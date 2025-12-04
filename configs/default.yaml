@@ -1,0 +1,19 @@
+freq_mhz: 7.5
+prf_hz: 3000
+angles_deg: [-12, -9, -6, -3, 0, 3, 6, 9, 12]
+ensemble_T: 200
+tile:
+  h: 8
+  w: 8
+  stride: 4
+ltaps: 4
+lw_shrinkage: true
+beta_KA: 0.2
+space_kernel_l: 2.0
+time_ar1_rho: 0.95
+evt:
+  u_quantile: 0.98
+  bootstrap_B: 200
+confirm2:
+  split: angles_even_odd
+  target_pair_pfa: 1.0e-05

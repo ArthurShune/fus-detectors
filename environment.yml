@@ -1,0 +1,34 @@
+name: stap-fus
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - scipy
+  - scikit-image
+  - scikit-learn
+  - matplotlib
+  - numba
+  - pytorch=2.4.*
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=12.1
+  - pip
+  - pip:
+      - k-Wave-python==0.4.0
+      - cupy-cuda12x
+      - rich
+      - tqdm
+      - hydra-core
+      - pyyaml
+      - plotly
+      - pre-commit
+      - ruff
+      - black
+      - pytest
+      - pytest-cov
+      - mypy
+      - jupyter
+      - ipykernel

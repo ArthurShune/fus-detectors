@@ -1,0 +1,16 @@
+scenario: nonrigid_extreme
+description: >
+  High-motion, heterogeneous regime with dropout and skull attenuation.
+  Used to confirm robustness in worst-case settings.
+
+grid:
+  motion_um: [80, 120, 150]
+  motion_freq_hz: [0.5, 0.8, 1.2]
+  heterogeneity: [medium, high]
+  prf_hz: [2000, 3000]
+  prf_jitter_pct: [5, 10]
+  sensor_dropout: [0.05, 0.1]
+  scatter_density: [1.2, 1.6, 2.0]
+  skull_db: [0, 3, 6]
+  K: [9, 11, 13, 15]
+  tiles: ["8x8:4", "12x12:6", "16x16:8"]

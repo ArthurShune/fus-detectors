@@ -1,0 +1,2 @@
+runs/motion/r4c/mcsvd_k8_reg4_stride2_seed*/** filter=lfs diff=lfs merge=lfs -text
+runs_motion_r4c_stride2.tar.gz filter=lfs diff=lfs merge=lfs -text

@@ -1,0 +1,1105 @@
+#!/usr/bin/env python3
+"""
+Replay the STAP/acceptance stage using pre-generated angle data from an existing pilot run.
+
+Usage:
+    PYTHONPATH=. conda run -n stap-fus python scripts/replay_stap_from_run.py \
+        --src runs/pilot/r1_real_psd_bg_guard095_inspect \
+        --out runs/pilot/r1_real_psd_bg_guard095_coords \
+        --stap-debug-coord 126,120 --stap-debug-coord 132,108 ...
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import time
+from pathlib import Path
+from typing import List, Sequence, Tuple
+
+import numpy as np
+
+from sim.kwave.common import AngleData, SimGeom, slice_angle_data, write_acceptance_bundle
+
+
+def _load_angle_data(src_root: Path, angles: Sequence[float]) -> List[List[AngleData]]:
+    """Load one or more ensembles of angle data from the source directory."""
+
+    def _load_dir(path: Path, ang: float) -> AngleData:
+        if not path.exists():
+            raise FileNotFoundError(f"Expected {path} with rf.npy/dt.npy")
+        rf = np.load(path / "rf.npy")
+        dt = float(np.load(path / "dt.npy"))
+        return AngleData(angle_deg=float(ang), rf=rf, dt=dt)
+
+    # First try the simple layout angle_{deg}
+    angle_data: List[AngleData] = []
+    simple_ok = True
+    for ang in angles:
+        name = f"angle_{int(round(ang))}"
+        d = src_root / name
+        if not d.exists():
+            simple_ok = False
+            break
+        angle_data.append(_load_dir(d, ang))
+    if simple_ok:
+        return [angle_data]
+
+    # Otherwise look for ensemble-prefixed directories (e.g., ens0_angle_-6)
+    ensemble_dirs = sorted(
+        {
+            p.name.split("_")[0]
+            for p in src_root.iterdir()
+            if p.is_dir() and p.name.startswith("ens")
+        }
+    )
+    if not ensemble_dirs:
+        missing = ", ".join(f"angle_{int(round(a))}" for a in angles)
+        raise FileNotFoundError(
+            f"Expected angle directories {missing} under {src_root}, none found."
+        )
+
+    angle_sets: List[List[AngleData]] = []
+    for ens in ensemble_dirs:
+        ens_set: List[AngleData] = []
+        for ang in angles:
+            name = f"{ens}_angle_{int(round(ang))}"
+            d = src_root / name
+            ens_set.append(_load_dir(d, ang))
+        angle_sets.append(ens_set)
+    return angle_sets
+
+
+def parse_args() -> argparse.Namespace:
+    ap = argparse.ArgumentParser(description="Replay STAP on existing angle data.")
+    ap.add_argument(
+        "--src",
+        type=Path,
+        required=True,
+        help="Source run directory containing angle_* dirs",
+    )
+    ap.add_argument(
+        "--out",
+        type=Path,
+        required=True,
+        help="Destination run directory",
+    )
+    ap.add_argument(
+        "--stap-profile",
+        type=str,
+        default="lab",
+        choices=["lab", "clinical"],
+        help=(
+            "Preset STAP configuration. 'lab' uses raw CLI defaults; "
+            "'clinical' applies a fixed, conservative configuration intended "
+            "to mimic a deployable intra-op fUS setting."
+        ),
+    )
+    ap.add_argument(
+        "--profile",
+        type=str,
+        default=None,
+        choices=["Brain-OpenSkull", "Brain-AliasContract", "Brain-SkullOR", "Brain-Pial128"],
+        help=(
+            "High-level operating profile matching the methodology (Brain-*). "
+            "When set, overrides a small set of baseline/STAP/mask defaults "
+            "to match the corresponding brain fUS profile."
+        ),
+    )
+    ap.add_argument(
+        "--stap-debug-coord",
+        action="append",
+        default=[],
+        help="Tile coordinate y,x (repeatable)",
+    )
+    ap.add_argument("--stap-debug-samples", type=int, default=32)
+    ap.add_argument("--stap-device", type=str, default="cuda")
+    ap.add_argument(
+        "--baseline",
+        type=str,
+        default="svd",
+        choices=["svd", "mc_svd", "rpca", "hosvd"],
+        help=(
+            "Baseline PD computation: plain SVD, motion-compensated SVD, RPCA, or tensor HOSVD."
+        ),
+    )
+    ap.add_argument("--reg-enable", dest="reg_enable", action="store_true")
+    ap.add_argument("--reg-disable", dest="reg_enable", action="store_false")
+    ap.set_defaults(reg_enable=False)
+    ap.add_argument("--reg-method", type=str, default="phasecorr", choices=["phasecorr"])
+    ap.add_argument("--reg-subpixel", type=int, default=4, choices=[1, 2, 4])
+    ap.add_argument("--reg-reference", type=str, default="median", choices=["first", "median"])
+    svd_group = ap.add_mutually_exclusive_group()
+    svd_group.add_argument("--svd-rank", type=int, default=None)
+    svd_group.add_argument("--svd-energy-frac", type=float, default=None)
+    ap.add_argument(
+        "--svd-profile",
+        type=str,
+        default="default",
+        choices=["default", "literature"],
+        help=(
+            "Preset for SVD-based baselines when --baseline=mc_svd. "
+            "'default' uses explicit --svd-rank/--svd-energy-frac (or rank=3 "
+            "when both are omitted); 'literature' applies a data-driven "
+            "energy-fraction rule (95%% of slow-time energy) when no explicit "
+            "SVD hyperparameters are provided, to better match common "
+            "spatiotemporal SVD clutter filters in the fUS literature."
+        ),
+    )
+    ap.add_argument("--rpca-enable", action="store_true")
+    ap.add_argument("--rpca-lambda", type=float, default=None)
+    ap.add_argument("--rpca-max-iters", type=int, default=250)
+    ap.add_argument(
+        "--hosvd-spatial-downsample",
+        type=int,
+        default=1,
+        help="Spatial downsample factor (complex avg pooling) for HOSVD baseline.",
+    )
+    ap.add_argument(
+        "--hosvd-t-sub",
+        type=int,
+        default=None,
+        help="Optional temporal sub-window length for HOSVD baseline.",
+    )
+    ap.add_argument(
+        "--hosvd-ranks",
+        type=str,
+        default=None,
+        help="Optional HOSVD multilinear ranks as 'rT,rH,rW'.",
+    )
+    ap.add_argument(
+        "--hosvd-energy-fracs",
+        type=str,
+        default=None,
+        help=(
+            "Optional per-mode HOSVD energy fractions as 'fT,fH,fW'; ignored if --hosvd-ranks"
+            " is set."
+        ),
+    )
+    ap.add_argument("--tile-h", type=int, default=12)
+    ap.add_argument("--tile-w", type=int, default=12)
+    ap.add_argument("--tile-stride", type=int, default=6)
+    ap.add_argument("--lt", type=int, default=4)
+    ap.add_argument(
+        "--tile-debug-limit",
+        type=int,
+        default=None,
+        help="Debug mode: process only the first N tiles to quickly inspect telemetry.",
+    )
+    ap.add_argument(
+        "--time-window-length",
+        type=int,
+        default=None,
+        help="Number of slow-time samples per replay window (defaults to full length).",
+    )
+    ap.add_argument(
+        "--time-window-offset",
+        type=int,
+        action="append",
+        default=[],
+        help="Slow-time offset for a replay window; repeat to export multiple windows.",
+    )
+    ap.add_argument("--diag-load", type=float, default=1e-2)
+    ap.add_argument("--cov-estimator", type=str, default="tyler_pca")
+    ap.add_argument("--huber-c", type=float, default=5.0)
+    ap.add_argument("--fd-span-mode", type=str, default="psd")
+    ap.add_argument("--fd-span-rel", type=str, default="0.30,1.10")
+    ap.add_argument("--fd-fixed-span-hz", type=float, default=None)
+    ap.add_argument("--grid-step-rel", type=float, default=0.12)
+    ap.add_argument("--max-pts", type=int, default=5)
+    ap.add_argument("--fd-min-pts", type=int, default=3)
+    ap.add_argument("--fd-min-abs-hz", type=float, default=0.0)
+    ap.add_argument("--msd-lambda", type=float, default=0.05)
+    ap.add_argument("--msd-ridge", type=float, default=0.12)
+    ap.add_argument("--msd-agg", type=str, default="median")
+    ap.add_argument("--msd-ratio-rho", type=float, default=0.05)
+    ap.add_argument("--msd-contrast-alpha", type=float, default=None)
+    ap.add_argument("--motion-half-span-rel", type=float, default=None)
+    ap.add_argument("--constraint-mode", type=str, default="exp+deriv")
+    ap.add_argument("--constraint-ridge", type=float, default=0.10)
+    ap.add_argument("--mvdr-load-mode", type=str, default="auto")
+    ap.add_argument("--mvdr-auto-kappa", type=float, default=50.0)
+    ap.add_argument("--ka-mode", type=str, default="none")
+    ap.add_argument(
+        "--ka-prior-path",
+        type=Path,
+        default=None,
+        help="Path to KA prior .npy when --ka-mode=library.",
+    )
+    ap.add_argument(
+        "--ka-directional-beta",
+        action="store_true",
+        help="Enable directional beta with passband/complement split shrinkage.",
+    )
+    ap.add_argument("--ka-kappa", type=float, default=40.0)
+    ap.add_argument("--ka-beta-bounds", type=str, default="0.05,0.5")
+    ap.add_argument("--ka-alpha", type=float, default=None)
+    ap.add_argument("--alias-cap-enable", action="store_true")
+    ap.add_argument("--alias-cap-alias-thresh", type=float, default=2.0)
+    ap.add_argument("--alias-cap-band-med-thresh", type=float, default=0.98)
+    ap.add_argument("--alias-cap-smin", type=float, default=0.4)
+    ap.add_argument("--alias-cap-c0", type=float, default=1.0)
+    ap.add_argument("--alias-cap-exp", type=float, default=1.0)
+    ap.add_argument(
+        "--alias-psd-select",
+        action="store_true",
+        help="Enable alias-aware PSD bin selection before KA guards.",
+    )
+    ap.add_argument(
+        "--alias-psd-select-ratio",
+        type=float,
+        default=1.2,
+        help="Alias ratio threshold (flow/f0) for triggering PSD down-selection.",
+    )
+    ap.add_argument(
+        "--alias-psd-select-bins",
+        type=int,
+        default=1,
+        help="Number of positive bins (per sign) to retain when alias PSD selection fires.",
+    )
+    ap.add_argument(
+        "--psd-telemetry",
+        action="store_true",
+        help="Capture multi-taper PSD telemetry for each tile.",
+    )
+    ap.add_argument(
+        "--psd-tapers",
+        type=int,
+        default=3,
+        help="Number of DPSS tapers to use when PSD telemetry is enabled.",
+    )
+    ap.add_argument(
+        "--psd-bandwidth",
+        type=float,
+        default=2.0,
+        help="DPSS time-half-bandwidth parameter (only used with --psd-telemetry).",
+    )
+    ap.add_argument(
+        "--feasibility-mode",
+        type=str,
+        default="legacy",
+        choices=["legacy", "updated", "blend"],
+        help="Feasibility configuration applied to STAP/KA processing.",
+    )
+    ap.add_argument(
+        "--ka-target-retain-f",
+        type=float,
+        default=None,
+        help="Optional KA passband retain target (>=1 keeps or boosts flow energy).",
+    )
+    ap.add_argument(
+        "--ka-target-shrink-perp",
+        type=float,
+        default=None,
+        help=(
+            "Optional KA orthogonal shrink target "
+            "(<=1 enforces stronger background suppression)."
+        ),
+    )
+    ap.add_argument(
+        "--ka-equalize-pf-trace",
+        action="store_true",
+        help="Enable Pf-trace equalization in KA to preserve flow mean",
+    )
+    ap.add_argument(
+        "--ka-beta-fixed",
+        type=float,
+        default=None,
+        help="Optional fixed beta for blend mode; when set with feasibility_mode=blend, "
+        "this value is passed as beta into the KA blend.",
+    )
+    ap.add_argument(
+        "--ka-gate-enable",
+        action="store_true",
+        help="Enable flow-aware KA gating (alias/flow/depth/PD/registration checks).",
+    )
+    ap.add_argument(
+        "--ka-score-model-json",
+        type=Path,
+        default=None,
+        help=(
+            "Optional JSON path for score-space KA risk model. When set together "
+            "with PD scoring and a positive --ka-score-alpha, a shrink-only "
+            "transform is applied to STAP PD scores based on telemetry features."
+        ),
+    )
+    ap.add_argument(
+        "--ka-score-alpha",
+        type=float,
+        default=0.0,
+        help=(
+            "Score-space KA shrink strength in [0,1]. When >0 and a score model "
+            "is provided, PD scores on high-risk tiles are inflated so that "
+            "S = -PD is shrunk."
+        ),
+    )
+    ap.add_argument(
+        "--ka-gate-alias-rmin",
+        type=float,
+        default=1.30,
+        help="Minimum PSD alias ratio required for KA gating to trigger.",
+    )
+    ap.add_argument(
+        "--ka-gate-flow-cov-min",
+        type=float,
+        default=0.20,
+        help="Minimum flow-mask coverage fraction within a tile for gating.",
+    )
+    ap.add_argument(
+        "--ka-gate-depth-min-frac",
+        type=float,
+        default=0.30,
+        help="Lower depth fraction bound for KA gating (0-1).",
+    )
+    ap.add_argument(
+        "--ka-gate-depth-max-frac",
+        type=float,
+        default=0.70,
+        help="Upper depth fraction bound for KA gating (0-1).",
+    )
+    ap.add_argument(
+        "--ka-gate-pd-min",
+        type=float,
+        default=None,
+        help="Minimum normalized PD metric for a tile to allow KA action.",
+    )
+    ap.add_argument(
+        "--ka-gate-reg-psr-max",
+        type=float,
+        default=6.0,
+        help="Upper bound on registration PSR for KA gating (None disables this check).",
+    )
+    ap.add_argument(
+        "--flow-mask-mode",
+        type=str,
+        default="default",
+        choices=["default", "pd_auto"],
+        help="Flow mask strategy (default uses geometry, pd_auto thresholds PD map).",
+    )
+    ap.add_argument(
+        "--flow-mask-pd-quantile",
+        type=float,
+        default=0.995,
+        help="Quantile for PD-based flow mask (only used when --flow-mask-mode=pd_auto).",
+    )
+    ap.add_argument(
+        "--flow-mask-depth-min-frac",
+        type=float,
+        default=0.25,
+        help="Minimum depth fraction for PD-based flow mask.",
+    )
+    ap.add_argument(
+        "--flow-mask-depth-max-frac",
+        type=float,
+        default=0.9,
+        help="Maximum depth fraction for PD-based flow mask.",
+    )
+    ap.add_argument(
+        "--flow-mask-erode-iters",
+        type=int,
+        default=0,
+        help="Binary erosion iterations for PD-based flow mask.",
+    )
+    ap.add_argument(
+        "--flow-mask-dilate-iters",
+        type=int,
+        default=2,
+        help="Binary dilation iterations for PD-based flow mask.",
+    )
+    ap.add_argument(
+        "--flow-mask-min-pixels",
+        type=int,
+        default=64,
+        help="Minimum number of pixels required for PD-based flow mask to take effect.",
+    )
+    ap.add_argument(
+        "--flow-mask-min-coverage-frac",
+        type=float,
+        default=0.0,
+        help="Minimum fractional area needed before accepting PD-based mask.",
+    )
+    ap.add_argument(
+        "--flow-mask-union-default",
+        dest="flow_mask_union_default",
+        action="store_true",
+        help="Union the PD-based flow mask with the default geometric ROI.",
+    )
+    ap.add_argument(
+        "--flow-mask-no-union-default",
+        dest="flow_mask_union_default",
+        action="store_false",
+        help="Use the PD-based mask alone (no union with default ROI).",
+    )
+    ap.set_defaults(flow_mask_union_default=True)
+    ap.add_argument(
+        "--flow-mask-suppress-alias-depth",
+        action="store_true",
+        help=(
+            "Treat the bg_alias depth band as background in the flow/bg masks "
+            "(used for pial-alias regimes so pial alias tiles are H0)."
+        ),
+    )
+    ap.add_argument("--bg-guard-target-med", type=float, default=0.45)
+    ap.add_argument("--bg-guard-target-low", type=float, default=0.16)
+    ap.add_argument("--bg-guard-percentile-low", type=float, default=0.10)
+    ap.add_argument("--bg-guard-coverage-min", type=float, default=0.10)
+    ap.add_argument("--bg-guard-max-scale", type=float, default=1.30)
+    ap.add_argument("--bg-guard-enabled", action="store_true")
+    ap.add_argument("--bg-guard-target-p90", type=float, default=0.95)
+    ap.add_argument("--bg-guard-min-alpha", type=float, default=0.4)
+    ap.add_argument("--bg-guard-metric", type=str, default="global")
+    ap.add_argument(
+        "--flow-alias-hz",
+        type=float,
+        default=None,
+        help="Inject alias tone at this Doppler frequency (Hz); None disables injection.",
+    )
+    ap.add_argument(
+        "--flow-alias-fraction",
+        type=float,
+        default=0.4,
+        help="Fraction of flow mask to modulate when aliasing is enabled.",
+    )
+    ap.add_argument(
+        "--flow-alias-depth-min-frac",
+        type=float,
+        default=None,
+        help="Minimum depth fraction allowed for aliasing (None keeps entire mask).",
+    )
+    ap.add_argument(
+        "--flow-alias-depth-max-frac",
+        type=float,
+        default=None,
+        help="Maximum depth fraction allowed for aliasing (None keeps entire mask).",
+    )
+    ap.add_argument(
+        "--flow-alias-jitter-hz",
+        type=float,
+        default=0.0,
+        help="Uniform ±jitter applied to the alias tone per seed (Hz).",
+    )
+    ap.add_argument(
+        "--bg-alias-hz",
+        type=float,
+        default=None,
+        help=(
+            "Inject alias tone at this Doppler frequency (Hz) on the "
+            "background mask; None disables."
+        ),
+    )
+    ap.add_argument(
+        "--bg-alias-fraction",
+        type=float,
+        default=0.3,
+        help="Fraction of background mask to modulate when background aliasing is enabled.",
+    )
+    ap.add_argument(
+        "--bg-alias-depth-min-frac",
+        type=float,
+        default=None,
+        help="Minimum depth fraction allowed for background aliasing (None keeps entire mask).",
+    )
+    ap.add_argument(
+        "--bg-alias-depth-max-frac",
+        type=float,
+        default=None,
+        help="Maximum depth fraction allowed for background aliasing (None keeps entire mask).",
+    )
+    ap.add_argument(
+        "--bg-alias-jitter-hz",
+        type=float,
+        default=0.0,
+        help="Uniform ±jitter applied to the background alias tone per seed (Hz).",
+    )
+    ap.add_argument(
+        "--flow-doppler-min-hz",
+        type=float,
+        default=None,
+        help="Minimum synthetic flow Doppler frequency (Hz) applied on the flow mask.",
+    )
+    ap.add_argument(
+        "--flow-doppler-max-hz",
+        type=float,
+        default=None,
+        help="Maximum synthetic flow Doppler frequency (Hz) applied on the flow mask.",
+    )
+    ap.add_argument(
+        "--aperture-phase-std",
+        type=float,
+        default=0.0,
+        help="RMS phase screen (rad) applied across aperture (0 disables).",
+    )
+    ap.add_argument(
+        "--aperture-phase-corr-len",
+        type=float,
+        default=12.0,
+        help="Correlation length (elements) for aperture phase screen.",
+    )
+    ap.add_argument(
+        "--aperture-phase-seed",
+        type=int,
+        default=111,
+        help="Additional RNG seed offset for aperture phase screen.",
+    )
+    ap.add_argument(
+        "--clutter-beta",
+        type=float,
+        default=0.0,
+        help="Temporal clutter 1/f^beta slope (<=0 disables).",
+    )
+    ap.add_argument(
+        "--clutter-snr-db",
+        type=float,
+        default=-6.0,
+        help="Temporal clutter SNR (dB) relative to background when beta>0.",
+    )
+    ap.add_argument(
+        "--clutter-depth-min-frac",
+        type=float,
+        default=0.20,
+        help="Minimum depth fraction for clutter injection.",
+    )
+    ap.add_argument(
+        "--clutter-depth-max-frac",
+        type=float,
+        default=0.95,
+        help="Maximum depth fraction for clutter injection.",
+    )
+    ap.add_argument(
+        "--vibration-hz",
+        type=float,
+        default=None,
+        help="Global vibration tone Doppler frequency (Hz); None disables.",
+    )
+    ap.add_argument(
+        "--vibration-amp",
+        type=float,
+        default=0.0,
+        help="Relative complex amplitude of the global vibration tone (0 disables).",
+    )
+    ap.add_argument(
+        "--vibration-depth-min-frac",
+        type=float,
+        default=0.15,
+        help="Depth fraction where the global vibration amplitude starts decaying.",
+    )
+    ap.add_argument(
+        "--vibration-depth-decay-frac",
+        type=float,
+        default=0.25,
+        help="Depth decay scale (in depth fraction units) for the global vibration tone.",
+    )
+    ap.add_argument(
+        "--score-mode",
+        type=str,
+        default="msd",
+        help=(
+            "Score pooling mode: 'msd' (default), 'pd', 'band_ratio', or 'band_ratio_whitened' "
+            "(whitened PSD log-ratio stored in band_ratio pools)"
+        ),
+    )
+    ap.add_argument(
+        "--band-ratio-mode",
+        type=str,
+        default="legacy",
+        help="Band-ratio flavor: 'legacy' PD ratio or 'whitened' PSD log-ratio.",
+    )
+    ap.add_argument(
+        "--psd-br-flow-low",
+        type=float,
+        default=120.0,
+        help="Lower (Hz) bound of the flow band for whitened band-ratio scoring.",
+    )
+    ap.add_argument(
+        "--psd-br-flow-high",
+        type=float,
+        default=400.0,
+        help="Upper (Hz) bound of the flow band for whitened band-ratio scoring.",
+    )
+    ap.add_argument(
+        "--psd-br-alias-center",
+        type=float,
+        default=900.0,
+        help="Center (Hz) of the alias band for whitened band-ratio scoring.",
+    )
+    ap.add_argument(
+        "--psd-br-alias-width",
+        type=float,
+        default=15.625,
+        help="Half-width (Hz) of the alias band for whitened band-ratio scoring.",
+    )
+    return ap.parse_args()
+
+
+def parse_coords(coord_list: Sequence[str]) -> List[Tuple[int, int]]:
+    coords: List[Tuple[int, int]] = []
+    for entry in coord_list:
+        clean = entry.replace(":", ",")
+        parts = [p.strip() for p in clean.split(",") if p.strip()]
+        if len(parts) != 2:
+            raise ValueError(f"Invalid coord '{entry}'")
+        coords.append((int(parts[0]), int(parts[1])))
+    return coords
+
+
+def _apply_brain_profile_defaults(args: argparse.Namespace) -> None:
+    """Apply high-level Brain-* profile defaults.
+
+    The Brain-* profiles mirror the operating regimes described in the
+    methodology (Brain-OpenSkull / Brain-AliasContract / Brain-SkullOR /
+    Brain-Pial128). When a Brain-* profile is requested we:
+      - use a motion-compensated SVD baseline with registration and a
+        literature-style energy-fraction rule,
+      - enable the clinical STAP preset with PD-based scoring, and
+      - configure PD-based flow masks consistent with the brain fUS methods.
+    """
+    profile = getattr(args, "profile", None)
+    if profile is None:
+        return
+
+    # Common defaults for all Brain-* profiles: MC-SVD baseline with
+    # registration, clinical STAP PD preset, and PD-based flow masks.
+    args.baseline = "mc_svd"
+    args.reg_enable = True
+    args.reg_method = "phasecorr"
+    args.reg_subpixel = 4
+    args.reg_reference = "median"
+    args.svd_profile = "literature"
+
+    args.stap_profile = "clinical"
+    args.score_mode = "pd"
+
+    args.flow_mask_mode = "pd_auto"
+    args.flow_mask_pd_quantile = 0.995
+    args.flow_mask_depth_min_frac = 0.25
+    args.flow_mask_depth_max_frac = 0.85
+    args.flow_mask_dilate_iters = 2
+    args.flow_mask_union_default = True
+
+    # Pial profile additionally suppresses the shallow alias depth band when
+    # building the flow mask so the pial band is always treated as H0.
+    if profile == "Brain-Pial128":
+        args.flow_mask_suppress_alias_depth = True
+
+
+def main() -> None:
+    args = parse_args()
+
+    # Apply high-level Brain-* operating profile presets (if any) before
+    # expanding the lower-level STAP presets.
+    _apply_brain_profile_defaults(args)
+
+    if getattr(args, "stap_profile", "lab") == "clinical":
+        # Clinical STAP profile: fixed, conservative configuration intended to
+        # reflect deployable intra-op fUS constraints. This preset is applied
+        # before downstream configuration is built.
+        args.tile_h = 8
+        args.tile_w = 8
+        args.tile_stride = 3
+        args.lt = 8
+
+        # Covariance / MVDR configuration
+        args.diag_load = 0.07
+        args.cov_estimator = "tyler_pca"
+        args.huber_c = 5.0
+        args.fd_span_mode = "psd"
+        args.fd_span_rel = "0.30,1.10"
+        args.grid_step_rel = 0.20
+        args.max_pts = 3
+        args.fd_min_pts = 3
+        args.constraint_mode = "exp+deriv"
+        args.constraint_ridge = 0.18
+        args.mvdr_load_mode = "auto"
+        args.mvdr_auto_kappa = 120.0
+
+        # MSD scoring configuration
+        args.msd_lambda = 0.05
+        args.msd_ridge = 0.10
+        args.msd_agg = "median"
+        args.msd_ratio_rho = 0.05
+        args.msd_contrast_alpha = 0.6
+
+        # Whitened band-ratio telemetry configuration (only when using an
+        # MC-SVD/SVD baseline, since the whitened ratio path assumes an
+        # MC-SVD-style clutter prior). For other baselines (e.g. RPCA, HOSVD)
+        # we leave the default legacy band-ratio so that PD scoring still
+        # works without triggering whitened-ratio constraints.
+        if getattr(args, "baseline", "mc_svd") in {"mc_svd", "svd"}:
+            args.band_ratio_mode = "whitened"
+            args.psd_br_flow_low = 30.0
+            args.psd_br_flow_high = 220.0
+            args.psd_br_alias_center = 650.0
+            args.psd_br_alias_width = 140.0
+
+        # Limit effective slow-time support per window if not explicitly set.
+        if args.time_window_length is None:
+            args.time_window_length = 32
+
+        # Limit training snapshots per tile via environment controls if not
+        # already set by the user.
+        os.environ.setdefault("STAP_SNAPSHOT_STRIDE", "4")
+        os.environ.setdefault("STAP_MAX_SNAPSHOTS", "64")
+
+        # For PD-based clinical runs, default to the PD-only fast path so that
+        # the GPU batched core uses the lighter band-energy computation instead
+        # of the full MSD contrast kernel. This preserves PD ROC while reducing
+        # latency, and can be disabled manually by clearing STAP_FAST_PD_ONLY.
+        if getattr(args, "score_mode", "pd") == "pd":
+            os.environ.setdefault("STAP_FAST_PD_ONLY", "1")
+
+    # Optional preset for motion-compensated SVD baseline. When the user
+    # selects the 'literature' profile and has not provided an explicit SVD
+    # rank or energy fraction, fall back to an energy-fraction rule that
+    # removes the smallest number of singular components accounting for ~95%
+    # of the slow-time energy. This mirrors common practice in spatiotemporal
+    # SVD clutter filtering for ultrafast Doppler / fUS, while leaving manual
+    # --svd-rank/--svd-energy-frac overrides untouched.
+    if getattr(args, "svd_profile", "default") == "literature":
+        if args.svd_rank is None and args.svd_energy_frac is None:
+            args.svd_energy_frac = 0.95
+
+    src_root = args.src
+    out_root = args.out
+    out_root.mkdir(parents=True, exist_ok=True)
+
+    meta = json.loads((src_root / "meta.json").read_text())
+    geom_meta = meta.get("geometry") or meta.get("sim_geom")
+    if geom_meta is None:
+        raise KeyError("meta.json missing 'geometry' or 'sim_geom'")
+    geom = SimGeom(
+        Nx=int(geom_meta["Nx"]),
+        Ny=int(geom_meta["Ny"]),
+        dx=float(geom_meta["dx"]),
+        dy=float(geom_meta["dy"]),
+        c0=float(geom_meta["c0"]),
+        rho0=float(geom_meta["rho0"]),
+        pml_size=int(geom_meta.get("pml", 20)),
+        cfl=float(geom_meta.get("cfl", 0.3)),
+        f0=float(meta.get("f0_hz", 7.5e6)),
+        ncycles=int(meta.get("ncycles", 3)),
+    )
+    if "angles_deg" in meta:
+        angles = [float(a) for a in meta["angles_deg"]]
+    elif "angles_deg_sets" in meta:
+        angle_sets_meta = meta["angles_deg_sets"]
+        if not angle_sets_meta:
+            raise ValueError("meta['angles_deg_sets'] is empty")
+        angles = [float(a) for a in angle_sets_meta[0]]
+    elif "base_angles_deg" in meta:
+        # Pilot generators (e.g., pilot_motion) record base angles and
+        # per-ensemble jittered 'angles_used_deg'. Replay directories are named
+        # by base angles (ensX_angle_{deg}), so prefer base_angles_deg here.
+        angles = [float(a) for a in meta["base_angles_deg"]]
+    elif "angles_used_deg" in meta:
+        # Fallback: take the first ensemble's used angles. Directory names remain
+        # based on rounded base angles, but in some pilots they may coincide. If
+        # not, this will raise downstream when directories are missing.
+        used = meta["angles_used_deg"]
+        if not used:
+            raise ValueError("meta['angles_used_deg'] is empty")
+        angles = [float(a) for a in used[0]]
+    else:
+        raise KeyError(
+            "meta.json missing 'angles_deg'/'angles_deg_sets'/'base_angles_deg'/'angles_used_deg'"
+        )
+    angle_sets = _load_angle_data(src_root, angles)
+
+    hosvd_ranks: tuple[int, int, int] | None = None
+    if args.hosvd_ranks:
+        parts = [p.strip() for p in str(args.hosvd_ranks).split(",") if p.strip()]
+        if len(parts) != 3:
+            raise SystemExit(
+                "Invalid --hosvd-ranks "
+                f"'{args.hosvd_ranks}'; expected 'rT,rH,rW' with three integers."
+            )
+        try:
+            hosvd_ranks = (int(parts[0]), int(parts[1]), int(parts[2]))
+        except ValueError as exc:
+            raise SystemExit(
+                "Invalid --hosvd-ranks "
+                f"'{args.hosvd_ranks}'; expected 'rT,rH,rW' with three integers."
+            ) from exc
+
+    hosvd_energy_fracs: tuple[float, float, float] | None = None
+    if args.hosvd_energy_fracs and hosvd_ranks is None:
+        parts_f = [p.strip() for p in str(args.hosvd_energy_fracs).split(",") if p.strip()]
+        if len(parts_f) != 3:
+            raise SystemExit(
+                "Invalid --hosvd-energy-fracs "
+                f"'{args.hosvd_energy_fracs}'; expected 'fT,fH,fW' with three floats."
+            )
+        try:
+            hosvd_energy_fracs = (float(parts_f[0]), float(parts_f[1]), float(parts_f[2]))
+        except ValueError as exc:
+            raise SystemExit(
+                "Invalid --hosvd-energy-fracs "
+                f"'{args.hosvd_energy_fracs}'; expected 'fT,fH,fW' with three floats."
+            ) from exc
+    pulses = int(meta.get("pulses", meta.get("pulses_per_set", 64)))
+    prf = float(meta.get("prf_hz", 3000.0))
+    seed = int(meta.get("seed", 0))
+
+    span_bounds = tuple(float(x.strip()) for x in args.fd_span_rel.split(",") if x.strip())
+    if len(span_bounds) != 2:
+        raise ValueError("--fd-span-rel must be 'min,max'")
+    ka_beta_bounds = tuple(float(x.strip()) for x in args.ka_beta_bounds.split(",") if x.strip())
+    if len(ka_beta_bounds) != 2:
+        raise ValueError("--ka-beta-bounds must be 'min,max'")
+
+    guard_opts = {
+        "guard_target_med": float(args.bg_guard_target_med),
+        "guard_target_low": float(args.bg_guard_target_low),
+        "guard_percentile_low": float(args.bg_guard_percentile_low),
+        "guard_tile_coverage_min": float(args.bg_guard_coverage_min),
+        "guard_max_scale": float(args.bg_guard_max_scale),
+        "bg_guard_enabled": bool(args.bg_guard_enabled),
+        "bg_guard_target_p90": float(args.bg_guard_target_p90),
+        "bg_guard_min_alpha": float(args.bg_guard_min_alpha),
+        "bg_guard_metric": str(args.bg_guard_metric),
+    }
+    if args.alias_cap_enable:
+        guard_opts.update(
+            {
+                "alias_cap_enable": True,
+                "alias_cap_alias_thresh": float(args.alias_cap_alias_thresh),
+                "alias_cap_band_med_thresh": float(args.alias_cap_band_med_thresh),
+                "alias_cap_smin": float(args.alias_cap_smin),
+                "alias_cap_c0": float(args.alias_cap_c0),
+                "alias_cap_exp": float(args.alias_cap_exp),
+            }
+        )
+    ka_gate_enabled = bool(args.ka_gate_enable or args.feasibility_mode == "updated")
+    if ka_gate_enabled:
+        gate_opts: dict[str, float | bool] = {
+            "ka_gate_enable": True,
+            "ka_gate_alias_rmin": float(args.ka_gate_alias_rmin),
+            "ka_gate_flow_cov_min": float(args.ka_gate_flow_cov_min),
+            "ka_gate_depth_min_frac": float(args.ka_gate_depth_min_frac),
+            "ka_gate_depth_max_frac": float(args.ka_gate_depth_max_frac),
+        }
+        if args.ka_gate_pd_min is not None:
+            gate_opts["ka_gate_pd_min"] = float(args.ka_gate_pd_min)
+        if args.ka_gate_reg_psr_max is not None:
+            gate_opts["ka_gate_reg_psr_max"] = float(args.ka_gate_reg_psr_max)
+        guard_opts.update(gate_opts)
+
+    debug_coords = parse_coords(args.stap_debug_coord)
+
+    motion_half_span = (
+        float(args.motion_half_span_rel)
+        if args.motion_half_span_rel and args.motion_half_span_rel > 0
+        else None
+    )
+
+    base_meta_extra = {
+        "source": "replay",
+        "orig_run": str(src_root),
+        "profile": getattr(args, "profile", None),
+        "aperture_phase_std": float(args.aperture_phase_std),
+        "aperture_phase_corr_len": float(args.aperture_phase_corr_len),
+        "clutter_beta": float(args.clutter_beta),
+        "clutter_snr_db": float(args.clutter_snr_db),
+        "clutter_depth_min_frac": float(args.clutter_depth_min_frac),
+        "clutter_depth_max_frac": float(args.clutter_depth_max_frac),
+        "flow_alias_hz": (float(args.flow_alias_hz) if args.flow_alias_hz is not None else None),
+        "flow_alias_fraction": float(args.flow_alias_fraction),
+        "flow_alias_depth_min_frac": args.flow_alias_depth_min_frac,
+        "flow_alias_depth_max_frac": args.flow_alias_depth_max_frac,
+        "flow_alias_jitter_hz": float(args.flow_alias_jitter_hz),
+        "bg_alias_hz": float(args.bg_alias_hz) if args.bg_alias_hz is not None else None,
+        "bg_alias_fraction": float(args.bg_alias_fraction),
+        "bg_alias_depth_min_frac": args.bg_alias_depth_min_frac,
+        "bg_alias_depth_max_frac": args.bg_alias_depth_max_frac,
+        "bg_alias_jitter_hz": float(args.bg_alias_jitter_hz),
+        "flow_doppler_min_hz": (
+            float(args.flow_doppler_min_hz) if args.flow_doppler_min_hz is not None else None
+        ),
+        "flow_doppler_max_hz": (
+            float(args.flow_doppler_max_hz) if args.flow_doppler_max_hz is not None else None
+        ),
+        "vibration_hz": float(args.vibration_hz) if args.vibration_hz is not None else None,
+        "vibration_amp": float(args.vibration_amp),
+        "vibration_depth_min_frac": float(args.vibration_depth_min_frac),
+        "vibration_depth_decay_frac": float(args.vibration_depth_decay_frac),
+    }
+
+    window_length = args.time_window_length
+    window_offsets = args.time_window_offset or []
+    window_specs: list[dict[str, int | None | str]] = []
+    if window_length is None:
+        if window_offsets:
+            raise ValueError("--time-window-offset requires --time-window-length")
+        window_specs.append({"offset": None, "length": None, "suffix": None})
+    else:
+        if window_length <= 0:
+            raise ValueError("--time-window-length must be positive")
+        offsets = window_offsets if window_offsets else [0]
+        for idx, offset in enumerate(offsets):
+            if offset < 0:
+                raise ValueError("time-window offsets must be non-negative")
+            if offset + window_length > pulses:
+                raise ValueError(
+                    "time window offset "
+                    f"{offset} + length {window_length} exceeds total pulses {pulses}"
+                )
+            suffix = None if len(offsets) == 1 else f"win{idx}_off{offset}"
+            window_specs.append({"offset": offset, "length": window_length, "suffix": suffix})
+
+    total_windows = len(window_specs)
+    overall_start = time.time()
+    for idx, spec in enumerate(window_specs):
+        window_idx = idx + 1
+        offset = spec["offset"]
+        length = spec["length"]
+        suffix = spec["suffix"]
+        window_label = suffix or (f"offset{offset}_len{length}" if length is not None else "full")
+        if length is None or offset is None:
+            angle_sets_window = angle_sets
+            pulses_window = pulses
+            meta_extra = dict(base_meta_extra)
+        else:
+            angle_sets_window = slice_angle_data(angle_sets, int(offset), int(length))
+            pulses_window = int(length)
+            meta_extra = dict(base_meta_extra)
+            meta_extra["time_window"] = {
+                "offset": int(offset),
+                "length": int(length),
+                "total_length": int(pulses),
+            }
+
+        print(
+            f"[replay_stap_from_run] ({window_idx}/{total_windows}) "
+            f"Processing window {window_label} (pulses={pulses_window})...",
+            flush=True,
+        )
+        win_start = time.time()
+
+        # KA extra options (including optional fixed beta for blend mode and
+        # optional score-space KA v1 risk model parameters).
+        ka_opts_extra = dict(guard_opts)
+        if args.ka_beta_fixed is not None:
+            ka_opts_extra["beta"] = float(args.ka_beta_fixed)
+        if args.ka_score_model_json is not None:
+            ka_opts_extra["score_model_json"] = str(args.ka_score_model_json)
+        if args.ka_score_alpha is not None and args.ka_score_alpha > 0.0:
+            ka_opts_extra["score_alpha"] = float(args.ka_score_alpha)
+
+        write_acceptance_bundle(
+            out_root=out_root,
+            g=geom,
+            angle_sets=angle_sets_window,
+            pulses_per_set=pulses_window,
+            prf_hz=prf,
+            seed=seed,
+            tile_hw=(int(args.tile_h), int(args.tile_w)),
+            tile_stride=int(args.tile_stride),
+            Lt=int(args.lt),
+            diag_load=float(args.diag_load),
+            cov_estimator=str(args.cov_estimator).lower(),
+            huber_c=float(args.huber_c),
+            stap_debug_samples=int(args.stap_debug_samples),
+            fd_span_mode=str(args.fd_span_mode).lower(),
+            fd_span_rel=span_bounds,
+            fd_fixed_span_hz=args.fd_fixed_span_hz,
+            constraint_mode=str(args.constraint_mode).lower(),
+            grid_step_rel=float(args.grid_step_rel),
+            fd_min_pts=int(args.fd_min_pts),
+            fd_max_pts=int(args.max_pts),
+            fd_min_abs_hz=float(args.fd_min_abs_hz),
+            msd_lambda=args.msd_lambda,
+            msd_ridge=float(args.msd_ridge),
+            msd_agg_mode=str(args.msd_agg).lower(),
+            msd_ratio_rho=float(args.msd_ratio_rho),
+            motion_half_span_rel=motion_half_span,
+            msd_contrast_alpha=args.msd_contrast_alpha,
+            tile_debug_limit=args.tile_debug_limit,
+            alias_psd_select_enable=bool(args.alias_psd_select),
+            alias_psd_select_ratio_thresh=float(args.alias_psd_select_ratio),
+            alias_psd_select_bins=max(1, int(args.alias_psd_select_bins)),
+            stap_debug_tile_coords=debug_coords,
+            ka_mode=str(args.ka_mode).lower(),
+            ka_prior_path=str(args.ka_prior_path) if args.ka_prior_path else None,
+            ka_beta_bounds=ka_beta_bounds,
+            ka_kappa=float(args.ka_kappa),
+            ka_alpha=args.ka_alpha,
+            ka_target_retain_f=args.ka_target_retain_f,
+            ka_target_shrink_perp=args.ka_target_shrink_perp,
+            ka_equalize_pf_trace=args.ka_equalize_pf_trace,
+            ka_opts_extra=ka_opts_extra,
+            mvdr_load_mode=str(args.mvdr_load_mode).lower(),
+            mvdr_auto_kappa=float(args.mvdr_auto_kappa),
+            constraint_ridge=float(args.constraint_ridge),
+            stap_device=args.stap_device,
+            meta_extra=meta_extra,
+            dataset_suffix=suffix,
+            score_mode=str(args.score_mode),
+            flow_mask_mode=str(args.flow_mask_mode).lower(),
+            flow_mask_pd_quantile=float(args.flow_mask_pd_quantile),
+            flow_mask_depth_min_frac=float(args.flow_mask_depth_min_frac),
+            flow_mask_depth_max_frac=float(args.flow_mask_depth_max_frac),
+            flow_mask_erode_iters=int(args.flow_mask_erode_iters),
+            flow_mask_dilate_iters=int(args.flow_mask_dilate_iters),
+            flow_mask_min_pixels=int(args.flow_mask_min_pixels),
+            flow_mask_min_coverage_fraction=float(args.flow_mask_min_coverage_frac),
+            flow_mask_union_default=bool(args.flow_mask_union_default),
+            flow_mask_suppress_alias_depth=bool(args.flow_mask_suppress_alias_depth),
+            baseline_type=str(args.baseline).lower(),
+            reg_enable=bool(args.reg_enable),
+            reg_method=str(args.reg_method),
+            reg_subpixel=int(args.reg_subpixel),
+            reg_reference=str(args.reg_reference),
+            svd_rank=args.svd_rank,
+            svd_energy_frac=args.svd_energy_frac,
+            rpca_enable=bool(args.rpca_enable),
+            rpca_lambda=args.rpca_lambda,
+            rpca_max_iters=int(args.rpca_max_iters),
+            flow_alias_hz=args.flow_alias_hz,
+            flow_alias_fraction=float(args.flow_alias_fraction),
+            flow_alias_depth_min_frac=args.flow_alias_depth_min_frac,
+            flow_alias_depth_max_frac=args.flow_alias_depth_max_frac,
+            flow_alias_jitter_hz=float(args.flow_alias_jitter_hz),
+            flow_doppler_min_hz=args.flow_doppler_min_hz,
+            flow_doppler_max_hz=args.flow_doppler_max_hz,
+            bg_alias_hz=args.bg_alias_hz,
+            bg_alias_fraction=float(args.bg_alias_fraction),
+            bg_alias_depth_min_frac=args.bg_alias_depth_min_frac,
+            bg_alias_depth_max_frac=args.bg_alias_depth_max_frac,
+            bg_alias_jitter_hz=float(args.bg_alias_jitter_hz),
+            vibration_hz=args.vibration_hz,
+            vibration_amp=float(args.vibration_amp),
+            vibration_depth_min_frac=float(args.vibration_depth_min_frac),
+            vibration_depth_decay_frac=float(args.vibration_depth_decay_frac),
+            aperture_phase_std=float(args.aperture_phase_std),
+            aperture_phase_corr_len=float(args.aperture_phase_corr_len),
+            aperture_phase_seed=int(args.aperture_phase_seed),
+            clutter_beta=float(args.clutter_beta),
+            clutter_snr_db=float(args.clutter_snr_db),
+            clutter_depth_min_frac=float(args.clutter_depth_min_frac),
+            clutter_depth_max_frac=float(args.clutter_depth_max_frac),
+            psd_telemetry=bool(args.psd_telemetry),
+            psd_tapers=int(args.psd_tapers),
+            psd_bandwidth=float(args.psd_bandwidth),
+            band_ratio_mode=str(args.band_ratio_mode),
+            band_ratio_flow_low_hz=float(args.psd_br_flow_low),
+            band_ratio_flow_high_hz=float(args.psd_br_flow_high),
+            band_ratio_alias_center_hz=float(args.psd_br_alias_center),
+            band_ratio_alias_width_hz=float(args.psd_br_alias_width),
+            feasibility_mode=str(args.feasibility_mode),
+            hosvd_spatial_downsample=int(args.hosvd_spatial_downsample),
+            hosvd_t_sub=args.hosvd_t_sub,
+            hosvd_ranks=hosvd_ranks,
+            hosvd_energy_fracs=hosvd_energy_fracs,
+        )
+        win_elapsed = time.time() - win_start
+        total_elapsed = time.time() - overall_start
+        remaining = total_windows - window_idx
+        eta = (total_elapsed / window_idx) * remaining if window_idx else 0.0
+        print(
+            f"[replay_stap_from_run] Completed window {window_label} "
+            f"in {win_elapsed/60:.1f} min (ETA {eta/60:.1f} min)",
+            flush=True,
+        )
+
+
+if __name__ == "__main__":
+    main()
