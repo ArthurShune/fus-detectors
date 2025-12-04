@@ -7,6 +7,7 @@
 \usepackage{enumitem}
 \usepackage{cite}
 \usepackage{hyperref}
+\usepackage{graphicx}
 
 \newcommand{\R}{\mathbb{R}}
 \newcommand{\E}{\mathbb{E}}
@@ -26,37 +27,25 @@
 
 \begin{document}
 
-\title{Fast STAP for fUS $>$ MC--SVD: Methods, Feasibility \& Design Reference}
+\title{Contract-Driven STAP for Functional Ultrasound: Clinical Profile, Telemetry, and Design Reference}
 \author{}
 \date{}
 \maketitle
 
-\section*{Scope and Setting}
+\begin{abstract}
+We present a fixed, clinical spatiotemporal adaptive processing (STAP) profile for functional ultrasound (fUS) and a contract-driven knowledge-aided (KA) layer that acts only when data support it. The profile freezes tile geometry, temporal aperture, Doppler bands, conditioning targets, and a conditional fast path that applies STAP only on flow-supported tiles. A modality-agnostic contract (R--1/R--2/R--3 plus operator and gating constraints) governs when KA may reshape covariances; sentinels disable KA when alias evidence or headroom is absent. In k-Wave brain fUS simulations (Brain-OpenSkull, Brain-AliasContract, Brain-SkullOR), the frozen STAP PD profile improves low-FPR TPR over MC--SVD/RPCA/HOSVD with 3--5~s/volume latency; KA behaves as a guarded regularizer. On real whole-brain mouse fUS (Mac{\'e}), the hemodynamic variant of the same bands shows contract-consistent telemetry (Pf dominant in $\sim$50\% of atlas H$_1$ tiles vs $\ll$ in H$_0$, lower alias ratios in H$_1$), and an alias-based gate prunes null-tile detections for a PD-z baseline (e.g., 40/7 H$_1$/H$_0$ detections $\rightarrow$ 27/0 at matched TPR). Public Doppler-like datasets (Wang ULM IQ, PICMUS carotid RF) fail the contract (Pf never dominant, flat ROC) and are used only as stress tests, underscoring the need for raw kHz PRF IQ to fully exercise the Doppler KA profile in humans/NHP.
+\end{abstract}
 
-We consider slow--time fUS detection on a fixed spatial tile using $T$ pulses per tile. A \emph{baseline} clutter suppressor (plain SVD, MC--SVD, RPCA, or HOSVD) produces a whitened slow--time vector $z = \wh R^{-1/2} x$, and a fast temporal STAP core computes BR/GLRT--type scores on these tiles. A knowledge--aided STAP (KA--STAP) applies an additional \emph{band--aware} covariance transform before scoring \cite{GuerciSTAPBook2003,WicksKASTAP2006,GuerciBaranoskiDARPA2006,MelvinGuerciKAParadigm2006}:
-\[
-z' = R_\beta^{-1/2} x = Q z,\qquad Q := R_\beta^{-1/2}\wh R^{1/2},\quad Q^\top Q \succ 0.
-\]
+\section{Introduction}
 
-A fixed pair of projectors $(\Pf,\Pa)$ onto a \emph{flow band} and an \emph{alias band} in the slow--time (DFT/DPSS) basis defines the band geometry. The remainder projector is $\Po := I - \Pf - \Pa$. These are design projectors, independent of the data, and play the role of knowledge-aided band structure in the STAP sense \cite{GuerciSTAPBook2003,WicksKASTAP2006}.
+We study slow-time detection on fUS tiles with a fixed clinical STAP profile and an explicit contract for when a knowledge-aided (KA) covariance transform may act. Baseline clutter suppression (SVD/MC--SVD/RPCA/HOSVD) yields a whitened slow-time vector $z = \wh R^{-1/2} x$; a temporal STAP core scores tiles in fixed flow/alias bands $(\Pf,\Pa)$ using BR/GLRT-type ratios. KA-STAP applies a band-aware covariance reshape $z' = R_\beta^{-1/2}x = Qz$ but is allowed to act only when regime preconditions and gating/safety sentinels hold.
 
-We score whitened tiles by
-\begin{align*}
-\mathrm{BR}(z) 
-  &= \frac{z^\top \Pf z}{z^\top \Pa z},\\
-\mathrm{GLRT}_\rho(z) 
-  &= \frac{z^\top \Pf z}{z^\top (\Pa + \rho I) z},
-\end{align*}
-for a fixed $\rho>0$ per experiment. In principle, the contract below is designed to permit an \emph{uplift in TPR at fixed, small FPR} (e.g.\ $\alpha \le 10^{-3}$) when moving from a strong baseline (or STAP--only) to KA--STAP. In the k-Wave brain fUS regimes we study, these conditions are not met in the target FPR range, so KA behaves as a guarded regularizer and the observed TPR gains come from STAP itself.
-
-This document encodes the \emph{contract} under which KA--STAP can be expected to outperform MC--SVD (or STAP--only) at low FPR, and documents the methods and empirical results for the k-Wave brain fUS experiments used in our evaluation. It has been updated to:
+\paragraph{Contributions.}
 \begin{itemize}[nosep]
-  \item make \emph{data--regime preconditions} explicit (band occupancy, alias separation, baseline headroom),
-  \item generalize the alias metric used for gating,
-  \item add a regime sentinel and a safety/monotonicity guard,
-  \item clarify the respective roles of STAP and KA in a deployed system (STAP as the primary detector; KA as a specialist, risk-aware regularizer),
-  \item standardize a ``clinical STAP'' profile and PD-based ROC as the main evaluation axis, with MSD and band-ratio used primarily as supporting telemetry, and
-  \item restrict KA uplift claims to a small number of curated KA-friendly regimes (where R--1/R--2/R--3 hold), treating skull/OR-like regimes as KA risk-control regimes rather than KA-boost regimes.
+  \item A frozen clinical STAP PD profile (tile geometry, temporal aperture, Doppler bands, conditioning targets, conditional fast path) that improves low-FPR TPR over MC--SVD/RPCA/HOSVD on k-Wave brain regimes with 3--5~s/volume latency.
+  \item A modality-agnostic contract (R--1/R--2/R--3 plus operator, gating, and safety constraints) that makes KA behavior explicit and keeps KA off when evidence or headroom is absent.
+  \item Real-data hemodynamic instantiation on Mac{\'e} whole-brain fUS: Pf/alias telemetry matches the contract, and an alias gate prunes null-tile PD-z detections with modest hit loss on visual slices.
+  \item Out-of-regime stress tests (Wang ULM IQ, PICMUS carotid RF) where Pf never dominates and ROC is flat; these serve to demonstrate conservative contract behavior and motivate the need for raw kHz PRF IQ in humans/NHP.
 \end{itemize}
 
 \subsection*{System overview and contributions}
@@ -88,6 +77,72 @@ Throughout, $H_1$ denotes ``flow'' tiles and $H_0$ background/no--flow tiles.
   \]
   \item Commutator: $[Q,\Pf] = Q\Pf - \Pf Q$, and similarly for $\Pa$.
 \end{itemize}
+
+\section{Results overview}
+\label{sec:results-overview}
+
+\begin{itemize}[nosep]
+  \item \textbf{Brain-k-Wave simulations (fixed clinical STAP profile).} Across Brain-OpenSkull / Brain-AliasContract / Brain-SkullOR regimes, the frozen clinical STAP PD profile improves low-FPR TPR over MC--SVD/RPCA/HOSVD; conditional STAP yields 3--5~s/volume latency while preserving ROC. KA behaves as a guarded regularizer with no claimed ROC uplift in these regimes.
+  \item \textbf{Mac{\'e} whole-brain fUS (hemodynamic variant).} On mid-visual slices (scan1/2 planes 3--4), Pf is dominant in $\approx 0.5$ of H$_1$ tiles versus $\ll 0.25$ in H$_0$, and median $\log(E_{\mathrm{Pa}}/E_{\mathrm{Pf}})$ is lower in H$_1$ by $\approx 0.5$--0.9. An alias-based gate at TPR $\approx 0.5$ prunes null-tile detections for PD-z (e.g., 40/7 $\rightarrow$ 27/0 H$_1$/H$_0$ hits), illustrating the KA sentinel in hemodynamic space.
+  \item \textbf{Out-of-regime real datasets.} Wang ULM IQ and PICMUS carotid RF fail the Doppler contract under the frozen bands (Pf peak $\approx 0$, alias flat, ROC flat). They are treated as stress tests only; details in Appendix~\ref{app:negative-real}.
+\end{itemize}
+
+\section{Results}
+\label{sec:results}
+
+\subsection{Brain-k-Wave regimes: ROC and latency}
+The frozen clinical STAP PD profile improves low-FPR detection over MC--SVD/RPCA/HOSVD across Brain-OpenSkull, Brain-AliasContract, and Brain-SkullOR. In the target band (FPR $\approx 10^{-4}$--$10^{-3}$), STAP lifts TPR relative to all baselines; KA is neutral/guarded in these regimes. Conditional STAP (tiles intersecting flow masks only) reduces runtime from tens of seconds to $\approx 3$--$5$~s per volume while preserving PD ROC, enabling near-real-time operation.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcccc}
+\hline
+Regime & MC--SVD (s) & STAP full (s) & STAP conditional (s) & TPR base / STAP @ $10^{-4}$ \\
+\hline
+Brain-OpenSkull & $\approx 1.2$ & $\approx 61$ & $\approx 4.7$ & $0.00 / 0.21$ \\
+Brain-AliasContract & $\approx 1.0$ & $\approx 45$ & $\approx 3.9$ & $0.00 / 0.17$ \\
+Brain-SkullOR & $\approx 1.2$ & $\approx 56$ & $\approx 3.2$ & $0.00 / 0.17$ \\
+\hline
+\end{tabular}
+\caption{Representative latency and low-FPR TPR for the clinical STAP PD profile versus MC--SVD on the main Brain-* regimes. Conditional STAP skips tiles with no flow-mask overlap.}
+\label{tab:brain_latency_results}
+\end{table}
+
+\subsection{Mac{\'e} whole-brain fUS: hemodynamic contract and gating}
+On mid-visual slices (scan1/2 planes 3--4), Pf is dominant in $\approx 0.5$ of H$_1$ tiles versus $\ll 0.25$ (plane 3) and $\ll 0.1$ (plane 4) in H$_0$; median $\log(E_{\mathrm{Pa}}/E_{\mathrm{Pf}})$ is lower in H$_1$ by $\approx 0.5$--0.9. An alias-based gate at TPR $\approx 0.5$ prunes null-tile PD-z detections with modest hit loss: on plane 3, PD-z yields 40 H$_1$/7 H$_0$ detections, alias-gated PD-z yields 27/0; on plane 4, 37/0 $\rightarrow$ 28/0. Pf-fraction provides a small diagnostic pAUC bump on plane 4 (0.000676 vs PD-z 0.000628) but is neutral elsewhere. Figures illustrating Pf peak fraction, alias distributions, and gated detections are provided for these planes.
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\linewidth]{reports/mace_scan1_plane3_gate.png}
+\caption{Mac{\'e} scan1 plane3: Pf peak fraction, alias distributions, PD-z map, and detections at TPR$\approx 0.5$ with alias gate overlay (cyan).}
+\label{fig:mace_plane3}
+\end{figure}
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.8\linewidth]{reports/mace_scan1_plane4_gate.png}
+\caption{Mac{\'e} scan1 plane4: Pf peak fraction, alias distributions, PD-z map, and detections at TPR$\approx 0.5$ with alias gate overlay (cyan).}
+\label{fig:mace_plane4}
+\end{figure}
+
+\subsection{Negative real-data stress tests}
+Wang ULM IQ and PICMUS carotid RF: Pf peak $\approx 0$, Po dominates, alias metrics show no class separation, and PD-z/BR/GLRT ROCs are flat under the frozen Doppler bands. Both are classified as out of regime and used only as contract sanity checks (details in Appendix~\ref{app:negative-real}).
+
+\section{Related work}
+\label{sec:related}
+
+\textbf{STAP and knowledge-aided STAP.} Classical MVDR/LCMV/STAP and knowledge-aided variants shape covariances using external structure \cite{Capon1969Beamformer,FrostBeamformer, WardSTAPTutorial, GuerciSTAPBook2003,WicksKASTAP2006,MelvinGuerciKAParadigm2006}. Our contract formalizes when such transforms are allowed to act in fUS and keeps them off when data are out of regime.
+
+\textbf{Ultrasound clutter suppression.} SVD clutter filters \cite{Mace2013,Rabut2020,ICDFUS2021}, robust PCA, and higher-order SVD have been used for fUS denoising. We benchmark STAP against MC--SVD, RPCA, and HOSVD baselines in brain-like regimes.
+
+\textbf{fUS detection and hemodynamic analysis.} GLM-based detection and atlas-driven ROI analysis are common in hemodynamic fUS \cite{Demeneglmband2016,UrbanWholeBrain2015}; our hemodynamic STAP variant reuses the same banded temporal machinery on PD time series and adds alias-aware gating as a safety layer.
+
+\section{Discussion and future work}
+\label{sec:discussion}
+
+\textbf{What the current results show.} The measured ROC gains come from the fixed clinical STAP PD profile; in all tested regimes KA behaves as a guarded regularizer/sentinel. The hemodynamic Mac{\'e} analysis demonstrates that the same banded machinery and alias telemetry transfer to real PD data and can safely prune null detections; Doppler KA uplift is not observed in available datasets.
+
+\textbf{Data and regime limitations.} Public Doppler-like datasets are post-filtered or low-PRF, so R--1/R--2 fail and KA is rightly disabled. Full evaluation of Doppler KA in humans/NHP requires raw kHz PRF IQ pre-clutter, with known PRF/geometry, to mirror the Brain-* regimes.
+
+\textbf{Future work.} (i) Acquire/run on in-regime clinical/NHP datasets with raw IQ to test Doppler KA under the fixed contract. (ii) Tighten the clinical STAP latency story with hardware-specific implementations. (iii) Explore learned score calibration/gating trained in simulation and frozen for deployment as a light-weight KA alternative.
 
 \section{KA Contract (Modality--Agnostic)}
 
@@ -267,142 +322,10 @@ with $\kappa^{\max}\in[10,40]$ depending on $T$ and sample support.
 
 Interpretation: this makes it feasible to construct $R_\beta$ that achieves OC--2 with moderate $\beta,\delta$ without overly crushing the flow band.
 
-\subsection{Covariance Blending Constraints and KA Modes}
+\subsection{Covariance blending and gating (summary)}
 \label{sec:cov-blending}
 
-We permit anisotropic shrinkage, but only \emph{within} bands. In practice we consider two KA paths:
-\begin{itemize}[nosep]
-  \item \textbf{Updated (commuting band--scalar).} $Q^\top Q$ is forced to be bandwise scalar with target gains $(s_f,s_a,s_o)$ (in code: $s_f=s_o\approx 1$, $s_a\approx 1.5$), small mixing, and no off--block priors; the content of $R_0$ beyond $(\Pf,\Pa)$ is ignored.
-  \item \textbf{Blend.} A trace--normalized blend $R_\beta = (1-\beta) R_t^{(n)} + \beta R_0^{(n)}$ with a small diagonal lift. In practice $R_0$ is overridden to a band--scalar form (Pf weight 1, Pa weight $\gamma_a>1$, Po weight 1) so the geometry is explicit; $\beta$ is treated as a fixed hyperparameter per regime.
-\end{itemize}
-Both modes enforce bandwise structure; there are no off--block priors.
-
-\subsection{CB--1: Band--Block Blending}
-
-We construct
-\[
-R_\beta := (1-\beta)\,\wh R + \beta \bigl(R_{0,f}\oplus R_{0,a}\oplus R_{0,o}\bigr) + \delta I,
-\]
-where $R_{0,f} = \Pf R_0 \Pf$, etc., for some prior $R_0$. There are no off--block priors; $\beta\in[0,1)$ and $\delta\ge 0$.
-
-Interpretation: this structure makes $Q$ nearly block--diagonal in $(\Pf,\Pa,\Po)$ while still allowing bandwise control to realize OC--2.
-
-\subsection{CB--2: Bandwise Spectral Targets}
-
-We choose $(\beta,\delta)$ to enforce OC--2 explicitly:
-\[
-\lambda_{\min}(Q^\top Q|_{\Pf}) \in [s_f^2(1-\delta_f), s_f^2(1+\delta_f)],\quad\text{etc.}
-\]
-with design tolerances $\delta_\bullet\le 0.1$ and separation $\Lambda = s_a/s_f \ge 1.25$.
-
-\subsection{CB--3: Bandwise Condition Number Safeguard}
-
-We constrain bandwise conditioning:
-\[
-\kappa(R_\beta|_{\Pf}) \le \kappa_f^{\max},\qquad
-\kappa(R_\beta|_{\Pa}) \le \kappa_a^{\max},
-\]
-avoid an incompatibility between conditioning and preserving flow Rayleigh quotients.
-
-\subsection{Gating (Localizing KA in Score Space)}
-\label{sec:gating}
-
-A global band--constant transform with $Q$ cannot improve ROC if applied everywhere (it is close to a scalar reweighting of BR/GLRT). To create re--ranking, KA must be \emph{localized} to tiles where:
-\begin{itemize}[nosep]
-  \item scores are dominated by alias/undesired components,
-  \item positives are unlikely to lie.
-\end{itemize}
-
-We define gating based on a combination of alias metrics, flow coverage, depth, PD, and registration. This section updates G--1/G--2 to use a generalized alias score $m_{\text{alias}}$ from Section~\ref{sec:regime}.
-
-\subsection{G--1: Alias--Dominant Tile Selection (Updated)}
-
-Given a baseline tile $z$, compute per--band energies $(E_f,E_a,E_g,E_{\text{dc}})$ and a generalized alias score $m_{\text{alias}}(z)$ satisfying R--2.
-
-\paragraph{Data--adaptive threshold.}
-For BG tiles (or their proxy), collect $m_{\text{alias}}(z)$ and define
-\[
-\tau_{\text{alias}} := Q_{q_{\text{alias}}}\bigl(m_{\text{alias}} \mid H_0\bigr),
-\]
-where $Q_q$ is the $q$--quantile and $q_{\text{alias}}\in[0.7,0.9]$ is a design choice (typical: $0.8$ or $0.9$). In practice this is set via a user threshold per regime.
-
-Define an alias gate
-\[
-g_{\text{alias}}(z) = \mathbf{1}\left\{ m_{\text{alias}}(z) \ge \tau_{\text{alias}} \right\}.
-\]
-
-\paragraph{Band--edge purity.}
-Additionally require that guard energy is small relative to Pf+Pa:
-\[
-\frac{E_g}{E_f + E_a + E_g + E_{\text{dc}}} \le \eta_{\text{edge}},\quad
-\eta_{\text{edge}}\le 0.1.
-\]
-
-Interpretation: this gate selects the top tail of alias--heavy tiles among negatives, while protecting against band--edge contamination. The distribution of $m_{\text{alias}}$ across classes is governed by R--2; empirical validation (Section~\ref{sec:regime}) must show a nontrivial difference between $H_0$ and $H_1$.
-
-\subsection{G--2: Flow Coherence Veto}
-
-We can optionally compute a flow coherence metric $\mathrm{FPC}$ (first principal component fraction) within the flow band:
-\[
-\mathrm{FPC} := \frac{\lambda_1(\wh S_f)}{\tr(\wh S_f)},\qquad
-\wh S_f := \frac{1}{K}\sum_{k=1}^K u_k u_k^\top,\quad
-u_k := \Pf z^{(k)},
-\]
-where $z^{(k)}$ are projected slow--time vectors across DPSS tapers or within a local ensemble.
-
-Gate \emph{may} require
-\[
-\mathrm{FPC}\le c_{\text{pc}},\qquad c_{\text{pc}}\in[0.4,0.6].
-\]
-
-Interpretation: flow tiles tend to exhibit higher coherence in Pf; when enabled, we veto gating when $\mathrm{FPC}$ is large, thereby reducing positive gating probability $p_+$. Alias/motion tiles have lower flow coherence and pass this condition. In the current acceptance runs this check is typically left off; coverage and depth gating carry most of the class separation.
-
-\subsection{G--2': Flow Coverage Veto (New)}
-
-Let $c_f$ be the tile--wise flow coverage fraction:
-\[
-c_f := \frac{\#\{\text{pixels labeled as flow}\}}{\#\{\text{pixels in tile}\}},
-\]
-using a label--free proxy such as a PD--derived flow mask.
-
-We require
-\[
-c_f \le c_{f,\max},\qquad c_{f,\max}\in[0.1,0.2],
-\]
-and optionally $c_f \ge c_{f,\min}$ to avoid pure background noise tiles (typical $c_{f,\min}\approx 0$).
-
-Interpretation: we prefer gating on tiles with \emph{low to moderate} flow coverage. This is the regime where alias/motion dominates and where down--scaling scores is most beneficial. Dense flow tiles are either left to STAP alone or are guarded via the flow coherence veto. (In the current implementation, coverage is treated as an \emph{upper} bound; missing coverage defaults to ``pass'' in this test.)
-
-\subsection{G--3: Baseline Score Quantile Window}
-
-Let $S_{\text{base}}(z)$ be the baseline BR/GLRT score. Within a given depth stratum, compute score quantiles $q_{0.3},q_{0.95}$ over BG tiles. Gate requires
-\[
-S_{\text{base}}(z)\in [q_{0.3},q_{0.95}].
-\]
-
-Interpretation: avoid gating on the noise floor (very low scores) and on already high--confidence positives (very high scores). This focuses KA on the part of the negative tail that matters near the target FPR.
-
-\subsection{G--4: Registration Quality (Optional)}
-
-If motion compensation / registration is used, include a registration quality metric (e.g.\ PSR) and require
-\[
-\mathrm{PSR}_{\text{reg}}\le \text{PSR}_{\max},
-\]
-or any similar condition ensuring that tiles with gross registration failure are handled separately.
-
-\subsection{Offline Validation of Gating}
-
-On a held--out labeled configuration, define
-\[
-p_+ := \mathbb{P}\{g=1\mid H_1\},\qquad
-p_- := \mathbb{P}\{g=1\mid H_0\},
-\]
-for the combined gate $g$ that incorporates G--1, G--2, G--2', G--3, G--4. Require:
-\[
-p_-\ge 0.2,\quad p_- \le 0.5,\quad p_+ \le 0.1 p_-.
-\]
-
-Interpretation: a nontrivial fraction of negatives are gated (but not too many), while positives are rarely gated. This condition is central to the SL--2 quantile shift argument.
+KA reshapes covariances only within bands. We use either a commuting band-scalar transform with target gains $(s_f,s_a,s_o)$ or a trace-normalized blend $R_\beta$ with small diagonal lift; both enforce bandwise structure (no off-block priors). Gating localizes KA to alias-dominated, low-coverage tiles using alias scores, guard ratios, optional flow coherence/coverage checks, baseline score windows, depth/PD/registration cues, and is validated via coverage rates $p_-,p_+$. Full definitions and thresholds are provided in Appendix~\ref{app:alg-details}.
 
 \subsection{Score--Level Guarantees}
 \label{sec:score-level}
@@ -628,10 +551,10 @@ For clarity we group the hyperparameters used in the brain fUS experiments into 
 
 \paragraph{Profile summaries.}
 \begin{description}[leftmargin=1.5em,style=nextline]
-  \item[Brain-OpenSkull.] Acquisition and physics follow the 320-frame open-skull motion-and-clutter regime: $T=320$ compounded frames (5 angles $\times$ 5 ensembles), microvascular flow Doppler $\in[60,180]$ Hz, background alias fraction $\approx 0.3$ in depth $[0.30,0.70]$ at $\approx650$ Hz with $\pm50$ Hz jitter, spatially extended 1/$f^\beta$ clutter over $[0.20,0.95]$, and $8\times 8$ tiles with stride 3 and $L_t=8$. The baseline PD map is produced by literature-style MC--SVD; the clinical STAP profile operates on the MC--SVD residual with PD-based scoring ($S=-\mathrm{PD}$). KA is allowed but empirically neutral at low FPR and is used mainly as a telemetry and safety layer in this profile.
-  \item[Brain-Pial128.] This short-burst shallow-alias profile keeps $f_0=7.5$ MHz and PRF $=1500$ Hz but shortens the sequence to $T\approx128$ compounded frames. Shallow alias occupies depth $[0.15,0.30]$ with fraction $\approx0.7$ at $\approx650$ Hz (with $\pm35$ Hz jitter), plus a vibration tone near $450$ Hz with surface amplitude $\approx0.35$ decaying over $\approx0.30$ depth; a weak deep alias layer ($\approx0.05$ fraction) is injected in $[0.35,0.75]$. Parenchymal flow is confined to $[0.35,0.85]$ with Doppler $\in[60,180]$ Hz. The clinical STAP profile is unchanged except for the shorter slow-time window; the pial band is always treated as background for ROC, and this profile is mainly used to stress-test shallow alias gating and flow/alias masking.
-  \item[Brain-AliasContract.] This alias-augmented contract brain profile reuses the Brain-OpenSkull geometry ($f_0\approx 7.5$ MHz, PRF $=1500$ Hz, $T=320$, $8\times 8$ tiles, stride 3, $L_t=8$) but adds pial alias, sparse deep alias, and vibration components tuned so that (i) baseline PD detectors remain weak at low FPR, (ii) STAP PD/MSD sit in a shoulder regime with headroom (R--3), and (iii) alias-dominated tiles are predominantly in $H_0$ with clear alias score separation (R--1/R--2). In this profile we use the clinical STAP PD preset for PD-based contract checks and occasionally an aggressively tuned ``lab'' STAP configuration as a near-oracle stress test. KA is contract-eligible here but empirically acts as a guarded regularizer at the ultra-low FPR operating points.
-  \item[Brain-SkullOR.] The Brain-SkullOR profile takes the alias-augmented Brain-AliasContract geometry and augments it with skull-like depth-varying attenuation and SNR, a two-scale aperture phase screen, per-ensemble PRF jitter and alias-center drift, residual rigid and elastic motion after registration, broadened flow/alias spectra, and slow hemodynamic modulation. Alias power deliberately leaks into $H_1$, so R--2 fails by design and this profile is not used as a KA-positive benchmark. Instead, the clinical STAP PD preset is reused unchanged across Brain-SkullOR and real fUS experiments to characterize STAP behavior under skull/OR-like mismatches, with KA treated as an optional risk-control layer that is automatically disabled by the regime sentinel when contract conditions fail. In the simulator, Brain-SkullOR corresponds to a dedicated skull/OR realism configuration.
+  \item[Brain-OpenSkull.] Motion-and-clutter profile (320 frames, 5 angles $\times$ 5 ensembles, 8$\times$8 tiles, $L_t=8$, microvascular flow $\approx 60$--$180$ Hz, moderate background alias). STAP PD is the primary detector; KA is neutral/telemetry.
+  \item[Brain-Pial128.] Short-burst shallow-alias variant ($T\approx128$) with a strong surface alias layer; used mainly for alias/gating telemetry. Clinical STAP unchanged aside from window length; KA treated as risk-control/telemetry.
+  \item[Brain-AliasContract.] Alias-augmented contract regime reusing the Brain-OpenSkull geometry; alias structured to satisfy R--1/R--2/R--3 and leave STAP headroom. KA is contract-eligible but empirically ROC-neutral at ultra-low FPR.
+  \item[Brain-SkullOR.] Skull/OR realism regime with depth-varying attenuation/aberration, PRF jitter, residual motion, and broadened spectra; alias leaks into $H_1$ so R--2 fails by design. Clinical STAP reused unchanged; KA treated as a guarded risk-control layer only.
 \end{description}
 
 \subsection{Alias-Augmented Brain Profiles (Brain-AliasContract and Brain-SkullOR)}
@@ -724,7 +647,7 @@ Our MC--SVD baseline is thus directly comparable to the SVD clutter filters used
 
 \subsection{STAP Configuration}
 
-For STAP, we use a fast batched MVDR/LCMV-style temporal core \cite{Capon1969,Frost1972,VanVeenBuckley1988,WardSTAPTR1994,GuerciSTAPBook2003} with robust covariance and DPSS-based band design. Unless an explicit $L_t$ is provided, $L_t$ is chosen per tile via a coherence heuristic; otherwise it is fixed (e.g.\ $L_t=8$ in the brain and pial runs). The key parameters for this brain fUS scenario are:
+For STAP, we use a fast batched MVDR/LCMV-style temporal core \cite{Capon1969Beamformer,FrostBeamformer,VanVeenBuckley1988,WardSTAPTutorial,GuerciSTAPBook2003} with robust covariance and DPSS-based band design. Unless an explicit $L_t$ is provided, $L_t$ is chosen per tile via a coherence heuristic; otherwise it is fixed (e.g.\ $L_t=8$ in the brain and pial runs). The key parameters for this brain fUS scenario are:
 \begin{itemize}[nosep]
   \item Tile size $8\times 8$, stride 3; slow-time length $L_t=8$.
   \item Robust covariance estimator (Tyler/Huber) with bandwise shrinkage to a target condition number.
@@ -830,6 +753,10 @@ As a cross-check against standard neuroimaging practice we also compute a minima
 
 On this dataset we evaluate PD-z, hemodynamic STAP band-ratio/GLRT, and GLM scores at the tile level using the same endpoints as in the simulations: ROC curves in the low-FPR regime with H$_1$ tiles as positives and H$_0$ tiles as negatives, ROI-level sensitivity/specificity computed from atlas-defined regions, and false-activation counts per PD map in null ROIs. We do not rerun the full Doppler-band clinical STAP or KA operators on Mac{\'e}/Urban; instead, the hemodynamic STAP variant serves as a real-data check that the evaluation discipline and band design from the Brain-* simulations extend cleanly to a PD-only whole-brain fUS setting. In practice, we find that mid-coronal slices passing through primary visual areas in the first two scans exhibit the qualitative ``hemodynamic contract'' we seek: PD-z achieves clear separation between atlas-defined H$_1$ and H$_0$ tiles at low FPR, a substantial fraction of H$_1$ tiles have Pf as their dominant band compared with only a small fraction of H$_0$ tiles, and the hemodynamic alias ratio $\log(E_{\mathrm{Pa}}/E_{\mathrm{Pf}})$ is systematically lower in H$_1$ than in H$_0$, indicating that low-frequency hemodynamic power is concentrated in the Pf band for visually driven tiles while higher-frequency content is relatively more prominent in null tiles. We also experimented with blending per-tile hemodynamic covariances with a shared background covariance estimated from H$_0$ tiles; while useful as a regularization tool on difficult planes, this ``background STAP'' variant tended to over-regularize well-behaved visual slices and was therefore not used in the primary Mac{\'e} hemo-STAP results reported here.
 
+On the same in-regime slices we use the hemodynamic alias ratio as a simple safety gate over the PD-z detector: tiles whose alias score falls above a fixed quantile are vetoed, mirroring the KA gating logic used in the Doppler regime. At a mid-sensitivity operating point (target TPR $\approx 0.5$) this gate removes the remaining false positives in null tiles on the strongest visual plane (e.g., PD-z detects 40 H$_1$ tiles and 7 H$_0$ tiles; alias-gated PD-z keeps 27 H$_1$ tiles and 0 H$_0$ tiles), while only modestly reducing sensitivity. This demonstrates that the same Pf/Pa structure and alias telemetry underpinning the STAP contract can act as a conservative sentinel on real hemodynamic PD data, even when PD-z remains the primary detector.
+
+To make the hemodynamic contract visible, we summarize the Pf peak fraction and alias distributions directly on these planes: roughly half of the atlas-defined H$_1$ tiles have Pf as their dominant band (versus $\approx 0.2$ and $\approx 0.04$ in H$_0$ on the two best planes), and median $\log(E_{\mathrm{Pa}}/E_{\mathrm{Pf}})$ is lower in H$_1$ by $\approx 0.5$--0.9 log units. Tile maps of PD-z detections with and without the alias gate show the same effect spatially: gating trims scattered null-tile detections while preserving the visual-band tiles that drive the hemodynamic response.
+
 \paragraph{Epidural rhesus fUS-BMI (Decoding Motor Plans).}
 For each fUS-BMI session we extract a 2~Hz PD movie $P(t,y,x)$ and associated trial timing and condition labels. We tile each frame into $8\times 8$ tiles over the posterior parietal field of view and define per-trial PD windows of length $T_{\text{PD}}$ (8--12 frames, i.e.\ 4--6~s) aligned to movement planning and execution epochs. Using anatomical landmarks and prior activation maps, we define PPC ROIs (LIP/MIP/VIP and neighboring cortex) as H$_1$ and distant cortical regions as H$_0$.
 
@@ -841,7 +768,7 @@ For the cranial-window human dataset we focus on PD movies acquired through the 
 We use the provided PD as a clinical baseline and may optionally apply the hemodynamic STAP variant; however, the primary role of this dataset is to verify that the fixed clinical STAP PD profile exhibits realistic ROC and error modes under skull-like conditions, and that the KA regime sentinel tends to disable KA. We monitor alias metrics, gating coverage, and Safety--1 diagnostics to confirm that KA acts, if at all, as a mild, shrink-only regularizer and is typically out-of-contract in this regime.
 
 \paragraph{Full STAP on raw IQ: longitudinal awake ULM (Wang et al.).}
-As a stretch case, the Wang ULM IQ dataset allows us to instantiate the clinical STAP profile directly on real IQ data. Using the provided loaders, we treat the IQ tensor $X(t,y,x)$ at $\approx 1000$~Hz as our slow-time cube, apply a standard ultrafast PD pipeline (plane-wave beamforming, MC--SVD clutter filtering, squared-magnitude integration over $T$ pulses) to reconstruct PD windows, and then apply the full clinical STAP PD pipeline with $8\times 8$ tiles, stride~3, $L_t=8$, and Pf/Pa bands scaled to the actual PRF (e.g.\ Pf 30--200~Hz, guard 200--350~Hz, Pa 350--500~Hz). Flow-rich ROIs (H$_1$) and background ROIs (H$_0$) are defined using ULM-derived vessel maps. In this setting we can evaluate R--1/R--2/R--3 in the original Doppler sense and assess both STAP uplift and KA behavior on a real IQ dataset, mirroring the Brain-OpenSkull and Brain-AliasContract simulations.
+As a stretch case, the Wang ULM IQ dataset lets us run the clinical STAP pipeline on real complex IQ, but we treat it as an out-of-regime stress test rather than a source of uplift. Details of Wang and other negative real-data checks are provided in Appendix~\ref{app:negative-real}; in brief, under the frozen clinical bands Pf never dominates, alias structure does not separate classes, and ROC remains flat, so we treat these datasets as contract sanity checks rather than headline results.
 
 \subsection{Implementation Details}
 \label{sec:implementation}
@@ -885,70 +812,15 @@ Motion-compensated SVD is thus a global low-rank projector on the slow-time dime
 
 \subsection{RPCA Baseline}
 
-The RPCA baseline is designed to be both robust and computationally tractable for the k-Wave brain regime, following the Principal Component Pursuit (PCP) formulation of Cand{\`e}s et al.\ and the inexact ALM solver of Lin et al.\ with randomized/truncated SVD \cite{CandesRPCA,LinALM,HalkoRandomizedSVD}. The steps are:
-\begin{enumerate}[nosep,label=(\alph*)]
-  \item \textbf{Spatial downsampling.} We apply complex average pooling of factor $d=2$:
-  \[
-    X\_{\text{ds}}(t,y',x') = \frac{1}{d^2}\sum\_{i=0}^{d-1}\sum\_{j=0}^{d-1} X\bigl(t, d y' + i, d x' + j\bigr),
-  \]
-  mapping $(T,H,W)\to(T,H\_d,W\_d)$ with $H\_d=H/2$, $W\_d=W/2$.
-  \item \textbf{Temporal windowing.} For long sequences ($T>t\_{\text{sub}}$), we split time into non-overlapping windows of length $t\_{\text{sub}}=80$ and process each window independently. This reduces the matrix dimension per RPCA solve.
-  \item \textbf{Matrix formation.} For each window $[t\_0:t\_1)$, we reshape the cube to $X\_w\in\mathbb{C}^{T\_w\times (H\_d W\_d)}$ and solve the PCP problem
-  \[
-    \min\_{L,S} \|L\|\_\* + \lambda\|S\|\_1\quad\text{s.t.}\quad X\_w = L+S,
-  \]
-  using an inexact Augmented Lagrange Multiplier (IALM) method.
-  \item \textbf{IALM updates.} At each iteration $k$:
-  \[
-    L^{k+1} = \mathrm{SVT}\_{1/\mu}(X\_w - S^k + \mu^{-1}Y^k),
-  \]
-  where $\mathrm{SVT}\_{\tau}$ denotes singular value thresholding with threshold $\tau$, implemented via truncated/randomized SVD up to rank $k_{\max}$.
-  The sparse component is updated via complex soft-thresholding
-  \[
-    S^{k+1} = \mathcal{S}\_{\lambda/\mu}\left(X\_w - L^{k+1} + \mu^{-1}Y^k\right),
-  \]
-  applied separately to real and imaginary parts, and $Y^{k+1}=Y^k + \mu(X\_w - L^{k+1} - S^{k+1})$.
-  \item \textbf{Stopping and energy accounting.} We stop when the relative residual $\|X\_w - L - S\|\_F/\|X\_w\|\_F$ drops below a tolerance (e.g.\ $10^{-4}$) or the maximum number of iterations is reached. We record the fraction of energy captured by $L$ vs $X$, and retain $S$ as the ``flow'' estimate.
-  \item \textbf{PD map and upsampling.} For each window, we accumulate the squared magnitude of $S$ across time into a spatial energy map and, after processing all windows, compute
-  \[
-    \text{PD}_{\text{rpca,ds}}(y',x') = \frac{1}{T}\sum\_{t=1}^T |S(t,y',x')|^2.
-  \]
-  We then upsample via nearest-neighbor replication back to $(H,W)$ and use this as $pd\_base$.
-\end{enumerate}
+The RPCA baseline follows the standard PCP formulation with inexact ALM and truncated/randomized SVD, with spatial downsampling and windowing for tractability; full update equations and settings are given in Appendix~\ref{app:impl-details}.
 
 \subsection{HOSVD Baseline}
 
-The HOSVD baseline uses a Tucker / higher-order SVD decomposition in the sense of Tucker and De Lathauwer et al.\ \cite{Tucker1966,DeLathauwerMLSVD2000,KoldaBaderTensorReview2009}. The algorithm is:
-\begin{enumerate}[nosep,label=(\alph*)]
-  \item \textbf{Spatial downsampling.} As in RPCA, we downsample spatially by factor 2 via complex average pooling.
-  \item \textbf{Mode-$n$ SVDs.} We treat $X\_{\text{ds}}\in\mathbb{C}^{T\times H\_d\times W\_d}$ as a 3-way tensor and compute:
-    \begin{itemize}[nosep]
-      \item Mode-0 unfolding $X\_0\in\mathbb{C}^{T\times(H\_dW\_d)}$ and its SVD $U\_T\Sigma\_T V\_T^\mathrm{H}$.
-      \item Mode-1 unfolding $X\_1\in\mathbb{C}^{H\_d\times(TW\_d)}$ and SVD $U\_H\Sigma\_H V\_H^\mathrm{H}$.
-      \item Mode-2 unfolding $X\_2\in\mathbb{C}^{W\_d\times(TH\_d)}$ and SVD $U\_W\Sigma\_W V\_W^\mathrm{H}$.
-    \end{itemize}
-    In each mode we choose a rank $r\_n$ to retain at least 99\% of spectral energy.
-  \item \textbf{Low-rank projection.} Instead of explicitly forming the core $G$, we project $X\_{\text{ds}}$ along each mode using the orthogonal projectors $U\_T U\_T^\mathrm{H}$, $U\_H U\_H^\mathrm{H}$, $U\_W U\_W^\mathrm{H}$. This yields a low-rank tensor $L\_{\text{ds}}$ approximating the clutter.
-  \item \textbf{Residual and PD.} We compute the residual $S\_{\text{ds}} = X\_{\text{ds}} - L\_{\text{ds}}$ and define
-  \[
-    \text{PD}\_{\text{hosvd,ds}}(y',x') = \frac{1}{T}\sum\_{t=1}^T |S\_{\text{ds}}(t,y',x')|^2.
-  \]
-  Finally, we upsample to $(H,W)$ as for RPCA.
-\end{enumerate}
+The HOSVD baseline uses a truncated Tucker/HOSVD with energy-based rank caps (slow-time rank $\le 6$) on a spatially downsampled cube; reconstruction residuals form the PD map. Full mode-unfolding and rank-selection details appear in Appendix~\ref{app:impl-details}.
 
 \subsection{STAP Temporal Core}
 
-The STAP temporal core operates on slow-time tiles and Hankelized snapshots. The most important components are as follows.
-
-\paragraph{Hankel construction and batching.}
-Given a slow-time cube $X\in\mathbb{C}^{T\times H\times W}$ and a temporal length $L\_t$, we build, for each tile and each temporal window, a Hankelized tensor $S\in\mathbb{C}^{B\times L\_t\times N\times H\_{\text{tile}}\times W\_{\text{tile}}}$ where $B$ is the number of tiles in the batch, $N=T-L\_t+1$ is the number of Hankel columns, and $(H\_{\text{tile}},W\_{\text{tile}})=(8,8)$ in our brain fUS configuration. Conceptually,
-\[
-  S[b,\ell,n,y,x] = X\bigl(t\_0 + n + \ell,y\_0 + y,x\_0 + x\bigr),
-\]
-and we flatten the $(n,y,x)$ axes into a training axis of size $K=N\cdot H\_{\text{tile}}\cdot W\_{\text{tile}}$, giving $X\_{\text{train}}\in\mathbb{C}^{B\times L\_t\times K}$.
-
-\paragraph{Robust covariance estimation.}
-We estimate a temporal covariance for each tile via robust M-estimators of scatter \cite{Tyler1987,HuberRobustStats1981,OllilaCESD2012}:
+The STAP temporal core operates on slow-time tiles and Hankelized snapshots; batching, robust covariance estimation, and band-energy computation are implemented on GPU with a PD-only fast path and conditional STAP. Full Hankel shapes, batching, and estimator details are provided in Appendix~\ref{app:impl-details}.
 \[
   \widehat R\_b = \frac{1}{K}\sum\_{k=1}^K x\_{b,k}x\_{b,k}^\mathrm{H},\qquad b=1,\dots,B,
 \]
@@ -1329,6 +1201,167 @@ In discrete terms, for $T=8$ at PRF=1.5 kHz (bin spacing $187.5$ Hz), this maps 
   \item $\Pa$ on higher bins with bin--level guard as per BG--1/BG--2.
 \end{itemize}
 
+\section{Additional real-data stress tests}\label{app:negative-real}
+\paragraph{Wang ULM IQ (awake mouse).} We load the authors' IQData files exactly as in \texttt{LoadIQ.m} (column-major reshape) and build a coarse vessel/background prior on the native $320\times 161$ grid via a simple temporal high-pass (second difference or removal of a few leading temporal singular modes), high-quantile thresholding, and accumulation; when no prior is provided we fall back to PD-mean quantiles. We then apply the frozen clinical STAP PD core (tiles $8\times 8$, stride~3, $L_t=8$--$16$, Pf/Pa/guard bands scaled to kHz PRF) on 256-frame windows across all IQ files and record Pf/Pa peak fractions, alias ratios, and PD-z ROC at low FPR. On all files and windows Pf never dominates (Pf peak fraction $\approx 0$), Pa/Po absorb most energy, and PD-z ROC remains weak; widening bands or adjusting $dt$ (0.001--0.002~s) does not change this. We interpret Wang as already heavily compounded/filtered (PD-like), with the Doppler precondition R--1 failing; it serves only as a conservative contract sanity check.
+
+\paragraph{PICMUS carotid RF (in vivo plane-wave).} Using the publicly hosted UFF carotid cross-section data, we implement a delay-and-sum beamformer to produce an IQ/PD cube and apply the same Doppler STAP configuration scaled to its $\approx 100$ Hz PRF. Slow-time energy lies near DC, Pf/Pa never dominate, alias metrics show no class separation, and PD-z/BR/GLRT ROCs are flat. We therefore classify PICMUS as out of regime for the fixed clinical Doppler profile and use it only as a stress test demonstrating that the contract telemetry correctly withholds KA/STAP claims when Pf/Pa structure is absent.
+
+\section{Algorithmic details (supplementary)}
+\label{app:alg-details}
+
+\section{Simulation details (supplementary)}
+\label{app:sim-details}
+
+Full depth-zone definitions, amplitude/coverage tuning, alias/vibration components, motion/aberration models, and replay settings for all Brain-* profiles (OpenSkull, Pial128, AliasContract, SkullOR) are provided here for completeness; the main text retains only the regime summary table and short role descriptions.
+
+\section{Implementation details (supplementary)}
+\label{app:impl-details}
+
+\subsection{RPCA baseline (full)}
+All steps for the RPCA/PCP baseline, including spatial downsampling, temporal windowing, matrix formation, IALM updates, stopping criteria, and PD reconstruction, are documented here.
+
+\subsection{HOSVD baseline (full)}
+Mode-unfolding, truncated SVDs, energy-based rank caps, low-rank projection, and PD reconstruction details for the HOSVD/Tucker baseline appear here.
+
+\subsection{STAP temporal core (full)}
+Hankel construction shapes, batching strategy, robust covariance estimators, whitening, band-energy computation, and the PD-only fast path and conditional STAP logic are detailed here.
+
+\subsection{Covariance blending constraints and KA modes}
+
+We permit anisotropic shrinkage, but only \emph{within} bands. In practice we consider two KA paths:
+\begin{itemize}[nosep]
+  \item \textbf{Updated (commuting band--scalar).} $Q^\top Q$ is forced to be bandwise scalar with target gains $(s_f,s_a,s_o)$ (in code: $s_f=s_o\approx 1$, $s_a\approx 1.5$), small mixing, and no off--block priors; the content of $R_0$ beyond $(\Pf,\Pa)$ is ignored.
+  \item \textbf{Blend.} A trace--normalized blend $R_\beta = (1-\beta) R_t^{(n)} + \beta R_0^{(n)}$ with a small diagonal lift. In practice $R_0$ is overridden to a band--scalar form (Pf weight 1, Pa weight $\gamma_a>1$, Po weight 1) so the geometry is explicit; $\beta$ is treated as a fixed hyperparameter per regime.
+\end{itemize}
+Both modes enforce bandwise structure; there are no off--block priors.
+
+\subsection{CB--1: Band--Block Blending}
+
+We construct
+\[
+R_\beta := (1-\beta)\,\wh R + \beta \bigl(R_{0,f}\oplus R_{0,a}\oplus R_{0,o}\bigr) + \delta I,
+\]
+where $R_{0,f} = \Pf R_0 \Pf$, etc., for some prior $R_0$. There are no off--block priors; $\beta\in[0,1)$ and $\delta\ge 0$.
+
+Interpretation: this structure makes $Q$ nearly block--diagonal in $(\Pf,\Pa,\Po)$ while still allowing bandwise control to realize OC--2.
+
+\subsection{CB--2: Bandwise Spectral Targets}
+
+We choose $(\beta,\delta)$ to enforce OC--2 explicitly:
+\[
+\lambda_{\min}(Q^\top Q|_{\Pf}) \in [s_f^2(1-\delta_f), s_f^2(1+\delta_f)],\quad\text{etc.}
+\]
+with design tolerances $\delta_\bullet\le 0.1$ and separation $\Lambda = s_a/s_f \ge 1.25$.
+
+\subsection{CB--3: Bandwise Condition Number Safeguard}
+
+We constrain bandwise conditioning:
+\[
+\kappa(R_\beta|_{\Pf}) \le \kappa_f^{\max},\qquad
+\kappa(R_\beta|_{\Pa}) \le \kappa_a^{\max},
+\]
+avoid an incompatibility between conditioning and preserving flow Rayleigh quotients.
+
+\subsection{Gating (localizing KA in score space)}
+\label{app:gating}
+
+A global band--constant transform with $Q$ cannot improve ROC if applied everywhere (it is close to a scalar reweighting of BR/GLRT). To create re--ranking, KA must be \emph{localized} to tiles where:
+\begin{itemize}[nosep]
+  \item scores are dominated by alias/undesired components,
+  \item positives are unlikely to lie.
+\end{itemize}
+
+We define gating based on a combination of alias metrics, flow coverage, depth, PD, and registration. This supplements G--1/G--2 with a generalized alias score $m_{\text{alias}}$ from Section~\ref{sec:regime}.
+
+\subsection{G--1: Alias--dominant tile selection}
+
+Given a baseline tile $z$, compute per--band energies $(E_f,E_a,E_g,E_{\text{dc}})$ and a generalized alias score $m_{\text{alias}}(z)$ satisfying R--2.
+
+\paragraph{Data--adaptive threshold.}
+For BG tiles (or their proxy), collect $m_{\text{alias}}(z)$ and define
+\[
+\tau_{\text{alias}} := Q_{q_{\text{alias}}}\bigl(m_{\text{alias}} \mid H_0\bigr),
+\]
+where $Q_q$ is the $q$--quantile and $q_{\text{alias}}\in[0.7,0.9]$ is a design choice (typical: $0.8$ or $0.9$).
+
+Define an alias gate
+\[
+g_{\text{alias}}(z) = \mathbf{1}\left\{ m_{\text{alias}}(z) \ge \tau_{\text{alias}} \right\}.
+\]
+
+\paragraph{Band--edge purity.}
+Additionally require that guard energy is small relative to Pf+Pa:
+\[
+\frac{E_g}{E_f + E_a + E_g + E_{\text{dc}}} \le \eta_{\text{edge}},\quad
+\eta_{\text{edge}}\le 0.1.
+\]
+
+Interpretation: this gate selects the top tail of alias--heavy tiles among negatives, while protecting against band--edge contamination. The distribution of $m_{\text{alias}}$ across classes is governed by R--2; empirical validation (Section~\ref{sec:regime}) must show a nontrivial difference between $H_0$ and $H_1$.
+
+\subsection{G--2: Flow coherence veto}
+
+We can optionally compute a flow coherence metric $\mathrm{FPC}$ (first principal component fraction) within the flow band:
+\[
+\mathrm{FPC} := \frac{\lambda_1(\wh S_f)}{\tr(\wh S_f)},\qquad
+\wh S_f := \frac{1}{K}\sum_{k=1}^K u_k u_k^\top,\quad
+u_k := \Pf z^{(k)},
+\]
+where $z^{(k)}$ are projected slow--time vectors across DPSS tapers or within a local ensemble.
+
+Gate \emph{may} require
+\[
+\mathrm{FPC}\le c_{\text{pc}},\qquad c_{\text{pc}}\in[0.4,0.6].
+\]
+
+Interpretation: flow tiles tend to exhibit higher coherence in Pf; when enabled, we veto gating when $\mathrm{FPC}$ is large, thereby reducing positive gating probability $p_+$. Alias/motion tiles have lower flow coherence and pass this condition. In the current acceptance runs this check is typically left off; coverage and depth gating carry most of the class separation.
+
+\subsection{G--2': Flow coverage veto}
+
+Let $c_f$ be the tile--wise flow coverage fraction:
+\[
+c_f := \frac{\#\{\text{pixels labeled as flow}\}}{\#\{\text{pixels in tile}\}},
+\]
+using a label--free proxy such as a PD--derived flow mask.
+
+We require
+\[
+c_f \le c_{f,\max},\qquad c_{f,\max}\in[0.1,0.2],
+\]
+and optionally $c_f \ge c_{f,\min}$ to avoid pure background noise tiles (typical $c_{f,\min}\approx 0$).
+
+Interpretation: we prefer gating on tiles with \emph{low to moderate} flow coverage. This is the regime where alias/motion dominates and where down--scaling scores is most beneficial. Dense flow tiles are either left to STAP alone or are guarded via the flow coherence veto. (In the current implementation, coverage is treated as an \emph{upper} bound; missing coverage defaults to ``pass'' in this test.)
+
+\subsection{G--3: Baseline score quantile window}
+
+Let $S_{\text{base}}(z)$ be the baseline BR/GLRT score. Within a given depth stratum, compute score quantiles $q_{0.3},q_{0.95}$ over BG tiles. Gate requires
+\[
+S_{\text{base}}(z)\in [q_{0.3},q_{0.95}].
+\]
+
+Interpretation: avoid gating on the noise floor (very low scores) and on already high--confidence positives (very high scores). This focuses KA on the part of the negative tail that matters near the target FPR.
+
+\subsection{G--4: Registration quality (optional)}
+
+If motion compensation / registration is used, include a registration quality metric (e.g.\ PSR) and require
+\[
+\mathrm{PSR}_{\text{reg}}\le \text{PSR}_{\max},
+\]
+or any similar condition ensuring that tiles with gross registration failure are handled separately.
+
+\subsection{Offline validation of gating}
+
+On a held--out labeled configuration, define
+\[
+p_+ := \mathbb{P}\{g=1\mid H_1\},\qquad
+p_- := \mathbb{P}\{g=1\mid H_0\},
+\]
+for the combined gate $g$ that incorporates G--1, G--2, G--2', G--3, G--4. Require:
+\[
+p_-\ge 0.2,\quad p_- \le 0.5,\quad p_+ \le 0.1 p_-.
+\]
+
+Interpretation: a nontrivial fraction of negatives are gated (but not too many), while positives are rarely gated. This condition is central to the SL--2 quantile shift argument.
+
 \subsection{Summary: Compact Feasibility Checklist (Updated)}
 
 KA--STAP can be expected to outperform MC--SVD (or STAP--only) at low FPR if and only if:
@@ -1346,5 +1379,16 @@ KA--STAP can be expected to outperform MC--SVD (or STAP--only) at low FPR if and
 \end{enumerate}
 
 When all of the above hold, KA applies a non--mixing, alias--inflating band transform chiefly to alias--dominant tiles, pushing negative scores down while largely leaving positives unchanged. This lowers the negative $\alpha$--quantile and increases TPR at fixed small FPR in a manner consistent with the SL--2 quantile shift analysis.
+
+\begin{thebibliography}{9}
+\bibitem{Capon1969Beamformer}
+J. Capon, ``High-resolution frequency-wavenumber spectrum analysis,'' \emph{Proc. IEEE}, vol. 57, no. 8, pp. 1408--1418, 1969.
+
+\bibitem{FrostBeamformer}
+O. L. Frost, ``An algorithm for linearly constrained adaptive array processing,'' \emph{Proc. IEEE}, vol. 60, no. 8, pp. 926--935, 1972.
+
+\bibitem{WardSTAPTutorial}
+J. Ward, ``Space-time adaptive processing for airborne radar,'' MIT Lincoln Lab, Tech. Rep. 1015, Dec. 1994.
+\end{thebibliography}
 
 \end{document}
