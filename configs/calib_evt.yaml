@@ -1,0 +1,2 @@
+u_strategy: mean_excess_stability
+bootstrap_B: 500

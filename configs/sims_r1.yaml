@@ -1,0 +1,16 @@
+scenario: rigid_baseline
+description: >
+  Moderate cranial motion with low-to-medium heterogeneity; baseline stress
+  pass should maintain ΔPD-SNR ≥3 dB and ΔTPR@FPR ≥0.05 across most cells.
+
+grid:
+  motion_um: [10, 30, 50]
+  motion_freq_hz: [0.2, 0.5, 1.0]
+  heterogeneity: [low, medium]
+  prf_hz: [2000, 3000, 4500]
+  prf_jitter_pct: [0, 5]
+  sensor_dropout: [0, 0.05]
+  scatter_density: [0.8, 1.0, 1.2]
+  skull_db: [0]
+  K: [5, 7, 9, 11]
+  tiles: ["8x8:4", "12x12:6"]

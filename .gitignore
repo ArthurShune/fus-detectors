@@ -1,0 +1,23 @@
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.npz
+*.npy
+*.pt
+.env
+.venv
+.ipynb_checkpoints/
+build/
+dist/
+site/assets/
+.kwavedata/
+figs/outputs/
+runs/
+reports/
+data/
+.pytest_cache/
+.ruff_cache/
+
+# Large run outputs (tracked via LFS or archived)
+runs/motion/r4c/mcsvd_k8_reg4_stride2_seed*/
