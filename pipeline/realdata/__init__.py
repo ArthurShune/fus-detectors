@@ -44,6 +44,24 @@ class MaceScan:
         return int(self.pd.shape[3])
 
 
+@dataclass
+class WangIQInfo:
+    """
+    Metadata for a Wang ULM IQ volume (single .dat file).
+
+    The raw file stores 2*row*col*frames doubles laid out as [IData(:); QData(:)]
+    in MATLAB column-major order, where IQ(t, y, x) has shape (row, col, frames).
+    """
+
+    row: int
+    col: int
+    frames: int
+
+    @property
+    def n_samples_per_polarity(self) -> int:
+        return int(self.row * self.col * self.frames)
+
+
 def iter_pd_slices(scan: MaceScan) -> Iterable[Tuple[int, np.ndarray]]:
     """
     Yield per-plane PD volumes shaped (T, H, W) for a given scan.
@@ -103,11 +121,22 @@ def mace_data_root(base: Path | str = Path("data")) -> Path:
     return base_path / "whole-brain-fUS"
 
 
+def wang_data_root(base: Path | str = Path("data")) -> Path:
+    """
+    Return the expected root directory for the Wang ULM IQ dataset.
+    """
+
+    base_path = Path(base)
+    return base_path / "wang_ulm"
+
+
 __all__ = [
     "MaceScan",
+    "WangIQInfo",
     "iter_pd_slices",
     "tile_iter",
     "tile_coords",
     "extract_tile_stack",
     "mace_data_root",
+    "wang_data_root",
 ]
