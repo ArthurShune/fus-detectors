@@ -2742,11 +2742,62 @@ def msd_snapshot_energies_batched(
         lam_eff = max(lam_candidates)
 
     Lt_dim = Rt.shape[0]
-    N = S.shape[1]
-    h, w = S.shape[2], S.shape[3]
+    if S.ndim < 2:
+        raise ValueError(f"Expected S with at least 2 dims (Lt, ...), got shape {tuple(S.shape)}")
+    if S.shape[0] != Lt_dim:
+        # Handle mis-ordered snapshot tensors by moving the Lt axis up front
+        # and selecting a reasonable slow-time axis based on size uniqueness.
+        tail_axes = list(range(S.ndim))
+        lt_axes = [ax for ax, sz in enumerate(S.shape) if sz == Lt_dim]
+        if lt_axes:
+            lt_ax = lt_axes[0]
+            order = [lt_ax] + [ax for ax in tail_axes if ax != lt_ax]
+            if len(order) >= 2:
+                rem_axes = order[1:]
+                rem_sizes = [S.shape[ax] for ax in rem_axes]
+                size_counts: dict[int, int] = {}
+                for sz in rem_sizes:
+                    size_counts[int(sz)] = size_counts.get(int(sz), 0) + 1
+                unique_axes = [
+                    ax for ax in rem_axes if size_counts.get(int(S.shape[ax]), 0) == 1
+                ]
+                if unique_axes:
+                    snap_ax = unique_axes[0]
+                else:
+                    snap_ax = rem_axes[int(np.argmax(rem_sizes))]
+                # Put snapshots immediately after Lt.
+                if snap_ax != rem_axes[0]:
+                    snap_pos = order.index(snap_ax)
+                    order[1], order[snap_pos] = order[snap_pos], order[1]
+            S = S.permute(order).contiguous()
+        if S.shape[0] != Lt_dim:
+            raise ValueError(
+                f"First dim of S ({S.shape[0]}) must match Lt={Lt_dim} from Rt; "
+                f"got S shape {tuple(S.shape)} and Rt shape {tuple(Rt.shape)}"
+            )
+    elif S.ndim >= 3:
+        # Lt is already leading; still normalize the snapshot axis so that it
+        # sits directly after Lt.
+        rem_axes = list(range(1, S.ndim))
+        rem_sizes = [S.shape[ax] for ax in rem_axes]
+        size_counts: dict[int, int] = {}
+        for sz in rem_sizes:
+            size_counts[int(sz)] = size_counts.get(int(sz), 0) + 1
+        unique_axes = [ax for ax in rem_axes if size_counts.get(int(S.shape[ax]), 0) == 1]
+        if unique_axes:
+            snap_ax = unique_axes[0]
+        else:
+            snap_ax = rem_axes[int(np.argmax(rem_sizes))]
+        if snap_ax != 1:
+            order = [0, snap_ax] + [ax for ax in rem_axes if ax != snap_ax]
+            S = S.permute(order).contiguous()
+    # Snapshot / spatial shape (e.g., (N, h, w)); keep this generic so the same
+    # code works for 3-D, 4-D, or higher-rank layouts.
+    snap_shape = S.shape[1:]
+    P = int(np.prod(snap_shape)) if snap_shape else 1
 
     if Ct.shape[-1] == 0:
-        zeros = torch.zeros((N, h, w), dtype=torch.float32, device=device)
+        zeros = torch.zeros(snap_shape, dtype=torch.float32, device=device)
         return zeros, zeros
 
     guard_eps = 0.0
@@ -2826,16 +2877,17 @@ def msd_snapshot_energies_batched(
         R_loaded = Rt + float(lam_final) * eye
         L = torch.linalg.cholesky(R_loaded)
 
-    S_flat = S.reshape(Lt_dim, N * h * w)
+    # Flatten snapshots / spatial dimensions but keep Lt explicit.
+    S_flat = S.reshape(Lt_dim, P)
     S_w = torch.linalg.solve_triangular(L, S_flat, upper=False, left=True)
-    S_w = S_w.reshape(Lt_dim, N, h, w)
+    S_w = S_w.reshape(Lt_dim, *snap_shape)
 
     C_w = torch.linalg.solve_triangular(L, Ct, upper=False, left=True)
     Gram = C_w.conj().transpose(-2, -1) @ C_w
     if ridge > 0.0:
         Gram = Gram + float(ridge) * torch.eye(Gram.shape[-1], dtype=dtype, device=device)
 
-    Sw_flat = S_w.reshape(Lt_dim, N * h * w)
+    Sw_flat = S_w.reshape(Lt_dim, P)
     z = C_w.conj().transpose(-2, -1) @ Sw_flat  # (Kc, N*h*w)
     proj_coeffs, _ = cholesky_solve_hermitian(Gram, z, jitter_init=1e-10, max_tries=3)
     T_band = torch.sum(z.conj() * proj_coeffs, dim=0).real
@@ -2911,7 +2963,7 @@ def msd_snapshot_energies_batched(
 
         T_band = T_band_new.reshape_as(T_band_flat)
 
-    return T_band.reshape(N, h, w), sw_pow.reshape(N, h, w)
+    return T_band.reshape(*snap_shape), sw_pow.reshape(*snap_shape)
 
 
 def _band_energy_whitened_batched(
@@ -2957,10 +3009,67 @@ def _band_energy_whitened_batched(
     Ct = C_t.to(device=device, dtype=work_dtype)
     lam_vec = lam_B.to(device=device).flatten()
 
-    B, Lt, _ = R.shape
+    B_R, Lt_R, _ = R.shape
+    # Normalize snapshot layout in case Lt is not at dim=1.
+    if S.shape[1] != Lt_R:
+        tail_axes = list(range(1, S.ndim))
+        lt_axes = [ax for ax in tail_axes if S.shape[ax] == Lt_R]
+        if lt_axes:
+            lt_ax = lt_axes[0]
+            order_tail = [lt_ax] + [ax for ax in tail_axes if ax != lt_ax]
+            if len(order_tail) >= 2:
+                rem_axes = order_tail[1:]
+                rem_sizes = [S.shape[ax] for ax in rem_axes]
+                size_counts: dict[int, int] = {}
+                for sz in rem_sizes:
+                    size_counts[int(sz)] = size_counts.get(int(sz), 0) + 1
+                unique_axes = [
+                    ax for ax in rem_axes if size_counts.get(int(S.shape[ax]), 0) == 1
+                ]
+                if unique_axes:
+                    snap_ax = unique_axes[0]
+                else:
+                    snap_ax = rem_axes[int(np.argmax(rem_sizes))]
+                if snap_ax != rem_axes[0]:
+                    snap_pos = order_tail.index(snap_ax)
+                    order_tail[1], order_tail[snap_pos] = order_tail[snap_pos], order_tail[1]
+            perm = [0] + order_tail
+            S = S.permute(perm).contiguous()
+    else:
+        # Lt already at dim=1; still normalize snapshot axis into dim=2.
+        rem_axes = list(range(2, S.ndim))
+        rem_sizes = [S.shape[ax] for ax in rem_axes]
+        if rem_axes:
+            size_counts: dict[int, int] = {}
+            for sz in rem_sizes:
+                size_counts[int(sz)] = size_counts.get(int(sz), 0) + 1
+            unique_axes = [
+                ax for ax in rem_axes if size_counts.get(int(S.shape[ax]), 0) == 1
+            ]
+            if unique_axes:
+                snap_ax = unique_axes[0]
+            else:
+                snap_ax = rem_axes[int(np.argmax(rem_sizes))]
+            if snap_ax != 2:
+                order = [0, 1, snap_ax] + [ax for ax in rem_axes if ax != snap_ax]
+                S = S.permute(order).contiguous()
+
+    B_S, Lt_S = S.shape[:2]
+    if S.ndim < 4:
+        raise ValueError(f"Expected >=4 dims for S, got {tuple(S.shape)}")
+    if S.ndim == 4:
+        N, h = S.shape[2], S.shape[3]
+        w = 1
+    else:
+        N, h, w = S.shape[2], S.shape[3], S.shape[4]
+    if B_R != B_S or Lt_R != Lt_S:
+        raise ValueError(
+            f"R and S mismatch in _band_energy_whitened_batched: "
+            f"R {R.shape}, S {S.shape}"
+        )
+    B, Lt = B_R, Lt_R
     if Ct.numel() == 0:
         # No band constraints: return zeros to avoid NaNs downstream.
-        _, _, N, h, w = S.shape
         zeros = torch.zeros((B, N, h, w), dtype=torch.float32, device=device)
         return zeros, zeros
 
