@@ -316,7 +316,7 @@ def main() -> None:
     hemo_br = scores["hemo_br"]
     hemo_glrt = scores["hemo_glrt"]
     alias_ratio = (Ea + 1e-8) / (Ef + 1e-8)
-    peak_idx = np.argmax(np.stack([Ef, Ea, scores["Eg"]], axis=1), axis=1)  # 0=Pf,1=Pa,2=Po
+    peak_idx = np.argmax(np.stack([Ef, Ea, scores["Eo"]], axis=1), axis=1)  # 0=Pf,1=Pa,2=Po (other)
 
     def frac(arr: np.ndarray, val: int) -> float:
         return float((arr == val).mean()) if arr.size else 0.0

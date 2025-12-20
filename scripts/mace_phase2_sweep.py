@@ -357,13 +357,13 @@ def main() -> None:
                 hemo_scores = hemo_stap_scores_for_tiles(p_tiles, hemo_cfg)
                 Ef = hemo_scores["Ef"]
                 Ea = hemo_scores["Ea"]
-                Eg = hemo_scores["Eg"]
+                Eo = hemo_scores["Eo"]
                 hemo_br = hemo_scores["hemo_br"].astype(np.float64)
 
                 alias = (Ea + 1e-8) / (Ef + 1e-8)
                 alias_log = np.log(alias + 1e-12)
-                bands = np.stack([Ef, Ea, Eg], axis=1)
-                peak_idx = np.argmax(bands, axis=1)  # 0=Pf, 1=Pa, 2=Po
+                bands = np.stack([Ef, Ea, Eo], axis=1)
+                peak_idx = np.argmax(bands, axis=1)  # 0=Pf, 1=Pa, 2=Po (other)
 
                 def _frac(mask: np.ndarray, idx: np.ndarray, val: int) -> float:
                     subset = idx[mask]
@@ -457,4 +457,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

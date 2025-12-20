@@ -62,6 +62,25 @@ class WangIQInfo:
         return int(self.row * self.col * self.frames)
 
 
+@dataclass
+class ShinIQInfo:
+    """
+    Metadata for Shin RatBrain IQ volumes (Zenodo 10711806, Fig3/Fig4 zips).
+
+    Files follow the same I/Q double layout as the Wang IQ dataset:
+      - IQDataXXX.dat stores 2*row*col*frames float64 values as [IData(:); QData(:)]
+      - Data is laid out in MATLAB column-major order with shape (row, col, frames)
+    """
+
+    row: int
+    col: int
+    frames: int
+
+    @property
+    def n_samples_per_polarity(self) -> int:
+        return int(self.row * self.col * self.frames)
+
+
 def iter_pd_slices(scan: MaceScan) -> Iterable[Tuple[int, np.ndarray]]:
     """
     Yield per-plane PD volumes shaped (T, H, W) for a given scan.
@@ -130,13 +149,24 @@ def wang_data_root(base: Path | str = Path("data")) -> Path:
     return base_path / "wang_ulm"
 
 
+def shin_ratbrain_data_root(base: Path | str = Path("data")) -> Path:
+    """
+    Return the expected root directory for the Shin RatBrain Fig3 dataset.
+    """
+
+    base_path = Path(base)
+    return base_path / "shin_zenodo_10711806" / "ratbrain_fig3_raw"
+
+
 __all__ = [
     "MaceScan",
     "WangIQInfo",
+    "ShinIQInfo",
     "iter_pd_slices",
     "tile_iter",
     "tile_coords",
     "extract_tile_stack",
     "mace_data_root",
     "wang_data_root",
+    "shin_ratbrain_data_root",
 ]

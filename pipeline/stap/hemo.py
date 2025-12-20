@@ -55,9 +55,9 @@ def _build_hemo_projectors(
     cfg: HemoStapConfig,
     device: torch.device,
     dtype: torch.dtype,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Build Pf, Pa, Po projectors for hemodynamic bands using DFT tones.
+    Build Pf, Pg, Pa, Po projectors for hemodynamic bands using DFT tones.
 
     Pf and Pa are constructed as projectors onto the span of complex tones
     whose continuous-time frequencies fall into the specified Pf/Pa bands.
@@ -80,9 +80,17 @@ def _build_hemo_projectors(
     pa_lo, pa_hi = cfg.pa_band
     pg_lo, pg_hi = cfg.pg_band
 
+    # NOTE: band masks must be disjoint. We treat the guard as an "open edge"
+    # separator by removing any frequencies that lie in Pf or Pa. This avoids
+    # double-counting bins when band edges fall exactly on the DFT grid.
     pf_mask = (freqs >= pf_lo) & (freqs <= pf_hi)
     pa_mask = (freqs >= pa_lo) & (freqs <= pa_hi)
-    pg_mask = (freqs >= pg_lo) & (freqs <= pg_hi)
+    if bool(torch.any(pf_mask & pa_mask)):
+        raise ValueError(
+            "HemoStapConfig bands overlap: pf_band and pa_band must be disjoint "
+            f"(pf_band={cfg.pf_band}, pa_band={cfg.pa_band})"
+        )
+    pg_mask = (freqs >= pg_lo) & (freqs <= pg_hi) & (~pf_mask) & (~pa_mask)
 
     def _tones_for_mask(mask: torch.Tensor) -> torch.Tensor:
         idx = torch.nonzero(mask, as_tuple=False).flatten()
@@ -113,10 +121,12 @@ def _build_hemo_projectors(
     # Symmetrize and cast to real float tensors for use with real z.
     Pf = 0.5 * (Pf_c + Pf_c.conj().transpose(-2, -1))
     Pa = 0.5 * (Pa_c + Pa_c.conj().transpose(-2, -1))
+    Pg = 0.5 * (Pg_c + Pg_c.conj().transpose(-2, -1))
     Po = 0.5 * (Po_c + Po_c.conj().transpose(-2, -1))
 
     return (
         Pf.real.to(dtype=dtype),
+        Pg.real.to(dtype=dtype),
         Pa.real.to(dtype=dtype),
         Po.real.to(dtype=dtype),
     )
@@ -141,7 +151,7 @@ def hemo_stap_scores_for_tiles(
     -------
     scores : dict
         A dictionary with fields:
-          - 'Ef', 'Ea', 'Eg' : band energies per tile (Pf, Pa, Po).
+          - 'Ef', 'Ea', 'Eg', 'Eo' : band energies per tile (Pf, Pa, Pg, Po).
           - 'hemo_br'        : Pf/Pa band-ratio per tile.
           - 'hemo_glrt'      : GLRT-like Pf/(Pa+rho*||z||^2) per tile (or None).
     """
@@ -219,18 +229,20 @@ def hemo_stap_scores_for_tiles(
         z[b] = Yb.mean(dim=1)
 
     # 6. Band projectors in hemodynamic space.
-    Pf, Pa, Po = _build_hemo_projectors(cfg, device=device, dtype=dtype)
+    Pf, Pg, Pa, Po = _build_hemo_projectors(cfg, device=device, dtype=dtype)
 
     # 7. Band energies and scores per tile.
     Ef = torch.empty((B,), dtype=dtype, device=device)
     Ea = torch.empty((B,), dtype=dtype, device=device)
     Eg = torch.empty((B,), dtype=dtype, device=device)
+    Eo = torch.empty((B,), dtype=dtype, device=device)
 
     for b in range(B):
         zb = z[b]
         Ef[b] = torch.dot(zb, Pf @ zb)
         Ea[b] = torch.dot(zb, Pa @ zb)
-        Eg[b] = torch.dot(zb, Po @ zb)
+        Eg[b] = torch.dot(zb, Pg @ zb)
+        Eo[b] = torch.dot(zb, Po @ zb)
 
     eps = 1e-6
     hemo_br = Ef / (Ea + eps)
@@ -246,6 +258,7 @@ def hemo_stap_scores_for_tiles(
         "Ef": Ef.detach().cpu().numpy(),
         "Ea": Ea.detach().cpu().numpy(),
         "Eg": Eg.detach().cpu().numpy(),
+        "Eo": Eo.detach().cpu().numpy(),
         "hemo_br": hemo_br.detach().cpu().numpy(),
         "hemo_glrt": hemo_glrt.detach().cpu().numpy(),
     }

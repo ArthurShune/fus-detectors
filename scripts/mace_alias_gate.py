@@ -254,11 +254,11 @@ def main() -> None:
     hemo_scores = hemo_stap_scores_for_tiles(p_tiles, hemo_cfg)
     Ef = hemo_scores["Ef"]
     Ea = hemo_scores["Ea"]
-    Eg = hemo_scores["Eg"]
+    Eo = hemo_scores["Eo"]
     alias = (Ea + 1e-8) / (Ef + 1e-8)
     alias_log = np.log(alias + 1e-12)
-    pf_frac = Ef / (Ef + Ea + Eg + 1e-8)
-    pf_peak = (Ef > Ea) & (Ef > Eg)
+    pf_frac = Ef / (Ef + Ea + Eo + 1e-8)
+    pf_peak = (Ef > Ea) & (Ef > Eo)
 
     # Base ROC
     pauc_pd, tpr_pd, fpr_min = _roc_summary(pdz_scores[pos_mask], pdz_scores[neg_mask])

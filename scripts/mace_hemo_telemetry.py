@@ -307,8 +307,8 @@ def main() -> None:
                 Ea = hemo_scores["Ea"]
 
                 alias_ratio = (Ea + 1e-8) / (Ef + 1e-8)
-                bands = np.stack([Ef, Ea, hemo_scores["Eg"]], axis=1)
-                peak_idx = np.argmax(bands, axis=1)  # 0=Pf, 1=Pa, 2=Po
+                bands = np.stack([Ef, Ea, hemo_scores["Eo"]], axis=1)
+                peak_idx = np.argmax(bands, axis=1)  # 0=Pf, 1=Pa, 2=Po (other)
 
                 pos_mask_tiles = labels_arr == 1
                 neg_mask_tiles = labels_arr == 0

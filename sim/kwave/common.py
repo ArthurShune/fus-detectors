@@ -32,6 +32,10 @@ try:
     from pipeline.stap.geometry import principal_angle, projected_flow_alignment
     from pipeline.stap.lt_auto import choose_lt_from_coherence
     from pipeline.stap.mvdr_bank import choose_fd_grid_auto
+    from pipeline.stap.ka_contract_v2 import (
+        derive_score_shrink_v2_tile_scales,
+        evaluate_ka_contract_v2,
+    )
     from pipeline.stap.temporal import (
         _generalized_band_metrics,
         _mixing_metric,
@@ -73,6 +77,8 @@ except ModuleNotFoundError:
     pd_temporal_core_batched = None  # type: ignore[assignment]
     choose_lt_from_coherence = None  # type: ignore[assignment]
     choose_fd_grid_auto = None  # type: ignore[assignment]
+    evaluate_ka_contract_v2 = None  # type: ignore[assignment]
+    derive_score_shrink_v2_tile_scales = None  # type: ignore[assignment]
     principal_angle = None  # type: ignore[assignment]
     projected_flow_alignment = None  # type: ignore[assignment]
     build_temporal_hankels_batch = None  # type: ignore[assignment]
@@ -353,6 +359,115 @@ def _multi_taper_psd(
     return freqs.astype(np.float32, copy=False), psd_mt.astype(np.float32, copy=False)
 
 
+def _inject_vessels_slowtime(
+    cube: np.ndarray,
+    micro_vessels: np.ndarray | None,
+    alias_vessels: np.ndarray | None,
+    *,
+    prf_hz: float,
+    f0_hz: float,
+    c0: float,
+) -> tuple[np.ndarray, dict[str, int]]:
+    """
+    Inject simple slow-time vessel modulations on a (T,H,W) complex cube.
+
+    This helper is intended for MaceBridge-style replay runs where
+    microvascular and alias vessel fields have been precomputed on
+    the Macé-aligned grid. Each vessel contributes a narrowband tone
+    along its approximate centerline; amplitudes are scaled relative
+    to the global cube RMS so that vessel injections behave as a
+    modest perturbation that can be tuned separately.
+    """
+
+    T, H, W = cube.shape
+    if T <= 0 or H <= 0 or W <= 0 or prf_hz <= 0.0:
+        return cube, {"n_micro": 0, "n_alias": 0}
+
+    prf = float(prf_hz)
+    f0 = float(f0_hz)
+    c0_val = float(c0)
+    cube_flat = cube.reshape(T, -1)
+    # Global RMS level used as a reference scale. We deliberately keep
+    # these injections as a modest but non-negligible perturbation so
+    # that Pf/Pa structure can be tuned without overwhelming the base
+    # k-Wave content.
+    bg_rms = float(np.sqrt(np.mean(np.abs(cube_flat) ** 2)) + 1e-12)
+    # Empirically chosen scales for MaceBridge: microvascular content
+    # is made relatively strong so that Pf can dominate in H1 tiles,
+    # while alias content remains pronounced but not overwhelming.
+    micro_amp_base = 0.40 * bg_rms
+    alias_amp_base = 0.20 * bg_rms
+
+    t_sec = np.arange(T, dtype=np.float32) / prf
+
+    def _line_indices(z0: float, x0: float, length: float, theta: float) -> np.ndarray:
+        """Approximate a short centerline in (z,x) and return flat indices."""
+
+        n = max(1, int(round(length)))
+        idxs: list[int] = []
+        cz = float(z0)
+        cx = float(x0)
+        cos_t = float(np.cos(theta))
+        sin_t = float(np.sin(theta))
+        for k in range(n):
+            z = int(round(cz + k * cos_t))
+            x = int(round(cx + k * sin_t))
+            if 0 <= z < H and 0 <= x < W:
+                idxs.append(z * W + x)
+        if not idxs:
+            return np.zeros(0, dtype=np.int64)
+        return np.asarray(idxs, dtype=np.int64)
+
+    n_micro = 0
+    if micro_vessels is not None and micro_vessels.size:
+        mv = np.asarray(micro_vessels, dtype=np.float32)
+        if mv.ndim == 2 and mv.shape[1] >= 5:
+            for z0, x0, length, theta_rad, v_mm_s, radius_um in mv:
+                idxs = _line_indices(z0, x0, length, theta_rad)
+                if idxs.size == 0:
+                    continue
+                v_m_s = float(v_mm_s) * 1e-3
+                if v_m_s <= 0.0:
+                    continue
+                f_D = 2.0 * f0 * v_m_s / max(c0_val, 1e-6)
+                # Keep microvascular content in Pf; clamp to a reasonable band.
+                f_D = float(np.clip(f_D, 30.0, 250.0))
+                phase = np.exp(1j * 2.0 * np.pi * f_D * t_sec, dtype=np.complex64)
+                # Scale amplitude by radius to mimic vessel cross-section.
+                radius = max(float(radius_um), 5.0)
+                amp = micro_amp_base * (radius / 40.0) ** 2
+                cube_flat[:, idxs] += amp * phase[:, None]
+                n_micro += 1
+
+    n_alias = 0
+    if alias_vessels is not None and alias_vessels.size:
+        av = np.asarray(alias_vessels, dtype=np.float32)
+        if av.ndim == 2 and av.shape[1] >= 5:
+            for z0, x0, length, theta_rad, v_m_s in av:
+                idxs = _line_indices(z0, x0, length, theta_rad)
+                if idxs.size == 0:
+                    continue
+                v_m_s = float(v_m_s)
+                if v_m_s <= 0.0:
+                    continue
+                f_D_base = 2.0 * f0 * v_m_s / max(c0_val, 1e-6)
+                # Map to aliased baseband frequency in [0, PRF/2].
+                f_mod = float(np.fmod(abs(f_D_base), prf))
+                nyq = 0.5 * prf
+                if f_mod > nyq:
+                    f_alias = prf - f_mod
+                else:
+                    f_alias = f_mod
+                # Guard against degenerate values.
+                f_alias = float(np.clip(f_alias, 400.0, nyq))
+                phase = np.exp(1j * 2.0 * np.pi * f_alias * t_sec, dtype=np.complex64)
+                cube_flat[:, idxs] += alias_amp_base * phase[:, None]
+                n_alias += 1
+
+    cube = cube_flat.reshape(cube.shape)
+    return cube, {"n_micro": int(n_micro), "n_alias": int(n_alias)}
+
+
 def _compute_alias_metrics_mt(
     cube_T_hw: np.ndarray,
     prf_hz: float,
@@ -615,6 +730,14 @@ class BandRatioRecorder:
         self.tile_filled = np.zeros(self.tile_count, dtype=bool)
         self.tile_is_bg = np.zeros(self.tile_count, dtype=bool)
         self.peak_freqs = np.zeros(self.tile_count, dtype=np.float32)
+        # Raw (non-whitened) band energies and guard fraction per tile. These
+        # are useful for label-free contract telemetry (e.g. guard dominance
+        # checks) even when the whitened band-ratio score is used for m_alias.
+        self.Ef_raw = np.zeros(self.tile_count, dtype=np.float32)
+        self.Ea_raw = np.zeros(self.tile_count, dtype=np.float32)
+        self.Eg_raw = np.zeros(self.tile_count, dtype=np.float32)
+        self.Edc_raw = np.zeros(self.tile_count, dtype=np.float32)
+        self.rg_raw = np.zeros(self.tile_count, dtype=np.float32)
         self.alias_bin_count = None
 
     def _ensure_bins(self, series_len: int) -> None:
@@ -661,6 +784,39 @@ class BandRatioRecorder:
         if peak_idx < 0 or peak_idx >= freqs.shape[0]:
             peak_idx = int(np.argmax(np.abs(psd)))
         self.peak_freqs[tile_idx] = float(abs(freqs[peak_idx]))
+
+        # Raw energy telemetry (non-whitened): Ef/Ea over the design bands and
+        # Eg over the in-between guard region. This is intentionally separate
+        # from the whitened band-ratio computation performed in finalize().
+        try:
+            flow_low = float(min(self.spec.flow_low_hz, self.spec.flow_high_hz))
+            flow_high = float(max(self.spec.flow_low_hz, self.spec.flow_high_hz))
+            alias_half = float(max(self.spec.alias_width_hz, 0.0))
+            alias_low = float(self.spec.alias_center_hz - alias_half)
+            alias_high = float(self.spec.alias_center_hz + alias_half)
+            mask_f = (freqs >= flow_low) & (freqs <= flow_high)
+            mask_a = (freqs >= alias_low) & (freqs <= alias_high)
+            mask_g = np.zeros_like(mask_f, dtype=bool)
+            if alias_low > flow_high:
+                mask_g = (freqs >= flow_high) & (freqs <= alias_low)
+                mask_g[mask_f | mask_a] = False
+            zero_idx = int(np.argmin(np.abs(freqs)))
+            E_dc = float(psd[zero_idx]) if 0 <= zero_idx < psd.size else 0.0
+            E_f = float(np.sum(psd[mask_f])) if np.any(mask_f) else 0.0
+            E_a = float(np.sum(psd[mask_a])) if np.any(mask_a) else 0.0
+            E_g = float(np.sum(psd[mask_g])) if np.any(mask_g) else 0.0
+            total = E_f + E_a + E_g + E_dc
+            if total <= 0.0:
+                total = 1e-12
+            r_g = float(E_g / total)
+            self.Ef_raw[tile_idx] = np.float32(E_f)
+            self.Ea_raw[tile_idx] = np.float32(E_a)
+            self.Eg_raw[tile_idx] = np.float32(E_g)
+            self.Edc_raw[tile_idx] = np.float32(E_dc)
+            self.rg_raw[tile_idx] = np.float32(r_g)
+        except Exception:
+            # Best-effort only: leave defaults on failure.
+            pass
 
         if tile_is_bg:
             assert self.bg_flow_sum is not None and self.bg_alias_sum is not None
@@ -751,8 +907,19 @@ class BandRatioRecorder:
         if self.series_len is not None:
             tele["br_series_len"] = int(self.series_len)
 
-        peak_freqs = np.asarray(self.peak_freqs, dtype=np.float64)
-        non_bg_mask = ~self.tile_is_bg
+        # Peak stats should consider only tiles with PSD observations. Otherwise
+        # empty tiles would be counted as non-bg with peak_freq=0 and bias
+        # band-occupancy fractions.
+        valid_mask = np.asarray(self.tile_filled, dtype=bool)
+        peak_freqs_full = np.asarray(self.peak_freqs, dtype=np.float64)
+        tile_is_bg_full = np.asarray(self.tile_is_bg, dtype=bool)
+        if np.any(valid_mask):
+            peak_freqs = peak_freqs_full[valid_mask]
+            tile_is_bg = tile_is_bg_full[valid_mask]
+        else:
+            peak_freqs = np.asarray([], dtype=np.float64)
+            tile_is_bg = np.asarray([], dtype=bool)
+        non_bg_mask = ~tile_is_bg
         flow_low = float(min(self.spec.flow_low_hz, self.spec.flow_high_hz))
         flow_high = float(max(self.spec.flow_low_hz, self.spec.flow_high_hz))
         alias_half = float(max(self.spec.alias_width_hz, 0.0))
@@ -765,9 +932,9 @@ class BandRatioRecorder:
         else:
             tele["br_flow_peak_fraction_nonbg"] = None
 
-        if np.any(self.tile_is_bg):
+        if np.any(tile_is_bg):
             alias_mask = (peak_freqs >= alias_low) & (peak_freqs <= alias_high)
-            tele["br_alias_peak_fraction_bg"] = float(np.mean(alias_mask[self.tile_is_bg]))
+            tele["br_alias_peak_fraction_bg"] = float(np.mean(alias_mask[tile_is_bg]))
         else:
             tele["br_alias_peak_fraction_bg"] = None
 
@@ -842,7 +1009,14 @@ def _pd_band_energy_attempt(
             evals_min = 0.0
         raw_cond = float(evals_max / evals_min) if evals_min > 0.0 else float("inf")
         details["pd_condG_raw"] = raw_cond
+        # IMPORTANT: Gram is computed in the *whitened* constraint basis. Depending on
+        # the whitening scale, its eigenvalues can be orders of magnitude below 1.
+        # An absolute ridge (e.g. 0.1) can then dominate Gram and collapse the
+        # projected-band energy toward ~0. Use a scale-aware ridge so that the ridge
+        # remains "relative" when Gram is tiny, while leaving typical regimes unchanged.
         ridge_eff = float(ridge)
+        if ridge_eff > 0.0 and evals_max > 0.0 and evals_max < 1.0:
+            ridge_eff = ridge_eff * evals_max
         if evals_max > 0.0:
             target_cond = float(cond_threshold)
             if evals_min <= 0.0:
@@ -1545,6 +1719,76 @@ def _svd_temporal_project(
     return Af, tele
 
 
+def _svd_temporal_keep_range(
+    A: np.ndarray,
+    *,
+    keep_min: int,
+    keep_max: Optional[int],
+    device: str = "cpu",
+) -> tuple[np.ndarray, dict]:
+    """Project temporal matrix A (T×N) by keeping a rank range (ULM-style band-pass SVD).
+
+    This keeps singular-vector indices [keep_min, keep_max] (1-based, inclusive) and
+    discards the rest. Typical usage is to discard low-rank tissue components and
+    high-rank noise, retaining mid-rank microbubble-like content.
+    """
+    T, N = A.shape
+    keep_min = int(keep_min)
+    keep_max = int(keep_max) if keep_max is not None else T
+    keep_min = max(1, keep_min)
+    keep_max = max(keep_min, min(keep_max, T))
+    k0 = keep_min - 1
+    k1 = keep_max
+
+    use_cuda = (
+        device and device.lower().startswith("cuda") and _HAS_TORCH and torch.cuda.is_available()
+    )
+    t0 = time.time()
+    if use_cuda:
+        At = torch.from_numpy(A)
+        if not At.is_cuda:
+            At = At.to("cuda")
+        C = At @ At.conj().T
+        evals, U = torch.linalg.eigh(C)
+        idx = torch.argsort(evals, descending=True)
+        s2 = torch.clamp(evals[idx].real, min=0.0)
+        U = U[:, idx]
+        U_k = U[:, k0:k1]
+        if U_k.numel() == 0:
+            Af = torch.zeros_like(At)
+        else:
+            Af = (U_k @ (U_k.conj().T @ At)).detach()
+        Af = Af.cpu().numpy().astype(np.complex64)
+        s2_vals = s2.detach().cpu().numpy()
+        s_top = np.sqrt(s2_vals[: min(5, s2_vals.size)])
+    else:
+        C = A @ A.conj().T
+        s2, U = np.linalg.eigh(C)
+        idx = np.argsort(s2)[::-1]
+        s2 = np.clip(s2[idx].real, 0.0, None)
+        U = U[:, idx]
+        U_k = U[:, k0:k1]
+        if U_k.size == 0:
+            Af = np.zeros_like(A, dtype=np.complex64)
+        else:
+            Af = (U_k @ (U_k.conj().T @ A)).astype(np.complex64)
+        s2_vals = s2
+        s_top = np.sqrt(s2_vals[: min(5, s2_vals.size)])
+
+    total = float(np.sum(s2_vals) + 1e-12)
+    kept = float(np.sum(s2_vals[k0:k1]) if k1 > k0 else 0.0)
+    tele = {
+        "svd_keep_min": int(keep_min),
+        "svd_keep_max": int(keep_max),
+        "svd_rank_kept": int(k1 - k0),
+        "svd_energy_kept_frac": float(kept / total),
+        "svd_energy_removed_frac": float(1.0 - kept / total),
+        "svd_top_singular_vals": [float(x) for x in s_top],
+        "svd_ms": float(1000.0 * (time.time() - t0)),
+    }
+    return Af, tele
+
+
 def _baseline_pd_mcsvd(
     Icube: np.ndarray,
     *,
@@ -1572,6 +1816,42 @@ def _baseline_pd_mcsvd(
     pd = np.mean((np.abs(A_f) ** 2).astype(np.float32), axis=0)
     telemetry = {
         "baseline_type": "mc_svd",
+        **tele_reg,
+        **tele_svd,
+        "baseline_ms": float(1000.0 * (time.time() - t_start)),
+    }
+    if return_filtered_cube:
+        return pd.astype(np.float32), telemetry, A_f.astype(np.complex64, copy=False)
+    return pd.astype(np.float32), telemetry
+
+
+def _baseline_pd_svd_bandpass(
+    Icube: np.ndarray,
+    *,
+    reg_enable: bool = False,
+    reg_method: str = "phasecorr",
+    reg_subpixel: int = 4,
+    reg_reference: str = "median",
+    svd_keep_min: int = 1,
+    svd_keep_max: Optional[int] = None,
+    device: str = "cpu",
+    return_filtered_cube: bool = False,
+) -> tuple:
+    """SVD band-pass baseline (ULM-style): keep singular components in a range."""
+    t_start = time.time()
+    if reg_method != "phasecorr":
+        raise ValueError("Only phasecorr registration is supported for SVD baselines.")
+    reg_cube, tele_reg = _register_stack_phasecorr(
+        Icube, reg_enable=reg_enable, upsample=reg_subpixel, ref_strategy=reg_reference
+    )
+    A = reg_cube.reshape(reg_cube.shape[0], -1)
+    A_f, tele_svd = _svd_temporal_keep_range(
+        A, keep_min=svd_keep_min, keep_max=svd_keep_max, device=device
+    )
+    A_f = A_f.reshape(reg_cube.shape)
+    pd = np.mean((np.abs(A_f) ** 2).astype(np.float32), axis=0)
+    telemetry = {
+        "baseline_type": "svd_bandpass",
         **tele_reg,
         **tele_svd,
         "baseline_ms": float(1000.0 * (time.time() - t_start)),
@@ -2684,7 +2964,17 @@ def _stap_pd_tile_lcmv(
         if fd_mode == "psd" and flow_freq_target:
             span_hz = float(flow_freq_target)
             f_peak = 0.0
-            fd_grid = [-span_hz, 0.0, span_hz]
+            # When we have an explicit microvascular target frequency from PSD,
+            # build a symmetric grid around ±span_hz using the same min/max-pts
+            # logic as the generic path. A hard [-span,0,span] triad tends to
+            # collapse to an even flow grid after motion splitting (dropping DC),
+            # which breaks Kc invariants and weakens telemetry.
+            step_hz = max(grid_step_rel * (prf_hz / max(Lt, 1)), 1.0)
+            half_lines = max(1, int(np.ceil(span_hz / step_hz)))
+            total_lines = int(np.clip(2 * half_lines + 1, min_pts, max_pts))
+            if total_lines % 2 == 0:
+                total_lines = max(min_pts, total_lines - 1)
+            fd_grid = np.linspace(-span_hz, span_hz, total_lines, dtype=np.float32).tolist()
             fd_grid_initial = list(fd_grid)
             info["fd_grid_source"] = "psd_override"
         if fd_grid is None:
@@ -2983,6 +3273,12 @@ def _stap_pd_tile_lcmv(
             motion_rank = int(np.asarray(motion_basis).shape[1])
             motion_basis_geom_np = np.asarray(motion_basis, dtype=np.complex64)
 
+        grid_center_val = (
+            float(flow_freq_target)
+            if flow_freq_target is not None and np.isfinite(flow_freq_target)
+            else (float(f_peak) if "f_peak" in locals() else 0.0)
+        )
+
         kc_cap = _cap_kc_from_rank(R_t, min_pts=min_pts, max_pts=max_pts)
         max_allowed = Lt if Lt % 2 == 1 else max(Lt - 1, 1)
         min_cap_candidate = min(max_allowed, max_pts)
@@ -2997,7 +3293,7 @@ def _stap_pd_tile_lcmv(
         info["kc_flow_cap"] = int(kc_cap)
         if len(fd_grid) > kc_cap:
             fd_grid, _ = _select_centered_grid(
-                fd_grid, kc_cap, f_peak if "f_peak" in locals() else 0.0
+                fd_grid, kc_cap, grid_center_val
             )
 
         if use_contrast:
@@ -3006,32 +3302,48 @@ def _stap_pd_tile_lcmv(
                 max_flow_rank = max(1, max_flow_rank - 1)
             if len(fd_grid) > max_flow_rank:
                 fd_grid, _ = _select_centered_grid(
-                    fd_grid, max_flow_rank, f_peak if "f_peak" in locals() else 0.0
+                    fd_grid, max_flow_rank, grid_center_val
                 )
         else:
             max_flow_rank = len(fd_grid)
 
-        Ct = bandpass_constraints_temporal(
+        Ct_exp = bandpass_constraints_temporal(
             Lt=Lt,
             prf_hz=prf_hz,
             fd_grid_hz=fd_grid,
             device=device_resolved,
             dtype=dtype,
-            mode="exp" if constraint_mode_norm == "exp" else "exp+deriv",
+            mode="exp",
         )
-        if Ct.shape[-1] > 0:
-            max_kc = min(Ct.shape[-1], Lt)
-            if max_kc < 1:
-                max_kc = 1
-            fd_grid_arr = list(fd_grid)
-            start = 0
-            if Ct.shape[-1] > max_kc:
-                fd_grid_arr, start = _select_centered_grid(
-                    fd_grid_arr, max_kc, f_peak if "f_peak" in locals() else 0.0
+        Ct = Ct_exp
+        kc_deriv_used = 0
+        if constraint_mode_norm != "exp" and fd_grid and Lt > 0:
+            # Add derivative constraints only when there is enough headroom to
+            # include more than one derivative column. For very short Lt (e.g. 4),
+            # keeping the tone grid (odd, symmetric) is preferable to adding a
+            # single derivative column that breaks symmetry and shifts Kc parity.
+            deriv_capacity = int(Lt - Ct_exp.shape[-1])
+            if deriv_capacity >= 2:
+                Ct_full = bandpass_constraints_temporal(
+                    Lt=Lt,
+                    prf_hz=prf_hz,
+                    fd_grid_hz=fd_grid,
+                    device=device_resolved,
+                    dtype=dtype,
+                    mode="exp+deriv",
                 )
-                Ct = Ct[:, start : start + len(fd_grid_arr)]
-            # Do not forcibly drop a column on even Kc — keeping symmetry matters here.
-            fd_grid = fd_grid_arr
+                Ct_deriv = Ct_full[:, 1::2]
+                if Ct_deriv.shape[-1] > 0:
+                    center_val = float(f_peak) if "f_peak" in locals() else 0.0
+                    fd_arr = np.asarray(fd_grid, dtype=np.float64)
+                    order = np.argsort(np.abs(fd_arr - center_val))
+                    n_deriv = int(min(int(Ct_deriv.shape[-1]), deriv_capacity))
+                    sel = np.sort(order[:n_deriv])
+                    Ct = torch.cat([Ct_exp, Ct_deriv[:, sel]], dim=1)
+                    kc_deriv_used = int(sel.size)
+            else:
+                info["constraint_deriv_dropped"] = True
+        info["kc_flow_deriv_used"] = int(kc_deriv_used)
         info["kc_flow"] = int(Ct.shape[-1]) if Ct.shape[-1] > 0 else None
         info["kc_flow_freqs"] = int(len(fd_grid))
 
@@ -3188,7 +3500,9 @@ def _stap_pd_tile_lcmv(
             info["cond_R"] = float(np.real(tel_cov.get("cond_est", float("nan"))))
         except Exception:
             info["cond_R"] = None
-        info["band_Kc"] = int(Ct.shape[-1])
+        # Report Kc as the number of kept flow tones after motion split/capping.
+        # This is the effective band geometry used for Pf/Pa telemetry.
+        info["band_Kc"] = int(len(fd_grid))
         try:
             info["fd_grid"] = [float(np.real(f)) for f in fd_grid]
         except Exception:
@@ -3620,14 +3934,53 @@ def _stap_pd_tile_lcmv(
             ka_opts_msd = {k: v for k, v in ka_opts_local.items() if k not in guard_only_keys}
             ka_opts_msd.setdefault("lambda_override_split", float(lam_for_msd))
 
-            Ct_primary = bandpass_constraints_temporal(
+            # Primary PD/BR basis: keep the tone grid, but cap derivative
+            # augmentation so the projector doesn't become near-full-rank on small Lt.
+            Ct_primary_exp = bandpass_constraints_temporal(
                 Lt=Lt,
                 prf_hz=prf_hz,
                 fd_grid_hz=fd_grid,
                 device="cpu",
                 dtype=torch.complex64,
-                mode="exp+deriv",
+                mode="exp",
             )
+            Ct_primary = Ct_primary_exp
+            kc_deriv_used_pd = 0
+            deriv_capacity_pd = int(Lt - Ct_primary_exp.shape[-1])
+            if fd_grid and deriv_capacity_pd > 0:
+                Ct_primary_full = bandpass_constraints_temporal(
+                    Lt=Lt,
+                    prf_hz=prf_hz,
+                    fd_grid_hz=fd_grid,
+                    device="cpu",
+                    dtype=torch.complex64,
+                    mode="exp+deriv",
+                )
+                Ct_primary_deriv = Ct_primary_full[:, 1::2]
+                if Ct_primary_deriv.shape[-1] > 0:
+                    # Limit derivative columns to keep selectivity on short apertures:
+                    # - For very short Lt (<=4), allow a single derivative column when it
+                    #   fits; otherwise the projector can be too low-rank and over-suppress
+                    #   true flow energy.
+                    # - For larger Lt, cap derivatives to avoid near-full-rank projectors
+                    #   that collapse the band-fraction dynamic range.
+                    if deriv_capacity_pd == 1:
+                        max_deriv = 1 if Lt <= 4 else 0
+                    else:
+                        max_deriv = 2 if int(Ct_primary_deriv.shape[-1]) <= 2 else 1
+                    n_deriv = int(
+                        min(int(Ct_primary_deriv.shape[-1]), deriv_capacity_pd, max_deriv)
+                    )
+                    if n_deriv > 0:
+                        center_val = float(f_peak) if "f_peak" in locals() else 0.0
+                        fd_arr = np.asarray(fd_grid, dtype=np.float64)
+                        order = np.argsort(np.abs(fd_arr - center_val))
+                        sel = np.sort(order[:n_deriv])
+                        Ct_primary = torch.cat(
+                            [Ct_primary_exp, Ct_primary_deriv[:, sel]], dim=1
+                        )
+                        kc_deriv_used_pd = int(sel.size)
+            info["kc_flow_deriv_used_pd"] = int(kc_deriv_used_pd)
             Ct_retry = None
             if isinstance(Ct_primary, torch.Tensor):
                 Ct_primary_np = Ct_primary.detach().cpu().numpy()
@@ -4222,12 +4575,16 @@ def _stap_pd_tile_lcmv_batch(
     if enable_fast_path is None:
         env_fast = os.getenv("STAP_FAST_PATH", "").lower()
         fast_flag = env_fast in {"1", "true", "yes", "on"}
+    debug_requested = bool(capture_debug) or (
+        cube_capture_flags is not None and any(bool(x) for x in cube_capture_flags)
+    )
     fast_eligible = (
         fast_flag
         and _STAP_AVAILABLE
         and stap_temporal_core_batched is not None
         and torch is not None
         and ka_mode == "none"
+        and not debug_requested
     )
     if fast_eligible:
         dev = device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -4893,6 +5250,16 @@ def _stap_pd(
             flow_mask_empty = not bool(flow_mask_tile.any())
             if flow_mask_empty:
                 pd_tile = base_tile.copy()
+                # For tiles with zero flow support, we explicitly fall back to
+                # baseline PD. Reflect that choice in the band-fraction output
+                # so debug/telemetry consumers see an identity-like value.
+                band_frac_tile = np.ones_like(band_frac_tile, dtype=band_frac_tile.dtype)
+                # Similarly, keep the detector score neutral for this tile so
+                # score maps behave like the conditional-STAP skip path.
+                score_tile = np.zeros_like(score_tile, dtype=score_tile.dtype)
+                if capture_debug and debug_payload is not None:
+                    debug_payload["band_fraction_tile"] = band_frac_tile.copy()
+                    debug_payload["score_tile"] = score_tile.copy()
                 background_uniformized = True
             else:
                 flow_cov_ratio = float(flow_mask_tile.sum()) / float(flow_mask_tile.size)
@@ -5025,6 +5392,25 @@ def _stap_pd(
                     bg_psd_accum = np.zeros_like(psd_power, dtype=np.float64)
                 bg_psd_accum += psd_power.astype(np.float64, copy=False)
                 bg_psd_count += 1
+
+        # If we captured a debug payload for this tile, attach a few useful
+        # scalar telemetry fields that are computed at the _stap_pd aggregation
+        # level (e.g. flow/background PD ratios and subtile clamping flags).
+        if capture_debug and debug_payload is not None:
+            for _k in (
+                "flow_mu_ratio",
+                "bg_var_inflation",
+                "flow_coverage",
+                "background_uniformized",
+                "subtile_background_uniformized",
+                "band_fraction_capped",
+                "band_fraction_cap_scale",
+                "alias_cap_applied",
+                "alias_cap_scale",
+                "bg_edge_clamped_count",
+            ):
+                if _k in info_tile:
+                    debug_payload[_k] = info_tile.get(_k)
 
         pd[y0 : y0 + th, x0 : x0 + tw] += pd_tile
         score[y0 : y0 + th, x0 : x0 + tw] += score_tile
@@ -5279,13 +5665,18 @@ def _stap_pd(
         tile_batch_indices = []
 
     for _cov_flow, y0, x0 in coords_ordered:
+        coord = (y0, x0)
+        capture_by_index = tile_counter in capture_indices
+        capture_by_coord = coord in remaining_coord_requests
+        capture_requested = capture_by_index or capture_by_coord
+
         # Optional conditional STAP: if the tile has no flow coverage at all,
         # we can safely fall back to the baseline PD map for this tile and
-        # skip STAP entirely. This reduces the number of tiles that hit the
-        # STAP core without affecting flow-supported regions.
+        # skip STAP entirely. When debug capture is requested for a tile,
+        # do not skip: run the normal STAP path so debug_samples are populated.
         if mask_flow is not None:
             flow_mask_tile = mask_flow[y0 : y0 + th, x0 : x0 + tw]
-            if not bool(flow_mask_tile.any()):
+            if not bool(flow_mask_tile.any()) and not capture_requested:
                 base_tile = None
                 if pd_base_full is not None:
                     base_tile = pd_base_full[y0 : y0 + th, x0 : x0 + tw]
@@ -5305,10 +5696,6 @@ def _stap_pd(
         t0_ext = time.perf_counter()
         cube_np = np.ascontiguousarray(Icube[:, y0 : y0 + th, x0 : x0 + tw], dtype=np.complex64)
         t_extract += time.perf_counter() - t0_ext
-        coord = (y0, x0)
-        capture_by_index = tile_counter in capture_indices
-        capture_by_coord = coord in remaining_coord_requests
-        capture_requested = capture_by_index or capture_by_coord
         if capture_by_coord:
             remaining_coord_requests.discard(coord)
         tile_batch_items.append(cube_np)
@@ -7832,6 +8219,12 @@ def write_acceptance_bundle(
     band_ratio_alias_center_hz: float = 900.0,
     band_ratio_alias_width_hz: float = 15.625,
     feasibility_mode: FeasibilityMode = "legacy",
+    # Optional Macé-aligned vessel fields (Phase B): when provided, these
+    # arrays encode precomputed microvascular and alias vessel centerlines
+    # on the simulated (H,W) grid and are used to inject narrowband Pf/Pa
+    # modulations in slow time instead of coarse per-pixel Doppler tones.
+    micro_vessels: np.ndarray | None = None,
+    alias_vessels: np.ndarray | None = None,
     # Optional amplitude scaling knobs for synthetic components.
     flow_amp_scale: float | None = None,
     alias_amp_scale: float | None = None,
@@ -7865,6 +8258,12 @@ def write_acceptance_bundle(
     hosvd_ranks: tuple[int, int, int] | None = None,
     hosvd_energy_fracs: tuple[float, float, float] | None = None,
     hosvd_max_iters: int = 1,
+    # Optional default flow/background masks used as a geometric prior for
+    # synthetic injections (flow Doppler, alias, clutter). When provided,
+    # these masks replace the internal circular _default_masks and are
+    # respected by PD-based flow mask refinement.
+    flow_mask_default: np.ndarray | None = None,
+    bg_mask_default: np.ndarray | None = None,
 ) -> dict[str, str]:
     if not angle_sets:
         raise ValueError("angle_sets is empty; nothing to process.")
@@ -8065,6 +8464,20 @@ def write_acceptance_bundle(
     clutter_meta: dict[str, float | int] | None = None
     flow_doppler_meta: dict[str, float | int] | None = None
     T, H, W = Icube.shape
+    # Optional Pf/Pa vessel injections (MaceBridge Phase B). When Macé-aligned
+    # vessel fields are provided, apply narrowband slow-time tones along the
+    # corresponding centerlines before clutter and coarse synthetic Doppler.
+    if (micro_vessels is not None and micro_vessels.size) or (
+        alias_vessels is not None and alias_vessels.size
+    ):
+        Icube, vessel_meta = _inject_vessels_slowtime(
+            Icube,
+            micro_vessels=micro_vessels,
+            alias_vessels=alias_vessels,
+            prf_hz=prf_hz,
+            f0_hz=g.f0,
+            c0=g.c0,
+        )
     clutter_beta_val = float(clutter_beta) if clutter_beta is not None else 0.0
     needs_masks = (
         (flow_alias_hz is not None and abs(flow_alias_hz) > 0.0)
@@ -8075,7 +8488,14 @@ def write_acceptance_bundle(
     default_flow_mask: np.ndarray | None = None
     default_bg_mask: np.ndarray | None = None
     if needs_masks:
-        default_flow_mask, default_bg_mask = _default_masks(g, H, W)
+        # Prefer explicit geometric defaults (e.g., Macé-derived H1/H0
+        # masks) when provided; otherwise fall back to a simple circular
+        # mask from _default_masks.
+        if flow_mask_default is not None and bg_mask_default is not None:
+            default_flow_mask = np.asarray(flow_mask_default, dtype=bool)
+            default_bg_mask = np.asarray(bg_mask_default, dtype=bool)
+        else:
+            default_flow_mask, default_bg_mask = _default_masks(g, H, W)
     # Optional: scale the complex flow amplitude inside the default flow mask before
     # any synthetic Doppler, alias, clutter, or vibration injections. This provides
     # a simple knob to adjust flow SNR for regimes like HAB without altering the
@@ -8123,7 +8543,7 @@ def write_acceptance_bundle(
         and (flow_doppler_min_hz != 0 or flow_doppler_max_hz != 0)
     ):
         if default_flow_mask is None:
-            default_flow_mask, _ = _default_masks(g, H, W)
+            default_flow_mask = mask_flow_default.copy()
         flow_mask_fd = default_flow_mask.copy()
         if flow_mask_depth_min_frac is not None:
             depth_min_fd = int(np.clip(flow_mask_depth_min_frac * H, 0, H))
@@ -8189,7 +8609,7 @@ def write_acceptance_bundle(
     if clutter_beta_val > 0.0:
         target_snr_db = float(clutter_snr_db) if clutter_snr_db is not None else -6.0
         if default_bg_mask is None:
-            _, default_bg_mask = _default_masks(g, H, W)
+            default_bg_mask = mask_bg_default.copy()
         Icube, clutter_meta = _inject_temporal_clutter(
             Icube,
             default_bg_mask,
@@ -8255,7 +8675,7 @@ def write_acceptance_bundle(
             Icube = cube_flat.reshape(Icube.shape)
     if flow_alias_hz is not None and abs(flow_alias_hz) > 0.0:
         if default_flow_mask is None:
-            default_flow_mask, _ = _default_masks(g, H, W)
+            default_flow_mask = mask_flow_default.copy()
         alias_mask = default_flow_mask.copy()
         if flow_alias_depth_min_frac is not None:
             depth_min = int(np.clip(flow_alias_depth_min_frac * H, 0, H))
@@ -8307,7 +8727,7 @@ def write_acceptance_bundle(
                 alias_meta["flow_alias_depth_min_frac"] = float(flow_alias_depth_min_frac)
     if bg_alias_hz is not None and abs(bg_alias_hz) > 0.0:
         if default_bg_mask is None:
-            _, default_bg_mask = _default_masks(g, H, W)
+            default_bg_mask = mask_bg_default.copy()
         alias_mask_bg = default_bg_mask.copy()
         if bg_alias_depth_min_frac is not None:
             depth_min_bg = int(np.clip(bg_alias_depth_min_frac * H, 0, H))
@@ -8471,7 +8891,20 @@ def write_acceptance_bundle(
             bandwidth=psd_bandwidth,
         )
 
-    mask_flow_default, mask_bg_default = _default_masks(g, H, W)
+    # Default flow/background masks used for synthetic injections and as a
+    # geometric prior for PD-based flow mask refinement. When explicit
+    # defaults are provided, use them; otherwise fall back to a simple
+    # circular mask from _default_masks.
+    if flow_mask_default is not None and bg_mask_default is not None:
+        mask_flow_default = np.asarray(flow_mask_default, dtype=bool)
+        mask_bg_default = np.asarray(bg_mask_default, dtype=bool)
+        if mask_flow_default.shape != (H, W) or mask_bg_default.shape != (H, W):
+            raise ValueError(
+                f"flow_mask_default/bg_mask_default shape mismatch: "
+                f"{mask_flow_default.shape}, {mask_bg_default.shape} vs {(H, W)}"
+            )
+    else:
+        mask_flow_default, mask_bg_default = _default_masks(g, H, W)
     flow_mask_mode_norm = (flow_mask_mode or "default").strip().lower()
     mask_flow, mask_bg, flow_mask_stats = _resolve_flow_mask(
         pd_base,
@@ -8602,35 +9035,140 @@ def write_acceptance_bundle(
         mt_meta = {"tapers": int(psd_tapers), "bandwidth": float(psd_bandwidth)}
         stap_info["band_ratio_mt_params"] = mt_meta
         baseline_telemetry.setdefault("band_ratio_mt_params", mt_meta)
+    base_tile_scores: np.ndarray | None = None
+    stap_tile_scores: np.ndarray | None = None
     if use_whitened_ratio and base_br_recorder is not None and stap_br_recorder is not None:
         base_tile_scores, base_br_stats = base_br_recorder.finalize()
         stap_tile_scores, stap_br_stats = stap_br_recorder.finalize()
-        if (
-            base_tile_scores is not None
-            and stap_tile_scores is not None
-            and base_tile_scores.size == stap_tile_scores.size
-            and base_tile_scores.size > 0
-        ):
+        # Always persist recorder summaries, even if one side is missing PSD
+        # observations (e.g. PD-only / fast STAP paths may not wire the
+        # post-filter callback for stap_br_recorder).
+        stap_info["band_ratio_br_stats"] = stap_br_stats or {"count": 0}
+        baseline_telemetry.setdefault("band_ratio_stats", base_br_stats or {"count": 0})
+
+        # Construct the baseline (MC-SVD residual) band-ratio map whenever
+        # baseline tile scores are available, independent of stap tile scores.
+        if base_tile_scores is not None and base_tile_scores.size == tile_count:
             base_band_ratio_map = _tile_scores_to_map(
                 base_tile_scores, pd_base.shape, tile_hw, tile_stride
             )
+        else:
+            base_band_ratio_map = np.ones_like(pd_base, dtype=np.float32)
+
+        # Construct the STAP band-ratio map only when stap tile scores exist.
+        if stap_tile_scores is not None and stap_tile_scores.size == tile_count:
             stap_band_ratio_map = _tile_scores_to_map(
                 stap_tile_scores, pd_base.shape, tile_hw, tile_stride
             )
-            stap_info["band_ratio_br_stats"] = stap_br_stats
-            baseline_telemetry.setdefault("band_ratio_stats", base_br_stats)
         else:
-            # No band-ratio observations; fall back to neutral maps.
             stap_band_ratio_map = np.ones_like(pd_base, dtype=np.float32)
-            base_band_ratio_map = np.ones_like(pd_base, dtype=np.float32)
-            stap_info["band_ratio_br_stats"] = stap_br_stats or {"count": 0}
-            baseline_telemetry.setdefault("band_ratio_stats", base_br_stats or {"count": 0})
     else:
         denom_pd = np.maximum(pd_base, 1e-12)
         stap_band_ratio = pd_stap / denom_pd
         stap_band_ratio[pd_base <= 1e-12] = 0.0
         stap_band_ratio_map = stap_band_ratio.astype(np.float32, copy=False)
         base_band_ratio_map = np.ones_like(pd_base, dtype=np.float32)
+
+    # Additional band telemetry maps (Phase 0 telemetry hardening).
+    # These maps are derived from the baseline band-ratio recorder when
+    # available; otherwise they fall back to neutral zeros.
+    base_m_alias_map = (-base_band_ratio_map).astype(np.float32, copy=False)
+    base_guard_frac_map = np.zeros_like(pd_base, dtype=np.float32)
+    base_peak_freq_map = np.zeros_like(pd_base, dtype=np.float32)
+    if use_whitened_ratio and base_br_recorder is not None:
+        try:
+            base_guard_frac_map = _tile_scores_to_map(
+                np.asarray(base_br_recorder.rg_raw, dtype=np.float32),
+                pd_base.shape,
+                tile_hw,
+                tile_stride,
+            )
+            base_peak_freq_map = _tile_scores_to_map(
+                np.asarray(base_br_recorder.peak_freqs, dtype=np.float32),
+                pd_base.shape,
+                tile_hw,
+                tile_stride,
+            )
+        except Exception:
+            base_guard_frac_map = np.zeros_like(pd_base, dtype=np.float32)
+            base_peak_freq_map = np.zeros_like(pd_base, dtype=np.float32)
+
+    # Phase 1 (KA Contract v2): evaluate a label-free contract state and log it.
+    # This is logging-only: it does not modify any score maps in Phase 1.
+    ka_contract_v2_report: dict | None = None
+    ka_contract_v2_inputs: dict | None = None
+    if evaluate_ka_contract_v2 is not None:
+        if (
+            use_whitened_ratio
+            and base_br_recorder is not None
+            and base_tile_scores is not None
+            and base_tile_scores.size == tile_count
+        ):
+            tile_cov_flow, tile_coords = _tile_coverages(mask_flow, tile_hw, tile_stride)
+            th, tw = tile_hw
+            # s_base must be aligned with the detector score convention
+            # (higher = more flow evidence). For PD scoring, downstream ROC uses
+            # S = -PD, so we use -PD here as well.
+            if score_mode_resolved == "pd":
+                score_map_for_contract = -pd_stap
+            elif score_mode_resolved == "band_ratio":
+                score_map_for_contract = stap_band_ratio_map
+            else:
+                score_map_for_contract = stap_scores
+            s_base_tiles = np.zeros(tile_cov_flow.shape[0], dtype=np.float32)
+            for idx, (y0, x0) in enumerate(tile_coords):
+                s_base_tiles[idx] = float(
+                    np.mean(score_map_for_contract[y0 : y0 + th, x0 : x0 + tw])
+                )
+            m_alias_tiles = (-np.asarray(base_tile_scores, dtype=np.float32)).astype(
+                np.float32, copy=False
+            )
+            r_guard_tiles = np.asarray(base_br_recorder.rg_raw, dtype=np.float32)
+            peak_freq_tiles = np.asarray(base_br_recorder.peak_freqs, dtype=np.float32)
+            pf_peak_tiles = (peak_freq_tiles >= float(br_spec.flow_low_hz)) & (
+                peak_freq_tiles <= float(br_spec.flow_high_hz)
+            )
+            valid_tiles = np.asarray(base_br_recorder.tile_filled, dtype=bool)
+            ka_contract_v2_inputs = {
+                "tile_cov_flow": tile_cov_flow,
+                "tile_coords": tile_coords,
+                "s_base_tiles": s_base_tiles,
+                "m_alias_tiles": m_alias_tiles,
+                "r_guard_tiles": r_guard_tiles,
+                "pf_peak_tiles": pf_peak_tiles.astype(bool),
+                "valid_tiles": valid_tiles,
+            }
+            ka_contract_v2_report = evaluate_ka_contract_v2(
+                s_base=s_base_tiles,
+                m_alias=m_alias_tiles,
+                r_guard=r_guard_tiles,
+                pf_peak=pf_peak_tiles,
+                c_flow=tile_cov_flow,
+                valid_mask=valid_tiles,
+            )
+        else:
+            ka_contract_v2_report = evaluate_ka_contract_v2(
+                s_base=None,
+                m_alias=None,
+                r_guard=None,
+                c_flow=None,
+            )
+
+        try:
+            stap_info["ka_contract_v2_state"] = str(ka_contract_v2_report.get("state"))
+            stap_info["ka_contract_v2_reason"] = str(ka_contract_v2_report.get("reason"))
+            ka_metrics = ka_contract_v2_report.get("metrics", {}) or {}
+            for key in (
+                "iqr_alias_bg",
+                "guard_q90",
+                "delta_bg_flow_median",
+                "delta_tail",
+                "p_shrink",
+                "uplift_eligible",
+            ):
+                stap_info[f"ka_contract_v2_{key}"] = ka_metrics.get(key)
+        except Exception:
+            pass
 
     base_score_map = pd_base
     stap_maps_by_mode = {
@@ -8895,7 +9433,95 @@ def write_acceptance_bundle(
     # we do not catastrophically reorder strong flow detections.
     score_model_json = ka_opts_dict.get("score_model_json")
     score_alpha_val = float(ka_opts_dict.get("score_alpha", 0.0))
-    if score_model_json and score_alpha_val > 0.0 and score_mode_resolved == "pd":
+    score_contract_v2_enable = bool(float(ka_opts_dict.get("score_contract_v2", 0.0)) > 0.0)
+    score_contract_v2_applied = False
+
+    # Phase 2: score-space KA v2 (contract-driven, shrink-only) in safety mode.
+    # This uses the KA Contract v2 state machine and does not require a trained
+    # model. We apply it only when the contract reports C1_SAFETY.
+    if (
+        score_contract_v2_enable
+        and derive_score_shrink_v2_tile_scales is not None
+        and score_mode_resolved == "pd"
+    ):
+        if score_model_json and score_alpha_val > 0.0:
+            stap_info["score_ka_v2_disabled_reason"] = "conflict_with_score_model_v1"
+        elif ka_contract_v2_report is None or ka_contract_v2_inputs is None:
+            stap_info["score_ka_v2_disabled_reason"] = "missing_contract_v2"
+        else:
+            state = str(ka_contract_v2_report.get("state") or "C0_OFF")
+            reason = str(ka_contract_v2_report.get("reason") or "")
+            stap_info["score_ka_v2_state"] = state
+            stap_info["score_ka_v2_contract_reason"] = reason
+            if state != "C1_SAFETY" or reason != "ok":
+                stap_info["score_ka_v2_disabled_reason"] = f"contract_{state}:{reason}"
+            elif not use_whitened_ratio:
+                stap_info["score_ka_v2_disabled_reason"] = "requires_whitened_band_ratio"
+            else:
+                ka_metrics = ka_contract_v2_report.get("metrics", {}) or {}
+                risk_mode = str(ka_metrics.get("risk_mode") or "alias").strip().lower()
+                stap_info["score_ka_v2_risk_mode"] = risk_mode
+                if risk_mode == "guard":
+                    risk_tiles = ka_contract_v2_inputs["r_guard_tiles"]
+                else:
+                    risk_tiles = ka_contract_v2_inputs["m_alias_tiles"]
+                shrink = derive_score_shrink_v2_tile_scales(
+                    report=ka_contract_v2_report,
+                    s_base=ka_contract_v2_inputs["s_base_tiles"],
+                    m_alias=risk_tiles,
+                    c_flow=ka_contract_v2_inputs["tile_cov_flow"],
+                    valid_mask=ka_contract_v2_inputs["valid_tiles"],
+                    mode="safety",
+                )
+                if not shrink.get("apply"):
+                    stap_info["score_ka_v2_disabled_reason"] = str(
+                        shrink.get("reason") or "unknown"
+                    )
+                else:
+                    scale_tiles = np.asarray(shrink["scale_tiles"], dtype=np.float32)
+                    gated_tiles = np.asarray(shrink["gated_tiles"], dtype=bool)
+                    tile_coords = ka_contract_v2_inputs["tile_coords"]
+                    th, tw = tile_hw
+                    # Build a per-pixel scale map by averaging overlaps, then
+                    # restrict the action to the union of gated tiles.
+                    scale_map = _tile_scores_to_map(scale_tiles, pd_base.shape, tile_hw, tile_stride)
+                    gate_union = np.zeros_like(pd_stap, dtype=bool)
+                    for idx, (y0, x0) in enumerate(tile_coords):
+                        if idx < gated_tiles.size and gated_tiles[idx]:
+                            gate_union[y0 : y0 + th, x0 : x0 + tw] = True
+                    scale_final = np.ones_like(scale_map, dtype=np.float32)
+                    scale_final[gate_union] = scale_map[gate_union].astype(np.float32, copy=False)
+
+                    # Protected pixels: never modify flow mask or extreme-score pixels.
+                    pd_stap_orig = pd_stap
+                    s_base_pix = -pd_stap_orig
+                    prot_pix = np.asarray(mask_flow, dtype=bool)
+                    cfg = ka_contract_v2_report.get("config") or {}
+                    q_hi = float(cfg.get("q_hi_protect", 0.995))
+                    finite = np.isfinite(s_base_pix)
+                    if finite.any():
+                        thr_hi = float(np.quantile(s_base_pix[finite], q_hi))
+                        prot_pix |= s_base_pix >= thr_hi
+                    scale_final[prot_pix] = 1.0
+
+                    pd_stap = (pd_stap_orig.astype(np.float32, copy=False) * scale_final).astype(
+                        np.float32, copy=False
+                    )
+                    # Keep the exported default score map consistent when PD is
+                    # the selected score_mode.
+                    stap_score_pool_map = pd_stap
+                    score_contract_v2_applied = True
+                    stap_info["score_ka_v2_applied"] = True
+                    stap_info["score_ka_v2_stats"] = shrink.get("stats", {})
+                    scaled = scale_final > (1.0 + 1e-6)
+                    stap_info["score_ka_v2_scaled_pixel_fraction"] = float(np.mean(scaled))
+                    if scaled.any():
+                        vals = scale_final[scaled].astype(np.float64, copy=False)
+                        stap_info["score_ka_v2_scale_p50"] = float(np.median(vals))
+                        stap_info["score_ka_v2_scale_p90"] = float(np.quantile(vals, 0.90))
+                        stap_info["score_ka_v2_scale_max"] = float(np.max(vals))
+
+    if score_model_json and score_alpha_val > 0.0 and score_mode_resolved == "pd" and not score_contract_v2_applied:
         try:
             import json as _json  # local alias to avoid shadowing
 
@@ -8950,12 +9576,42 @@ def write_acceptance_bundle(
                         if tau < 0.5:
                             stap_info["score_ka_disabled_reason"] = "flow_rank_tau_lt_0.5"
                             pd_stap = pd_stap_orig
+            if score_mode_resolved == "pd":
+                stap_score_pool_map = pd_stap
         except Exception as exc:  # pragma: no cover - best-effort safeguard
             stap_info["score_ka_disabled_reason"] = f"{type(exc).__name__}: {exc}"
+
+    # Ensure the pooled PD score samples (stap_pos/stap_neg) reflect the final
+    # pd_stap after any score-space KA transforms. Several analysis scripts
+    # load these pools directly; keeping them in sync avoids confusing
+    # "KA applied but ROC unchanged" artifacts.
+    if score_mode_resolved == "pd":
+        try:
+            stap_pos_pd, stap_neg_pd = _pool_scores(
+                pd_stap, mask_flow, mask_bg, 20000, 60000, seed + 2
+            )
+            score_pool_arrays["pd"]["stap_pos"] = stap_pos_pd
+            score_pool_arrays["pd"]["stap_neg"] = stap_neg_pd
+            _save("stap_pos", stap_pos_pd.astype(np.float32, copy=False))
+            _save("stap_neg", stap_neg_pd.astype(np.float32, copy=False))
+
+            base_pos_pd = score_pool_arrays["pd"]["base_pos"]
+            base_neg_pd = score_pool_arrays["pd"]["base_neg"]
+            prob = _rank_consistency_same_class(base_pos_pd, stap_pos_pd)
+            tau = None if prob is None else (2.0 * prob - 1.0)
+            rank_consistency["pos"] = {"concordance": prob, "kendall_tau": tau}
+            prob = _rank_consistency_same_class(base_neg_pd, stap_neg_pd)
+            tau = None if prob is None else (2.0 * prob - 1.0)
+            rank_consistency["neg"] = {"concordance": prob, "kendall_tau": tau}
+        except Exception as exc:  # pragma: no cover - best-effort safeguard
+            stap_info["score_pool_refresh_error"] = f"{type(exc).__name__}: {exc}"
 
     _save("pd_base", pd_base.astype(np.float32, copy=False))
     _save("pd_stap", pd_stap.astype(np.float32, copy=False))
     _save("base_band_ratio_map", base_band_ratio_map.astype(np.float32, copy=False))
+    _save("base_m_alias_map", base_m_alias_map.astype(np.float32, copy=False))
+    _save("base_guard_frac_map", base_guard_frac_map.astype(np.float32, copy=False))
+    _save("base_peak_freq_map", base_peak_freq_map.astype(np.float32, copy=False))
     _save("stap_band_ratio_map", stap_band_ratio_map.astype(np.float32, copy=False))
     _save("base_score_map", base_score_map.astype(np.float32, copy=False))
     _save("stap_score_map", stap_scores.astype(np.float32, copy=False))
@@ -9305,6 +9961,7 @@ def write_acceptance_bundle(
         "rank_consistency": rank_consistency,
         "rank_consistency_gated": rank_consistency_gated,
         "score_transform_gated": score_transform_gated,
+        "ka_contract_v2": ka_contract_v2_report,
     }
     if alias_meta:
         meta["flow_alias"] = alias_meta

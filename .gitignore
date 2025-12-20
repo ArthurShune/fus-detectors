@@ -18,6 +18,14 @@ reports/
 data/
 .pytest_cache/
 .ruff_cache/
+figs/paper/
+mace_bridge/
+tmp/
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.synctex.gz
 
 # Large run outputs (tracked via LFS or archived)
 runs/motion/r4c/mcsvd_k8_reg4_stride2_seed*/
