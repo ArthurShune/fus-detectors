@@ -1,0 +1,558 @@
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass
+from typing import Any
+
+import numpy as np
+
+
+@dataclass(frozen=True)
+class KaContractV2Config:
+    """Configuration for the KA Contract v2 state machine.
+
+    Phase 1: this config drives state/telemetry only (no score modification).
+    """
+
+    # Coverage proxies
+    c_bg: float = 0.05
+    c_flow: float = 0.20
+
+    # Candidate/protection quantiles on the baseline score
+    q_lo_candidate: float = 0.30
+    q_hi_protect: float = 0.995
+
+    # Risk threshold (quantile of m_alias on background-proxy tiles)
+    q_risk: float = 0.90
+
+    # R1 telemetry integrity checks
+    alias_iqr_min: float = 0.25
+    # Guard fraction is treated as an uplift veto (strict) and, optionally, a
+    # safety-only lane (looser) when guard is actionable in background tails.
+    guard_q90_max_uplift: float = 0.25
+    guard_q90_max_safety: float = 0.70
+    guard_iqr_bg_min: float = 0.03
+    delta_tail_guard_min: float = 0.01
+
+    # R2 differential evidence (label-free) for uplift eligibility (C2)
+    delta_bf_min: float = 0.30
+    delta_tail_min: float = 0.20
+
+    # C2 guardrail: require minimum Pf realization (label-free proxy). This is
+    # intentionally modest; it is meant to prevent "uplift-eligible" states
+    # from triggering when the declared Pf band is effectively empty.
+    pf_peak_min_c2: float = 0.05
+    n_flow_min_c2: int = 50
+
+    # Coverage sentinels (fraction of candidate tiles gated)
+    pmin_safety: float = 0.02
+    pmax_safety: float = 0.25
+    pmin_safety_guard: float = 0.02
+    pmax_safety_guard: float = 0.15
+    pmin_uplift: float = 0.05
+    pmax_uplift: float = 0.40
+
+    # Shrink mapping parameters (used only to estimate invariance in Phase 1)
+    wmin_safety: float = 0.75
+    k_safety: float = 0.7
+    wmin_guard: float = 0.75
+    k_guard: float = 0.5
+    wmin_uplift: float = 0.50
+    k_uplift: float = 1.0
+    iqr_logw_min: float = 0.02
+
+    # Sample support
+    n_bg_min: int = 200
+    n_min: int = 500
+    n_cand_min: int = 200
+    n_tail_min: int = 20
+    n_mid_min: int = 20
+
+    eps: float = 1e-12
+
+
+def _as_float(x: Any) -> float | None:
+    if x is None:
+        return None
+    try:
+        return float(x)
+    except Exception:
+        return None
+
+
+def _quantile(values: np.ndarray, q: float) -> float | None:
+    if values.size == 0:
+        return None
+    q = float(np.clip(q, 0.0, 1.0))
+    return float(np.quantile(values, q))
+
+
+def evaluate_ka_contract_v2(
+    *,
+    s_base: np.ndarray | None,
+    m_alias: np.ndarray | None,
+    r_guard: np.ndarray | None,
+    pf_peak: np.ndarray | None = None,
+    c_flow: np.ndarray | None,
+    valid_mask: np.ndarray | None = None,
+    config: KaContractV2Config | None = None,
+) -> dict[str, Any]:
+    """Evaluate KA Contract v2 and return a JSON-serializable report.
+
+    Parameters are per-tile arrays (shape: (N_tiles,)).
+
+    Notes
+    -----
+    - Phase 1 is logging-only: the resulting state does not alter scores.
+    - m_alias is expected to increase with alias dominance (e.g. log(Ea/Ef)).
+    - s_base is expected to increase with flow evidence (e.g. STAP PD).
+    """
+
+    cfg = config or KaContractV2Config()
+    report: dict[str, Any] = {
+        "state": "C0_OFF",
+        "reason": "uninitialized",
+        "config": asdict(cfg),
+        "metrics": {},
+    }
+
+    if s_base is None or m_alias is None or r_guard is None or c_flow is None:
+        report["reason"] = "missing_inputs"
+        return report
+
+    s_base = np.asarray(s_base, dtype=np.float64).ravel()
+    m_alias = np.asarray(m_alias, dtype=np.float64).ravel()
+    r_guard = np.asarray(r_guard, dtype=np.float64).ravel()
+    pf_peak = None if pf_peak is None else np.asarray(pf_peak, dtype=bool).ravel()
+    c_flow = np.asarray(c_flow, dtype=np.float64).ravel()
+    if not (s_base.size == m_alias.size == r_guard.size == c_flow.size):
+        report["reason"] = "shape_mismatch"
+        report["metrics"] = {
+            "n_s_base": int(s_base.size),
+            "n_m_alias": int(m_alias.size),
+            "n_r_guard": int(r_guard.size),
+            "n_c_flow": int(c_flow.size),
+        }
+        return report
+    if pf_peak is not None and pf_peak.size != s_base.size:
+        report["reason"] = "pf_peak_shape_mismatch"
+        report["metrics"] = {
+            "n_tiles": int(s_base.size),
+            "n_pf_peak": int(pf_peak.size),
+        }
+        return report
+
+    if valid_mask is None:
+        valid = np.isfinite(s_base) & np.isfinite(m_alias) & np.isfinite(r_guard) & np.isfinite(c_flow)
+    else:
+        valid_mask = np.asarray(valid_mask, dtype=bool).ravel()
+        if valid_mask.size != s_base.size:
+            report["reason"] = "valid_mask_shape_mismatch"
+            report["metrics"] = {
+                "n_tiles": int(s_base.size),
+                "n_valid_mask": int(valid_mask.size),
+            }
+            return report
+        valid = valid_mask & np.isfinite(s_base) & np.isfinite(m_alias) & np.isfinite(r_guard) & np.isfinite(c_flow)
+
+    n_total = int(s_base.size)
+    n_valid = int(np.sum(valid))
+    report["metrics"].update(
+        {
+            "n_tiles": n_total,
+            "n_valid": n_valid,
+        }
+    )
+    if n_valid < int(cfg.n_min):
+        report["reason"] = "insufficient_samples"
+        return report
+
+    c_bg = float(cfg.c_bg)
+    c_flow_thr = float(cfg.c_flow)
+    T_bg = valid & (c_flow <= c_bg)
+    T_flow = valid & (c_flow >= c_flow_thr)
+    n_bg = int(np.sum(T_bg))
+    n_flow = int(np.sum(T_flow))
+    report["metrics"].update(
+        {
+            "n_bg_proxy": n_bg,
+            "n_flow_proxy": n_flow,
+            "c_bg": float(cfg.c_bg),
+            "c_flow": float(cfg.c_flow),
+        }
+    )
+    if n_bg < int(cfg.n_bg_min):
+        report["reason"] = "insufficient_bg_samples"
+        return report
+
+    # --- R1: telemetry integrity ---
+    m_alias_bg = m_alias[T_bg]
+    q25 = _quantile(m_alias_bg, 0.25)
+    q75 = _quantile(m_alias_bg, 0.75)
+    iqr_alias_bg = None if q25 is None or q75 is None else float(q75 - q25)
+    guard_q90 = _quantile(r_guard[valid], 0.90)
+    report["metrics"].update(
+        {
+            "iqr_alias_bg": _as_float(iqr_alias_bg),
+            "guard_q90": _as_float(guard_q90),
+        }
+    )
+    if iqr_alias_bg is None or iqr_alias_bg < float(cfg.alias_iqr_min):
+        report["reason"] = "alias_metric_flat"
+        return report
+    if guard_q90 is None:
+        report["reason"] = "guard_metric_missing"
+        return report
+
+    # --- R2: differential evidence (label-free) on m_alias (always logged) ---
+    med_bg = float(np.median(m_alias[T_bg])) if n_bg else float(np.median(m_alias[valid]))
+    if n_flow:
+        med_flow = float(np.median(m_alias[T_flow]))
+    else:
+        med_flow = float(np.median(m_alias[valid]))
+    delta_bf = float(med_bg - med_flow)
+
+    s_bg = s_base[T_bg]
+    if s_bg.size >= 5:
+        q99 = float(np.quantile(s_bg, 0.99))
+        q40 = float(np.quantile(s_bg, 0.40))
+        q60 = float(np.quantile(s_bg, 0.60))
+    else:
+        q99 = float(np.max(s_bg)) if s_bg.size else float(np.max(s_base[valid]))
+        q40, q60 = float("-inf"), float("inf")
+    T_tail = T_bg & (s_base >= q99)
+    T_mid = T_bg & (s_base >= q40) & (s_base <= q60)
+    n_tail = int(np.sum(T_tail))
+    n_mid = int(np.sum(T_mid))
+    if n_tail >= int(cfg.n_tail_min) and n_mid >= int(cfg.n_mid_min):
+        delta_tail = float(np.median(m_alias[T_tail]) - np.median(m_alias[T_mid]))
+    else:
+        delta_tail = float("-inf")
+    uplift_eligible_raw = bool(
+        delta_bf >= float(cfg.delta_bf_min) and delta_tail >= float(cfg.delta_tail_min)
+    )
+
+    risk_mode = "alias"
+    uplift_vetoed_by_guard = False
+    guard_q90_max_uplift = float(cfg.guard_q90_max_uplift)
+    guard_q90_max_safety = float(cfg.guard_q90_max_safety)
+    report["metrics"].update(
+        {
+            "delta_bg_flow_median": float(delta_bf),
+            "delta_tail": float(delta_tail) if np.isfinite(delta_tail) else None,
+            "uplift_eligible_raw": uplift_eligible_raw,
+            "tail_q99": float(q99),
+            "n_tail": n_tail,
+            "n_mid": n_mid,
+            "guard_q90_max_uplift": guard_q90_max_uplift,
+            "guard_q90_max_safety": guard_q90_max_safety,
+        }
+    )
+
+    # Guard dominates: veto uplift always, but allow a safety-only lane when the
+    # guard metric is actionable in background tail tiles.
+    if float(guard_q90) > guard_q90_max_uplift:
+        uplift_vetoed_by_guard = True
+        if float(guard_q90) > guard_q90_max_safety:
+            report["metrics"].update(
+                {"risk_mode": risk_mode, "uplift_vetoed_by_guard": uplift_vetoed_by_guard}
+            )
+            report["reason"] = "guard_extreme_out_of_regime"
+            return report
+
+        r_guard_bg = r_guard[T_bg]
+        g25 = _quantile(r_guard_bg, 0.25)
+        g75 = _quantile(r_guard_bg, 0.75)
+        guard_iqr_bg = None if g25 is None or g75 is None else float(g75 - g25)
+        if n_tail >= int(cfg.n_tail_min) and n_mid >= int(cfg.n_mid_min):
+            delta_tail_guard = float(np.median(r_guard[T_tail]) - np.median(r_guard[T_mid]))
+        else:
+            delta_tail_guard = float("-inf")
+        report["metrics"].update(
+            {
+                "guard_iqr_bg": _as_float(guard_iqr_bg),
+                "delta_tail_guard": float(delta_tail_guard)
+                if np.isfinite(delta_tail_guard)
+                else None,
+            }
+        )
+        if guard_iqr_bg is None or guard_iqr_bg < float(cfg.guard_iqr_bg_min):
+            report["metrics"].update(
+                {"risk_mode": risk_mode, "uplift_vetoed_by_guard": uplift_vetoed_by_guard}
+            )
+            report["reason"] = "guard_dominates_not_actionable"
+            return report
+        if delta_tail_guard < float(cfg.delta_tail_guard_min):
+            report["metrics"].update(
+                {"risk_mode": risk_mode, "uplift_vetoed_by_guard": uplift_vetoed_by_guard}
+            )
+            report["reason"] = "guard_dominates_not_actionable"
+            return report
+
+        risk_mode = "guard"
+
+    uplift_vetoed_by_pf_peak = False
+    pf_peak_nonbg: float | None = None
+    pf_peak_flow: float | None = None
+    if pf_peak is not None:
+        # Non-background proxy tiles: anything not in the bg proxy.
+        T_nonbg = valid & (c_flow > c_bg)
+        n_nonbg = int(np.sum(T_nonbg))
+        if n_nonbg > 0:
+            pf_peak_nonbg = float(np.mean(pf_peak[T_nonbg]))
+        if n_flow > 0:
+            pf_peak_flow = float(np.mean(pf_peak[T_flow]))
+        report["metrics"].update(
+            {
+                "n_nonbg_proxy": n_nonbg,
+                "pf_peak_nonbg": pf_peak_nonbg,
+                "pf_peak_flow": pf_peak_flow,
+            }
+        )
+
+    uplift_eligible = bool(uplift_eligible_raw and not uplift_vetoed_by_guard and risk_mode == "alias")
+    pf_peak_min_c2 = float(cfg.pf_peak_min_c2)
+    n_flow_min_c2 = int(cfg.n_flow_min_c2)
+    uplift_veto_pf_peak_reason: str | None = None
+    if uplift_eligible and pf_peak_min_c2 > 0.0:
+        # If Pf peak telemetry is missing or indicates Pf is not realized on the
+        # *flow proxy* set, downgrade to C1. This keeps C2 aligned with "uplift
+        # eligible" meaning without relying on non-bg tiles that may be dominated
+        # by cluttery or ambiguous regions.
+        if pf_peak is None:
+            uplift_vetoed_by_pf_peak = True
+            uplift_veto_pf_peak_reason = "pf_peak_missing"
+        elif n_flow < n_flow_min_c2:
+            uplift_vetoed_by_pf_peak = True
+            uplift_veto_pf_peak_reason = "pf_peak_flow_insufficient_samples"
+        elif pf_peak_flow is None:
+            uplift_vetoed_by_pf_peak = True
+            uplift_veto_pf_peak_reason = "pf_peak_flow_missing"
+        elif float(pf_peak_flow) < pf_peak_min_c2:
+            uplift_vetoed_by_pf_peak = True
+            uplift_veto_pf_peak_reason = "pf_peak_flow_below_min"
+        if uplift_vetoed_by_pf_peak:
+            uplift_eligible = False
+
+    report["metrics"].update(
+        {
+            "uplift_vetoed_by_guard": uplift_vetoed_by_guard,
+            "uplift_vetoed_by_pf_peak": uplift_vetoed_by_pf_peak,
+            "uplift_veto_pf_peak_reason": uplift_veto_pf_peak_reason,
+            "pf_peak_min_c2": pf_peak_min_c2,
+            "n_flow_min_c2": n_flow_min_c2,
+            "uplift_eligible": uplift_eligible,
+            "risk_mode": risk_mode,
+        }
+    )
+
+    # --- Candidate/protected sets (coverage sentinels) ---
+    s_valid = s_base[valid]
+    q_hi = float(np.quantile(s_valid, float(cfg.q_hi_protect)))
+    q_lo = float(np.quantile(s_valid, float(cfg.q_lo_candidate)))
+    T_prot = valid & ((c_flow >= c_flow_thr) | (s_base >= q_hi))
+    T_cand = valid & (~T_prot) & (s_base >= q_lo) & (s_base <= q_hi)
+    n_prot = int(np.sum(T_prot))
+    n_cand = int(np.sum(T_cand))
+    report["metrics"].update(
+        {
+            "q_lo_candidate": float(cfg.q_lo_candidate),
+            "q_hi_protect": float(cfg.q_hi_protect),
+            "score_q_lo": float(q_lo),
+            "score_q_hi": float(q_hi),
+            "n_protected": n_prot,
+            "n_candidates": n_cand,
+        }
+    )
+    if n_cand < int(cfg.n_cand_min):
+        report["reason"] = "too_few_candidates"
+        return report
+
+    risk_bg = m_alias_bg if risk_mode == "alias" else r_guard[T_bg]
+    risk_all = m_alias if risk_mode == "alias" else r_guard
+    tau_alias = float(np.quantile(risk_bg, float(cfg.q_risk)))
+    med_alias_bg = float(np.median(risk_bg))
+    mad_alias = float(np.median(np.abs(risk_bg - med_alias_bg))) + float(cfg.eps)
+    report["metrics"].update(
+        {
+            "q_risk": float(cfg.q_risk),
+            "tau_alias": float(tau_alias),
+            "mad_alias": float(mad_alias),
+        }
+    )
+
+    gated = T_cand & (risk_all >= tau_alias)
+    p_shrink = float(np.sum(gated) / max(1, n_cand))
+    report["metrics"].update(
+        {
+            "n_gated": int(np.sum(gated)),
+            "p_shrink": float(p_shrink),
+        }
+    )
+
+    if risk_mode == "guard":
+        pmin, pmax = float(cfg.pmin_safety_guard), float(cfg.pmax_safety_guard)
+    elif uplift_eligible:
+        pmin, pmax = float(cfg.pmin_uplift), float(cfg.pmax_uplift)
+    else:
+        pmin, pmax = float(cfg.pmin_safety), float(cfg.pmax_safety)
+    report["metrics"].update({"pmin": pmin, "pmax": pmax})
+    if p_shrink < pmin or p_shrink > pmax:
+        report["reason"] = "coverage_out_of_bounds"
+        return report
+
+    # Estimate whether the shrink map would be effectively invariant.
+    if risk_mode == "guard":
+        w_min = float(cfg.wmin_guard)
+        k = float(cfg.k_guard)
+    else:
+        w_min = float(cfg.wmin_uplift if uplift_eligible else cfg.wmin_safety)
+        k = float(cfg.k_uplift if uplift_eligible else cfg.k_safety)
+    # Normalized excess risk in units of MAD.
+    u = np.maximum(0.0, (risk_all - tau_alias) / mad_alias)
+    w = np.ones_like(s_base, dtype=np.float64)
+    w[gated] = np.maximum(w_min, np.exp(-k * u[gated]))
+    if np.sum(gated) >= 50:
+        logw = np.log(w[gated] + float(cfg.eps))
+        iqr_logw = float(np.quantile(logw, 0.75) - np.quantile(logw, 0.25))
+    else:
+        iqr_logw = 0.0
+    report["metrics"]["iqr_logw_gated"] = float(iqr_logw)
+    if iqr_logw < float(cfg.iqr_logw_min):
+        report["reason"] = "invariance_no_effect"
+        return report
+
+    report["state"] = "C2_UPLIFT" if uplift_eligible else "C1_SAFETY"
+    report["reason"] = "ok"
+    return report
+
+
+def derive_score_shrink_v2_tile_scales(
+    *,
+    report: dict[str, Any],
+    s_base: np.ndarray,
+    m_alias: np.ndarray,
+    c_flow: np.ndarray,
+    valid_mask: np.ndarray | None = None,
+    mode: str = "safety",
+) -> dict[str, Any]:
+    """Derive per-tile shrink-only scale factors from a v2 contract report.
+
+    This helper computes scale factors >= 1 that can be applied to PD maps so
+    that a score defined as S = -PD is shrunk (i.e. made smaller) on risky tiles.
+
+    Parameters
+    ----------
+    report:
+        Output of evaluate_ka_contract_v2.
+    s_base:
+        Baseline per-tile detector score used by the contract state machine
+        (higher = more flow evidence). For PD scoring, this should be -PD.
+    m_alias:
+        Per-tile alias metric (larger = more alias-like), e.g. log(Ea/Ef).
+    c_flow:
+        Per-tile flow coverage fraction in [0,1].
+    mode:
+        "safety" (Phase 2) or "uplift" (Phase 3+). Phase 2 uses "safety".
+    """
+
+    out: dict[str, Any] = {
+        "apply": False,
+        "reason": "uninitialized",
+        "scale_tiles": None,
+        "gated_tiles": None,
+        "protected_tiles": None,
+        "candidate_tiles": None,
+        "stats": {},
+    }
+
+    if not isinstance(report, dict):
+        out["reason"] = "invalid_report"
+        return out
+    if report.get("reason") != "ok":
+        out["reason"] = f"contract_{report.get('reason')}"
+        return out
+
+    cfg = report.get("config") or {}
+    metrics = report.get("metrics") or {}
+    risk_mode = str(metrics.get("risk_mode") or "alias").strip().lower()
+    tau_alias = metrics.get("tau_alias")
+    mad_alias = metrics.get("mad_alias")
+    score_q_lo = metrics.get("score_q_lo")
+    score_q_hi = metrics.get("score_q_hi")
+    if tau_alias is None or mad_alias is None or score_q_lo is None or score_q_hi is None:
+        out["reason"] = "missing_thresholds"
+        return out
+
+    try:
+        c_bg = float(cfg.get("c_bg", 0.05))
+        c_flow_thr = float(cfg.get("c_flow", 0.20))
+    except Exception:
+        out["reason"] = "invalid_config"
+        return out
+
+    mode_norm = str(mode or "safety").strip().lower()
+    if mode_norm not in {"safety", "uplift"}:
+        out["reason"] = "invalid_mode"
+        return out
+
+    if mode_norm == "uplift":
+        w_min = float(cfg.get("wmin_uplift", 0.50))
+        k = float(cfg.get("k_uplift", 1.0))
+    else:
+        if risk_mode == "guard":
+            w_min = float(cfg.get("wmin_guard", 0.75))
+            k = float(cfg.get("k_guard", 0.5))
+        else:
+            w_min = float(cfg.get("wmin_safety", 0.75))
+            k = float(cfg.get("k_safety", 0.7))
+
+    s_base = np.asarray(s_base, dtype=np.float64).ravel()
+    m_alias = np.asarray(m_alias, dtype=np.float64).ravel()
+    c_flow = np.asarray(c_flow, dtype=np.float64).ravel()
+    if not (s_base.size == m_alias.size == c_flow.size):
+        out["reason"] = "shape_mismatch"
+        return out
+
+    if valid_mask is None:
+        valid = np.isfinite(s_base) & np.isfinite(m_alias) & np.isfinite(c_flow)
+    else:
+        vm = np.asarray(valid_mask, dtype=bool).ravel()
+        if vm.size != s_base.size:
+            out["reason"] = "valid_mask_shape_mismatch"
+            return out
+        valid = vm & np.isfinite(s_base) & np.isfinite(m_alias) & np.isfinite(c_flow)
+
+    # Reconstruct candidate/protected and gate conditions using the same
+    # thresholds recorded in the report.
+    T_bg = valid & (c_flow <= c_bg)
+    T_prot = valid & ((c_flow >= c_flow_thr) | (s_base >= float(score_q_hi)))
+    T_cand = valid & (~T_prot) & (s_base >= float(score_q_lo)) & (s_base <= float(score_q_hi))
+    gated = T_cand & (m_alias >= float(tau_alias))
+
+    eps = float(cfg.get("eps", 1e-12))
+    denom = float(mad_alias) if float(mad_alias) > 0.0 else eps
+    u = np.maximum(0.0, (m_alias - float(tau_alias)) / denom)
+    w = np.ones_like(s_base, dtype=np.float64)
+    if np.any(gated):
+        w[gated] = np.maximum(w_min, np.exp(-k * u[gated]))
+    # Protected set identity.
+    w[T_prot] = 1.0
+    scale = 1.0 / np.maximum(w, eps)
+
+    out["apply"] = True
+    out["reason"] = "ok"
+    out["scale_tiles"] = scale.astype(np.float32, copy=False)
+    out["gated_tiles"] = gated.astype(bool)
+    out["protected_tiles"] = T_prot.astype(bool)
+    out["candidate_tiles"] = T_cand.astype(bool)
+    out["stats"] = {
+        "n_valid": int(np.sum(valid)),
+        "n_bg_proxy": int(np.sum(T_bg)),
+        "n_protected": int(np.sum(T_prot)),
+        "n_candidates": int(np.sum(T_cand)),
+        "n_gated": int(np.sum(gated)),
+        "scale_min": float(np.min(scale[valid])) if np.any(valid) else 1.0,
+        "scale_max": float(np.max(scale[valid])) if np.any(valid) else 1.0,
+        "scale_median": float(np.median(scale[gated])) if np.any(gated) else 1.0,
+    }
+    return out

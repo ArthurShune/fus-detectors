@@ -185,7 +185,7 @@ def main() -> None:
             scores = hemo_stap_scores_for_tiles(p_tiles, stap_cfg)
             Ef = scores["Ef"]
             Ea = scores["Ea"]
-            peak_idx = np.argmax(np.stack([Ef, Ea, scores["Eg"]], axis=1), axis=1)
+            peak_idx = np.argmax(np.stack([Ef, Ea, scores["Eo"]], axis=1), axis=1)
             pf_peak = float((peak_idx == 0).mean())
             pa_peak = float((peak_idx == 1).mean())
             alias_ratio = (Ea + 1e-8) / (Ef + 1e-8)

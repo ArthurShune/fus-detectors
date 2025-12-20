@@ -22,6 +22,46 @@ import numpy as np
 from sim.kwave.common import AngleData, SimGeom, slice_angle_data, write_acceptance_bundle
 
 
+def _maybe_resize_roi_mask(mask: np.ndarray, geom: SimGeom) -> np.ndarray:
+    """
+    Resize a 2D ROI mask to match the simulation geometry (Ny, Nx).
+
+    For now we support only the common MaceBridge case where the mask
+    height differs from Ny by at most one pixel (due to a small upward
+    adjustment of Ny for k-Wave prime-factor friendliness). In that case
+    we pad or crop along the depth dimension and leave the lateral size
+    unchanged. Any other mismatch is treated as an error.
+    """
+    mask = np.asarray(mask, dtype=bool)
+    H_roi, W_roi = mask.shape
+    H_geom, W_geom = int(geom.Ny), int(geom.Nx)
+
+    if H_roi == H_geom and W_roi == W_geom:
+        return mask
+
+    if W_roi != W_geom:
+        raise ValueError(
+            f"ROI mask width mismatch: {W_roi} vs geom.Nx={W_geom}; "
+            "cannot safely align to simulation grid."
+        )
+
+    # Allow a single-pixel height adjustment (typical for MaceBridge where
+    # Ny may be incremented to avoid large prime factors); treat the extra
+    # row as background and pad at the far depth edge.
+    if H_roi == H_geom - 1:
+        resized = np.zeros((H_geom, W_geom), dtype=bool)
+        resized[:H_roi, :] = mask
+        return resized
+    if H_roi == H_geom + 1:
+        # Rare case: ROI one row taller than the PD grid; drop the last row.
+        return mask[:H_geom, :]
+
+    raise ValueError(
+        f"ROI mask height mismatch: {H_roi} vs geom.Ny={H_geom}; "
+        "only ±1 pixel differences are supported."
+    )
+
+
 def _load_angle_data(src_root: Path, angles: Sequence[float]) -> List[List[AngleData]]:
     """Load one or more ensembles of angle data from the source directory."""
 
@@ -334,6 +374,16 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     ap.add_argument(
+        "--ka-score-contract-v2",
+        action="store_true",
+        help=(
+            "Enable KA Contract v2 score-space shrink-only mode (Phase 2). "
+            "This uses alias/guard telemetry + flow coverage to localize a "
+            "bounded shrink on PD scores (S=-PD), and only activates when the "
+            "contract state is C1_SAFETY."
+        ),
+    )
+    ap.add_argument(
         "--ka-gate-alias-rmin",
         type=float,
         default=1.30,
@@ -510,6 +560,18 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.0,
         help="Uniform ±jitter applied to the background alias tone per seed (Hz).",
+    )
+    ap.add_argument(
+        "--flow-amp-scale",
+        type=float,
+        default=1.0,
+        help="Optional global amplitude scale for flow-mask pixels (1.0 leaves them unchanged).",
+    )
+    ap.add_argument(
+        "--alias-amp-scale",
+        type=float,
+        default=1.0,
+        help="Optional amplitude scale for synthetic alias components (1.0 leaves them unchanged).",
     )
     ap.add_argument(
         "--flow-doppler-min-hz",
@@ -804,6 +866,49 @@ def main() -> None:
         )
     angle_sets = _load_angle_data(src_root, angles)
 
+    # Optional Macé/MaceBridge ROI defaults: when a replay run directory
+    # contains roi_H1.npy / roi_H0.npy, treat roi_H1 as the default flow
+    # mask and everything else as background. These defaults are passed
+    # into write_acceptance_bundle so that synthetic flow/alias/clutter
+    # injections and PD-based flow mask refinement respect Macé-derived
+    # anatomy. For non-MaceBridge runs these files are absent and the
+    # internal circular defaults are used instead.
+    flow_mask_default: np.ndarray | None = None
+    bg_mask_default: np.ndarray | None = None
+    micro_vessels_arr: np.ndarray | None = None
+    alias_vessels_arr: np.ndarray | None = None
+    roi_h1_path = src_root / "roi_H1.npy"
+    roi_h0_path = src_root / "roi_H0.npy"
+    if roi_h1_path.exists():
+        roi_H1 = np.load(roi_h1_path)
+        roi_H1 = _maybe_resize_roi_mask(roi_H1, geom)
+        # Background is simply the complement of H1; any explicit H0 ROI is
+        # a subset of this and does not need to be treated separately for
+        # purposes of flow/background masking.
+        flow_mask_default = roi_H1
+        bg_mask_default = ~roi_H1
+        # If an explicit H0 mask is present and shape-compatible, we keep it
+        # only to sanity-check alignment; otherwise it is ignored.
+        if roi_h0_path.exists():
+            try:
+                roi_H0 = np.load(roi_h0_path)
+                _ = _maybe_resize_roi_mask(roi_H0, geom)
+            except Exception:
+                # Do not fail replay if the auxiliary H0 mask is misaligned;
+                # flow_mask_default/bg_mask_default already carry a safe prior.
+                pass
+        # Optional Macé vessel fields for MaceBridge: when present, these
+        # arrays encode per-slice microvascular and alias vessel centerlines
+        # on the Macé grid. We treat them as defined on the PD grid up to
+        # clamping and pass them into write_acceptance_bundle so that Pf/Pa
+        # modulations can be injected at replay time.
+        micro_path = src_root / "micro_vessels.npy"
+        alias_path = src_root / "alias_vessels.npy"
+        if micro_path.exists():
+            micro_vessels_arr = np.load(micro_path)
+        if alias_path.exists():
+            alias_vessels_arr = np.load(alias_path)
+
     hosvd_ranks: tuple[int, int, int] | None = None
     if args.hosvd_ranks:
         parts = [p.strip() for p in str(args.hosvd_ranks).split(",") if p.strip()]
@@ -983,6 +1088,8 @@ def main() -> None:
             ka_opts_extra["score_model_json"] = str(args.ka_score_model_json)
         if args.ka_score_alpha is not None and args.ka_score_alpha > 0.0:
             ka_opts_extra["score_alpha"] = float(args.ka_score_alpha)
+        if args.ka_score_contract_v2:
+            ka_opts_extra["score_contract_v2"] = 1.0
 
         write_acceptance_bundle(
             out_root=out_root,
@@ -1065,6 +1172,8 @@ def main() -> None:
             bg_alias_depth_min_frac=args.bg_alias_depth_min_frac,
             bg_alias_depth_max_frac=args.bg_alias_depth_max_frac,
             bg_alias_jitter_hz=float(args.bg_alias_jitter_hz),
+            flow_amp_scale=float(args.flow_amp_scale),
+            alias_amp_scale=float(args.alias_amp_scale),
             vibration_hz=args.vibration_hz,
             vibration_amp=float(args.vibration_amp),
             vibration_depth_min_frac=float(args.vibration_depth_min_frac),
@@ -1089,6 +1198,10 @@ def main() -> None:
             hosvd_t_sub=args.hosvd_t_sub,
             hosvd_ranks=hosvd_ranks,
             hosvd_energy_fracs=hosvd_energy_fracs,
+            flow_mask_default=flow_mask_default,
+            bg_mask_default=bg_mask_default,
+            micro_vessels=micro_vessels_arr,
+            alias_vessels=alias_vessels_arr,
         )
         win_elapsed = time.time() - win_start
         total_elapsed = time.time() - overall_start

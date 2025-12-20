@@ -24,6 +24,10 @@ def _load_bundle(bundle_dir: str) -> Dict:
     out["mask_flow"] = _load("mask_flow.npy")
     out["mask_bg"] = _load("mask_bg.npy")
     out["base_band_ratio"] = _load("base_band_ratio_map.npy")
+    # Optional: explicit alias metric map (m_alias = log(Ea/Ef) up to a constant).
+    base_m_alias_path = os.path.join(bundle_dir, "base_m_alias_map.npy")
+    if os.path.exists(base_m_alias_path):
+        out["base_m_alias"] = np.load(base_m_alias_path)
     out["base_score"] = _load("base_score_map.npy")
     out["stap_score"] = _load("stap_score_map.npy")
     # Optional maps used when we want to align R-3 with the actual
@@ -221,17 +225,17 @@ def _check_r1_from_bandratio_telemetry(meta: Dict) -> Dict[str, float] | None:
 
 
 def check_r2_alias_separation(
-    base_band_ratio: np.ndarray,
+    m_alias: np.ndarray,
     mask_flow: np.ndarray,
     mask_bg: np.ndarray,
 ) -> Dict[str, float]:
     """
     R-2: Alias score class separation.
 
-    We treat base_band_ratio_map as an alias score m_alias that increases
-    when alias-band energy dominates (e.g. log(E_a/E_f)).
+    We treat m_alias as an alias score that increases when alias-band
+    energy dominates (e.g. log(E_a/E_f)).
     """
-    m_alias = np.asarray(base_band_ratio, dtype=float)
+    m_alias = np.asarray(m_alias, dtype=float)
     h1 = mask_flow.astype(bool)
     h0 = mask_bg.astype(bool)
 
@@ -370,7 +374,14 @@ def main() -> None:
         print(line)
 
     # R-2: alias separation using band-ratio map.
-    r2 = check_r2_alias_separation(data["base_band_ratio"], data["mask_flow"], data["mask_bg"])
+    # Use an explicit alias metric map when present; otherwise invert the
+    # baseline band-ratio map (which is log(Ef/(gamma*Ea))) so that larger
+    # values correspond to more alias-like behavior.
+    m_alias_map = data.get("base_m_alias")
+    if m_alias_map is None:
+        m_alias_map = -np.asarray(data["base_band_ratio"], dtype=float)
+
+    r2 = check_r2_alias_separation(m_alias_map, data["mask_flow"], data["mask_bg"])
     print("\n[R-2] Alias score separation (m_alias = log(E_a/E_f))")
     print(
         f"  median(m_alias | H0) = {r2['median_alias_H0']:.3f}, "
