@@ -8206,10 +8206,15 @@ def write_acceptance_bundle(
     flow_mask_suppress_alias_depth: bool = False,
     # Conditional STAP (compute gating) controls. When enabled (default),
     # tiles with zero overlap with the chosen conditional flow mask are
-    # skipped and fall back to the baseline PD map. By default, the
-    # conditional mask is the same `mask_flow.npy` written in the bundle,
-    # but Phase-2 leakage ablations may override it (e.g. disjoint-window
-    # or random masks) while keeping evaluation masks fixed.
+    # skipped and fall back to the baseline PD map.
+    #
+    # In simulations we keep evaluation masks (mask_flow/mask_bg) tied to
+    # injection geometry, but by default derive a label-free PD proxy mask
+    # (mask_flow_pd.npy) from the baseline PD map and use it as the
+    # conditional-execution gate (exported as mask_flow_stap_gate.npy).
+    #
+    # Phase-2 leakage ablations may override the conditional mask (e.g.
+    # disjoint-window or random masks) while keeping evaluation masks fixed.
     stap_conditional_enable: bool = True,
     stap_conditional_flow_mask: np.ndarray | None = None,
     stap_conditional_bg_mask: np.ndarray | None = None,
@@ -8997,6 +9002,73 @@ def write_acceptance_bundle(
                     if flow_mask_stats is not None:
                         flow_mask_stats["suppress_alias_depth"] = 1.0
 
+    # Label-free flow-proxy mask derived from the baseline PD brightness proxy.
+    #
+    # In simulation runs we often want *evaluation* masks to reflect simulator
+    # truth (mask_flow/mask_bg from defaults) while still using a PD-derived
+    # proxy mask for conditional execution and contract logic. In real data
+    # runs, eval masks are typically already PD-derived, so the proxy mask
+    # collapses to the eval mask.
+    flow_mask_pd_stats: dict[str, float] = {}
+    if flow_mask_mode_norm == "pd_auto":
+        mask_flow_pd = mask_flow.copy()
+        flow_mask_pd_stats = {
+            "mode": "same_as_eval",
+            "pd_auto_used": 1.0,
+            "coverage_fraction": float(mask_flow_pd.mean()),
+        }
+    else:
+        # Pure PD-derived proxy (no union with defaults). If the proxy mask is
+        # too small, we keep it but mark it invalid; conditional STAP will
+        # fall back to full STAP (no skipping) and the runtime contract will
+        # return conservative states due to low proxy support.
+        mask_pd, stats_pd = _flow_mask_from_pd(
+            pd_base,
+            percentile=flow_mask_pd_quantile,
+            depth_min_frac=flow_mask_depth_min_frac,
+            depth_max_frac=flow_mask_depth_max_frac,
+            erode_iters=flow_mask_erode_iters,
+            dilate_iters=flow_mask_dilate_iters,
+        )
+        flow_mask_pd_stats["mode"] = "pd_proxy"
+        flow_mask_pd_stats.update(stats_pd)
+        coverage_pre = float(mask_pd.mean())
+        valid_pixels = int(mask_pd.sum())
+        flow_mask_pd_stats["coverage_pre"] = coverage_pre
+        flow_mask_pd_stats["valid_pixels"] = float(valid_pixels)
+        min_pixels = max(int(flow_mask_min_pixels), 1)
+        min_cov = max(float(flow_mask_min_coverage_fraction), 0.0)
+        use_pd = valid_pixels >= min_pixels and coverage_pre >= min_cov
+        flow_mask_pd_stats["pd_auto_used"] = 1.0 if use_pd else 0.0
+        if not use_pd:
+            flow_mask_pd_stats["pd_auto_failed"] = 1.0
+            if valid_pixels < min_pixels:
+                flow_mask_pd_stats["pd_auto_reason"] = "min_pixels"
+            elif coverage_pre < min_cov:
+                flow_mask_pd_stats["pd_auto_reason"] = "min_coverage"
+            else:
+                flow_mask_pd_stats["pd_auto_reason"] = "unknown"
+        mask_flow_pd = mask_pd.astype(bool, copy=False)
+
+    # Apply the same alias-depth suppression to the PD proxy mask so the pial
+    # alias band is never treated as flow-supported for conditional STAP.
+    if flow_mask_suppress_alias_depth and bg_alias_hz is not None:
+        if bg_alias_depth_min_frac is not None and bg_alias_depth_max_frac is not None:
+            try:
+                depth_min_alias = float(bg_alias_depth_min_frac)
+                depth_max_alias = float(bg_alias_depth_max_frac)
+            except Exception:
+                depth_min_alias = 0.0
+                depth_max_alias = 0.0
+            if depth_max_alias > depth_min_alias and H > 0:
+                r0 = int(np.clip(depth_min_alias * H, 0, H))
+                r1 = int(np.clip(depth_max_alias * H, 0, H))
+                if r1 > r0:
+                    mask_flow_pd[r0:r1, :] = False
+                    flow_mask_pd_stats["suppress_alias_depth"] = 1.0
+
+    pd_proxy_valid = bool(flow_mask_pd_stats.get("pd_auto_used", 1.0) > 0.5)
+
     # Resolve the conditional-STAP gating masks. These can differ from the
     # evaluation masks (mask_flow/mask_bg) so that we can (i) disable
     # conditional execution (full STAP) or (ii) run leakage ablations where
@@ -9004,14 +9076,21 @@ def write_acceptance_bundle(
     # while evaluation masks remain fixed.
     cond_enabled = bool(stap_conditional_enable)
     cond_tag = (stap_conditional_mask_tag or "").strip()
-    if not cond_enabled:
+    # If the PD proxy mask is invalid (too small), fall back to full STAP so
+    # that conditional execution never degenerates into "skip everything".
+    if cond_enabled and stap_conditional_flow_mask is None and not pd_proxy_valid:
+        cond_enabled = False
+        mask_flow_cond = None
+        mask_bg_cond = None
+        cond_source = "disabled:pd_proxy_invalid"
+    elif not cond_enabled:
         mask_flow_cond = None
         mask_bg_cond = None
         cond_source = "disabled"
     else:
-        mask_flow_cond = mask_flow
-        mask_bg_cond = mask_bg
-        cond_source = "eval_mask"
+        mask_flow_cond = mask_flow_pd
+        mask_bg_cond = (~mask_flow_cond).copy()
+        cond_source = "pd_proxy"
         if stap_conditional_flow_mask is not None:
             mask_flow_cond = np.asarray(stap_conditional_flow_mask, dtype=bool)
             if mask_flow_cond.shape != (H, W):
@@ -9126,6 +9205,8 @@ def write_acceptance_bundle(
     stap_info["flow_mask_mode"] = flow_mask_mode_norm
     if flow_mask_stats is not None:
         stap_info["flow_mask_stats"] = flow_mask_stats
+    if flow_mask_pd_stats is not None:
+        stap_info["flow_mask_pd_stats"] = flow_mask_pd_stats
     stap_info["stap_conditional_mask"] = cond_mask_stats
     stap_info["band_ratio_mode_requested"] = band_ratio_mode_norm
     stap_info["band_ratio_mode_effective"] = band_ratio_mode_effective
@@ -9206,7 +9287,9 @@ def write_acceptance_bundle(
             and base_tile_scores is not None
             and base_tile_scores.size == tile_count
         ):
-            tile_cov_flow, tile_coords = _tile_coverages(mask_flow, tile_hw, tile_stride)
+            # Contract/protection uses the PD-derived flow proxy mask, not the
+            # evaluation masks (which are simulator-truth in Brain-* regimes).
+            tile_cov_flow, tile_coords = _tile_coverages(mask_flow_pd, tile_hw, tile_stride)
             th, tw = tile_hw
             # s_base must be aligned with the detector score convention
             # (higher = more flow evidence). For PD scoring, downstream ROC uses
@@ -9623,9 +9706,10 @@ def write_acceptance_bundle(
                     # Protected pixels: never modify flow mask or extreme-score pixels.
                     pd_stap_orig = pd_stap
                     s_base_pix = -pd_stap_orig
-                    # IMPORTANT: never mutate `mask_flow` (used for evaluation and
-                    # conditional execution). Use a copy for protected pixels.
-                    prot_pix = np.asarray(mask_flow, dtype=bool).copy()
+                    # IMPORTANT: never mutate masks. Protected pixels are defined
+                    # using the PD-derived flow proxy (runtime) rather than the
+                    # evaluation masks (sim-truth in Brain-* regimes).
+                    prot_pix = np.asarray(mask_flow_pd, dtype=bool).copy()
                     cfg = ka_contract_v2_report.get("config") or {}
                     q_hi = float(cfg.get("q_hi_protect", 0.995))
                     finite = np.isfinite(s_base_pix)
@@ -9924,7 +10008,9 @@ def write_acceptance_bundle(
 
     pd_stats_global = _pd_global_stats_dict(pd_base, pd_stap, mask_flow, mask_bg)
     pd_stats_combined = {**pd_stats_flat, **pd_stats_global}
-    mask_flow_pd = _pd_derived_flow_mask(pd_stap, mask_flow)
+    # `mask_flow_pd` is the PD-derived flow proxy mask computed from the
+    # baseline PD map (see above). It is exported for downstream analysis and
+    # used by conditional execution / contract telemetry.
     mask_flow_pd_path = bundle_dir / "mask_flow_pd.npy"
     np.save(mask_flow_pd_path, mask_flow_pd.astype(np.bool_, copy=False))
     paths["mask_flow_pd"] = str(mask_flow_pd_path)

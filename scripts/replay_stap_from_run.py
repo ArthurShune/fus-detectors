@@ -776,12 +776,15 @@ def _apply_brain_profile_defaults(args: argparse.Namespace) -> None:
     args.stap_profile = "clinical"
     args.score_mode = "pd"
 
-    args.flow_mask_mode = "pd_auto"
+    # Evaluation masks for Brain-* simulations should reflect simulator truth
+    # (default geometric/injection masks). A separate PD-derived proxy mask is
+    # still exported and used for conditional execution / contract telemetry.
+    args.flow_mask_mode = "default"
     args.flow_mask_pd_quantile = 0.995
     args.flow_mask_depth_min_frac = 0.25
     args.flow_mask_depth_max_frac = 0.85
     args.flow_mask_dilate_iters = 2
-    args.flow_mask_union_default = True
+    args.flow_mask_union_default = False
 
     # Pial profile additionally suppresses the shallow alias depth band when
     # building the flow mask so the pial band is always treated as H0.

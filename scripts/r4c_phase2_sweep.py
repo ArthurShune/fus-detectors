@@ -248,7 +248,7 @@ def replay_for_config(
         "--bg-alias-jitter-hz",
         "50.0",
         "--flow-mask-mode",
-        "pd_auto",
+        "default",
         "--flow-mask-pd-quantile",
         "0.995",
         "--flow-mask-depth-min-frac",

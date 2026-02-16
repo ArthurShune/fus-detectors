@@ -482,15 +482,12 @@ r4b-generate:
 			--jitter_um $(R4_JITTER_UM) \
 			--pulses $(R4_PULSES) \
 			--prf $(R4B_PRF) \
-			--seed $${s} \
-			--tile-h $(R4B_TILE) --tile-w $(R4B_TILE) --tile-stride $(R4B_TILE_STRIDE) \
-			--lt $(R4B_LT) \
-			--flow-mask-mode pd_auto --flow-mask-pd-quantile 0.995 \
-			--flow-mask-depth-min-frac 0.20 --flow-mask-depth-max-frac 0.95 \
-			--flow-mask-dilate-iters 2 \
-			--diag-load 1e-2 --cov-estimator tyler_pca --huber-c 5.0 \
-			--fd-span-mode psd --fd-span-rel "0.30,1.10" \
-			--msd-lambda 5e-2 --msd-ridge 0.06 --msd-agg median --msd-ratio-rho 0.05 \
+				--seed $${s} \
+				--tile-h $(R4B_TILE) --tile-w $(R4B_TILE) --tile-stride $(R4B_TILE_STRIDE) \
+				--lt $(R4B_LT) \
+				--diag-load 1e-2 --cov-estimator tyler_pca --huber-c 5.0 \
+				--fd-span-mode psd --fd-span-rel "0.30,1.10" \
+				--msd-lambda 5e-2 --msd-ridge 0.06 --msd-agg median --msd-ratio-rho 0.05 \
 			--motion-half-span-rel 0.25 --msd-contrast-alpha 0.8 \
 			--ka-mode library \
 			--ka-prior-path runs/motion/priors/ka_prior_lt4_prf3k.npy \
@@ -517,13 +514,13 @@ r4b-replay:
 				--baseline mc_svd \
 				--tile-h $(R4B_TILE) --tile-w $(R4B_TILE) --tile-stride $(R4B_TILE_STRIDE) \
 				--lt $(R4B_LT) \
-				--reg-enable --reg-method phasecorr --reg-subpixel $(R4B_MCSV_REG) --reg-reference median \
-				--svd-rank $${k} \
-				--msd-contrast-alpha 0.8 \
-				--flow-mask-mode pd_auto --flow-mask-pd-quantile 0.995 \
-				--flow-mask-depth-min-frac 0.20 --flow-mask-depth-max-frac 0.95 \
-				--flow-mask-dilate-iters 2 \
-				--stap-device cuda; \
+					--reg-enable --reg-method phasecorr --reg-subpixel $(R4B_MCSV_REG) --reg-reference median \
+					--svd-rank $${k} \
+					--msd-contrast-alpha 0.8 \
+					--flow-mask-mode default --flow-mask-pd-quantile 0.995 \
+					--flow-mask-depth-min-frac 0.20 --flow-mask-depth-max-frac 0.95 \
+					--flow-mask-dilate-iters 2 \
+					--stap-device cuda; \
 		done; \
 		echo "[r4b] MC-SVD reg-off K=3 seed $${s}"; \
 		PYTHONPATH=. conda run -n $(ENV_NAME) python scripts/replay_stap_from_run.py \
@@ -532,13 +529,13 @@ r4b-replay:
 			--baseline mc_svd \
 			--tile-h $(R4B_TILE) --tile-w $(R4B_TILE) --tile-stride $(R4B_TILE_STRIDE) \
 			--lt $(R4B_LT) \
-			--reg-disable \
-			--svd-rank 3 \
-			--msd-contrast-alpha 0.8 \
-			--flow-mask-mode pd_auto --flow-mask-pd-quantile 0.995 \
-			--flow-mask-depth-min-frac 0.20 --flow-mask-depth-max-frac 0.95 \
-			--flow-mask-dilate-iters 2 \
-			--stap-device cuda; \
+				--reg-disable \
+				--svd-rank 3 \
+				--msd-contrast-alpha 0.8 \
+				--flow-mask-mode default --flow-mask-pd-quantile 0.995 \
+				--flow-mask-depth-min-frac 0.20 --flow-mask-depth-max-frac 0.95 \
+				--flow-mask-dilate-iters 2 \
+				--stap-device cuda; \
 	done
 
 r4b-analyze:
@@ -1125,13 +1122,13 @@ r4c-replay:
 				--psd-br-alias-center $(R4C_BAND_ALIAS_CENTER) \
 				--psd-br-alias-width $(R4C_BAND_ALIAS_WIDTH) \
 				--flow-doppler-min-hz $(R4C_FLOW_DOPPLER_MIN) --flow-doppler-max-hz $(R4C_FLOW_DOPPLER_MAX) \
-				--bg-alias-hz $(R4C_BG_ALIAS_HZ) --bg-alias-fraction $(R4C_BG_ALIAS_FRAC) \
-				--bg-alias-depth-min-frac $(R4C_BG_ALIAS_DEPTH_MIN) --bg-alias-depth-max-frac $(R4C_BG_ALIAS_DEPTH_MAX) \
-				--bg-alias-jitter-hz $(R4C_BG_ALIAS_JITTER) \
-				--flow-mask-mode pd_auto \
-				--flow-mask-pd-quantile $(R4C_FLOW_MASK_PD_Q) \
-				--flow-mask-depth-min-frac $(R4C_FLOW_MASK_DEPTH_MIN) \
-				--flow-mask-depth-max-frac $(R4C_FLOW_MASK_DEPTH_MAX) \
+					--bg-alias-hz $(R4C_BG_ALIAS_HZ) --bg-alias-fraction $(R4C_BG_ALIAS_FRAC) \
+					--bg-alias-depth-min-frac $(R4C_BG_ALIAS_DEPTH_MIN) --bg-alias-depth-max-frac $(R4C_BG_ALIAS_DEPTH_MAX) \
+					--bg-alias-jitter-hz $(R4C_BG_ALIAS_JITTER) \
+					--flow-mask-mode default \
+					--flow-mask-pd-quantile $(R4C_FLOW_MASK_PD_Q) \
+					--flow-mask-depth-min-frac $(R4C_FLOW_MASK_DEPTH_MIN) \
+					--flow-mask-depth-max-frac $(R4C_FLOW_MASK_DEPTH_MAX) \
 				--flow-mask-dilate-iters 2 \
 				--aperture-phase-std $(R4C_PHASE_STD) \
 				--aperture-phase-corr-len $(R4C_PHASE_CORR_LEN) \
@@ -1168,17 +1165,17 @@ r4c-pial-replay:
 			--psd-br-alias-width $(R4C_BAND_ALIAS_WIDTH) \
 			--flow-doppler-min-hz $(R4C_FLOW_DOPPLER_MIN) --flow-doppler-max-hz $(R4C_FLOW_DOPPLER_MAX) \
 			--bg-alias-hz $(R4C_PIAL_BG_ALIAS_HZ) --bg-alias-fraction $(R4C_PIAL_BG_ALIAS_FRAC) \
-			--bg-alias-depth-min-frac $(R4C_PIAL_BG_ALIAS_DEPTH_MIN) --bg-alias-depth-max-frac $(R4C_PIAL_BG_ALIAS_DEPTH_MAX) \
-			--bg-alias-jitter-hz $(R4C_PIAL_BG_ALIAS_JITTER) \
-			--vibration-hz $(R4C_PIAL_VIBRATION_HZ) \
-			--vibration-amp $(R4C_PIAL_VIBRATION_AMP) \
-			--vibration-depth-min-frac $(R4C_PIAL_VIBRATION_DEPTH_MIN) \
-			--vibration-depth-decay-frac $(R4C_PIAL_VIBRATION_DEPTH_DECAY) \
-			--flow-mask-mode pd_auto \
-			--flow-mask-pd-quantile $(R4C_FLOW_MASK_PD_Q) \
-			--flow-mask-depth-min-frac $(R4C_FLOW_MASK_DEPTH_MIN) \
-			--flow-mask-depth-max-frac $(R4C_FLOW_MASK_DEPTH_MAX) \
-			--flow-mask-suppress-alias-depth \
+				--bg-alias-depth-min-frac $(R4C_PIAL_BG_ALIAS_DEPTH_MIN) --bg-alias-depth-max-frac $(R4C_PIAL_BG_ALIAS_DEPTH_MAX) \
+				--bg-alias-jitter-hz $(R4C_PIAL_BG_ALIAS_JITTER) \
+				--vibration-hz $(R4C_PIAL_VIBRATION_HZ) \
+				--vibration-amp $(R4C_PIAL_VIBRATION_AMP) \
+				--vibration-depth-min-frac $(R4C_PIAL_VIBRATION_DEPTH_MIN) \
+				--vibration-depth-decay-frac $(R4C_PIAL_VIBRATION_DEPTH_DECAY) \
+				--flow-mask-mode default \
+				--flow-mask-pd-quantile $(R4C_FLOW_MASK_PD_Q) \
+				--flow-mask-depth-min-frac $(R4C_FLOW_MASK_DEPTH_MIN) \
+				--flow-mask-depth-max-frac $(R4C_FLOW_MASK_DEPTH_MAX) \
+				--flow-mask-suppress-alias-depth \
 			--flow-mask-dilate-iters 2 \
 			--aperture-phase-std $(R4C_PHASE_STD) \
 			--aperture-phase-corr-len $(R4C_PHASE_CORR_LEN) \
@@ -1210,14 +1207,14 @@ r4c-replay-ka:
 			--psd-br-flow-high $(R4C_BAND_FLOW_HIGH) \
 			--psd-br-alias-center $(R4C_BAND_ALIAS_CENTER) \
 			--psd-br-alias-width $(R4C_BAND_ALIAS_WIDTH) \
-			--flow-doppler-min-hz $(R4C_FLOW_DOPPLER_MIN) --flow-doppler-max-hz $(R4C_FLOW_DOPPLER_MAX) \
-			--bg-alias-hz $(R4C_BG_ALIAS_HZ) --bg-alias-fraction $(R4C_BG_ALIAS_FRAC) \
-			--bg-alias-depth-min-frac $(R4C_BG_ALIAS_DEPTH_MIN) --bg-alias-depth-max-frac $(R4C_BG_ALIAS_DEPTH_MAX) \
-			--bg-alias-jitter-hz $(R4C_BG_ALIAS_JITTER) \
-			--flow-mask-mode pd_auto \
-			--flow-mask-pd-quantile $(R4C_FLOW_MASK_PD_Q) \
-			--flow-mask-depth-min-frac $(R4C_FLOW_MASK_DEPTH_MIN) \
-			--flow-mask-depth-max-frac $(R4C_FLOW_MASK_DEPTH_MAX) \
+				--flow-doppler-min-hz $(R4C_FLOW_DOPPLER_MIN) --flow-doppler-max-hz $(R4C_FLOW_DOPPLER_MAX) \
+				--bg-alias-hz $(R4C_BG_ALIAS_HZ) --bg-alias-fraction $(R4C_BG_ALIAS_FRAC) \
+				--bg-alias-depth-min-frac $(R4C_BG_ALIAS_DEPTH_MIN) --bg-alias-depth-max-frac $(R4C_BG_ALIAS_DEPTH_MAX) \
+				--bg-alias-jitter-hz $(R4C_BG_ALIAS_JITTER) \
+				--flow-mask-mode default \
+				--flow-mask-pd-quantile $(R4C_FLOW_MASK_PD_Q) \
+				--flow-mask-depth-min-frac $(R4C_FLOW_MASK_DEPTH_MIN) \
+				--flow-mask-depth-max-frac $(R4C_FLOW_MASK_DEPTH_MAX) \
 			--flow-mask-dilate-iters 2 \
 			--aperture-phase-std $(R4C_PHASE_STD) \
 			--aperture-phase-corr-len $(R4C_PHASE_CORR_LEN) \
@@ -1262,14 +1259,14 @@ r4c-pial-replay-ka:
 			--bg-alias-hz $(R4C_PIAL_BG_ALIAS_HZ) --bg-alias-fraction $(R4C_PIAL_BG_ALIAS_FRAC) \
 			--bg-alias-depth-min-frac $(R4C_PIAL_BG_ALIAS_DEPTH_MIN) --bg-alias-depth-max-frac $(R4C_PIAL_BG_ALIAS_DEPTH_MAX) \
 			--bg-alias-jitter-hz $(R4C_PIAL_BG_ALIAS_JITTER) \
-			--vibration-hz $(R4C_PIAL_VIBRATION_HZ) \
-			--vibration-amp $(R4C_PIAL_VIBRATION_AMP) \
-			--vibration-depth-min-frac $(R4C_PIAL_VIBRATION_DEPTH_MIN) \
-			--vibration-depth-decay-frac $(R4C_PIAL_VIBRATION_DEPTH_DECAY) \
-			--flow-mask-mode pd_auto \
-			--flow-mask-pd-quantile $(R4C_FLOW_MASK_PD_Q) \
-			--flow-mask-depth-min-frac $(R4C_FLOW_MASK_DEPTH_MIN) \
-			--flow-mask-depth-max-frac $(R4C_FLOW_MASK_DEPTH_MAX) \
+				--vibration-hz $(R4C_PIAL_VIBRATION_HZ) \
+				--vibration-amp $(R4C_PIAL_VIBRATION_AMP) \
+				--vibration-depth-min-frac $(R4C_PIAL_VIBRATION_DEPTH_MIN) \
+				--vibration-depth-decay-frac $(R4C_PIAL_VIBRATION_DEPTH_DECAY) \
+				--flow-mask-mode default \
+				--flow-mask-pd-quantile $(R4C_FLOW_MASK_PD_Q) \
+				--flow-mask-depth-min-frac $(R4C_FLOW_MASK_DEPTH_MIN) \
+				--flow-mask-depth-max-frac $(R4C_FLOW_MASK_DEPTH_MAX) \
 			--flow-mask-suppress-alias-depth \
 			--flow-mask-dilate-iters 2 \
 			--aperture-phase-std $(R4C_PHASE_STD) \
@@ -1317,14 +1314,14 @@ r4c-replay-rpca:
 			--psd-br-flow-high $(R4C_BAND_FLOW_HIGH) \
 			--psd-br-alias-center $(R4C_BAND_ALIAS_CENTER) \
 			--psd-br-alias-width $(R4C_BAND_ALIAS_WIDTH) \
-			--flow-doppler-min-hz $(R4C_FLOW_DOPPLER_MIN) --flow-doppler-max-hz $(R4C_FLOW_DOPPLER_MAX) \
-			--bg-alias-hz $(R4C_BG_ALIAS_HZ) --bg-alias-fraction $(R4C_BG_ALIAS_FRAC) \
-			--bg-alias-depth-min-frac $(R4C_BG_ALIAS_DEPTH_MIN) --bg-alias-depth-max-frac $(R4C_BG_ALIAS_DEPTH_MAX) \
-			--bg-alias-jitter-hz $(R4C_BG_ALIAS_JITTER) \
-			--flow-mask-mode pd_auto \
-			--flow-mask-pd-quantile $(R4C_FLOW_MASK_PD_Q) \
-			--flow-mask-depth-min-frac $(R4C_FLOW_MASK_DEPTH_MIN) \
-			--flow-mask-depth-max-frac $(R4C_FLOW_MASK_DEPTH_MAX) \
+				--flow-doppler-min-hz $(R4C_FLOW_DOPPLER_MIN) --flow-doppler-max-hz $(R4C_FLOW_DOPPLER_MAX) \
+				--bg-alias-hz $(R4C_BG_ALIAS_HZ) --bg-alias-fraction $(R4C_BG_ALIAS_FRAC) \
+				--bg-alias-depth-min-frac $(R4C_BG_ALIAS_DEPTH_MIN) --bg-alias-depth-max-frac $(R4C_BG_ALIAS_DEPTH_MAX) \
+				--bg-alias-jitter-hz $(R4C_BG_ALIAS_JITTER) \
+				--flow-mask-mode default \
+				--flow-mask-pd-quantile $(R4C_FLOW_MASK_PD_Q) \
+				--flow-mask-depth-min-frac $(R4C_FLOW_MASK_DEPTH_MIN) \
+				--flow-mask-depth-max-frac $(R4C_FLOW_MASK_DEPTH_MAX) \
 			--flow-mask-dilate-iters 2 \
 			--aperture-phase-std $(R4C_PHASE_STD) \
 			--aperture-phase-corr-len $(R4C_PHASE_CORR_LEN) \
@@ -1360,14 +1357,14 @@ r4c-replay-hosvd:
 			--psd-br-flow-high $(R4C_BAND_FLOW_HIGH) \
 			--psd-br-alias-center $(R4C_BAND_ALIAS_CENTER) \
 			--psd-br-alias-width $(R4C_BAND_ALIAS_WIDTH) \
-			--flow-doppler-min-hz $(R4C_FLOW_DOPPLER_MIN) --flow-doppler-max-hz $(R4C_FLOW_DOPPLER_MAX) \
-			--bg-alias-hz $(R4C_BG_ALIAS_HZ) --bg-alias-fraction $(R4C_BG_ALIAS_FRAC) \
-			--bg-alias-depth-min-frac $(R4C_BG_ALIAS_DEPTH_MIN) --bg-alias-depth-max-frac $(R4C_BG_ALIAS_DEPTH_MAX) \
-			--bg-alias-jitter-hz $(R4C_BG_ALIAS_JITTER) \
-			--flow-mask-mode pd_auto \
-			--flow-mask-pd-quantile $(R4C_FLOW_MASK_PD_Q) \
-			--flow-mask-depth-min-frac $(R4C_FLOW_MASK_DEPTH_MIN) \
-			--flow-mask-depth-max-frac $(R4C_FLOW_MASK_DEPTH_MAX) \
+				--flow-doppler-min-hz $(R4C_FLOW_DOPPLER_MIN) --flow-doppler-max-hz $(R4C_FLOW_DOPPLER_MAX) \
+				--bg-alias-hz $(R4C_BG_ALIAS_HZ) --bg-alias-fraction $(R4C_BG_ALIAS_FRAC) \
+				--bg-alias-depth-min-frac $(R4C_BG_ALIAS_DEPTH_MIN) --bg-alias-depth-max-frac $(R4C_BG_ALIAS_DEPTH_MAX) \
+				--bg-alias-jitter-hz $(R4C_BG_ALIAS_JITTER) \
+				--flow-mask-mode default \
+				--flow-mask-pd-quantile $(R4C_FLOW_MASK_PD_Q) \
+				--flow-mask-depth-min-frac $(R4C_FLOW_MASK_DEPTH_MIN) \
+				--flow-mask-depth-max-frac $(R4C_FLOW_MASK_DEPTH_MAX) \
 			--flow-mask-dilate-iters 2 \
 			--aperture-phase-std $(R4C_PHASE_STD) \
 			--aperture-phase-corr-len $(R4C_PHASE_CORR_LEN) \
@@ -1551,13 +1548,13 @@ r4c_brw_replay:
 		PYTHONPATH=. conda run -n $(ENV_NAME) python scripts/replay_stap_from_run.py \
 			--src $$src_dir \
 			--out $$base_out \
-			--baseline mc_svd \
-			--tile-h $(R4C_TILE) --tile-w $(R4C_TILE) --tile-stride 1 \
-			--lt $(R4C_LT) \
-			--flow-mask-mode pd_auto \
-			--flow-mask-pd-quantile $(R4C_FLOW_MASK_PD_Q) \
-			--flow-mask-depth-min-frac $(R4C_FLOW_MASK_DEPTH_MIN) \
-			--flow-mask-depth-max-frac $(R4C_FLOW_MASK_DEPTH_MAX) \
+				--baseline mc_svd \
+				--tile-h $(R4C_TILE) --tile-w $(R4C_TILE) --tile-stride 1 \
+				--lt $(R4C_LT) \
+				--flow-mask-mode default \
+				--flow-mask-pd-quantile $(R4C_FLOW_MASK_PD_Q) \
+				--flow-mask-depth-min-frac $(R4C_FLOW_MASK_DEPTH_MIN) \
+				--flow-mask-depth-max-frac $(R4C_FLOW_MASK_DEPTH_MAX) \
 			--score-mode $(R4C_BRW_SCORE_MODE) \
 			--psd-telemetry --psd-tapers $(R4C_BRW_PSD_TAPERS) --psd-bandwidth $(R4C_BRW_PSD_BANDWIDTH) \
 			--psd-br-flow-low $(R4C_BRW_FLOW_LOW) \
@@ -1581,13 +1578,13 @@ r4c_brw_replay:
 		PYTHONPATH=. conda run -n $(ENV_NAME) python scripts/replay_stap_from_run.py \
 			--src $$src_dir \
 			--out $$ka_out \
-			--baseline mc_svd \
-			--tile-h $(R4C_TILE) --tile-w $(R4C_TILE) --tile-stride 1 \
-			--lt $(R4C_LT) \
-			--flow-mask-mode pd_auto \
-			--flow-mask-pd-quantile $(R4C_FLOW_MASK_PD_Q) \
-			--flow-mask-depth-min-frac $(R4C_FLOW_MASK_DEPTH_MIN) \
-			--flow-mask-depth-max-frac $(R4C_FLOW_MASK_DEPTH_MAX) \
+				--baseline mc_svd \
+				--tile-h $(R4C_TILE) --tile-w $(R4C_TILE) --tile-stride 1 \
+				--lt $(R4C_LT) \
+				--flow-mask-mode default \
+				--flow-mask-pd-quantile $(R4C_FLOW_MASK_PD_Q) \
+				--flow-mask-depth-min-frac $(R4C_FLOW_MASK_DEPTH_MIN) \
+				--flow-mask-depth-max-frac $(R4C_FLOW_MASK_DEPTH_MAX) \
 			--score-mode $(R4C_BRW_SCORE_MODE) \
 			--psd-telemetry --psd-tapers $(R4C_BRW_PSD_TAPERS) --psd-bandwidth $(R4C_BRW_PSD_BANDWIDTH) \
 			--psd-br-flow-low $(R4C_BRW_FLOW_LOW) \

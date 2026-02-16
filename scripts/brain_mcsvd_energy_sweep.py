@@ -162,8 +162,18 @@ def parse_args() -> argparse.Namespace:
         help="Comma-separated FPR targets (right-tail score).",
     )
     ap.add_argument("--stap-device", type=str, default="cpu", help="STAP device passed to replay.")
-    ap.add_argument("--summary-csv", type=Path, required=True, help="Write per-candidate metrics to CSV.")
-    ap.add_argument("--summary-json", type=Path, required=True, help="Write summary JSON.")
+    ap.add_argument(
+        "--summary-csv",
+        type=Path,
+        default=Path("reports/brain_mcsvd_energy_sweep.csv"),
+        help="Write per-candidate metrics to CSV.",
+    )
+    ap.add_argument(
+        "--summary-json",
+        type=Path,
+        default=Path("reports/brain_mcsvd_energy_sweep.json"),
+        help="Write summary JSON.",
+    )
     ap.add_argument("--dry-run", action="store_true", help="Print commands without running.")
     return ap.parse_args()
 
@@ -216,6 +226,9 @@ def main() -> None:
             str(int(args.window_length)),
             "--time-window-offset",
             str(int(args.window_offset)),
+            # Evaluation masks should be simulator truth in Brain-* pilots.
+            "--flow-mask-mode",
+            "default",
             "--svd-energy-frac",
             str(ef),
             "--stap-conditional-mask",
@@ -347,4 +360,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
