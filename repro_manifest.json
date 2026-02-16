@@ -1,35 +1,10 @@
 {
   "git": {
-    "commit": "e80f31e19a6c67c23ea8eaa35db56e2766d1f387",
-    "commit_short": "e80f31e",
+    "commit": "943f098950a06285bae12f2721eb65681df46da8",
+    "commit_short": "943f098",
     "branch": "main",
-    "dirty": true,
-    "dirty_paths": [
-      "M pipeline/stap/ka_contract_v2.py",
-      "M scripts/hab_contract_check.py",
-      "M scripts/replay_stap_from_run.py",
-      "M scripts/shin_ratbrain_motion_aggregate.py",
-      "M scripts/shin_ratbrain_motion_compare.py",
-      "M scripts/shin_ratbrain_motion_sweep.py",
-      "M sim/kwave/common.py",
-      "M sim/kwave/icube_bundle.py",
-      "M stap_fus_methodology.tex",
-      "M tests/test_ka_score_shrink_v2.py",
-      "M tests/test_kwave_physics.py",
-      "?? appendix_ka_contract_theory.tex",
-      "?? appendix_repro_manifest.tex",
-      "?? repro_manifest.json",
-      "?? scripts/brain_mcsvd_energy_sweep.py",
-      "?? scripts/conditional_stap_leakage_ablation.py",
-      "?? scripts/generate_repro_manifest.py",
-      "?? scripts/ka_contract_v2_ablation.py",
-      "?? scripts/mace_alias_gate_holdout.py",
-      "?? scripts/pd_mode_sanity.py",
-      "?? scripts/shin_ratbrain_allclips_contract_hygiene.py",
-      "?? scripts/shin_ratbrain_motion_sensitivity_posthoc.py",
-      "?? stap_fus_paper.tex",
-      "?? stap_fus_supplement.tex"
-    ]
+    "dirty": false,
+    "dirty_paths": []
   },
   "env": {
     "python": "3.12.8 | packaged by Anaconda, Inc. | (main, Dec 11 2024, 16:31:09) [GCC 11.2.0]",
