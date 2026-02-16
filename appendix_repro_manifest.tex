@@ -7,7 +7,7 @@ The manifest lists the minimal set of commands/outputs needed to reproduce the m
 Run \path{PYTHONPATH=. python scripts/generate_repro_manifest.py} to refresh this manifest.
 
 \paragraph{Repository state.}
-Commit: \texttt{943f098} (full: \texttt{943f098950a06285bae12f2721eb65681df46da8}); branch: \texttt{main}; dirty: \texttt{false}.
+Commit: \texttt{cc16413} (full: \texttt{cc16413cd985b5d59bf5d022fe9162942af1cdc7}); branch: \texttt{main}; dirty: \texttt{false}.
 
 \paragraph{Environment.}
 Python: \texttt{3.12.8 | packaged by Anaconda, Inc. | (main, Dec 11 2024, 16:31:09) [GCC 11.2.0]}.
@@ -91,6 +91,16 @@ PYTHONPATH=. python scripts/ka_contract_v2_ablation.py \
 PYTHONPATH=. python scripts/mace_alias_gate_holdout.py \
   --out-csv reports/mace_alias_gate_holdout.csv \
   --out-json reports/mace_alias_gate_holdout.json
+\end{verbatim}
+
+  \item \textbf{Mace pixel-level vascular-atlas check (independent structural labels)}
+    (paper refs: Macé section: vascular atlas pixel-level check).
+    Outputs: \path{reports/mace_vascular_pixel_eval.csv}, \path{reports/mace_vascular_pixel_eval.json}.
+    Notes: Maps atlas.Vascular into each scan plane using Transformation.mat; evaluates vascular vs non-vascular pixels (structural, not clinical efficacy).
+\begin{verbatim}
+PYTHONPATH=. python scripts/mace_vascular_pixel_eval.py \
+  --out-csv reports/mace_vascular_pixel_eval.csv \
+  --out-json reports/mace_vascular_pixel_eval.json
 \end{verbatim}
 
   \item \textbf{Mace PD-only contract v2 dashboard (plane sweep + paper figure)}

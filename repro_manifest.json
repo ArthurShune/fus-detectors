@@ -1,7 +1,7 @@
 {
   "git": {
-    "commit": "943f098950a06285bae12f2721eb65681df46da8",
-    "commit_short": "943f098",
+    "commit": "cc16413cd985b5d59bf5d022fe9162942af1cdc7",
+    "commit_short": "cc16413",
     "branch": "main",
     "dirty": false,
     "dirty_paths": []
@@ -138,6 +138,22 @@
         "  --out-json reports/mace_alias_gate_holdout.json"
       ],
       "notes": null
+    },
+    {
+      "name": "Mace pixel-level vascular-atlas check (independent structural labels)",
+      "paper_refs": [
+        "Mac\u00e9 section: vascular atlas pixel-level check"
+      ],
+      "outputs": [
+        "reports/mace_vascular_pixel_eval.csv",
+        "reports/mace_vascular_pixel_eval.json"
+      ],
+      "commands": [
+        "PYTHONPATH=. python scripts/mace_vascular_pixel_eval.py \\",
+        "  --out-csv reports/mace_vascular_pixel_eval.csv \\",
+        "  --out-json reports/mace_vascular_pixel_eval.json"
+      ],
+      "notes": "Maps atlas.Vascular into each scan plane using Transformation.mat; evaluates vascular vs non-vascular pixels (structural, not clinical efficacy)."
     },
     {
       "name": "Mace PD-only contract v2 dashboard (plane sweep + paper figure)",
