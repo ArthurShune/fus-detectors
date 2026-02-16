@@ -195,10 +195,10 @@ def load_mace_region_info(root: Path | None = None) -> MaceRegionInfo:
         )
     acr_list = [str(a) for a in acr]
     name_list = [str(n) for n in name]
-    # Labels in Regions are 1-based; index 0 is reserved for background.
+    # Labels in Regions are 1..N (1-based). Index 0 would be background if present.
     label_for_acr: Dict[str, int] = {}
     for idx, a in enumerate(acr_list):
-        label_for_acr[a] = idx  # idx corresponds to the value stored in Regions
+        label_for_acr[a] = idx + 1  # Regions stores 1-based labels aligned to infoRegions
     return MaceRegionInfo(
         acronyms=acr_list,
         names=name_list,
@@ -296,8 +296,13 @@ def scan_plane_to_atlas_indices(
     scan_xyz = np.stack([pa, dv, rl], axis=1)
     atlas_xyz = scan_xyz @ A.T + t
 
-    dv_a = atlas_xyz[:, 0]
-    ap_a = atlas_xyz[:, 1]
+    # NOTE: `Transf.M` is a MATLAB `affine3d` matrix, which uses (x, y, z) =
+    # (cols, rows, planes). For this dataset, the provided transform maps
+    # scan (x, y, z) = (PA index, DV index, RL index) into atlas
+    # (x, y, z) = (AP index, DV index, LR index). Therefore the first two
+    # outputs are (AP, DV), not (DV, AP).
+    ap_a = atlas_xyz[:, 0]
+    dv_a = atlas_xyz[:, 1]
     lr_a = atlas_xyz[:, 2]
 
     i_dv = np.rint(dv_a).astype(np.int64)

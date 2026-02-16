@@ -339,6 +339,18 @@ def _default_artifacts() -> list[ArtifactInfo]:
             notes="Maps atlas.Vascular into each scan plane using Transformation.mat; evaluates vascular vs non-vascular pixels (structural, not clinical efficacy).",
         ),
         ArtifactInfo(
+            name="Mace atlas-alignment sanity overlay figure",
+            paper_refs=["Appendix: Macé atlas alignment sanity check"],
+            outputs=["figs/paper/mace_atlas_overlay.png"],
+            commands=[
+                "PYTHONPATH=. python scripts/mace_atlas_overlay_fig.py \\",
+                "  --scan-name scan1 \\",
+                "  --plane-indices 5 10 15 \\",
+                "  --out-png figs/paper/mace_atlas_overlay.png",
+            ],
+            notes="Overlays atlas ROIs and atlas.Vascular contours on mean PD for representative planes (sanity check of Transformation.mat alignment).",
+        ),
+        ArtifactInfo(
             name="Mace PD-only contract v2 dashboard (plane sweep + paper figure)",
             paper_refs=["Figure: mace_pdonly_contract_v2_dashboard.png"],
             outputs=["reports/mace_pdonly_contract_v2.csv", "figs/paper/mace_pdonly_contract_v2_dashboard.png"],

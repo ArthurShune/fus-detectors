@@ -72,10 +72,12 @@ def _region_voxel_counts(
     for label, nvox in zip(labels, freqs, strict=True):
         if label <= 0:
             continue
-        if int(label) >= len(region_info.acronyms):
+        # Labels are 1..N inclusive.
+        if int(label) > len(region_info.acronyms):
             # Defensive: label outside metadata range
             continue
-        acr = region_info.acronyms[int(label)]
+        # Atlas `Regions` stores 1-based indices into infoRegions.
+        acr = region_info.acronyms[int(label) - 1]
         counts[acr] = (int(label), int(nvox))
     return counts
 
