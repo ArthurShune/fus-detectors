@@ -1,0 +1,283 @@
+{
+  "git": {
+    "commit": "e80f31e19a6c67c23ea8eaa35db56e2766d1f387",
+    "commit_short": "e80f31e",
+    "branch": "main",
+    "dirty": true,
+    "dirty_paths": [
+      "M pipeline/stap/ka_contract_v2.py",
+      "M scripts/hab_contract_check.py",
+      "M scripts/replay_stap_from_run.py",
+      "M scripts/shin_ratbrain_motion_aggregate.py",
+      "M scripts/shin_ratbrain_motion_compare.py",
+      "M scripts/shin_ratbrain_motion_sweep.py",
+      "M sim/kwave/common.py",
+      "M sim/kwave/icube_bundle.py",
+      "M stap_fus_methodology.tex",
+      "M tests/test_ka_score_shrink_v2.py",
+      "M tests/test_kwave_physics.py",
+      "?? appendix_ka_contract_theory.tex",
+      "?? appendix_repro_manifest.tex",
+      "?? repro_manifest.json",
+      "?? scripts/brain_mcsvd_energy_sweep.py",
+      "?? scripts/conditional_stap_leakage_ablation.py",
+      "?? scripts/generate_repro_manifest.py",
+      "?? scripts/ka_contract_v2_ablation.py",
+      "?? scripts/mace_alias_gate_holdout.py",
+      "?? scripts/pd_mode_sanity.py",
+      "?? scripts/shin_ratbrain_allclips_contract_hygiene.py",
+      "?? scripts/shin_ratbrain_motion_sensitivity_posthoc.py",
+      "?? stap_fus_paper.tex",
+      "?? stap_fus_supplement.tex"
+    ]
+  },
+  "env": {
+    "python": "3.12.8 | packaged by Anaconda, Inc. | (main, Dec 11 2024, 16:31:09) [GCC 11.2.0]",
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "processor": "x86_64",
+    "versions": {
+      "numpy": "1.26.4",
+      "scipy": "1.14.1",
+      "torch": "2.2.2+cpu",
+      "matplotlib": "3.10.0"
+    },
+    "cwd": "/home/ashune/stap-for-fus"
+  },
+  "datasets": [
+    {
+      "name": "Brain-* k-Wave pilots (simulated IQ)",
+      "purpose": "Labeled low-FPR ROC + ablations.",
+      "local_path": "runs/pilot/",
+      "doi_or_url": "(generated locally via sim/kwave/pilot_motion.py / Makefile targets r4c-*)"
+    },
+    {
+      "name": "Mace/Urban whole-brain mouse fUS (PD-only)",
+      "purpose": "PD-only telemetry + hold-out alias-gate evaluation (no Doppler IQ).",
+      "local_path": "data/whole-brain-fUS",
+      "doi_or_url": "https://doi.org/10.5281/zenodo.4905862"
+    },
+    {
+      "name": "Shin RatBrain Fig3 (LOCA-ULM) beamformed IQ",
+      "purpose": "Real-IQ ingestion/telemetry/contract + label-free robustness sweeps.",
+      "local_path": "data/shin_zenodo_10711806/RatBrain_Fig3.zip (extracts to data/shin_zenodo_10711806/ratbrain_fig3_raw)",
+      "doi_or_url": "https://doi.org/10.5281/zenodo.10711806"
+    }
+  ],
+  "selections": {
+    "Brain seed sweep (AliasContract pilot)": "seed2-seed12 (n=11).",
+    "Shin all-clips telemetry": "IQData001-IQData080 (n=80), window 0:128.",
+    "Shin motion subset": "IQData001-005, IQData010, IQData020, IQData040, IQData060, IQData080 (n=10).",
+    "Mace holdout split (deduplicated)": "train: scan1/2 + scan3/6; test: scan4 + scan5."
+  },
+  "artifacts": [
+    {
+      "name": "PD-mode sanity checks (PD-mode map and score S=-PD)",
+      "paper_refs": [
+        "Notation (PD convention)"
+      ],
+      "outputs": [
+        "reports/pd_mode_sanity/ (optional figs)"
+      ],
+      "commands": [
+        "PYTHONPATH=. python scripts/pd_mode_sanity.py runs/<bundle_root>/pw_* --out-dir reports/pd_mode_sanity"
+      ],
+      "notes": "Run on any generated acceptance bundle root containing pw_* directories."
+    },
+    {
+      "name": "Conditional STAP leakage ablation (full vs conditional masks)",
+      "paper_refs": [
+        "Results (Brain-k-Wave): conditional STAP ablation"
+      ],
+      "outputs": [
+        "reports/condstap_leakage.csv",
+        "reports/condstap_leakage.json"
+      ],
+      "commands": [
+        "PYTHONPATH=. python scripts/conditional_stap_leakage_ablation.py \\",
+        "  --pilots runs/pilot/r4_kwave_seed1 runs/pilot/r4_kwave_seed2 \\",
+        "  --profile Brain-OpenSkull \\",
+        "  --out-root runs/ablation/condstap_leakage \\",
+        "  --window-length 64 --window-offset 0 --disjoint-offset 64 \\",
+        "  --summary-csv reports/condstap_leakage.csv \\",
+        "  --summary-json reports/condstap_leakage.json"
+      ],
+      "notes": null
+    },
+    {
+      "name": "Brain-* baseline fairness: MC--SVD(e) tune-once sweep",
+      "paper_refs": [
+        "Baseline fairness (Brain-*)"
+      ],
+      "outputs": [
+        "reports/brain_mcsvd_energy_sweep.csv",
+        "reports/brain_mcsvd_energy_sweep.json"
+      ],
+      "commands": [
+        "PYTHONPATH=. python scripts/brain_mcsvd_energy_sweep.py \\",
+        "  --pilot runs/pilot/r4_kwave_seed1 \\",
+        "  --profile Brain-OpenSkull \\",
+        "  --out-root runs/sweep/mcsvd_energy_brain_seed1 \\",
+        "  --window-length 64 --window-offset 0 \\",
+        "  --energy-fracs 0.90,0.95,0.97,0.975,0.98,0.99 \\",
+        "  --fprs 1e-4,3e-4,1e-3 \\",
+        "  --summary-csv reports/brain_mcsvd_energy_sweep.csv \\",
+        "  --summary-json reports/brain_mcsvd_energy_sweep.json"
+      ],
+      "notes": null
+    },
+    {
+      "name": "KA Contract v2 falsifiability ablation (STAP-only vs contract vs forced)",
+      "paper_refs": [
+        "KA evaluation discipline"
+      ],
+      "outputs": [
+        "reports/ka_v2_ablation.csv",
+        "reports/ka_v2_ablation.json"
+      ],
+      "commands": [
+        "PYTHONPATH=. python scripts/ka_contract_v2_ablation.py \\",
+        "  --pilot runs/pilot/r4c_kwave_hab_contract_seed2 \\",
+        "  --profile Brain-AliasContract \\",
+        "  --out-root runs/ablation/ka_v2_falsifiability \\",
+        "  --stap-device cpu \\",
+        "  --window-length 64 \\",
+        "  --window-offsets 0 64 128 192 256 \\",
+        "  --summary-csv reports/ka_v2_ablation.csv \\",
+        "  --summary-json reports/ka_v2_ablation.json"
+      ],
+      "notes": null
+    },
+    {
+      "name": "Mace PD-only holdout alias-gate evaluation (label-free thresholds)",
+      "paper_refs": [
+        "Table: Mace hold-out alias gate"
+      ],
+      "outputs": [
+        "reports/mace_alias_gate_holdout.csv",
+        "reports/mace_alias_gate_holdout.json"
+      ],
+      "commands": [
+        "PYTHONPATH=. python scripts/mace_alias_gate_holdout.py \\",
+        "  --out-csv reports/mace_alias_gate_holdout.csv \\",
+        "  --out-json reports/mace_alias_gate_holdout.json"
+      ],
+      "notes": null
+    },
+    {
+      "name": "Mace PD-only contract v2 dashboard (plane sweep + paper figure)",
+      "paper_refs": [
+        "Figure: mace_pdonly_contract_v2_dashboard.png"
+      ],
+      "outputs": [
+        "reports/mace_pdonly_contract_v2.csv",
+        "figs/paper/mace_pdonly_contract_v2_dashboard.png"
+      ],
+      "commands": [
+        "PYTHONPATH=. python scripts/mace_pdonly_contract_v2_sweep.py \\",
+        "  --out-csv reports/mace_pdonly_contract_v2.csv",
+        "",
+        "PYTHONPATH=. python scripts/mace_pdonly_contract_v2_dashboard_fig.py \\",
+        "  --in-csv reports/mace_pdonly_contract_v2.csv \\",
+        "  --out-png figs/paper/mace_pdonly_contract_v2_dashboard.png"
+      ],
+      "notes": null
+    },
+    {
+      "name": "Shin all-clips contract telemetry (n=80; telemetry-only)",
+      "paper_refs": [
+        "Shin section: all-clips telemetry audit"
+      ],
+      "outputs": [
+        "reports/shin_ratbrain_shinU_e970_telemetry_only_0_128_all80.csv",
+        "reports/shin_ratbrain_shinU_e970_telemetry_only_0_128_all80_summary.json"
+      ],
+      "commands": [
+        "PYTHONPATH=. python -m scripts.shin_ratbrain_allclips_contract_hygiene \\",
+        "  --extract-from-zip --no-run-stap --no-score-ka-v2 \\",
+        "  --profile U --svd-energy-frac 0.97 --frames-list 0:128 \\",
+        "  --out-root runs/shin_ratbrain_shinU_e970_telemetry_only_0_128_all80 \\",
+        "  --out-csv reports/shin_ratbrain_shinU_e970_telemetry_only_0_128_all80.csv \\",
+        "  --out-json reports/shin_ratbrain_shinU_e970_telemetry_only_0_128_all80_summary.json"
+      ],
+      "notes": null
+    },
+    {
+      "name": "Shin brainlike motion sweep (10 clips) + aggregate plots",
+      "paper_refs": [
+        "Table: Shin motion endpoints",
+        "Figure: shin_motion_brainlike_batch_U_agg.png",
+        "Figure: shin_motion_brainlike_compare_reg1.png",
+        "Figure: shin_motion_brainlike_compare.png"
+      ],
+      "outputs": [
+        "reports/shin_motion_brainlike_batch_U/*.csv",
+        "reports/shin_motion_brainlike_batch_U_agg.csv",
+        "figs/paper/shin_motion_brainlike_batch_U_agg.png",
+        "figs/paper/shin_motion_brainlike_compare_reg1.png",
+        "figs/paper/shin_motion_brainlike_compare.png"
+      ],
+      "commands": [
+        "# Per-clip sweeps (canonical window 0:128; KA disabled):",
+        "for f in IQData001.dat IQData002.dat IQData003.dat IQData004.dat IQData005.dat IQData010.dat IQData020.dat IQData040.dat IQData060.dat IQData080.dat; do",
+        "  PYTHONPATH=. python -m scripts.shin_ratbrain_motion_sweep \\",
+        "    --iq-file \"$f\" --frames 0:128 --profile U --svd-energy-frac 0.97 \\",
+        "    --motion-kind brainlike --amp-px-list 0,0.5,1,2 \\",
+        "    --no-score-ka-v2 --out-root runs/shin_motion_brainlike_batch_U \\",
+        "    --out-csv \"reports/shin_motion_brainlike_batch_U/${f%.dat}.csv\" \\",
+        "    --out-png \"reports/shin_motion_brainlike_batch_U/${f%.dat}.png\";",
+        "done",
+        "",
+        "# Aggregate curve (writes CSV + plot):",
+        "PYTHONPATH=. python -m scripts.shin_ratbrain_motion_aggregate \\",
+        "  --in-dir reports/shin_motion_brainlike_batch_U \\",
+        "  --out-csv reports/shin_motion_brainlike_batch_U_agg.csv \\",
+        "  --out-png reports/shin_motion_brainlike_batch_U_agg.png",
+        "",
+        "# Compare across windows / reg ablations (writes comparison plots):",
+        "PYTHONPATH=. python -m scripts.shin_ratbrain_motion_compare \\",
+        "  --curve \"0:128=reports/shin_motion_brainlike_batch_U_agg.csv\" \\",
+        "  --curve \"64:192=reports/shin_motion_brainlike_batch_U_f64_192_reg1_agg.csv\" \\",
+        "  --curve \"122:250=reports/shin_motion_brainlike_batch_U_f122_250_reg1_agg.csv\" \\",
+        "  --out-png reports/shin_motion_brainlike_compare_reg1.png",
+        "cp -f reports/shin_motion_brainlike_compare_reg1.png figs/paper/shin_motion_brainlike_compare_reg1.png"
+      ],
+      "notes": "Window-specific batch runs (64:192, 122:250) follow the same pattern; see scripts/shin_ratbrain_motion_aggregate.py for expected inputs."
+    },
+    {
+      "name": "Shin motion crop/alignment sensitivity (post-hoc)",
+      "paper_refs": [
+        "Shin motion section: crop sensitivity note"
+      ],
+      "outputs": [
+        "reports/shin_motion_brainlike_batch_U_crop_sensitivity.csv"
+      ],
+      "commands": [
+        "PYTHONPATH=. python -m scripts.shin_ratbrain_motion_sensitivity_posthoc \\",
+        "  --run-root runs/shin_motion_brainlike_batch_U \\",
+        "  --amps 0,0.5,1,2 \\",
+        "  --crop-margins 0,4,8,12 \\",
+        "  --align-maps-list 0,1 \\",
+        "  --out-csv reports/shin_motion_brainlike_batch_U_crop_sensitivity.csv"
+      ],
+      "notes": null
+    },
+    {
+      "name": "Paper build modes (paper vs supplement vs full)",
+      "paper_refs": [
+        "Build packaging (Phase 7)"
+      ],
+      "outputs": [
+        "stap_fus_paper.pdf",
+        "stap_fus_supplement.pdf",
+        "stap_fus_methodology.pdf"
+      ],
+      "commands": [
+        "pdflatex stap_fus_methodology.tex   # full (default)",
+        "pdflatex stap_fus_paper.tex         # paper-only (no appendices)",
+        "pdflatex stap_fus_supplement.tex    # supplement-only (appendices only)"
+      ],
+      "notes": null
+    }
+  ]
+}

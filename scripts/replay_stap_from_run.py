@@ -19,7 +19,7 @@ from typing import List, Sequence, Tuple
 
 import numpy as np
 
-from sim.kwave.common import AngleData, SimGeom, slice_angle_data, write_acceptance_bundle
+from sim.kwave.common import AngleData, SimGeom, write_acceptance_bundle
 
 
 def _maybe_resize_roi_mask(mask: np.ndarray, geom: SimGeom) -> np.ndarray:
@@ -384,6 +384,14 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     ap.add_argument(
+        "--ka-score-contract-v2-force",
+        action="store_true",
+        help=(
+            "Ablation-only: force-apply the KA Contract v2 shrink mapping even "
+            "when the contract would disable it (quantifies worst-case harm)."
+        ),
+    )
+    ap.add_argument(
         "--ka-gate-alias-rmin",
         type=float,
         default=1.30,
@@ -488,6 +496,38 @@ def parse_args() -> argparse.Namespace:
             "Treat the bg_alias depth band as background in the flow/bg masks "
             "(used for pial-alias regimes so pial alias tiles are H0)."
         ),
+    )
+    ap.add_argument(
+        "--stap-conditional-enable",
+        dest="stap_conditional_enable",
+        action="store_true",
+        help=(
+            "Enable conditional STAP execution (default): tiles with zero overlap "
+            "with the conditional flow mask are skipped and fall back to baseline PD."
+        ),
+    )
+    ap.add_argument(
+        "--stap-conditional-disable",
+        dest="stap_conditional_enable",
+        action="store_false",
+        help="Disable conditional STAP execution (run full STAP on all tiles).",
+    )
+    ap.set_defaults(stap_conditional_enable=True)
+    ap.add_argument(
+        "--stap-conditional-mask",
+        type=Path,
+        default=None,
+        help=(
+            "Optional .npy flow mask used for conditional STAP gating. "
+            "When set, this overrides the bundle's mask_flow.npy for conditional execution, "
+            "while evaluation masks remain fixed."
+        ),
+    )
+    ap.add_argument(
+        "--stap-conditional-mask-tag",
+        type=str,
+        default=None,
+        help="Optional tag recorded in meta for the conditional mask source.",
     )
     ap.add_argument("--bg-guard-target-med", type=float, default=0.45)
     ap.add_argument("--bg-guard-target-low", type=float, default=0.16)
@@ -727,6 +767,11 @@ def _apply_brain_profile_defaults(args: argparse.Namespace) -> None:
     args.reg_subpixel = 4
     args.reg_reference = "median"
     args.svd_profile = "literature"
+    # Phase 3 (baseline fairness): tune-once-then-freeze MC--SVD energy-fraction
+    # baseline for Brain-* on a pre-committed calibration configuration.
+    # See: reports/brain_mcsvd_energy_sweep.csv (summary of the calibration sweep).
+    if args.svd_rank is None and args.svd_energy_frac is None:
+        args.svd_energy_frac = 0.90
 
     args.stap_profile = "clinical"
     args.score_mode = "pd"
@@ -813,9 +858,11 @@ def main() -> None:
     # selects the 'literature' profile and has not provided an explicit SVD
     # rank or energy fraction, fall back to an energy-fraction rule that
     # removes the smallest number of singular components accounting for ~95%
-    # of the slow-time energy. This mirrors common practice in spatiotemporal
-    # SVD clutter filtering for ultrafast Doppler / fUS, while leaving manual
-    # --svd-rank/--svd-energy-frac overrides untouched.
+    # of the slow-time energy (default). Brain-* profiles override this to a
+    # separately frozen value (currently e=0.90; see _apply_brain_profile_defaults).
+    # This mirrors common practice in spatiotemporal SVD clutter filtering for
+    # ultrafast Doppler / fUS, while leaving manual --svd-rank/--svd-energy-frac
+    # overrides untouched.
     if getattr(args, "svd_profile", "default") == "literature":
         if args.svd_rank is None and args.svd_energy_frac is None:
             args.svd_energy_frac = 0.95
@@ -940,9 +987,16 @@ def main() -> None:
                 "Invalid --hosvd-energy-fracs "
                 f"'{args.hosvd_energy_fracs}'; expected 'fT,fH,fW' with three floats."
             ) from exc
-    pulses = int(meta.get("pulses", meta.get("pulses_per_set", 64)))
+    pulses_per_set = int(
+        meta.get(
+            "pulses_per_set",
+            meta.get("pulses_per_ensemble", meta.get("pulses", 64)),
+        )
+    )
     prf = float(meta.get("prf_hz", 3000.0))
     seed = int(meta.get("seed", 0))
+    ensembles = len(angle_sets)
+    total_frames_full = int(pulses_per_set) * int(ensembles)
 
     span_bounds = tuple(float(x.strip()) for x in args.fd_span_rel.split(",") if x.strip())
     if len(span_bounds) != 2:
@@ -1042,10 +1096,10 @@ def main() -> None:
         for idx, offset in enumerate(offsets):
             if offset < 0:
                 raise ValueError("time-window offsets must be non-negative")
-            if offset + window_length > pulses:
+            if offset + window_length > total_frames_full:
                 raise ValueError(
                     "time window offset "
-                    f"{offset} + length {window_length} exceeds total pulses {pulses}"
+                    f"{offset} + length {window_length} exceeds total frames {total_frames_full}"
                 )
             suffix = None if len(offsets) == 1 else f"win{idx}_off{offset}"
             window_specs.append({"offset": offset, "length": window_length, "suffix": suffix})
@@ -1058,23 +1112,27 @@ def main() -> None:
         length = spec["length"]
         suffix = spec["suffix"]
         window_label = suffix or (f"offset{offset}_len{length}" if length is not None else "full")
+        slow_time_offset = None
+        slow_time_length = None
         if length is None or offset is None:
             angle_sets_window = angle_sets
-            pulses_window = pulses
+            pulses_window = pulses_per_set
             meta_extra = dict(base_meta_extra)
         else:
-            angle_sets_window = slice_angle_data(angle_sets, int(offset), int(length))
-            pulses_window = int(length)
+            angle_sets_window = angle_sets
+            pulses_window = pulses_per_set
+            slow_time_offset = int(offset)
+            slow_time_length = int(length)
             meta_extra = dict(base_meta_extra)
             meta_extra["time_window"] = {
                 "offset": int(offset),
                 "length": int(length),
-                "total_length": int(pulses),
+                "total_length": int(total_frames_full),
             }
 
         print(
             f"[replay_stap_from_run] ({window_idx}/{total_windows}) "
-            f"Processing window {window_label} (pulses={pulses_window})...",
+            f"Processing window {window_label} (frames={slow_time_length or total_frames_full})...",
             flush=True,
         )
         win_start = time.time()
@@ -1088,8 +1146,14 @@ def main() -> None:
             ka_opts_extra["score_model_json"] = str(args.ka_score_model_json)
         if args.ka_score_alpha is not None and args.ka_score_alpha > 0.0:
             ka_opts_extra["score_alpha"] = float(args.ka_score_alpha)
-        if args.ka_score_contract_v2:
+        if args.ka_score_contract_v2 or args.ka_score_contract_v2_force:
             ka_opts_extra["score_contract_v2"] = 1.0
+        if args.ka_score_contract_v2_force:
+            ka_opts_extra["score_contract_v2_force"] = 1.0
+
+        stap_conditional_mask = None
+        if args.stap_conditional_mask is not None:
+            stap_conditional_mask = np.load(args.stap_conditional_mask)
 
         write_acceptance_bundle(
             out_root=out_root,
@@ -1139,6 +1203,8 @@ def main() -> None:
             stap_device=args.stap_device,
             meta_extra=meta_extra,
             dataset_suffix=suffix,
+            slow_time_offset=slow_time_offset,
+            slow_time_length=slow_time_length,
             score_mode=str(args.score_mode),
             flow_mask_mode=str(args.flow_mask_mode).lower(),
             flow_mask_pd_quantile=float(args.flow_mask_pd_quantile),
@@ -1150,6 +1216,9 @@ def main() -> None:
             flow_mask_min_coverage_fraction=float(args.flow_mask_min_coverage_frac),
             flow_mask_union_default=bool(args.flow_mask_union_default),
             flow_mask_suppress_alias_depth=bool(args.flow_mask_suppress_alias_depth),
+            stap_conditional_enable=bool(args.stap_conditional_enable),
+            stap_conditional_flow_mask=stap_conditional_mask,
+            stap_conditional_mask_tag=args.stap_conditional_mask_tag,
             baseline_type=str(args.baseline).lower(),
             reg_enable=bool(args.reg_enable),
             reg_method=str(args.reg_method),

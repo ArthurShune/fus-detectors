@@ -36,6 +36,8 @@ def _load_bundle(bundle_dir: str) -> Dict:
         ("stap_score_pool", "stap_score_pool_map.npy"),
         ("pd_base", "pd_base.npy"),
         ("pd_stap", "pd_stap.npy"),
+        ("score_pd_base", "score_pd_base.npy"),
+        ("score_pd_stap", "score_pd_stap.npy"),
         ("stap_band_ratio", "stap_band_ratio_map.npy"),
     ):
         path = os.path.join(bundle_dir, fname)
@@ -417,11 +419,15 @@ def main() -> None:
             raise RuntimeError(
                 "PD score_mode requested but pd_base.npy / pd_stap.npy are missing."
             )
-        # For PD maps we typically observe larger BG energy than flow,
-        # so we invert the sign so that larger scores correspond to
-        # more flow-like behavior for ROC purposes.
-        base_score = -pd_base
-        stap_score = -pd_stap
+        # PD-mode convention: ROC is evaluated by thresholding the lower tail
+        # of pd_*.npy (equivalently, use the right-tail score S=-pd).
+        # Prefer explicit score maps when present to avoid sign ambiguity.
+        base_score = data.get("score_pd_base")
+        stap_score = data.get("score_pd_stap")
+        if base_score is None:
+            base_score = -pd_base
+        if stap_score is None:
+            stap_score = -pd_stap
     else:  # "msd"
         base_score = data["base_score"]
         stap_score = data["stap_score"]
