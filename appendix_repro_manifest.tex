@@ -7,7 +7,7 @@ The manifest lists the minimal set of commands/outputs needed to reproduce the m
 Run \path{PYTHONPATH=. python scripts/generate_repro_manifest.py} to refresh this manifest.
 
 \paragraph{Repository state.}
-Commit: \texttt{cc16413} (full: \texttt{cc16413cd985b5d59bf5d022fe9162942af1cdc7}); branch: \texttt{main}; dirty: \texttt{false}.
+Commit: \texttt{8862158} (full: \texttt{8862158f019578262f5e4b8222da30e8265df300}); branch: \texttt{main}; dirty: \texttt{false}.
 
 \paragraph{Environment.}
 Python: \texttt{3.12.8 | packaged by Anaconda, Inc. | (main, Dec 11 2024, 16:31:09) [GCC 11.2.0]}.
@@ -101,6 +101,17 @@ PYTHONPATH=. python scripts/mace_alias_gate_holdout.py \
 PYTHONPATH=. python scripts/mace_vascular_pixel_eval.py \
   --out-csv reports/mace_vascular_pixel_eval.csv \
   --out-json reports/mace_vascular_pixel_eval.json
+\end{verbatim}
+
+  \item \textbf{Mace atlas-alignment sanity overlay figure}
+    (paper refs: Appendix: Macé atlas alignment sanity check).
+    Outputs: \path{figs/paper/mace_atlas_overlay.png}.
+    Notes: Overlays atlas ROIs and atlas.Vascular contours on mean PD for representative planes (sanity check of Transformation.mat alignment).
+\begin{verbatim}
+PYTHONPATH=. python scripts/mace_atlas_overlay_fig.py \
+  --scan-name scan1 \
+  --plane-indices 5 10 15 \
+  --out-png figs/paper/mace_atlas_overlay.png
 \end{verbatim}
 
   \item \textbf{Mace PD-only contract v2 dashboard (plane sweep + paper figure)}
