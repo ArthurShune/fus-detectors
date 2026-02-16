@@ -328,6 +328,17 @@ def _default_artifacts() -> list[ArtifactInfo]:
             ],
         ),
         ArtifactInfo(
+            name="Mace pixel-level vascular-atlas check (independent structural labels)",
+            paper_refs=["Macé section: vascular atlas pixel-level check"],
+            outputs=["reports/mace_vascular_pixel_eval.csv", "reports/mace_vascular_pixel_eval.json"],
+            commands=[
+                "PYTHONPATH=. python scripts/mace_vascular_pixel_eval.py \\",
+                "  --out-csv reports/mace_vascular_pixel_eval.csv \\",
+                "  --out-json reports/mace_vascular_pixel_eval.json",
+            ],
+            notes="Maps atlas.Vascular into each scan plane using Transformation.mat; evaluates vascular vs non-vascular pixels (structural, not clinical efficacy).",
+        ),
+        ArtifactInfo(
             name="Mace PD-only contract v2 dashboard (plane sweep + paper figure)",
             paper_refs=["Figure: mace_pdonly_contract_v2_dashboard.png"],
             outputs=["reports/mace_pdonly_contract_v2.csv", "figs/paper/mace_pdonly_contract_v2_dashboard.png"],
