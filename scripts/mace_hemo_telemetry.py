@@ -234,7 +234,9 @@ def main() -> None:
         "delta_log_Ea",
         "delta_log_alias",
         "pd_z_auc",
+        "pd_z_pauc_max",
         "pd_z_tpr_at_fpr_min",
+        "pd_z_fpr_min",
     ]
 
     with out_csv.open("w", newline="") as f:
@@ -350,9 +352,10 @@ def main() -> None:
                 fpr, tpr, _ = roc_curve(
                     pdz_scores[pos_mask_tiles], pdz_scores[neg_mask_tiles], num_thresh=4096
                 )
-                pd_auc = partial_auc(fpr, tpr, fpr_max=1e-3)
                 fpr_min = 1.0 / float(n_neg_tiles)
                 fpr_min_clipped = float(np.clip(fpr_min, 1e-8, 1.0))
+                pauc_max = float(max(0.05, fpr_min_clipped))
+                pd_auc = partial_auc(fpr, tpr, fpr_max=pauc_max)
                 pd_tpr = tpr_at_fpr_target(fpr, tpr, target_fpr=fpr_min_clipped)
 
                 writer.writerow(
@@ -378,7 +381,9 @@ def main() -> None:
                         "delta_log_Ea": delta_log_Ea,
                         "delta_log_alias": delta_log_alias,
                         "pd_z_auc": float(pd_auc),
+                        "pd_z_pauc_max": float(pauc_max),
                         "pd_z_tpr_at_fpr_min": float(pd_tpr),
+                        "pd_z_fpr_min": float(fpr_min_clipped),
                     }
                 )
 

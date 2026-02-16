@@ -13,8 +13,8 @@ For each scan and coronal plane with both H1/H0 tiles, this script:
   - records, per (scan, plane):
       * Pf/Pa/Po peak-band fractions in H1/H0,
       * alias log(Ea/Ef) medians in H1/H0,
-      * PD-z and hemo-BR pAUC/TPR at empirical FPR_min,
-      * PD-z+alias-gate pAUC/TPR at empirical FPR_min,
+      * PD-z and hemo-BR pAUC (up to max(0.05, FPR_min)) and TPR@FPR_min,
+      * PD-z+alias-gate pAUC (up to max(0.05, FPR_min)) and TPR@FPR_min,
       * hit/FP counts at a fixed target TPR before/after gating.
 
 Output
@@ -204,14 +204,19 @@ def _pd_z_score_baseline(p_t: np.ndarray, baseline_frac: float = 0.3, eps: float
     return float(z_det.max())
 
 
-def _roc_summary(pos_scores: np.ndarray, neg_scores: np.ndarray) -> Tuple[float, float, float]:
-    """Compute pAUC and TPR@FPR_min given positive/negative score vectors."""
+def _roc_summary(pos_scores: np.ndarray, neg_scores: np.ndarray) -> Tuple[float, float, float, float]:
+    """Compute pAUC and TPR@FPR_min given positive/negative score vectors.
+
+    Note: with tile-level ROIs, the minimum nonzero FPR is 1/n_neg. We therefore
+    report pAUC up to max(0.05, FPR_min) instead of a fixed ultra-low target.
+    """
     fpr, tpr, _ = roc_curve(pos_scores, neg_scores, num_thresh=4096)
-    pauc = partial_auc(fpr, tpr, fpr_max=1e-3)
     fpr_min = 1.0 / float(len(neg_scores))
     fpr_min_clipped = float(np.clip(fpr_min, 1e-8, 1.0))
+    pauc_max = float(max(0.05, fpr_min_clipped))
+    pauc = partial_auc(fpr, tpr, fpr_max=pauc_max)
     tpr_emp = tpr_at_fpr_target(fpr, tpr, target_fpr=fpr_min_clipped)
-    return float(pauc), float(tpr_emp), fpr_min_clipped
+    return float(pauc), float(tpr_emp), fpr_min_clipped, pauc_max
 
 
 def _counts_at_tpr(
@@ -278,15 +283,18 @@ def main() -> None:
         "median_log_alias_neg",
         "delta_log_alias",
         "pd_pauc",
+        "pd_pauc_max",
         "pd_tpr_at_fpr_min",
         "pd_fpr_min",
         "br_pauc",
+        "br_pauc_max",
         "br_tpr_at_fpr_min",
         "br_fpr_min",
         "alias_quantile",
         "alias_threshold",
         "gate_kept_frac",
         "gated_pd_pauc",
+        "gated_pd_pauc_max",
         "gated_pd_tpr_at_fpr_min",
         "gated_pd_fpr_min",
         "tpr_target",
@@ -383,12 +391,12 @@ def main() -> None:
                 delta_log_alias = median_log_alias_pos - median_log_alias_neg
 
                 # Ungated PD-z ROC.
-                pd_pauc, pd_tpr, pd_fpr_min = _roc_summary(
+                pd_pauc, pd_tpr, pd_fpr_min, pd_pauc_max = _roc_summary(
                     pdz_scores_arr[pos_mask_tiles], pdz_scores_arr[neg_mask_tiles]
                 )
 
                 # Hemodynamic BR ROC.
-                br_pauc, br_tpr, br_fpr_min = _roc_summary(
+                br_pauc, br_tpr, br_fpr_min, br_pauc_max = _roc_summary(
                     hemo_br[pos_mask_tiles], hemo_br[neg_mask_tiles]
                 )
 
@@ -400,7 +408,7 @@ def main() -> None:
                 kept_frac = float(gate.mean())
 
                 if pos_g.any() and neg_g.any():
-                    gated_pd_pauc, gated_pd_tpr, gated_pd_fpr_min = _roc_summary(
+                    gated_pd_pauc, gated_pd_tpr, gated_pd_fpr_min, gated_pd_pauc_max = _roc_summary(
                         pdz_scores_arr[pos_g], pdz_scores_arr[neg_g]
                     )
                     pd_hits_at_tpr, pd_fp_at_tpr, _ = _counts_at_tpr(
@@ -417,6 +425,7 @@ def main() -> None:
                     gated_pd_pauc = float("nan")
                     gated_pd_tpr = float("nan")
                     gated_pd_fpr_min = float("nan")
+                    gated_pd_pauc_max = float("nan")
                     pd_hits_at_tpr = 0
                     pd_fp_at_tpr = 0
                     gated_pd_hits_at_tpr = 0
@@ -435,15 +444,18 @@ def main() -> None:
                         "median_log_alias_neg": median_log_alias_neg,
                         "delta_log_alias": delta_log_alias,
                         "pd_pauc": pd_pauc,
+                        "pd_pauc_max": pd_pauc_max,
                         "pd_tpr_at_fpr_min": pd_tpr,
                         "pd_fpr_min": pd_fpr_min,
                         "br_pauc": br_pauc,
+                        "br_pauc_max": br_pauc_max,
                         "br_tpr_at_fpr_min": br_tpr,
                         "br_fpr_min": br_fpr_min,
                         "alias_quantile": float(args.alias_quantile),
                         "alias_threshold": alpha_thr,
                         "gate_kept_frac": kept_frac,
                         "gated_pd_pauc": gated_pd_pauc,
+                        "gated_pd_pauc_max": gated_pd_pauc_max,
                         "gated_pd_tpr_at_fpr_min": gated_pd_tpr,
                         "gated_pd_fpr_min": gated_pd_fpr_min,
                         "tpr_target": float(args.tpr_target),

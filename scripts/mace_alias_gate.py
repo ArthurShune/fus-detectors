@@ -8,7 +8,7 @@ This script:
   - computes per-tile PD-z baseline scores,
   - computes hemo-STAP scores and an alias metric log(Ea/Ef),
   - applies an alias gate (alias <= quantile) and recomputes PD-z ROC on gated tiles,
-  - reports pAUC@1e-3 and TPR@FPR_min for PD-z and PD-z+gate, plus gating stats.
+  - reports pAUC up to max(0.05, FPR_min) and TPR@FPR_min for PD-z and PD-z+gate, plus gating stats.
 
 Usage:
     PYTHONPATH=. python scripts/mace_alias_gate.py --scan-index 0 --plane-index 3 --alias-quantile 0.6
@@ -153,13 +153,19 @@ def _pd_z_score(p_t: np.ndarray, baseline_frac: float = 0.3, eps: float = 1e-12)
     return float(z_det.max())
 
 
-def _roc_summary(pos_scores: np.ndarray, neg_scores: np.ndarray) -> Tuple[float, float, float]:
-    """Compute pAUC and TPR@FPR_min given positive/negative score vectors."""
+def _roc_summary(pos_scores: np.ndarray, neg_scores: np.ndarray) -> Tuple[float, float, float, float]:
+    """Compute pAUC and TPR@FPR_min given positive/negative score vectors.
+
+    Note: with tile-level ROIs, the minimum nonzero FPR is 1/n_neg. We therefore
+    report pAUC up to max(0.05, FPR_min) instead of a fixed ultra-low target.
+    """
     fpr, tpr, _ = roc_curve(pos_scores, neg_scores, num_thresh=4096)
-    pauc = partial_auc(fpr, tpr, fpr_max=1e-3)
     fpr_min = 1.0 / float(len(neg_scores))
-    tpr_emp = tpr_at_fpr_target(fpr, tpr, target_fpr=float(np.clip(fpr_min, 1e-8, 1.0)))
-    return pauc, tpr_emp, fpr_min
+    fpr_min_clipped = float(np.clip(fpr_min, 1e-8, 1.0))
+    pauc_max = float(max(0.05, fpr_min_clipped))
+    pauc = partial_auc(fpr, tpr, fpr_max=pauc_max)
+    tpr_emp = tpr_at_fpr_target(fpr, tpr, target_fpr=fpr_min_clipped)
+    return float(pauc), float(tpr_emp), fpr_min_clipped, pauc_max
 
 
 def _threshold_for_tpr(pos_scores: np.ndarray, neg_scores: np.ndarray, target_tpr: float) -> float:
@@ -261,7 +267,9 @@ def main() -> None:
     pf_peak = (Ef > Ea) & (Ef > Eo)
 
     # Base ROC
-    pauc_pd, tpr_pd, fpr_min = _roc_summary(pdz_scores[pos_mask], pdz_scores[neg_mask])
+    pauc_pd, tpr_pd, fpr_min, pauc_max_pd = _roc_summary(
+        pdz_scores[pos_mask], pdz_scores[neg_mask]
+    )
     pos_hit_tgt, neg_fp_tgt, thr_tgt = _counts_at_tpr(
         pdz_scores[pos_mask], pdz_scores[neg_mask], target_tpr=float(args.tpr_target)
     )
@@ -272,7 +280,7 @@ def main() -> None:
     pos_g = pos_mask & gate
     neg_g = neg_mask & gate
     if pos_g.any() and neg_g.any():
-        pauc_g, tpr_g, fpr_min_g = _roc_summary(pdz_scores[pos_g], pdz_scores[neg_g])
+        pauc_g, tpr_g, fpr_min_g, pauc_max_g = _roc_summary(pdz_scores[pos_g], pdz_scores[neg_g])
         pos_hit_tgt_g, neg_fp_tgt_g, thr_tgt_g = _counts_at_tpr(
             pdz_scores[pos_g], pdz_scores[neg_g], target_tpr=float(args.tpr_target)
         )
@@ -280,6 +288,7 @@ def main() -> None:
         pauc_g = np.nan
         tpr_g = np.nan
         fpr_min_g = np.nan
+        pauc_max_g = np.nan
         pos_hit_tgt_g = np.nan
         neg_fp_tgt_g = np.nan
         thr_tgt_g = np.nan
@@ -290,11 +299,20 @@ def main() -> None:
     print(f"[mace-gate] alias quantile={args.alias_quantile:.3f}, thr={alpha_thr:.3e}")
     print(f"[mace-gate] alias log median pos/neg: {np.median(alias_log[pos_mask]):.3f} / {np.median(alias_log[neg_mask]):.3f}")
     # Pf-fraction diagnostic
-    pauc_pf, tpr_pf, fpr_min_pf = _roc_summary(pf_frac[pos_mask], pf_frac[neg_mask])
-    print(f"[mace-gate] Pf-fraction: pAUC@1e-3={pauc_pf:.6f}, TPR@FPR_min={tpr_pf:.3f} (FPR_min={fpr_min_pf:.3e})")
-    print(f"[mace-gate] PD-z: pAUC@1e-3={pauc_pd:.6f}, TPR@FPR_min={tpr_pd:.3f} (FPR_min={fpr_min:.3e})")
+    pauc_pf, tpr_pf, fpr_min_pf, pauc_max_pf = _roc_summary(pf_frac[pos_mask], pf_frac[neg_mask])
+    print(
+        f"[mace-gate] Pf-fraction: pAUC(FPR<={pauc_max_pf:.3f})={pauc_pf:.6f}, "
+        f"TPR@FPR_min={tpr_pf:.3f} (FPR_min={fpr_min_pf:.3e})"
+    )
+    print(
+        f"[mace-gate] PD-z: pAUC(FPR<={pauc_max_pd:.3f})={pauc_pd:.6f}, "
+        f"TPR@FPR_min={tpr_pd:.3f} (FPR_min={fpr_min:.3e})"
+    )
     print(f"[mace-gate] PD-z:      hits@TPR={args.tpr_target:.2f}: {pos_hit_tgt}, FP_H0: {neg_fp_tgt} at thr={thr_tgt:.3e}")
-    print(f"[mace-gate] PD-z + gate: pAUC@1e-3={pauc_g:.6f}, TPR@FPR_min={tpr_g:.3f} (FPR_min={fpr_min_g:.3e})")
+    print(
+        f"[mace-gate] PD-z + gate: pAUC(FPR<={pauc_max_g:.3f})={pauc_g:.6f}, "
+        f"TPR@FPR_min={tpr_g:.3f} (FPR_min={fpr_min_g:.3e})"
+    )
     print(f"[mace-gate] PD-z + gate: hits@TPR={args.tpr_target:.2f}: {pos_hit_tgt_g}, FP_H0: {neg_fp_tgt_g} at thr={thr_tgt_g:.3e}")
 
     if args.out_png:

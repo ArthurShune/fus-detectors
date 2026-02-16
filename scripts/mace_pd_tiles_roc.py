@@ -137,16 +137,17 @@ def main() -> None:
         )
 
     fpr, tpr, _ = roc_curve(scores_pos, scores_neg, num_thresh=4096)
-    auc = partial_auc(fpr, tpr, fpr_max=1e-3)
     n_neg = scores_neg.size
     fpr_min = 1.0 / float(n_neg)
     fpr_min = float(np.clip(fpr_min, 1e-8, 1.0))
+    pauc_max = float(max(0.05, fpr_min))
+    auc = partial_auc(fpr, tpr, fpr_max=pauc_max)
     tpr_emp = tpr_at_fpr_target(fpr, tpr, target_fpr=fpr_min)
 
     print(f"Macé scan '{scan.name}', plane {args.plane_index}:")
     print(f"  PD shape T,H,W = ({T}, {H}, {W}), tile_hw={tile_hw}, stride={stride}")
     print(f"  positives={scores_pos.size}, negatives={scores_neg.size}")
-    print(f"  partial AUC (FPR<=1e-3): {auc:.4f}")
+    print(f"  partial AUC (FPR<={pauc_max:.3f}): {auc:.4f}")
     print(f"  TPR at empirical FPR_min={fpr_min:.3e}: {tpr_emp:.4f}")
 
 
