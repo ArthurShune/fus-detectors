@@ -10,7 +10,7 @@ For each scan and coronal plane, this script:
       * hemo-STAP BR and GLRT (hemodynamic STAP on tile-averaged PD),
       * GLM t-stat (minimal GLM cross-check),
   - and records ROC summaries for each score:
-      partial AUC at FPR <= 1e-3 and TPR at empirical FPR_min = 1/N_neg.
+      partial AUC at FPR <= 0.05 and TPR at empirical FPR_min = 1/N_neg.
 
 Results are written to a CSV file with one row per (scan, plane, score_name).
 
@@ -360,9 +360,10 @@ def main() -> None:
                     s_pos = scores[pos_mask_tiles]
                     s_neg = scores[neg_mask_tiles]
                     fpr, tpr, _ = roc_curve(s_pos, s_neg, num_thresh=4096)
-                    auc = partial_auc(fpr, tpr, fpr_max=1e-3)
                     fpr_min = 1.0 / float(n_neg_tiles)
                     fpr_min_clipped = float(np.clip(fpr_min, 1e-8, 1.0))
+                    pauc_max = float(max(0.05, fpr_min_clipped))
+                    auc = partial_auc(fpr, tpr, fpr_max=pauc_max)
                     tpr_emp = tpr_at_fpr_target(fpr, tpr, target_fpr=fpr_min_clipped)
                     writer.writerow(
                         {
@@ -372,7 +373,8 @@ def main() -> None:
                             "n_pos_tiles": n_pos_tiles,
                             "n_neg_tiles": n_neg_tiles,
                             "score_name": name,
-                            "partial_auc_fpr_le_1e-3": auc,
+                            "partial_auc_fpr_le_0.05": auc,
+                            "pauc_max": pauc_max,
                             "tpr_at_empirical_fpr_min": tpr_emp,
                             "fpr_min": fpr_min_clipped,
                         }

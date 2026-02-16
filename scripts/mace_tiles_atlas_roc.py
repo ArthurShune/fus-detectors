@@ -417,11 +417,12 @@ def main() -> None:
         s_pos = scores[pos_mask_tiles]
         s_neg = scores[neg_mask_tiles]
         fpr, tpr, _ = roc_curve(s_pos, s_neg, num_thresh=4096)
-        auc = partial_auc(fpr, tpr, fpr_max=1e-3)
         fpr_min = 1.0 / float(n_neg_tiles)
         fpr_min_clipped = float(np.clip(fpr_min, 1e-8, 1.0))
+        pauc_max = float(max(0.05, fpr_min_clipped))
+        auc = partial_auc(fpr, tpr, fpr_max=pauc_max)
         tpr_emp = tpr_at_fpr_target(fpr, tpr, target_fpr=fpr_min_clipped)
-        print(f"  [{name}] partial AUC (FPR<=1e-3): {auc:.4f}")
+        print(f"  [{name}] partial AUC (FPR<={pauc_max:.3f}): {auc:.4f}")
         print(f"  [{name}] TPR at empirical FPR_min={fpr_min_clipped:.3e}: {tpr_emp:.4f}")
 
     frac_inside = float(inside.mean())
