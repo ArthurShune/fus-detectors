@@ -395,9 +395,9 @@ def run_replay_for_point(
         "650.0",
         "--psd-br-alias-width",
         "140.0",
-        # PD-based flow masks consistent with Brain-* profiles.
+        # Evaluation masks should be simulator truth in Brain-* runs.
         "--flow-mask-mode",
-        "pd_auto",
+        "default",
         "--flow-mask-pd-quantile",
         "0.995",
         "--flow-mask-depth-min-frac",
@@ -674,4 +674,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

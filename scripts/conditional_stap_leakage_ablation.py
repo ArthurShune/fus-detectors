@@ -227,8 +227,18 @@ def parse_args() -> argparse.Namespace:
         help="FPR targets (space-separated).",
     )
     ap.add_argument("--stap-device", type=str, default="cuda", help="STAP device passed to replay.")
-    ap.add_argument("--summary-csv", type=Path, required=True, help="Write per-pilot metrics to CSV.")
-    ap.add_argument("--summary-json", type=Path, required=True, help="Write summary JSON.")
+    ap.add_argument(
+        "--summary-csv",
+        type=Path,
+        default=Path("reports/condstap_leakage.csv"),
+        help="Write per-pilot metrics to CSV.",
+    )
+    ap.add_argument(
+        "--summary-json",
+        type=Path,
+        default=Path("reports/condstap_leakage.json"),
+        help="Write summary JSON.",
+    )
     ap.add_argument("--dry-run", action="store_true", help="Print commands without running.")
     ap.add_argument("--bootstrap-seed", type=int, default=1337, help="Seed for bootstrap CIs.")
     return ap.parse_args()
@@ -281,6 +291,10 @@ def main() -> None:
             str(args.window_length),
             "--time-window-offset",
             str(args.window_offset),
+            # Evaluation masks are simulator truth; conditional masks use the
+            # PD-derived proxy mask exported as mask_flow_pd.npy.
+            "--flow-mask-mode",
+            "default",
             "--stap-conditional-disable",
             "--stap-conditional-mask-tag",
             "full",
@@ -298,12 +312,15 @@ def main() -> None:
         if bundle_full is not None:
             # Load evaluation mask + compute target tile coverage for random mask.
             mask_eval = np.load(bundle_full / "mask_flow.npy").astype(bool)
+            # Match coverage to the PD-derived proxy mask actually used for
+            # conditional execution (not the sim-truth evaluation mask).
+            mask_proxy = np.load(bundle_full / "mask_flow_pd.npy").astype(bool)
             with open(bundle_full / "meta.json") as f:
                 meta_full = json.load(f)
             tile_hw_raw = meta_full.get("tile_hw") or [8, 8]
             tile_hw = (int(tile_hw_raw[0]), int(tile_hw_raw[1]))
             tile_stride = int(meta_full.get("tile_stride") or 3)
-            target_tile_any = _tile_any_fraction(mask_eval, tile_hw, tile_stride)
+            target_tile_any = _tile_any_fraction(mask_proxy, tile_hw, tile_stride)
         else:
             tile_hw = (8, 8)
             tile_stride = 3
@@ -325,6 +342,8 @@ def main() -> None:
             str(args.window_length),
             "--time-window-offset",
             str(args.window_offset),
+            "--flow-mask-mode",
+            "default",
             "--stap-conditional-mask-tag",
             "same_window",
         ]
@@ -351,6 +370,8 @@ def main() -> None:
             str(args.window_length),
             "--time-window-offset",
             str(args.disjoint_offset),
+            "--flow-mask-mode",
+            "default",
             "--stap-conditional-mask",
             str(false_mask_path),
             "--stap-conditional-mask-tag",
@@ -361,7 +382,7 @@ def main() -> None:
             disjoint_mask_path = false_mask_path
         else:
             bundle_disjoint_mask = _bundle_dir_from_out(out_disjoint_mask)
-            disjoint_mask_path = bundle_disjoint_mask / "mask_flow.npy"
+            disjoint_mask_path = bundle_disjoint_mask / "mask_flow_pd.npy"
             if not disjoint_mask_path.exists():
                 raise FileNotFoundError(disjoint_mask_path)
 
@@ -381,6 +402,8 @@ def main() -> None:
             str(args.window_length),
             "--time-window-offset",
             str(args.window_offset),
+            "--flow-mask-mode",
+            "default",
             "--stap-conditional-mask",
             str(disjoint_mask_path),
             "--stap-conditional-mask-tag",
@@ -416,6 +439,8 @@ def main() -> None:
             str(args.window_length),
             "--time-window-offset",
             str(args.window_offset),
+            "--flow-mask-mode",
+            "default",
             "--stap-conditional-mask",
             str(random_mask_path),
             "--stap-conditional-mask-tag",
