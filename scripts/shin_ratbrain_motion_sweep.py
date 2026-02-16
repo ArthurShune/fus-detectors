@@ -91,6 +91,26 @@ def _nrmse(a: np.ndarray, b: np.ndarray) -> float:
     return float(rmse / scale)
 
 
+def _shannon_entropy(x: np.ndarray, *, bins: int = 128) -> float:
+    """Histogram-based Shannon entropy of a real array (higher = more diverse)."""
+    x = np.asarray(x, dtype=np.float64).ravel()
+    x = x[np.isfinite(x)]
+    if x.size == 0:
+        return float("nan")
+    x = x - float(np.mean(x))
+    std = float(np.std(x)) + 1e-12
+    x = x / std
+    x = np.clip(x, -6.0, 6.0)
+    hist, _ = np.histogram(x, bins=int(max(8, bins)), range=(-6.0, 6.0), density=False)
+    p = hist.astype(np.float64)
+    s = float(np.sum(p))
+    if s <= 0.0:
+        return float("nan")
+    p /= s
+    p = p[p > 0.0]
+    return float(-np.sum(p * np.log(p)))
+
+
 def _jaccard(a: np.ndarray, b: np.ndarray) -> float:
     a = np.asarray(a, dtype=bool)
     b = np.asarray(b, dtype=bool)
@@ -638,11 +658,13 @@ def main() -> None:
     ref_pd_base = ref_pd_pre = ref_pd_post = None
     ref_mask_bg = ref_mask_flow = None
     vessel_ref = None
-    thr_vessel = None
-    thr_bg_tail = None
+    thr_vessel_base = None
+    thr_vessel_stap = None
+    thr_bg_tail_base = None
+    thr_bg_tail_stap = None
     ref_base_score = ref_stap_score = None
     thr_base_fpr_ref = thr_stap_fpr_ref = None
-    pos_base_ref = pos_stap_ref = None
+    pos_base_ref = pos_stap_ref = pos_shared_ref = None
 
     for amp_px in amp_list:
         kind = str(args.motion_kind).strip().lower()
@@ -780,14 +802,20 @@ def main() -> None:
             ref_base_score = np.asarray(base_score_map, dtype=np.float64)
             ref_stap_score = np.asarray(stap_score_map, dtype=np.float64)
 
-            # Reference vessel/flow proxy from the detector score S=-PD on the STAP pre-KA map.
-            # This aligns with our sign convention: flow-like pixels correspond to *lower* PD.
-            s_ref_pre = -ref_pd_pre
-            thr_vessel = _safe_quantile(s_ref_pre, float(args.vessel_quantile))
-            vessel_ref = s_ref_pre >= float(thr_vessel)
+            # Shared structure proxy from *both* no-motion maps: intersection of high-score
+            # regions from baseline and STAP pre-KA scores, using frozen quantiles.
+            q_vessel = float(args.vessel_quantile)
+            thr_vessel_base = _safe_quantile(ref_base_score, q_vessel)
+            thr_vessel_stap = _safe_quantile(ref_stap_score, q_vessel)
+            if thr_vessel_base is None or thr_vessel_stap is None:
+                raise RuntimeError("Failed to compute vessel quantiles on reference score maps.")
+            vessel_base_ref = ref_base_score >= float(thr_vessel_base)
+            vessel_stap_ref = ref_stap_score >= float(thr_vessel_stap)
+            vessel_ref = vessel_base_ref & vessel_stap_ref
 
-            # Reference BG tail threshold from STAP pre-KA score S=-PD.
-            thr_bg_tail = _safe_quantile(s_ref_pre[ref_mask_bg], float(args.bg_tail_quantile))
+            # Reference BG tail thresholds per method (score S=-PD) on the BG proxy.
+            thr_bg_tail_base = _safe_quantile(ref_base_score[ref_mask_bg], float(args.bg_tail_quantile))
+            thr_bg_tail_stap = _safe_quantile(ref_stap_score[ref_mask_bg], float(args.bg_tail_quantile))
 
             # Reference thresholds for proxy TPR@FPR curves on detector score maps.
             thr_base_fpr_ref = _threshold_at_fpr(ref_base_score, ref_mask_bg, float(args.fpr_target))
@@ -797,13 +825,16 @@ def main() -> None:
             thr_pos_stap = _safe_quantile(ref_stap_score, q_pos)
             pos_base_ref = (ref_base_score >= float(thr_pos_base)) if thr_pos_base is not None else None
             pos_stap_ref = (ref_stap_score >= float(thr_pos_stap)) if thr_pos_stap is not None else None
+            pos_shared_ref = (pos_base_ref & pos_stap_ref) if pos_base_ref is not None and pos_stap_ref is not None else None
 
         if ref_pd_base is None or ref_pd_pre is None or ref_pd_post is None or ref_base_score is None or ref_stap_score is None:
             raise RuntimeError("Reference (amp=0) run failed to initialize.")
 
-        assert vessel_ref is not None and thr_vessel is not None and thr_bg_tail is not None
+        assert vessel_ref is not None
+        assert thr_vessel_base is not None and thr_vessel_stap is not None
+        assert thr_bg_tail_base is not None and thr_bg_tail_stap is not None
         assert thr_base_fpr_ref is not None and thr_stap_fpr_ref is not None
-        assert pos_base_ref is not None and pos_stap_ref is not None
+        assert pos_base_ref is not None and pos_stap_ref is not None and pos_shared_ref is not None
         assert ref_mask_bg is not None and ref_mask_flow is not None
 
         # Optional crop for similarity metrics (avoid boundary artifacts).
@@ -842,21 +873,37 @@ def main() -> None:
         nrmse_stap = _nrmse(pre_map[sl], ref_pre_map[sl])
         nrmse_ka = _nrmse(post_map[sl], ref_post_map[sl])
 
-        # Vessel/flow-proxy overlap using reference threshold on the score S=-PD.
+        # Non-collapse diagnostics: map variance / entropy should not collapse toward 0.
+        std_pd_base = float(np.std(base_map[sl]))
+        std_pd_stap = float(np.std(pre_map[sl]))
+        std_pd_ka = float(np.std(post_map[sl]))
+        ent_pd_base = _shannon_entropy(base_map[sl])
+        ent_pd_stap = _shannon_entropy(pre_map[sl])
+        ent_pd_ka = _shannon_entropy(post_map[sl])
+
+        bg_sl_mask = ref_mask_bg[sl]
+        var_ref_base_bg = float(np.var(ref_base_map[sl][bg_sl_mask])) + 1e-12
+        var_ref_pre_bg = float(np.var(ref_pre_map[sl][bg_sl_mask])) + 1e-12
+        var_ref_post_bg = float(np.var(ref_post_map[sl][bg_sl_mask])) + 1e-12
+        bg_var_ratio_base = float(np.var(base_map[sl][bg_sl_mask]) / var_ref_base_bg)
+        bg_var_ratio_stap = float(np.var(pre_map[sl][bg_sl_mask]) / var_ref_pre_bg)
+        bg_var_ratio_ka = float(np.var(post_map[sl][bg_sl_mask]) / var_ref_post_bg)
+
+        # Shared-structure overlap using fixed no-motion thresholds on S=-PD.
         s_base = -base_map
         s_pre = -pre_map
         s_post = -post_map
-        vessel_base = s_base >= float(thr_vessel)
-        vessel_pre = s_pre >= float(thr_vessel)
-        vessel_post = s_post >= float(thr_vessel)
+        vessel_base = base_score_map >= float(thr_vessel_base)
+        vessel_pre = stap_score_map >= float(thr_vessel_stap)
+        vessel_post = s_post >= float(thr_vessel_stap)
         j_base = _jaccard(vessel_base, vessel_ref)
         j_stap = _jaccard(vessel_pre, vessel_ref)
         j_ka = _jaccard(vessel_post, vessel_ref)
 
-        # Background tail clusters/area using reference BG threshold on score S=-PD.
-        hit_base = ref_mask_bg & (s_base >= float(thr_bg_tail))
-        hit_pre = ref_mask_bg & (s_pre >= float(thr_bg_tail))
-        hit_post = ref_mask_bg & (s_post >= float(thr_bg_tail))
+        # Background tail clusters/area using per-method no-motion BG thresholds on S=-PD.
+        hit_base = ref_mask_bg & (base_score_map >= float(thr_bg_tail_base))
+        hit_pre = ref_mask_bg & (stap_score_map >= float(thr_bg_tail_stap))
+        hit_post = ref_mask_bg & (s_post >= float(thr_bg_tail_stap))
         area_base = int(np.sum(hit_base))
         area_pre = int(np.sum(hit_pre))
         area_post = int(np.sum(hit_post))
@@ -918,6 +965,20 @@ def main() -> None:
             stap_score_map, pos_mask=pos_stap_ref, neg_mask=neg, thr=float(thr_stap_run)
         )
 
+        # Cross-method proxy: shared no-motion high-score set (baseline ∩ STAP).
+        tpr_base_shared_fixed, _ = _tpr_fpr_at_threshold(
+            base_score_map, pos_mask=pos_shared_ref, neg_mask=neg, thr=float(thr_base_fpr_ref)
+        )
+        tpr_stap_shared_fixed, _ = _tpr_fpr_at_threshold(
+            stap_score_map, pos_mask=pos_shared_ref, neg_mask=neg, thr=float(thr_stap_fpr_ref)
+        )
+        tpr_base_shared_run, _ = _tpr_fpr_at_threshold(
+            base_score_map, pos_mask=pos_shared_ref, neg_mask=neg, thr=float(thr_base_run)
+        )
+        tpr_stap_shared_run, _ = _tpr_fpr_at_threshold(
+            stap_score_map, pos_mask=pos_shared_ref, neg_mask=neg, thr=float(thr_stap_run)
+        )
+
         ka_v2 = meta.get("ka_contract_v2") or {}
         ka_metrics = (ka_v2.get("metrics") or {}) if isinstance(ka_v2, dict) else {}
         tele = meta.get("stap_fallback_telemetry") or {}
@@ -946,6 +1007,15 @@ def main() -> None:
                 "nrmse_pd_base": nrmse_base,
                 "nrmse_pd_stap_pre": nrmse_stap,
                 "nrmse_pd_ka": nrmse_ka,
+                "std_pd_base": std_pd_base,
+                "std_pd_stap_pre": std_pd_stap,
+                "std_pd_ka": std_pd_ka,
+                "entropy_pd_base": ent_pd_base,
+                "entropy_pd_stap_pre": ent_pd_stap,
+                "entropy_pd_ka": ent_pd_ka,
+                "bg_var_ratio_pd_base": bg_var_ratio_base,
+                "bg_var_ratio_pd_stap_pre": bg_var_ratio_stap,
+                "bg_var_ratio_pd_ka": bg_var_ratio_ka,
                 "align_maps": bool(args.align_maps),
                 "align_shift_base_dy": float(dyb),
                 "align_shift_base_dx": float(dxb),
@@ -959,6 +1029,8 @@ def main() -> None:
                 "jacc_vessel_base": j_base,
                 "jacc_vessel_stap_pre": j_stap,
                 "jacc_vessel_ka": j_ka,
+                "vessel_ref_shared_frac": float(np.mean(vessel_ref)),
+                "pos_shared_ref_frac": float(np.mean(pos_shared_ref)),
                 "bg_tail_area_base": area_base,
                 "bg_tail_area_stap_pre": area_pre,
                 "bg_tail_area_ka": area_post,
@@ -985,6 +1057,10 @@ def main() -> None:
                 "fpr_stap_self_fixedthr": fpr_stap_self_fixed,
                 "tpr_base_self_at_fpr": tpr_base_self_run,
                 "tpr_stap_self_at_fpr": tpr_stap_self_run,
+                "tpr_base_shared_fixedthr": tpr_base_shared_fixed,
+                "tpr_stap_shared_fixedthr": tpr_stap_shared_fixed,
+                "tpr_base_shared_at_fpr": tpr_base_shared_run,
+                "tpr_stap_shared_at_fpr": tpr_stap_shared_run,
                 "ka_state": ka_v2.get("state") if isinstance(ka_v2, dict) else None,
                 "ka_reason": ka_v2.get("reason") if isinstance(ka_v2, dict) else None,
                 "ka_risk_mode": ka_metrics.get("risk_mode"),
@@ -1011,7 +1087,8 @@ def main() -> None:
             "[shin-motion]"
             f" amp={amp_px:.2f}px"
             f" corr(base/stap/ka)={corr_base:.3f}/{corr_stap:.3f}/{corr_ka:.3f}"
-            f" tpr_self@fpr(base/stap)={tpr_base_self_run:.3f}/{tpr_stap_self_run:.3f}"
+            f" tpr_flow@fpr(base/stap)={tpr_base_flow_run:.3f}/{tpr_stap_flow_run:.3f}"
+            f" tpr_shared@fpr(base/stap)={tpr_base_shared_run:.3f}/{tpr_stap_shared_run:.3f}"
             f" clusters(base/stap/ka)={clust_base}/{clust_pre}/{clust_post}"
             f" ka={rows[-1]['ka_state']}({rows[-1]['ka_reason']})"
         )
@@ -1034,8 +1111,8 @@ def main() -> None:
             corr_stap = np.array([r["corr_pd_stap_pre"] for r in rows], dtype=float)
             cl_base = np.array([r["bg_tail_clusters_base"] for r in rows], dtype=float)
             cl_stap = np.array([r["bg_tail_clusters_stap_pre"] for r in rows], dtype=float)
-            tpr_base = np.array([r["tpr_base_self_at_fpr"] for r in rows], dtype=float)
-            tpr_stap = np.array([r["tpr_stap_self_at_fpr"] for r in rows], dtype=float)
+            tpr_base = np.array([r["tpr_base_flow_at_fpr"] for r in rows], dtype=float)
+            tpr_stap = np.array([r["tpr_stap_flow_at_fpr"] for r in rows], dtype=float)
 
             fig, axes = plt.subplots(1, 3, figsize=(14, 4), constrained_layout=True)
             ax = axes[0]

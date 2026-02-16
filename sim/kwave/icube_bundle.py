@@ -102,6 +102,7 @@ def write_acceptance_bundle_from_icube(
       - base_band_ratio_map.npy (+ base_m_alias_map.npy)
       - base_score_map.npy / stap_score_map.npy / stap_score_pool_map.npy
       - pd_base.npy / pd_stap.npy
+      - score_pd_base.npy / score_pd_stap.npy   (explicit right-tail scores S=-pd)
     """
     if Icube.ndim != 3:
         raise ValueError(f"Icube must have shape (T,H,W), got {Icube.shape}")
@@ -449,7 +450,8 @@ def write_acceptance_bundle_from_icube(
                             # Protected pixels: never modify flow mask or extreme-score pixels.
                             pd_stap_orig = pd_stap.astype(np.float32, copy=False)
                             s_base_pix = -pd_stap_orig
-                            prot_pix = np.asarray(mask_flow, dtype=bool)
+                            # IMPORTANT: never mutate `mask_flow` (evaluation mask).
+                            prot_pix = np.asarray(mask_flow, dtype=bool).copy()
                             cfg = ka_contract_v2_report.get("config") or {}
                             q_hi = float(cfg.get("q_hi_protect", 0.995))
                             finite = np.isfinite(s_base_pix)
@@ -477,8 +479,11 @@ def write_acceptance_bundle_from_icube(
     # ---- Save maps ----
     _save("pd_base", pd_base.astype(np.float32, copy=False))
     _save("pd_stap", pd_stap.astype(np.float32, copy=False))
+    _save("score_pd_base", (-pd_base).astype(np.float32, copy=False))
+    _save("score_pd_stap", (-pd_stap).astype(np.float32, copy=False))
     if pd_stap_pre_ka is not None:
         _save("pd_stap_pre_ka", pd_stap_pre_ka.astype(np.float32, copy=False))
+        _save("score_pd_stap_pre_ka", (-pd_stap_pre_ka).astype(np.float32, copy=False))
     _save("mask_flow", mask_flow.astype(np.bool_, copy=False))
     _save("mask_bg", mask_bg.astype(np.bool_, copy=False))
     _save("base_band_ratio_map", base_band_ratio_map.astype(np.float32, copy=False))
@@ -511,6 +516,21 @@ def write_acceptance_bundle_from_icube(
         "tile_hw": [int(tile_hw[0]), int(tile_hw[1])],
         "tile_stride": int(tile_stride),
         "score_stats": {"mode": str((score_mode or "pd").strip().lower())},
+        "pd_mode": {
+            "pd_files": {
+                "base": "pd_base.npy",
+                "stap": "pd_stap.npy",
+                "stap_pre_ka": "pd_stap_pre_ka.npy" if pd_stap_pre_ka is not None else None,
+            },
+            "score_files": {
+                "base": "score_pd_base.npy",
+                "stap": "score_pd_stap.npy",
+                "stap_pre_ka": (
+                    "score_pd_stap_pre_ka.npy" if pd_stap_pre_ka is not None else None
+                ),
+            },
+            "roc_convention": "lower_tail_on_pd (equivalently right_tail_on_score=-pd)",
+        },
         "baseline_stats": baseline_telemetry,
         "stap_fallback_telemetry": telemetry_combined,
         "ka_contract_v2": ka_contract_v2_report,

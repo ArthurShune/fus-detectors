@@ -114,6 +114,8 @@ def test_write_acceptance_bundle_contract(tmp_path):
         "stap_neg",
         "pd_base",
         "pd_stap",
+        "score_pd_base",
+        "score_pd_stap",
         "base_score_map",
         "stap_score_map",
         "stap_score_pool_map",
@@ -123,6 +125,13 @@ def test_write_acceptance_bundle_contract(tmp_path):
     ]
     for k in required:
         assert k in paths and Path(paths[k]).exists()
+
+    pd_base = np.load(paths["pd_base"])
+    pd_stap = np.load(paths["pd_stap"])
+    score_pd_base = np.load(paths["score_pd_base"])
+    score_pd_stap = np.load(paths["score_pd_stap"])
+    np.testing.assert_allclose(score_pd_base, -pd_base, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(score_pd_stap, -pd_stap, rtol=0.0, atol=0.0)
 
     # Confirm-2 pairs count matches stap_neg length // 2
     stap_neg = np.load(paths["stap_neg"])
@@ -140,6 +149,8 @@ def test_write_acceptance_bundle_contract(tmp_path):
 
     bundle_files = meta.get("bundle_files")
     assert bundle_files and bundle_files["pd_base"].endswith("pd_base.npy")
+    pd_mode = meta.get("pd_mode")
+    assert pd_mode and pd_mode["score_files"]["base"].endswith("score_pd_base.npy")
     score_stats = meta.get("score_stats", {})
     assert score_stats.get("mode") == "msd"
     assert "map_stats" in score_stats and "pd" in score_stats["map_stats"]
@@ -154,3 +165,77 @@ def test_write_acceptance_bundle_contract(tmp_path):
     # PD medians should be finite if masks are non-empty
     for k in ["baseline_flow_median", "baseline_bg_median", "stap_flow_median", "stap_bg_median"]:
         assert k in pd_stats and pd_stats[k] is not None and np.isfinite(pd_stats[k])
+
+
+def test_write_acceptance_bundle_conditional_mask_override_and_window(tmp_path):
+    # Minimal synthetic AngleData; keep sizes small so this remains a quick unit test.
+    g = SimGeom(Nx=32, Ny=32, dx=90e-6, dy=90e-6, c0=1540.0, rho0=1000.0, ncycles=1, f0=7.0e6)
+    prf = 3000.0
+    rng = np.random.default_rng(123)
+    Nt = 96
+    dt = g.cfl * min(g.dx, g.dy) / g.c0
+    angles = [0.0, 8.0]
+    base_angles = []
+    for i, ang in enumerate(angles):
+        rf = rng.standard_normal((Nt, g.Nx)).astype(np.float32)
+        t = np.arange(Nt, dtype=np.float32) * dt
+        rf += (0.05 * np.sin(2.0 * np.pi * (0.05 + 0.01 * i) * t))[:, None].astype(np.float32)
+        base_angles.append(AngleData(angle_deg=ang, rf=rf, dt=float(dt)))
+
+    # Two ensembles to create a longer clip, then slice a slow-time window.
+    angle_sets = [list(base_angles), list(base_angles)]
+    # Full synthesized T would be pulses_per_set * ensembles = 4 * 2 = 8 frames.
+    # Slice a 4-frame window starting at offset 2.
+    slow_offset = 2
+    slow_len = 4
+
+    # Override conditional mask to all-false so STAP skips every tile and
+    # falls back to baseline PD everywhere.
+    cond_mask = np.zeros((g.Ny, g.Nx), dtype=bool)
+
+    paths = write_acceptance_bundle(
+        out_root=Path(tmp_path),
+        g=g,
+        angle_sets=angle_sets,
+        pulses_per_set=4,
+        prf_hz=prf,
+        seed=7,
+        tile_hw=(8, 8),
+        tile_stride=4,
+        Lt=3,
+        diag_load=1e-2,
+        cov_estimator="scm",
+        huber_c=5.0,
+        mvdr_load_mode="absolute",
+        mvdr_auto_kappa=40.0,
+        constraint_ridge=0.12,
+        fd_span_mode="psd",
+        fd_span_rel=(0.30, 1.10),
+        grid_step_rel=0.08,
+        fd_min_pts=5,
+        fd_max_pts=7,
+        msd_lambda=2e-2,
+        msd_ridge=0.10,
+        msd_agg_mode="trim10",
+        stap_device="cpu",
+        dataset_name="test_bundle_condmask",
+        slow_time_offset=slow_offset,
+        slow_time_length=slow_len,
+        stap_conditional_enable=True,
+        stap_conditional_flow_mask=cond_mask,
+        stap_conditional_mask_tag="unit_test_allfalse",
+        meta_extra={"source": "unit_test"},
+    )
+
+    meta = json.loads(Path(paths["meta"]).read_text())
+    assert meta["total_frames"] == slow_len
+
+    pd_base = np.load(paths["pd_base"])
+    pd_stap = np.load(paths["pd_stap"])
+    np.testing.assert_allclose(pd_stap, pd_base, rtol=0.0, atol=0.0)
+
+    # The evaluation masks should be nontrivial while the conditional mask is all-false.
+    mask_flow = np.load(paths["mask_flow"]).astype(bool)
+    assert mask_flow.any()
+    mask_cond = np.load(paths["mask_flow_stap_gate"]).astype(bool)
+    assert not mask_cond.any()

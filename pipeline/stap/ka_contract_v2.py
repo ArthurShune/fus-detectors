@@ -556,3 +556,146 @@ def derive_score_shrink_v2_tile_scales(
         "scale_median": float(np.median(scale[gated])) if np.any(gated) else 1.0,
     }
     return out
+
+
+def derive_score_shrink_v2_tile_scales_forced(
+    *,
+    report: dict[str, Any] | None,
+    s_base: np.ndarray,
+    m_alias: np.ndarray,
+    c_flow: np.ndarray,
+    valid_mask: np.ndarray | None = None,
+    mode: str = "safety",
+    risk_mode: str | None = None,
+) -> dict[str, Any]:
+    """Forced variant of `derive_score_shrink_v2_tile_scales` for ablations.
+
+    Unlike the contract-governed helper, this function does not require the
+    contract report to be `reason=ok` and does not enforce coverage/invariance
+    sentinels. It recomputes candidate/protected sets and the risk threshold
+    from the provided arrays and the (frozen) config.
+
+    Intended use: quantify worst-case harm when KA is applied even when the
+    contract would disable it.
+    """
+
+    out: dict[str, Any] = {
+        "apply": False,
+        "reason": "uninitialized",
+        "scale_tiles": None,
+        "gated_tiles": None,
+        "protected_tiles": None,
+        "candidate_tiles": None,
+        "stats": {},
+    }
+
+    cfg_obj: KaContractV2Config
+    cfg_dict = None
+    if isinstance(report, dict):
+        cfg_dict = report.get("config")
+    if isinstance(cfg_dict, dict):
+        try:
+            cfg_obj = KaContractV2Config(**cfg_dict)
+        except Exception:
+            cfg_obj = KaContractV2Config()
+    else:
+        cfg_obj = KaContractV2Config()
+
+    rm = (risk_mode or "").strip().lower()
+    if not rm and isinstance(report, dict):
+        try:
+            metrics = report.get("metrics") or {}
+            rm = str(metrics.get("risk_mode") or "").strip().lower()
+        except Exception:
+            rm = ""
+    if rm not in {"alias", "guard"}:
+        rm = "alias"
+
+    mode_norm = str(mode or "safety").strip().lower()
+    if mode_norm not in {"safety", "uplift"}:
+        out["reason"] = "invalid_mode"
+        return out
+
+    if mode_norm == "uplift":
+        w_min = float(cfg_obj.wmin_uplift)
+        k = float(cfg_obj.k_uplift)
+    else:
+        if rm == "guard":
+            w_min = float(cfg_obj.wmin_guard)
+            k = float(cfg_obj.k_guard)
+        else:
+            w_min = float(cfg_obj.wmin_safety)
+            k = float(cfg_obj.k_safety)
+
+    s_base = np.asarray(s_base, dtype=np.float64).ravel()
+    m_alias = np.asarray(m_alias, dtype=np.float64).ravel()
+    c_flow = np.asarray(c_flow, dtype=np.float64).ravel()
+    if not (s_base.size == m_alias.size == c_flow.size):
+        out["reason"] = "shape_mismatch"
+        return out
+
+    if valid_mask is None:
+        valid = np.isfinite(s_base) & np.isfinite(m_alias) & np.isfinite(c_flow)
+    else:
+        vm = np.asarray(valid_mask, dtype=bool).ravel()
+        if vm.size != s_base.size:
+            out["reason"] = "valid_mask_shape_mismatch"
+            return out
+        valid = vm & np.isfinite(s_base) & np.isfinite(m_alias) & np.isfinite(c_flow)
+
+    if not np.any(valid):
+        out["reason"] = "no_valid_tiles"
+        return out
+
+    c_bg = float(cfg_obj.c_bg)
+    c_flow_thr = float(cfg_obj.c_flow)
+    eps = float(cfg_obj.eps)
+
+    s_valid = s_base[valid]
+    q_hi = float(np.quantile(s_valid, float(cfg_obj.q_hi_protect)))
+    q_lo = float(np.quantile(s_valid, float(cfg_obj.q_lo_candidate)))
+
+    T_prot = valid & ((c_flow >= c_flow_thr) | (s_base >= q_hi))
+    T_cand = valid & (~T_prot) & (s_base >= q_lo) & (s_base <= q_hi)
+
+    T_bg = valid & (c_flow <= c_bg)
+    risk_bg = m_alias[T_bg]
+    if risk_bg.size == 0:
+        risk_bg = m_alias[valid]
+
+    tau_alias = float(np.quantile(risk_bg, float(cfg_obj.q_risk)))
+    med_alias_bg = float(np.median(risk_bg))
+    mad_alias = float(np.median(np.abs(risk_bg - med_alias_bg))) + eps
+    denom = mad_alias if mad_alias > 0.0 else eps
+
+    gated = T_cand & (m_alias >= tau_alias)
+
+    u = np.maximum(0.0, (m_alias - tau_alias) / denom)
+    w = np.ones_like(s_base, dtype=np.float64)
+    if np.any(gated):
+        w[gated] = np.maximum(w_min, np.exp(-k * u[gated]))
+    w[T_prot] = 1.0
+    scale = 1.0 / np.maximum(w, eps)
+
+    out["apply"] = True
+    out["reason"] = "ok_forced"
+    out["scale_tiles"] = scale.astype(np.float32, copy=False)
+    out["gated_tiles"] = gated.astype(bool)
+    out["protected_tiles"] = T_prot.astype(bool)
+    out["candidate_tiles"] = T_cand.astype(bool)
+    out["stats"] = {
+        "risk_mode": rm,
+        "mode": mode_norm,
+        "q_risk": float(cfg_obj.q_risk),
+        "tau_alias": float(tau_alias),
+        "mad_alias": float(mad_alias),
+        "n_valid": int(np.sum(valid)),
+        "n_bg_proxy": int(np.sum(T_bg)),
+        "n_protected": int(np.sum(T_prot)),
+        "n_candidates": int(np.sum(T_cand)),
+        "n_gated": int(np.sum(gated)),
+        "scale_min": float(np.min(scale[valid])) if np.any(valid) else 1.0,
+        "scale_max": float(np.max(scale[valid])) if np.any(valid) else 1.0,
+        "scale_median": float(np.median(scale[gated])) if np.any(gated) else 1.0,
+    }
+    return out

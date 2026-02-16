@@ -49,8 +49,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Aggregate Shin motion sweep CSVs (from scripts/shin_ratbrain_motion_sweep.py) into a curve-ready summary.\n"
-            "This script is label-free: it summarizes map stability (corr vs no-motion) and a label-free self-tail recall\n"
-            "curve at a fixed background-tail operating point (bg-FPR) across multiple IQData files."
+            "This script is label-free: it summarizes map stability (corr vs no-motion) and a label-free flow-proxy TPR\n"
+            "curve at a fixed background operating point (bg-FPR) across multiple IQData files."
         )
     )
     parser.add_argument(
@@ -92,8 +92,9 @@ def main() -> None:
         rows = by_amp[amp]
         corr_base = [_to_float(r.get("corr_pd_base")) for r in rows]
         corr_stap = [_to_float(r.get("corr_pd_stap_pre")) for r in rows]
-        tpr_base = [_to_float(r.get("tpr_base_self_at_fpr")) for r in rows]
-        tpr_stap = [_to_float(r.get("tpr_stap_self_at_fpr")) for r in rows]
+        # Anchor metric: TPR on a shared flow-proxy mask at matched bg-FPR (recalibrated per run).
+        tpr_base = [_to_float(r.get("tpr_base_flow_at_fpr")) for r in rows]
+        tpr_stap = [_to_float(r.get("tpr_stap_flow_at_fpr")) for r in rows]
         disp_rms = [_to_float(r.get("disp_rms_px")) for r in rows]
 
         out = {
@@ -166,8 +167,8 @@ def main() -> None:
             ax.plot(amps_np, stap_med, "o-", label="STAP", color="C1")
             ax.fill_between(amps_np, stap_q25, stap_q75, color="C1", alpha=0.15, linewidth=0)
             ax.set_xlabel("motion amplitude (px)")
-            ax.set_ylabel("self-tail recall @ bg-FPR=1e-3")
-            ax.set_title("Self-Tail Recall (median ± IQR)")
+            ax.set_ylabel("TPR on flow-proxy")
+            ax.set_title("Flow-Proxy TPR (median ± IQR)")
             ax.grid(True, alpha=0.3)
             ax.legend()
 

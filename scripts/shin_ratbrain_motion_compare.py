@@ -118,7 +118,7 @@ def main() -> None:
         plot_band(ax1, s["tpr_base_median"], s["tpr_base_q25"], s["tpr_base_q75"], color="tab:gray", name="MC-SVD PD")
         plot_band(ax1, s["tpr_stap_median"], s["tpr_stap_q25"], s["tpr_stap_q75"], color="tab:blue", name="STAP PD (pre-KA)")
         ax1.set_xlabel("Motion amplitude (px)")
-        ax1.set_ylabel("Self-tail recall @ bg-FPR=1e-3 (median ± IQR)")
+        ax1.set_ylabel("Flow-proxy TPR @ bg-FPR=1e-3 (median ± IQR)")
         ax1.set_ylim(-0.01, 1.01)
         ax1.grid(True, alpha=0.3)
 
@@ -130,7 +130,7 @@ def main() -> None:
                 0.02,
                 0.06,
                 f"frac(STAP>base) @max amp:\n"
-                f"corr={frac_corr:.2f}, recall={frac_tpr:.2f}",
+                f"corr={frac_corr:.2f}, tpr={frac_tpr:.2f}",
                 transform=ax1.transAxes,
                 fontsize=9,
                 ha="left",

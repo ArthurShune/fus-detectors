@@ -34,6 +34,7 @@ try:
     from pipeline.stap.mvdr_bank import choose_fd_grid_auto
     from pipeline.stap.ka_contract_v2 import (
         derive_score_shrink_v2_tile_scales,
+        derive_score_shrink_v2_tile_scales_forced,
         evaluate_ka_contract_v2,
     )
     from pipeline.stap.temporal import (
@@ -79,6 +80,7 @@ except ModuleNotFoundError:
     choose_fd_grid_auto = None  # type: ignore[assignment]
     evaluate_ka_contract_v2 = None  # type: ignore[assignment]
     derive_score_shrink_v2_tile_scales = None  # type: ignore[assignment]
+    derive_score_shrink_v2_tile_scales_forced = None  # type: ignore[assignment]
     principal_angle = None  # type: ignore[assignment]
     projected_flow_alignment = None  # type: ignore[assignment]
     build_temporal_hankels_batch = None  # type: ignore[assignment]
@@ -5712,6 +5714,24 @@ def _stap_pd(
 
     flush_batch()
 
+    # Pixels with zero tile support are outside the tiling grid (typically a
+    # small border when (H - th) or (W - tw) is not divisible by stride). For
+    # PD-mode scoring these uncovered pixels must not default to 0, since 0 can
+    # become an extreme value under the lower-tail PD convention. When a
+    # baseline PD map is available, fall back to it on uncovered pixels.
+    #
+    # This is especially important for full-STAP runs where mask_flow/mask_bg
+    # are not provided (conditional execution disabled): downstream ROC code may
+    # still include these border pixels via evaluation masks.
+    uncovered = counts == 0.0
+    if (
+        pd_base_full is not None
+        and np.any(uncovered)
+        and pd_base_full.shape == pd.shape
+        and np.isfinite(pd_base_full).any()
+    ):
+        pd[uncovered] = pd_base_full.astype(pd.dtype, copy=False)[uncovered]
+
     counts[counts == 0.0] = 1.0
     score_counts[score_counts == 0.0] = 1.0
 
@@ -8165,6 +8185,13 @@ def write_acceptance_bundle(
     stap_device: str | None = None,
     dataset_name: str | None = None,
     dataset_suffix: str | None = None,
+    # Optional slow-time windowing. When set, we first synthesize/inject the
+    # full slow-time cube (length = pulses_per_set * len(angle_sets)), then
+    # slice frames [slow_time_offset, slow_time_offset + slow_time_length)
+    # before running baseline + STAP. This enables disjoint-window ablations
+    # while preserving the underlying simulated clip distribution.
+    slow_time_offset: int | None = None,
+    slow_time_length: int | None = None,
     meta_extra: dict | None = None,
     score_mode: str = "msd",
     flow_mask_mode: str = "default",
@@ -8177,6 +8204,16 @@ def write_acceptance_bundle(
     flow_mask_min_coverage_fraction: float = 0.0,
     flow_mask_union_default: bool = True,
     flow_mask_suppress_alias_depth: bool = False,
+    # Conditional STAP (compute gating) controls. When enabled (default),
+    # tiles with zero overlap with the chosen conditional flow mask are
+    # skipped and fall back to the baseline PD map. By default, the
+    # conditional mask is the same `mask_flow.npy` written in the bundle,
+    # but Phase-2 leakage ablations may override it (e.g. disjoint-window
+    # or random masks) while keeping evaluation masks fixed.
+    stap_conditional_enable: bool = True,
+    stap_conditional_flow_mask: np.ndarray | None = None,
+    stap_conditional_bg_mask: np.ndarray | None = None,
+    stap_conditional_mask_tag: str | None = None,
     baseline_type: str = "svd",
     reg_enable: bool = False,
     reg_method: str = "phasecorr",
@@ -8805,6 +8842,24 @@ def write_acceptance_bundle(
             "depth_max_frac": float(clutter_depth_max_frac),
         }
 
+    # Optional slow-time window slice applied after synthesis + injections.
+    # Note: this slices the realized clip (including injected clutter/alias)
+    # so disjoint windows share the same underlying simulation.
+    if slow_time_length is not None:
+        full_T = int(Icube.shape[0])
+        offset = int(slow_time_offset or 0)
+        length = int(slow_time_length)
+        if offset < 0:
+            raise ValueError("slow_time_offset must be non-negative")
+        if length <= 0:
+            raise ValueError("slow_time_length must be positive")
+        end = offset + length
+        if end > full_T:
+            raise ValueError(
+                f"slow-time window [{offset}, {end}) exceeds total_frames={full_T}"
+            )
+        Icube = np.ascontiguousarray(Icube[offset:end], dtype=Icube.dtype)
+
     baseline_type_norm = (baseline_type or "svd").strip().lower()
     baseline_device = "cuda" if stap_device_resolved.lower().startswith("cuda") else "cpu"
     baseline_telemetry: dict | None = None
@@ -8942,6 +8997,52 @@ def write_acceptance_bundle(
                     if flow_mask_stats is not None:
                         flow_mask_stats["suppress_alias_depth"] = 1.0
 
+    # Resolve the conditional-STAP gating masks. These can differ from the
+    # evaluation masks (mask_flow/mask_bg) so that we can (i) disable
+    # conditional execution (full STAP) or (ii) run leakage ablations where
+    # the conditional mask is derived from a disjoint window or randomized
+    # while evaluation masks remain fixed.
+    cond_enabled = bool(stap_conditional_enable)
+    cond_tag = (stap_conditional_mask_tag or "").strip()
+    if not cond_enabled:
+        mask_flow_cond = None
+        mask_bg_cond = None
+        cond_source = "disabled"
+    else:
+        mask_flow_cond = mask_flow
+        mask_bg_cond = mask_bg
+        cond_source = "eval_mask"
+        if stap_conditional_flow_mask is not None:
+            mask_flow_cond = np.asarray(stap_conditional_flow_mask, dtype=bool)
+            if mask_flow_cond.shape != (H, W):
+                raise ValueError(
+                    f"stap_conditional_flow_mask shape mismatch: {mask_flow_cond.shape} vs {(H, W)}"
+                )
+            if stap_conditional_bg_mask is not None:
+                mask_bg_cond = np.asarray(stap_conditional_bg_mask, dtype=bool)
+                if mask_bg_cond.shape != (H, W):
+                    raise ValueError(
+                        f"stap_conditional_bg_mask shape mismatch: {mask_bg_cond.shape} vs {(H, W)}"
+                    )
+            else:
+                mask_bg_cond = (~mask_flow_cond).copy()
+            cond_source = "override"
+
+    if cond_tag:
+        cond_source = f"{cond_source}:{cond_tag}"
+
+    cond_mask_stats: dict[str, float | str] = {
+        "enabled": 1.0 if cond_enabled else 0.0,
+        "source": cond_source,
+    }
+    if mask_flow_cond is not None:
+        cond_mask_stats["coverage_pixels"] = float(mask_flow_cond.mean())
+        cov_cond, _coords_cond = _tile_coverages(mask_flow_cond, tile_hw, tile_stride)
+        cond_mask_stats["coverage_tiles_any"] = float(np.mean(cov_cond > 0.0)) if cov_cond.size else 0.0
+    else:
+        cond_mask_stats["coverage_pixels"] = 0.0
+        cond_mask_stats["coverage_tiles_any"] = 0.0
+
     if use_whitened_ratio and baseline_filtered_cube is not None and base_br_recorder is not None:
         _collect_band_ratio_from_cube(
             baseline_filtered_cube,
@@ -8986,8 +9087,8 @@ def write_acceptance_bundle(
         stap_device=stap_device_resolved,
         tile_batch=tile_batch_size,
         pd_base_full=pd_base,
-        mask_flow=mask_flow,
-        mask_bg=mask_bg,
+        mask_flow=mask_flow_cond,
+        mask_bg=mask_bg_cond,
         ka_mode=ka_mode_norm if ka_active else "none",
         ka_prior_library=ka_prior_library if ka_active else None,
         ka_opts=ka_opts_dict if ka_active else None,
@@ -9025,6 +9126,7 @@ def write_acceptance_bundle(
     stap_info["flow_mask_mode"] = flow_mask_mode_norm
     if flow_mask_stats is not None:
         stap_info["flow_mask_stats"] = flow_mask_stats
+    stap_info["stap_conditional_mask"] = cond_mask_stats
     stap_info["band_ratio_mode_requested"] = band_ratio_mode_norm
     stap_info["band_ratio_mode_effective"] = band_ratio_mode_effective
     stap_info["band_ratio_bands_hz"] = dict(band_ratio_spec_meta)
@@ -9434,11 +9536,16 @@ def write_acceptance_bundle(
     score_model_json = ka_opts_dict.get("score_model_json")
     score_alpha_val = float(ka_opts_dict.get("score_alpha", 0.0))
     score_contract_v2_enable = bool(float(ka_opts_dict.get("score_contract_v2", 0.0)) > 0.0)
+    score_contract_v2_force = bool(
+        float(ka_opts_dict.get("score_contract_v2_force", 0.0)) > 0.0
+    )
     score_contract_v2_applied = False
 
     # Phase 2: score-space KA v2 (contract-driven, shrink-only) in safety mode.
     # This uses the KA Contract v2 state machine and does not require a trained
-    # model. We apply it only when the contract reports C1_SAFETY.
+    # model. By default we apply it only when the contract reports C1_SAFETY.
+    # For ablations, an optional "force" mode applies the same shrink mapping
+    # even when the contract would disable it.
     if (
         score_contract_v2_enable
         and derive_score_shrink_v2_tile_scales is not None
@@ -9453,9 +9560,7 @@ def write_acceptance_bundle(
             reason = str(ka_contract_v2_report.get("reason") or "")
             stap_info["score_ka_v2_state"] = state
             stap_info["score_ka_v2_contract_reason"] = reason
-            if state != "C1_SAFETY" or reason != "ok":
-                stap_info["score_ka_v2_disabled_reason"] = f"contract_{state}:{reason}"
-            elif not use_whitened_ratio:
+            if not use_whitened_ratio:
                 stap_info["score_ka_v2_disabled_reason"] = "requires_whitened_band_ratio"
             else:
                 ka_metrics = ka_contract_v2_report.get("metrics", {}) or {}
@@ -9465,15 +9570,38 @@ def write_acceptance_bundle(
                     risk_tiles = ka_contract_v2_inputs["r_guard_tiles"]
                 else:
                     risk_tiles = ka_contract_v2_inputs["m_alias_tiles"]
-                shrink = derive_score_shrink_v2_tile_scales(
-                    report=ka_contract_v2_report,
-                    s_base=ka_contract_v2_inputs["s_base_tiles"],
-                    m_alias=risk_tiles,
-                    c_flow=ka_contract_v2_inputs["tile_cov_flow"],
-                    valid_mask=ka_contract_v2_inputs["valid_tiles"],
-                    mode="safety",
-                )
-                if not shrink.get("apply"):
+                shrink = None
+                if score_contract_v2_force:
+                    if derive_score_shrink_v2_tile_scales_forced is None:
+                        stap_info["score_ka_v2_disabled_reason"] = "forced_helper_unavailable"
+                    else:
+                        stap_info["score_ka_v2_forced"] = True
+                        shrink = derive_score_shrink_v2_tile_scales_forced(
+                            report=ka_contract_v2_report,
+                            s_base=ka_contract_v2_inputs["s_base_tiles"],
+                            m_alias=risk_tiles,
+                            c_flow=ka_contract_v2_inputs["tile_cov_flow"],
+                            valid_mask=ka_contract_v2_inputs["valid_tiles"],
+                            mode="safety",
+                            risk_mode=risk_mode,
+                        )
+                else:
+                    if state != "C1_SAFETY" or reason != "ok":
+                        stap_info["score_ka_v2_disabled_reason"] = f"contract_{state}:{reason}"
+                    else:
+                        shrink = derive_score_shrink_v2_tile_scales(
+                            report=ka_contract_v2_report,
+                            s_base=ka_contract_v2_inputs["s_base_tiles"],
+                            m_alias=risk_tiles,
+                            c_flow=ka_contract_v2_inputs["tile_cov_flow"],
+                            valid_mask=ka_contract_v2_inputs["valid_tiles"],
+                            mode="safety",
+                        )
+
+                if shrink is None:
+                    if "score_ka_v2_disabled_reason" not in stap_info:
+                        stap_info["score_ka_v2_disabled_reason"] = "no_shrink_result"
+                elif not shrink.get("apply"):
                     stap_info["score_ka_v2_disabled_reason"] = str(
                         shrink.get("reason") or "unknown"
                     )
@@ -9495,7 +9623,9 @@ def write_acceptance_bundle(
                     # Protected pixels: never modify flow mask or extreme-score pixels.
                     pd_stap_orig = pd_stap
                     s_base_pix = -pd_stap_orig
-                    prot_pix = np.asarray(mask_flow, dtype=bool)
+                    # IMPORTANT: never mutate `mask_flow` (used for evaluation and
+                    # conditional execution). Use a copy for protected pixels.
+                    prot_pix = np.asarray(mask_flow, dtype=bool).copy()
                     cfg = ka_contract_v2_report.get("config") or {}
                     q_hi = float(cfg.get("q_hi_protect", 0.995))
                     finite = np.isfinite(s_base_pix)
@@ -9606,8 +9736,21 @@ def write_acceptance_bundle(
         except Exception as exc:  # pragma: no cover - best-effort safeguard
             stap_info["score_pool_refresh_error"] = f"{type(exc).__name__}: {exc}"
 
+    # ---- PD-mode score convention (repository) ----
+    # We persist PD maps as `pd_*.npy` and evaluate ROC by thresholding their
+    # lower tail (equivalently, use the right-tail score S = -pd).
+    #
+    # In the Brain-* regimes used in this repo, H0 tiles often contain strong
+    # alias/clutter energy, so *smaller* values of `pd_*.npy` can be more
+    # flow-like; this is why scripts such as `scripts/hab_contract_check.py`
+    # use `score = -pd` for PD-based ROC.
+    #
+    # For transparency and to avoid sign ambiguity, we also export the explicit
+    # right-tail score maps `score_pd_*.npy := -pd_*.npy`.
     _save("pd_base", pd_base.astype(np.float32, copy=False))
     _save("pd_stap", pd_stap.astype(np.float32, copy=False))
+    _save("score_pd_base", (-pd_base).astype(np.float32, copy=False))
+    _save("score_pd_stap", (-pd_stap).astype(np.float32, copy=False))
     _save("base_band_ratio_map", base_band_ratio_map.astype(np.float32, copy=False))
     _save("base_m_alias_map", base_m_alias_map.astype(np.float32, copy=False))
     _save("base_guard_frac_map", base_guard_frac_map.astype(np.float32, copy=False))
@@ -9618,6 +9761,10 @@ def write_acceptance_bundle(
     _save("stap_score_pool_map", stap_score_pool_map.astype(np.float32, copy=False))
     _save("mask_flow", mask_flow.astype(np.bool_, copy=False))
     _save("mask_bg", mask_bg.astype(np.bool_, copy=False))
+    if cond_enabled and mask_flow_cond is not None:
+        _save("mask_flow_stap_gate", mask_flow_cond.astype(np.bool_, copy=False))
+        if mask_bg_cond is not None:
+            _save("mask_bg_stap_gate", mask_bg_cond.astype(np.bool_, copy=False))
     _save("confirm2_scores1", confirm2_s1)
     _save("confirm2_scores2", confirm2_s2)
     _save("confirm2_pos_scores1", confirm2_pos1)
@@ -9861,6 +10008,8 @@ def write_acceptance_bundle(
     for key in (
         "pd_base",
         "pd_stap",
+        "score_pd_base",
+        "score_pd_stap",
         "mask_flow",
         "mask_bg",
         "base_band_ratio_map",
@@ -9944,6 +10093,13 @@ def write_acceptance_bundle(
         "score_pool_default": score_mode_resolved,
         "score_pool_files": score_pool_files_rel,
         "score_pool_stats": pool_stats_by_mode,
+        "pd_mode": {
+            "pd_files": {"base": "pd_base.npy", "stap": "pd_stap.npy"},
+            "score_files": {"base": "score_pd_base.npy", "stap": "score_pd_stap.npy"},
+            "roc_convention": "lower_tail_on_pd (equivalently right_tail_on_score=-pd)",
+            "pd_base_definition": "pd_base[y,x]=(1/T)∑_t |X_base[t,y,x]|^2 for the chosen baseline-filtered cube",
+            "pd_stap_definition": "pd_stap is the STAP PD-mode map produced by the temporal core; in this repo it is derived from baseline PD and per-tile flow-subspace energy fractions with explicit background invariance clamps",
+        },
         "bundle_files": bundle_files,
         "stap_device": stap_info.get("stap_device"),
         "seed": int(seed),
