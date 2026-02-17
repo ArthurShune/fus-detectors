@@ -379,8 +379,9 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Enable KA Contract v2 score-space shrink-only mode (Phase 2). "
             "This uses alias/guard telemetry + flow coverage to localize a "
-            "bounded shrink on PD scores (S=-PD), and only activates when the "
-            "contract state is C1_SAFETY."
+            "bounded shrink on PD scores (S=-PD). By default this applies in "
+            "C1_SAFETY; use --ka-score-contract-v2-mode to also allow C2_UPLIFT "
+            "(research-only)."
         ),
     )
     ap.add_argument(
@@ -389,6 +390,31 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Ablation-only: force-apply the KA Contract v2 shrink mapping even "
             "when the contract would disable it (quantifies worst-case harm)."
+        ),
+    )
+    ap.add_argument(
+        "--ka-score-contract-v2-mode",
+        type=str,
+        default="safety",
+        choices=["safety", "uplift", "auto"],
+        help=(
+            "When --ka-score-contract-v2 is enabled, choose which contract states "
+            "permit applying the shrink-only mapping: "
+            "'safety' applies only in C1_SAFETY, "
+            "'uplift' applies only in C2_UPLIFT, and "
+            "'auto' applies in both (safety mapping in C1, uplift mapping in C2)."
+        ),
+    )
+    ap.add_argument(
+        "--ka-contract-v2-proxy-source",
+        type=str,
+        default="pd",
+        choices=["pd", "eval"],
+        help=(
+            "Choose the flow-coverage proxy used by the v2 contract. "
+            "'pd' uses the PD-derived proxy mask (label-free; default). "
+            "'eval' uses the evaluation flow mask (simulator-truth in Brain-* sims; "
+            "ablation/oracle mode)."
         ),
     )
     ap.add_argument(
@@ -780,11 +806,18 @@ def _apply_brain_profile_defaults(args: argparse.Namespace) -> None:
     # (default geometric/injection masks). A separate PD-derived proxy mask is
     # still exported and used for conditional execution / contract telemetry.
     args.flow_mask_mode = "default"
-    args.flow_mask_pd_quantile = 0.995
-    args.flow_mask_depth_min_frac = 0.25
-    args.flow_mask_depth_max_frac = 0.85
-    args.flow_mask_dilate_iters = 2
-    args.flow_mask_union_default = False
+    # Allow explicit CLI overrides for the proxy-mask extraction knobs by only
+    # applying these defaults when the user did not provide a different value.
+    if getattr(args, "flow_mask_pd_quantile", 0.995) == 0.995:
+        args.flow_mask_pd_quantile = 0.995
+    if getattr(args, "flow_mask_depth_min_frac", 0.25) == 0.25:
+        args.flow_mask_depth_min_frac = 0.25
+    if getattr(args, "flow_mask_depth_max_frac", 0.85) == 0.85:
+        args.flow_mask_depth_max_frac = 0.85
+    if getattr(args, "flow_mask_dilate_iters", 2) == 2:
+        args.flow_mask_dilate_iters = 2
+    if getattr(args, "flow_mask_union_default", True) is True:
+        args.flow_mask_union_default = False
 
     # Pial profile additionally suppresses the shallow alias depth band when
     # building the flow mask so the pial band is always treated as H0.
@@ -837,9 +870,14 @@ def main() -> None:
         if getattr(args, "baseline", "mc_svd") in {"mc_svd", "svd"}:
             args.band_ratio_mode = "whitened"
             args.psd_br_flow_low = 30.0
-            args.psd_br_flow_high = 220.0
-            args.psd_br_alias_center = 650.0
-            args.psd_br_alias_width = 140.0
+            # Match the brain-fUS band geometry described in the methodology:
+            # Pf ~ [30,250] Hz, guard ~ [250,400] Hz, Pa ~ [400,Nyquist] Hz.
+            # The band-ratio recorder uses (flow_low, flow_high) and an
+            # (alias_center, alias_half_width) parameterization; center=575 and
+            # half-width=175 yields an alias band starting at ~400 Hz.
+            args.psd_br_flow_high = 250.0
+            args.psd_br_alias_center = 575.0
+            args.psd_br_alias_width = 175.0
 
         # Limit effective slow-time support per window if not explicitly set.
         if args.time_window_length is None:
@@ -1151,6 +1189,12 @@ def main() -> None:
             ka_opts_extra["score_alpha"] = float(args.ka_score_alpha)
         if args.ka_score_contract_v2 or args.ka_score_contract_v2_force:
             ka_opts_extra["score_contract_v2"] = 1.0
+            ka_opts_extra["score_contract_v2_mode"] = str(
+                getattr(args, "ka_score_contract_v2_mode", "safety")
+            )
+            ka_opts_extra["score_contract_v2_proxy_source"] = str(
+                getattr(args, "ka_contract_v2_proxy_source", "pd")
+            )
         if args.ka_score_contract_v2_force:
             ka_opts_extra["score_contract_v2_force"] = 1.0
 
