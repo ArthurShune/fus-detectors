@@ -7,7 +7,7 @@ The manifest lists the minimal set of commands/outputs needed to reproduce the m
 Run \path{PYTHONPATH=. python scripts/generate_repro_manifest.py} to refresh this manifest.
 
 \paragraph{Repository state.}
-Commit: \texttt{8862158} (full: \texttt{8862158f019578262f5e4b8222da30e8265df300}); branch: \texttt{main}; dirty: \texttt{false}.
+Commit: \texttt{07f9d14} (full: \texttt{07f9d144b5edad5f4997c83ab1939402cf0eaebd}); branch: \texttt{main}; dirty: \texttt{false}.
 
 \paragraph{Environment.}
 Python: \texttt{3.12.8 | packaged by Anaconda, Inc. | (main, Dec 11 2024, 16:31:09) [GCC 11.2.0]}.
@@ -112,6 +112,39 @@ PYTHONPATH=. python scripts/mace_atlas_overlay_fig.py \
   --scan-name scan1 \
   --plane-indices 5 10 15 \
   --out-png figs/paper/mace_atlas_overlay.png
+\end{verbatim}
+
+  \item \textbf{Telemetry regime comparison (sim vs real; contract-v2 scalars)}
+    (paper refs: Figure: telemetry\_regime\_compare.png).
+    Outputs: \path{figs/paper/telemetry_regime_compare.png}.
+    Notes: Overlays PfPeakFrac(flow), guard\_q90, and iqr\_alias\_bg across Brain-* simulations, Shin real IQ, and Macé PD-only planes; intended as telemetry anchoring (not a claim that sims match real data).
+\begin{verbatim}
+# Sample Brain-* replay bundles (write meta.json with ka_contract_v2 telemetry):
+PYTHONPATH=. python scripts/replay_stap_from_run.py \
+  --src runs/pilot/r4_kwave_seed1 \
+  --out runs/telemetry_regime_compare/brain_open_seed1 \
+  --profile Brain-OpenSkull \
+  --time-window-length 64 \
+  --time-window-offset 0 --time-window-offset 64 --time-window-offset 128 \
+  --time-window-offset 192 --time-window-offset 256
+PYTHONPATH=. python scripts/replay_stap_from_run.py \
+  --src runs/pilot/r4c_kwave_hab_contract_seed2_v2 \
+  --out runs/telemetry_regime_compare/brain_aliascontract_seed2 \
+  --profile Brain-AliasContract \
+  --time-window-length 64 \
+  --time-window-offset 0 --time-window-offset 64 --time-window-offset 128 \
+  --time-window-offset 192 --time-window-offset 256
+PYTHONPATH=. python scripts/replay_stap_from_run.py \
+  --src runs/pilot/r4c_kwave_hab_v3_skull_seed2_v2 \
+  --out runs/telemetry_regime_compare/brain_skullor_seed2 \
+  --profile Brain-SkullOR \
+  --time-window-length 64 \
+  --time-window-offset 0 --time-window-offset 64 --time-window-offset 128 \
+  --time-window-offset 192 --time-window-offset 256
+
+# Generate the overlay histogram figure (reads Shin bundles and Macé CSV from other artifacts):
+PYTHONPATH=. python scripts/telemetry_regime_compare_fig.py \
+  --out-png figs/paper/telemetry_regime_compare.png
 \end{verbatim}
 
   \item \textbf{Mace PD-only contract v2 dashboard (plane sweep + paper figure)}
