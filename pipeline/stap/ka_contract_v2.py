@@ -180,6 +180,27 @@ def evaluate_ka_contract_v2(
             "c_flow": float(cfg.c_flow),
         }
     )
+    # Log Pf-peak telemetry as early as possible so it is present even when the
+    # contract exits early (e.g. guard-dominance reasons). This is used for
+    # regime anchoring comparisons across sim vs real datasets.
+    pf_peak_nonbg: float | None = None
+    pf_peak_flow: float | None = None
+    n_nonbg = 0
+    if pf_peak is not None:
+        # Non-background proxy tiles: anything not in the bg proxy.
+        T_nonbg = valid & (c_flow > c_bg)
+        n_nonbg = int(np.sum(T_nonbg))
+        if n_nonbg > 0:
+            pf_peak_nonbg = float(np.mean(pf_peak[T_nonbg]))
+        if n_flow > 0:
+            pf_peak_flow = float(np.mean(pf_peak[T_flow]))
+        report["metrics"].update(
+            {
+                "n_nonbg_proxy": n_nonbg,
+                "pf_peak_nonbg": pf_peak_nonbg,
+                "pf_peak_flow": pf_peak_flow,
+            }
+        )
     if n_bg < int(cfg.n_bg_min):
         report["reason"] = "insufficient_bg_samples"
         return report
@@ -291,23 +312,6 @@ def evaluate_ka_contract_v2(
         risk_mode = "guard"
 
     uplift_vetoed_by_pf_peak = False
-    pf_peak_nonbg: float | None = None
-    pf_peak_flow: float | None = None
-    if pf_peak is not None:
-        # Non-background proxy tiles: anything not in the bg proxy.
-        T_nonbg = valid & (c_flow > c_bg)
-        n_nonbg = int(np.sum(T_nonbg))
-        if n_nonbg > 0:
-            pf_peak_nonbg = float(np.mean(pf_peak[T_nonbg]))
-        if n_flow > 0:
-            pf_peak_flow = float(np.mean(pf_peak[T_flow]))
-        report["metrics"].update(
-            {
-                "n_nonbg_proxy": n_nonbg,
-                "pf_peak_nonbg": pf_peak_nonbg,
-                "pf_peak_flow": pf_peak_flow,
-            }
-        )
 
     uplift_eligible = bool(uplift_eligible_raw and not uplift_vetoed_by_guard and risk_mode == "alias")
     pf_peak_min_c2 = float(cfg.pf_peak_min_c2)
