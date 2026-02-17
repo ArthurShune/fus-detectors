@@ -234,16 +234,47 @@ def _adjust_alias_band_for_meta(
 ) -> dict[str, float]:
     if not alias_meta:
         return band_ratio_spec
-    center = alias_meta.get("flow_alias_hz")
-    if center is None:
+    injected_center = alias_meta.get("flow_alias_hz")
+    if injected_center is None:
         return band_ratio_spec
-    width = float(band_ratio_spec.get("alias_width_hz", 0.0))
+
+    # The band-ratio recorder can operate in a "fixed band geometry" mode
+    # (e.g. brain fUS: Pf ~ [30,250] Hz, Pa ~ [400,Nyquist] Hz) where the alias
+    # band is intentionally wide and should *not* drift based on injected tones.
+    # In that case, we only widen the band if needed to include the injected
+    # center, but we do not re-center it unnecessarily (which can accidentally
+    # push other Pa-adjacent content, such as skull vibration tones, into the
+    # guard band and trigger false out-of-regime sentinels).
+    try:
+        center0 = float(band_ratio_spec.get("alias_center_hz", 0.0))
+        half0 = float(band_ratio_spec.get("alias_width_hz", 0.0))
+    except Exception:
+        return band_ratio_spec
+    low0 = center0 - half0
+    high0 = center0 + half0
+
     jitter = float(alias_meta.get("flow_alias_jitter_hz") or 0.0)
     pad = 5.0
-    width = max(width, jitter + pad)
+    half_new = max(half0, jitter + pad)
+
+    # Heuristic: if the configured alias band is already "broad" (hundreds of Hz),
+    # treat it as a fixed design choice and never re-center it based on injected
+    # tone metadata. This avoids drift when tones jitter across Nyquist where the
+    # effective baseband peak is an aliased frequency.
+    if half0 >= 100.0:
+        adjusted = dict(band_ratio_spec)
+        adjusted["alias_width_hz"] = float(half_new)
+        return adjusted
+
+    injected_center = float(injected_center)
+    if low0 <= injected_center <= high0:
+        adjusted = dict(band_ratio_spec)
+        adjusted["alias_width_hz"] = float(half_new)
+        return adjusted
+
     adjusted = dict(band_ratio_spec)
-    adjusted["alias_center_hz"] = float(center)
-    adjusted["alias_width_hz"] = float(width)
+    adjusted["alias_center_hz"] = injected_center
+    adjusted["alias_width_hz"] = float(half_new)
     return adjusted
 
 
@@ -7994,14 +8025,23 @@ def _flow_mask_from_pd(
     """
     H, W = pd_map.shape
     q = float(np.clip(percentile, 0.0, 1.0))
-    thresh = float(np.quantile(pd_map, q))
     mask = np.zeros_like(pd_map, dtype=bool)
-    mask[pd_map >= thresh] = True
     depth_min = int(np.clip(depth_min_frac * H, 0, H))
     depth_max = int(np.clip(depth_max_frac * H, 0, H))
     if depth_max <= depth_min:
         depth_min = 0
         depth_max = H
+    # Compute the PD quantile threshold inside the depth window. This matches
+    # the methodology (e.g. "quantile within a depth range") and avoids cases
+    # where very bright shallow layers set an unrealistically high threshold
+    # for deep parenchymal flow proxy masks.
+    pd_window = np.asarray(pd_map[depth_min:depth_max, :], dtype=float)
+    pd_window = pd_window[np.isfinite(pd_window)]
+    if pd_window.size == 0:
+        thresh = float(np.nan)
+    else:
+        thresh = float(np.quantile(pd_window, q))
+    mask[pd_map >= thresh] = True
     mask[:depth_min, :] = False
     mask[depth_max:, :] = False
     if erode_iters > 0:
@@ -8361,7 +8401,12 @@ def write_acceptance_bundle(
         "beta_bounds": ka_beta_bounds,
         "kappa_target": float(ka_kappa),
     }
-    string_passthrough = {"bg_guard_metric", "score_model_json"}
+    string_passthrough = {
+        "bg_guard_metric",
+        "score_model_json",
+        "score_contract_v2_mode",
+        "score_contract_v2_proxy_source",
+    }
     if ka_opts_extra:
         for key, value in ka_opts_extra.items():
             if key in string_passthrough:
@@ -8608,24 +8653,29 @@ def write_acceptance_bundle(
             # original HAB design when f_lo/f_hi sit in [40,220] Hz.
             u = rng_flow.random(size=flow_idx.size)
             f_draw = np.empty(flow_idx.size, dtype=np.float32)
+            # Helper: draw from an intended sub-band, but fall back safely when
+            # the requested (f_lo,f_hi) range does not overlap that sub-band.
+            def _uniform_subband(lo_target: float, hi_target: float, n: int) -> np.ndarray:
+                lo = max(f_lo, float(lo_target))
+                hi = min(f_hi, float(hi_target))
+                if hi < lo:
+                    # No overlap: pick the closest point (clipped) within [f_lo,f_hi].
+                    mid = 0.5 * (float(lo_target) + float(hi_target))
+                    val = float(np.clip(mid, f_lo, f_hi))
+                    return np.full(int(n), val, dtype=np.float32)
+                return rng_flow.uniform(lo, hi, size=int(n)).astype(np.float32, copy=False)
             # 70%: main microvascular band
             mask1 = u < 0.7
             if np.any(mask1):
-                f_draw[mask1] = rng_flow.uniform(
-                    max(f_lo, 40.0), min(f_hi, 200.0), size=int(np.sum(mask1))
-                )
+                f_draw[mask1] = _uniform_subband(40.0, 200.0, int(np.sum(mask1)))
             # 20%: slightly faster components extending toward guard band
             mask2 = (u >= 0.7) & (u < 0.9)
             if np.any(mask2):
-                f_draw[mask2] = rng_flow.uniform(
-                    max(f_lo, 200.0), min(f_hi, 320.0), size=int(np.sum(mask2))
-                )
+                f_draw[mask2] = _uniform_subband(200.0, 320.0, int(np.sum(mask2)))
             # 10%: very slow components near DC
             mask3 = ~(mask1 | mask2)
             if np.any(mask3):
-                f_draw[mask3] = rng_flow.uniform(
-                    max(f_lo, 10.0), min(f_hi, 40.0), size=int(np.sum(mask3))
-                )
+                f_draw[mask3] = _uniform_subband(10.0, 40.0, int(np.sum(mask3)))
             # Optional per-pixel Doppler jitter.
             freqs_eff = f_draw.copy()
             # Doppler jitter parameter (fractional std) can be set via meta_extra
@@ -9287,9 +9337,20 @@ def write_acceptance_bundle(
             and base_tile_scores is not None
             and base_tile_scores.size == tile_count
         ):
-            # Contract/protection uses the PD-derived flow proxy mask, not the
-            # evaluation masks (which are simulator-truth in Brain-* regimes).
-            tile_cov_flow, tile_coords = _tile_coverages(mask_flow_pd, tile_hw, tile_stride)
+            # Contract/protection uses a flow-coverage proxy. By default this is
+            # the PD-derived proxy mask (label-free). For simulations, an
+            # ablation/oracle mode may use the evaluation flow mask (sim-truth)
+            # to quantify sensitivity to proxy quality.
+            proxy_source_raw = str(ka_opts_dict.get("score_contract_v2_proxy_source") or "pd")
+            proxy_source = proxy_source_raw.strip().lower()
+            cov_mask = mask_flow_pd
+            if proxy_source in {"eval", "truth"} and mask_flow is not None:
+                cov_mask = mask_flow
+                proxy_source = "eval"
+            else:
+                proxy_source = "pd"
+            stap_info["ka_contract_v2_proxy_source"] = proxy_source
+            tile_cov_flow, tile_coords = _tile_coverages(cov_mask, tile_hw, tile_stride)
             th, tw = tile_hw
             # s_base must be aligned with the detector score convention
             # (higher = more flow evidence). For PD scoring, downstream ROC uses
@@ -9305,9 +9366,28 @@ def write_acceptance_bundle(
                 s_base_tiles[idx] = float(
                     np.mean(score_map_for_contract[y0 : y0 + th, x0 : x0 + tw])
                 )
-            m_alias_tiles = (-np.asarray(base_tile_scores, dtype=np.float32)).astype(
-                np.float32, copy=False
-            )
+            # Alias risk metric for the contract: prefer a raw log(Ea/Ef) ratio
+            # computed from the recorder's non-whitened band energies. The
+            # recorder's returned tile scores are whitened by the background PSD
+            # average (useful for scoring), but that whitening can suppress the
+            # label-free separation signal the contract relies on.
+            m_alias_tiles = None
+            try:
+                ef_raw = np.asarray(base_br_recorder.Ef_raw, dtype=np.float32)
+                ea_raw = np.asarray(base_br_recorder.Ea_raw, dtype=np.float32)
+                if ef_raw.size == tile_count and ea_raw.size == tile_count:
+                    eps_ma = float(getattr(br_spec, "eps", 1e-8))
+                    m_alias_tiles = np.log((ea_raw + eps_ma) / (ef_raw + eps_ma)).astype(
+                        np.float32, copy=False
+                    )
+                    stap_info["ka_contract_v2_m_alias_source"] = "raw_log_ea_over_ef"
+            except Exception:
+                m_alias_tiles = None
+            if m_alias_tiles is None:
+                m_alias_tiles = (-np.asarray(base_tile_scores, dtype=np.float32)).astype(
+                    np.float32, copy=False
+                )
+                stap_info["ka_contract_v2_m_alias_source"] = "whitened_log_ef_over_ea"
             r_guard_tiles = np.asarray(base_br_recorder.rg_raw, dtype=np.float32)
             peak_freq_tiles = np.asarray(base_br_recorder.peak_freqs, dtype=np.float32)
             pf_peak_tiles = (peak_freq_tiles >= float(br_spec.flow_low_hz)) & (
@@ -9649,37 +9729,62 @@ def write_acceptance_bundle(
                 ka_metrics = ka_contract_v2_report.get("metrics", {}) or {}
                 risk_mode = str(ka_metrics.get("risk_mode") or "alias").strip().lower()
                 stap_info["score_ka_v2_risk_mode"] = risk_mode
+                mode_norm = (
+                    str(ka_opts_dict.get("score_contract_v2_mode") or "safety").strip().lower()
+                )
+                stap_info["score_ka_v2_mode_requested"] = mode_norm
+                if mode_norm not in {"safety", "uplift", "auto"}:
+                    stap_info["score_ka_v2_disabled_reason"] = "invalid_score_ka_v2_mode"
+                    mode_norm = "safety"
                 if risk_mode == "guard":
                     risk_tiles = ka_contract_v2_inputs["r_guard_tiles"]
                 else:
                     risk_tiles = ka_contract_v2_inputs["m_alias_tiles"]
                 shrink = None
+                apply_mode: str | None = None
                 if score_contract_v2_force:
                     if derive_score_shrink_v2_tile_scales_forced is None:
                         stap_info["score_ka_v2_disabled_reason"] = "forced_helper_unavailable"
                     else:
                         stap_info["score_ka_v2_forced"] = True
+                        apply_mode = "safety"
                         shrink = derive_score_shrink_v2_tile_scales_forced(
                             report=ka_contract_v2_report,
                             s_base=ka_contract_v2_inputs["s_base_tiles"],
                             m_alias=risk_tiles,
                             c_flow=ka_contract_v2_inputs["tile_cov_flow"],
                             valid_mask=ka_contract_v2_inputs["valid_tiles"],
-                            mode="safety",
+                            mode=apply_mode,
                             risk_mode=risk_mode,
                         )
                 else:
-                    if state != "C1_SAFETY" or reason != "ok":
+                    if reason != "ok":
                         stap_info["score_ka_v2_disabled_reason"] = f"contract_{state}:{reason}"
                     else:
-                        shrink = derive_score_shrink_v2_tile_scales(
-                            report=ka_contract_v2_report,
-                            s_base=ka_contract_v2_inputs["s_base_tiles"],
-                            m_alias=risk_tiles,
-                            c_flow=ka_contract_v2_inputs["tile_cov_flow"],
-                            valid_mask=ka_contract_v2_inputs["valid_tiles"],
-                            mode="safety",
-                        )
+                        if mode_norm == "safety":
+                            apply_mode = "safety" if state == "C1_SAFETY" else None
+                        elif mode_norm == "uplift":
+                            apply_mode = "uplift" if state == "C2_UPLIFT" else None
+                        elif mode_norm == "auto":
+                            if state == "C1_SAFETY":
+                                apply_mode = "safety"
+                            elif state == "C2_UPLIFT":
+                                apply_mode = "uplift"
+                            else:
+                                apply_mode = None
+                        if apply_mode is None:
+                            stap_info["score_ka_v2_disabled_reason"] = (
+                                f"mode_mismatch_{mode_norm}:{state}"
+                            )
+                        else:
+                            shrink = derive_score_shrink_v2_tile_scales(
+                                report=ka_contract_v2_report,
+                                s_base=ka_contract_v2_inputs["s_base_tiles"],
+                                m_alias=risk_tiles,
+                                c_flow=ka_contract_v2_inputs["tile_cov_flow"],
+                                valid_mask=ka_contract_v2_inputs["valid_tiles"],
+                                mode=str(apply_mode),
+                            )
 
                 if shrink is None:
                     if "score_ka_v2_disabled_reason" not in stap_info:
@@ -9689,6 +9794,7 @@ def write_acceptance_bundle(
                         shrink.get("reason") or "unknown"
                     )
                 else:
+                    stap_info["score_ka_v2_mode_applied"] = str(apply_mode or "safety")
                     scale_tiles = np.asarray(shrink["scale_tiles"], dtype=np.float32)
                     gated_tiles = np.asarray(shrink["gated_tiles"], dtype=bool)
                     tile_coords = ka_contract_v2_inputs["tile_coords"]
