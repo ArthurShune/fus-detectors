@@ -1,0 +1,439 @@
+\section{Supplementary Results}\label{app:supp-results}
+
+This appendix collects additional dataset audits and diagnostic panels that support the main paper's methodology, but are not required for the primary labeled low-FPR detection claims.
+
+\begin{center}
+\fbox{\begin{minipage}{0.95\linewidth}
+\textbf{Evaluation discipline (summary).}
+Quantitative ROC claims are restricted to regimes with independent labels (Brain-* simulator truth; Gammex B-mode structural masks).
+Operating points are reported under a fixed-profile protocol by selecting thresholds on labeled (or structurally labeled) $H_0$ sets at target FPR and evaluating TPR on the corresponding $H_1$ set; the empirically supported floor $fpr_{\min}=1/n_{\mathrm{neg}}$ is reported.
+Uncertainty is quantified at the natural unit of variation (windows for Brain-*; frames for cine acquisitions) rather than treating pooled pixels as independent samples.
+Conditional execution is treated as a changed decision rule and is reported only with explicit leakage controls.
+For Twinkling sequences, PRF is treated as an explicit experimental assumption (frozen overrides) and band-discretization sentinels force conservative behavior when discretized bands are invalid.
+When KA is enabled, it is shrink-only with protected-set invariance; labeled ROC reporting uses the pre-KA STAP score.
+\end{minipage}}
+\end{center}
+
+\paragraph{Where to find what.}
+\begin{itemize}[nosep]
+  \item Full ROC curve shapes for labeled regimes: Figure~\ref{fig:brain_kwave_roc_curves} (Brain-*) and Figure~\ref{fig:twinkling_gammex_structural_roc_curves} (Gammex).
+  \item STAP-only ablation and PRF override sensitivity (Gammex): Figure~\ref{fig:twinkling_gammex_ablation_prf_sensitivity}.
+  \item Conditional-execution leakage ablation (Brain-OpenSkull): Table~\ref{tab:condstap_leakage_ablation}.
+  \item Shin proxy-metric comparisons, runtime, and measured rigid-motion telemetry: Figure~\ref{fig:shin_baseline_matrix_proxy_metrics} and Figure~\ref{fig:shin_motion_telemetry}.
+\end{itemize}
+
+\subsection{Full ROC curves for labeled regimes}
+The main text reports strict low-FPR operating points. Here we provide representative ROC-style curves to show the overall curve shape under the same masks and scoring conventions.
+
+\noindent ROC curves are reported with the same unit-of-variation discipline as the operating-point tables. For Brain-* simulations, we compute ROC curves per 64-frame window and summarize them as median and IQR across \textbf{windows}; the supported floor $fpr_{\min}=1/n_{\mathrm{neg}}$ is fixed by the window's negative-set size. For Gammex, thresholds are calibrated on pooled pixels for stability, while uncertainty is quantified via a frame-level bootstrap (resampling \textbf{cine frames} as the unit of variation at fixed pooled thresholds).
+
+\ifSTAPSUPPLEMENTONLY
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/paper/brain_kwave_roc_curves.pdf}
+\caption{Brain-* k-Wave labeled regimes: ROC-style curves (TPR vs FPR on a log-x axis) under the same 64-frame window protocol used for the Brain-* low-FPR operating-point reporting in the main paper. Curves show the median and interquartile range over five disjoint windows. The vertical dashed line indicates the supported floor $fpr_{\min}=1/n_{\mathrm{neg}}$.}
+\label{fig:brain_kwave_roc_curves}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/paper/twinkling_gammex_structural_roc_curves.pdf}
+\caption{Gammex flow phantom structural labels: pooled ROC-style curves on along and across views, shown for baseline comparators and the pre-KA STAP matched-subspace score. The vertical guides indicate the strict low-FPR operating points reported in the main paper.}
+\label{fig:twinkling_gammex_structural_roc_curves}
+\end{figure}
+\else
+\noindent In the full build (main text + appendices), these curves are included in the main Results section (Figure~\ref{fig:brain_kwave_roc_curves} and Figure~\ref{fig:twinkling_gammex_structural_roc_curves}); this appendix focuses on complementary audits and diagnostics.
+\fi
+
+\subsection{Cross-window threshold calibration audit (Brain-*)}
+\label{app:brain-crosswindow-calib}
+The main Brain-* tables calibrate the operating threshold $\tau_\alpha$ on the negative set of the \emph{same} 64-frame window being evaluated. To quantify how sensitive these strict low-FPR operating points are to window-to-window distribution shift (and to avoid over-interpreting quantized tail points), we perform a simple cross-window audit: for each regime and FPR target $\alpha$, we calibrate $\tau_\alpha$ on one window's negatives and apply it to the other windows. Table~\ref{tab:brain_crosswindow_calibration} reports within-window TPR (as in the main text) alongside cross-window TPR and the realized cross-window FPR.
+
+\begin{table}[t]
+\centering
+\small
+\begingroup
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{P{3.0cm} c P{4.3cm} P{4.3cm} P{4.4cm}}
+\hline
+Regime & $\alpha$ & within-window TPR med (IQR) & cross-window TPR med (IQR) & cross-window realized FPR med (IQR) \\
+\hline
+Brain-OpenSkull & $10^{-4}$ & 0.0223 (0.0031,0.3922) & 0.0254 (0.0018,0.2226) & 1.59e-04 (0,1.25e-03) \\
+Brain-OpenSkull & $3\times 10^{-4}$ & 0.2107 (0.0077,0.4610) & 0.2253 (0.0045,0.3409) & 3.19e-04 (0,1.82e-03) \\
+Brain-OpenSkull & $10^{-3}$ & 0.2834 (0.1496,0.5590) & 0.3026 (0.1158,0.4226) & 1.15e-03 (7.47e-05,3.38e-03) \\
+Brain-AliasContract & $10^{-4}$ & 0.3499 (0.2649,0.3756) & 0.3303 (0.2534,0.3998) & 1.10e-04 (0,5.28e-04) \\
+Brain-AliasContract & $3\times 10^{-4}$ & 0.4033 (0.3283,0.4560) & 0.4016 (0.3188,0.4569) & 2.99e-04 (5.48e-05,9.21e-04) \\
+Brain-AliasContract & $10^{-3}$ & 0.5063 (0.4383,0.5113) & 0.4927 (0.4096,0.5416) & 9.76e-04 (3.54e-04,2.18e-03) \\
+Brain-SkullOR & $10^{-4}$ & 0.3791 (0.2622,0.3987) & 0.3491 (0.2624,0.4213) & 1.20e-04 (0,7.37e-04) \\
+Brain-SkullOR & $3\times 10^{-4}$ & 0.4460 (0.3230,0.4648) & 0.4010 (0.3242,0.4741) & 3.19e-04 (2.99e-05,1.39e-03) \\
+Brain-SkullOR & $10^{-3}$ & 0.5102 (0.4364,0.5456) & 0.5136 (0.4131,0.5377) & 9.86e-04 (1.74e-04,2.72e-03) \\
+\hline
+\end{tabular}
+\endgroup
+\caption{Brain-* cross-window threshold calibration audit for the pre-KA STAP score. ``Within-window'' matches the main reporting protocol (calibrate $\tau_\alpha$ on a window's negatives and evaluate on that same window). ``Cross-window'' calibrates $\tau_\alpha$ on one window and evaluates on a disjoint window ($n=20$ ordered window pairs). Reported values are median (IQR) over windows/pairs. Full outputs are written to \path{reports/brain_crosswindow_calibration.csv} / \path{reports/brain_crosswindow_calibration_summary.json}.}
+\label{tab:brain_crosswindow_calibration}
+\end{table}
+
+\subsection{STAP-only ablation and PRF override sensitivity (Gammex)}
+To isolate the role of the STAP core from baseline prefiltering, we run a small STAP-only ablation on the Gammex flow phantom by applying STAP directly to raw (registered) CFM IQ without the SVD band-pass baseline. We also provide a small PRF override sensitivity check on the along view to assess brittleness to the frozen PRF assumption required by Twinkling metadata limitations.
+
+\ifSTAPSUPPLEMENTONLY
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/paper/twinkling_gammex_ablation_prf_sensitivity.pdf}
+\caption{Gammex flow phantom: (left) STAP-only ablation comparing the standard baseline SVD band-pass + STAP pipeline to STAP-only on raw IQ (first 20 cine frames; both views). (right) PRF override sensitivity on the along view (first 20 cine frames). Points show TPR at a fixed FPR target of $10^{-3}$ with 95\% frame-bootstrap CIs under the structural tube masks. This is a low-cost sanity audit of the frozen-PRF band discretization (not tuned to improve ROC); PRF is an acquisition constant for a sequence family and band-sanity sentinels are deterministic functions of $(N,\mathrm{PRF})$. Full numeric outputs are in \path{reports/twinkling_gammex_ablation_prf_sensitivity.csv}.}
+\label{fig:twinkling_gammex_ablation_prf_sensitivity}
+\end{figure}
+\else
+\noindent In the full build (main text + appendices), this audit is shown in the main Results section (Figure~\ref{fig:twinkling_gammex_ablation_prf_sensitivity}).
+\fi
+
+\subsection{Conditional execution leakage ablation (Brain-OpenSkull pilots)}
+Conditional execution (compute gating) skips STAP outside a flow-proxy region and falls back to the baseline score. Because this changes the overall decision rule, we evaluate it explicitly under leakage controls by varying only the \emph{gating} mask: (i) a proxy mask computed from the same scored window, (ii) a proxy mask carried from a disjoint window, and (iii) a randomized mask with matched coverage. Table~\ref{tab:condstap_leakage_ablation} reports the corresponding change in TPR relative to full STAP at fixed low-FPR targets.
+
+\begin{table}[t]
+\centering
+\small
+\begingroup
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{P{4.0cm} >{\centering\arraybackslash}p{3.3cm} >{\centering\arraybackslash}p{3.3cm} >{\centering\arraybackslash}p{3.3cm}}
+\hline
+Conditional-execution mask & $\Delta\mathrm{TPR}@10^{-4}$ ($\times 10^{-3}$) & $\Delta\mathrm{TPR}@3\!\times\!10^{-4}$ ($\times 10^{-3}$) & $\Delta\mathrm{TPR}@10^{-3}$ ($\times 10^{-3}$) \\
+\hline
+Same-window proxy mask & $+0.31\,[0.23,0.39]$ & $+0.81\,[0.54,1.04]$ & $+3.05\,[2.67,3.43]$ \\
+Disjoint-window proxy mask & $-3.05\,[-5.69,-0.92]$ & $-2.90\,[-5.34,-0.88]$ & $-1.74\,[-4.64,0.28]$ \\
+Random mask (matched coverage) & $-3.05\,[-5.65,-0.92]$ & $-2.97\,[-5.68,-0.71]$ & $-2.36\,[-4.96,-0.06]$ \\
+\hline
+\end{tabular}
+\endgroup
+\caption{Conditional-execution leakage ablation on Brain-OpenSkull pilots (five independent realizations; 64-frame window; matched-subspace STAP score). Entries report mean $\Delta\mathrm{TPR}$ (conditional minus full STAP) at fixed FPR targets, with 95\% bootstrap CIs over realizations ($n=5$). Evaluation masks are identical across conditions; only the conditional-execution gating mask varies.}
+\label{tab:condstap_leakage_ablation}
+\end{table}
+\noindent This behavior is expected because gating changes the decision rule: leakage-controlled gating produces a small TPR decrease in exchange for a large runtime reduction, making it a clear engineering tradeoff rather than a free performance gain.
+
+\subsection{KA hygiene on artifact-heavy calculi sequences (Twinkling)}
+To illustrate the shrink-only behavior of the KA layer in a strongly artifact-dominated regime, we evaluate Twinkling calculi sequences under a frozen short-ensemble profile. Figure~\ref{fig:twinkling_contract_states_reasons} summarizes the KA prior outputs (region and reason) across Gammex and calculi runs, and Figure~\ref{fig:twinkling_calculi_tail_example} shows a representative calculi example where the post-KA score compresses the background tail without increasing any scores on penalized pixels.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/paper/twinkling_contract_states_reasons.png}
+\caption{Twinkling KA-prior summary panel: prior (region, reason) distributions across Gammex (structural-label) and calculi (artifact-heavy) runs. Reproducibility details are provided in \SuppOrApp{app:repro}.}
+\label{fig:twinkling_contract_states_reasons}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/paper/twinkling_calculi_tail_example.png}
+\caption{Representative calculi tail example (pre/post KA) showing shrink-only tail hygiene behavior when the KA prior is active ($w<1$). Reproducibility details are provided in \SuppOrApp{app:repro}.}
+\label{fig:twinkling_calculi_tail_example}
+\end{figure}
+
+\subsection{ULM 7883227: additional motion variants}
+In addition to the main \texttt{brainlike} motion sweep reported in the main paper, we report an \texttt{elastic} (nonrigid-only) motion ladder under the same frozen baseline and STAP configuration.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/paper/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_elastic_e975.pdf}
+\caption{ULM 7883227 motion sweep under \texttt{elastic} (nonrigid-only) motion with the same frozen baseline/profile used in the main paper (\texttt{blocks 1--3}, frames $0{:}128$, baseline MC--SVD with frozen energy fraction $e=0.975$). Motion is injected at the beamformed IQ stage as a robustness stress test; it does not model channel-domain decorrelation physics. Reproducibility details are provided in \SuppOrApp{app:repro}.}
+\label{fig:ulm_elastic_e975}
+\end{figure}
+
+\subsection{Mac{\'e} whole-brain fUS: hemodynamic band-energy statistics and hold-out check}
+We treat the Mac{\'e}/Urban whole-brain dataset as a PD-only, open-skull analogue of Brain-OpenSkull and compute tile-level hemodynamic band-energy statistics with fixed bands $\Pf=[0,0.5]$~Hz, guard $[0.5,1.0]$~Hz, and $\Pa=[1.0,3.0]$~Hz on $8\times 8$ tiles (stride 3). Offline we also compute atlas-derived \emph{region strata} (e.g.\ VIS/SC/LGd versus CP/CA/DG) for descriptive summaries; these strata are not treated as ground-truth flow labels and are not used as KA inputs. Figure~\ref{fig:mace_phase2_summary} summarizes a systematic sweep in ``Pf occupancy vs alias separation'' space. We provide an explicit atlas-alignment sanity check in \SuppOrApp{app:mace-atlas-align}.
+Here PD-z denotes a per-tile change-from-baseline z-score on the PD time series (distinct from the Doppler/IQ PD-mode score maps $S_{\mathrm{PD}}$ exported by the STAP pipeline).
+
+\paragraph{Hold-out discipline (avoid plane selection bias and label-tuned thresholds).}
+To address the selection-bias critique and to avoid per-plane PD-z thresholds chosen using atlas strata (e.g.\ setting thresholds to force a fixed activation fraction in a preferred stratum), we add a scan-level hold-out evaluation (reproducibility details in \SuppOrApp{app:repro}). We (i) define label-free proxy sets from a mean-PD vascularity mask and set a per-plane PD-z operating point by a fixed background-proxy tail rule $\mathbb{P}\{\mathrm{PD}\text{-}z\ge\tau\mid \mathcal{T}_{\mathrm{bg}}\}=\alpha_{\mathrm{pd}}$ (no atlas labels), (ii) define the alias suppression threshold as a fixed background-proxy quantile of $m_{\mathrm{alias}}=\log((E_{\mathrm{Pa}}+\epsilon)/(E_{\mathrm{Pf}}+\epsilon))$, and (iii) select Pf-rich planes in held-out scans using a label-free band-energy statistic (Pf-peak fraction on flow-proxy tiles), with the selection threshold fixed from the training scans. Table~\ref{tab:mace_holdout_alias_gate} summarizes the resulting held-out counts on \texttt{scan4}--\texttt{scan5} (training: \texttt{scan1/2} and \texttt{scan3/6}; note \texttt{scan2} duplicates \texttt{scan1} and \texttt{scan6} duplicates \texttt{scan3} in this loader).
+
+On held-out scans (\texttt{scan4}--\texttt{scan5}), this fixed, shrink-only alias suppression reduces proxy activations in the CP/CA/DG stratum while modestly affecting activations in the VIS/SC/LGd stratum at the chosen label-free operating point. At $\alpha_{\mathrm{pd}}=0.01$ on the background proxy, aggregate (VIS/SC/LGd / CP/CA/DG hit counts) change from $23/142$ to $22/95$ (VIS/SC/LGd retention $\approx 0.96$). On the Pf-peak-selected subset of held-out planes (PfPeak$_{\mathrm{flow}}\ge\tau_{\mathrm{sel}}$), hit counts change from $19/22$ to $19/19$ (VIS/SC/LGd retention $=1.0$). We interpret this as a conservative safety-regularization behavior rather than an efficacy claim: Mac{\'e} is PD-only and provides no Doppler-side flow labels, so its primary role here is to validate the band-energy/proxy machinery and the no-peeking threshold discipline.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/paper/mace_phase2_summary.png}
+\caption{Mac{\'e} systematic band-energy summary (six files; 84 planes; four unique acquisitions in this loader): Pf peak occupancy vs alias separation under a fixed hemodynamic STAP configuration (tiles $8\times 8$, stride 3; $\Pf=[0,0.5]$~Hz, guard $[0.5,1.0]$~Hz, $\Pa=[1.0,3.0]$~Hz). Each point is one (scan, plane) instance; the x-axis is the Pf peak fraction in the VIS/SC/LGd atlas stratum and the y-axis the Pf peak fraction in the CP/CA/DG stratum (offline, descriptive), and color encodes $\Delta\log(E_a/E_f)=\mathrm{median}(\mathrm{VIS/SC/LGd})-\mathrm{median}(\mathrm{CP/CA/DG})$ (negative means alias ratios are lower in VIS/SC/LGd). Dashed lines indicate an offline descriptive threshold pair ($x>0.4$, $y<0.25$); they are not used for the held-out, label-free operating-point evaluation in Table~\ref{tab:mace_holdout_alias_gate}.}
+\label{fig:mace_phase2_summary}
+\end{figure}
+
+\begin{table}[t]
+\centering
+\small
+\begingroup
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{P{4.2cm} >{\centering\arraybackslash}p{0.9cm} >{\centering\arraybackslash}p{3.0cm} >{\centering\arraybackslash}p{3.0cm} >{\centering\arraybackslash}p{2.0cm} >{\centering\arraybackslash}p{2.0cm}}
+\hline
+Held-out subset (scan4--scan5) & $n$ & offline VIS/\allowbreak SC/\allowbreak LGd / CP/\allowbreak CA/\allowbreak DG hits (pre) & offline VIS/\allowbreak SC/\allowbreak LGd / CP/\allowbreak CA/\allowbreak DG hits (post) & VIS/\allowbreak SC/\allowbreak LGd retention & CP/\allowbreak CA/\allowbreak DG reduction \\
+\hline
+All planes & 40 & 23/142 & 22/95 & 0.957 & 47 \\
+Selected (PfPeak$_{\mathrm{flow}}\ge\tau_{\mathrm{sel}}$) & 5 & 19/22 & 19/19 & 1.000 & 3 \\
+\hline
+\end{tabular}
+\endgroup
+\caption{Mac{\'e} hold-out alias-gate evaluation with label-free thresholding. For each plane we set the PD-z threshold $\tau$ by a fixed background-proxy tail rule $\mathbb{P}\{\mathrm{PD}\text{-}z\ge\tau\mid\mathcal{T}_{\mathrm{bg}}\}=\alpha_{\mathrm{pd}}$ with $\alpha_{\mathrm{pd}}=0.01$, and set the alias suppression threshold as the $0.8$ quantile of $m_{\mathrm{alias}}=\log((E_{\mathrm{Pa}}+\epsilon)/(E_{\mathrm{Pf}}+\epsilon))$ on the same background proxy set. ``Selected'' planes are those whose Pf-peak fraction on flow-proxy tiles exceeds a training-derived threshold $\tau_{\mathrm{sel}}$ (the 0.95 quantile of PfPeak$_{\mathrm{flow}}$ over the training scans \texttt{scan1/2} and \texttt{scan3/6}; $\tau_{\mathrm{sel}}\approx 0.145$). Hit counts use atlas strata (VIS/SC/LGd and CP/CA/DG) only for offline descriptive evaluation (not KA inputs and not a Doppler efficacy claim). Reproducibility details are provided in \SuppOrApp{app:repro}.}
+\label{tab:mace_holdout_alias_gate}
+\end{table}
+
+\paragraph{Pixel-level separability vs.\ the vascular atlas (independent structural labels).}
+To add one real-data quantitative check with an \emph{independent} label source (not derived from PD), we map the dataset-provided Allen atlas vascular volume \texttt{atlas.Vascular} into each Mac{\'e} scan plane using the affine in \texttt{Transformation.mat}. We threshold \texttt{atlas.Vascular} at $0.5$ to define vascular vs.\ non-vascular pixels and restrict evaluation to pixels that map inside the atlas and to non-background atlas regions. This yields $n_{\mathrm{neg}}\approx 1.7\times 10^4$ non-vascular pixels per plane (median $fpr_{\min}\approx 5.9\times 10^{-5}$), so FPR targets down to $10^{-4}$ are empirically meaningful at pixel level.
+As expected for PD-only hemodynamics, extreme-tail separability is weak; the purpose of this check is independent-label auditability and an empirical FPR scale rather than a performance headline.
+
+We then evaluate three families of scalar maps: (i) a structural baseline based on the mean PD image (reported as a right-tail score using a left-tail convention, $S_{\mathrm{inv\_meanPD}}=-\log(\overline{P}+\epsilon)$), (ii) PD-z as a per-pixel change-from-baseline z-score on log-PD (the maximum z-score after an early baseline segment), and (iii) a hemodynamic alias band-energy statistic $m_{\mathrm{alias}}=\log((E_a+\epsilon)/(E_f+\epsilon))$ computed from simple FFT band energies on log-PD with fixed hemodynamic bands $\Pf=[0,0.5]$~Hz and $\Pa=[1.0,3.0]$~Hz. Finally, to mirror the conservative posture on real data, we apply a label-free alias penalty as a shrink-only score-space regularizer on PD-z: protect a flow-proxy set defined by a high mean-PD quantile, then down-weight non-proxy pixels whose $m_{\mathrm{alias}}$ lies above the $0.90$ quantile of $m_{\mathrm{alias}}$ on the background proxy. Table~\ref{tab:mace_vascular_pixel_eval} summarizes the resulting low-FPR operating points.
+
+\begin{table}[t]
+\centering
+\small
+\begingroup
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{P{5.6cm} >{\centering\arraybackslash}p{3.1cm} >{\centering\arraybackslash}p{3.1cm} >{\centering\arraybackslash}p{3.1cm}}
+\hline
+Score (vascular vs.\ non-vascular) & TPR@$10^{-4}$ ($\times 10^{-3}$) & TPR@$3\!\times\!10^{-4}$ ($\times 10^{-3}$) & TPR@$10^{-3}$ ($\times 10^{-3}$) \\
+\hline
+$S_{\mathrm{inv\_meanPD}}=-\log(\overline{P}+\epsilon)$ (structural baseline) & 0.00 (0.00, 0.00) & 0.00 (0.00, 1.04) & 2.76 (1.84, 3.20) \\
+PD-z (log-PD; max z after baseline) & 0.00 (0.00, 0.00) & 0.00 (0.00, 0.81) & 0.94 (0.00, 1.78) \\
+$m_{\mathrm{alias}}=\log((E_a+\epsilon)/(E_f+\epsilon))$ (hemodynamic alias statistic) & 0.00 (0.00, 0.00) & 0.00 (0.00, 0.75) & 1.05 (0.00, 2.04) \\
+PD-z + label-free alias penalty (shrink-only) & 0.00 (0.00, 0.00) & 0.00 (0.00, 0.81) & 0.92 (0.00, 1.74) \\
+\hline
+\end{tabular}
+\endgroup
+\caption{Mac{\'e} pixel-level quantitative evaluation using an independent vascular atlas label source (\texttt{atlas.Vascular}; $n=80$ planes from four deduplicated scans). Entries report median (IQR) TPR at fixed FPR targets for vascular vs.\ non-vascular pixels. The median negative-pixel count per plane is $\approx 1.69\times 10^4$ (median $fpr_{\min}\approx 5.9\times 10^{-5}$). Reproducibility details are provided in \SuppOrApp{app:repro}.}
+\label{tab:mace_vascular_pixel_eval}
+\end{table}
+
+\paragraph{PD-only prior summary panel.}
+To keep PD-only Mac{\'e} reporting aligned with the same audit posture used for Doppler IQ, we summarize the PD-only KA prior outcomes over all planes using a compact summary panel that mirrors the Doppler-IQ summary but operates per plane. The panel reports (region, reason) histograms and shrink-only coverage/strength band-energy summaries under label-free proxy sets (\SuppOrApp{app:pdonly-dashboard}), and presents atlas-stratified summaries only as a clearly separated offline/descriptive panel.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/paper/mace_pdonly_contract_v2_dashboard.pdf}
+\caption{Mac{\'e} PD-only prior summary panel over all deduplicated scan/plane instances. Top: prior regions and the most common (region, reason) pairs (runtime, label-free). Bottom-left: coverage vs strength summaries for shrink-only penalization ($p_{\mathrm{shrink}}$ vs $\mathrm{IQR}(\log w)$ on penalized tiles), with the invariance threshold indicated. Bottom-right: offline atlas-stratified Pf-peak fractions (VIS/SC/LGd vs CP/CA/DG tiles) colored by $\Delta\log(E_a/E_f)$ (descriptive only; not a KA input). Reproducibility details are provided in \SuppOrApp{app:repro}.}
+\label{fig:mace_pdonly_contract_v2_dashboard}
+\end{figure}
+
+% Example per-plane gating visualizations are retained in the repository figures,
+% but omitted from the main text to avoid confusion with label-conditioned
+% operating-point selection. See Appendix~\ref{app:pdonly-dashboard} for the
+% PD-only summary-panel definitions.
+
+\subsection{Shin RatBrain Fig3 (LOCA-ULM): real kHz IQ viability and KA-prior diagnostics}
+\label{sec:shin-ratbrain}
+
+To demonstrate that the frozen STAP + band-energy + KA-prior stack is operational on real Doppler-like IQ, we use the LOCA-ULM RatBrain Fig3 dataset released with Shin et al.\ as beamformed, post-compounded complex IQ sequences \cite{ShinLOCAULM2024,ShinZenodo10711806}. This is a microbubble ULM IQ dataset; we use it solely as a kHz-IQ ingestion and band-energy/prior audit anchor, not as a physiological fUS benchmark. The Fig3 archive contains 80 clips (\texttt{IQData001.dat}--\texttt{IQData080.dat}) and a \texttt{SizeInfo.dat} file describing the tensor shape. Each clip stores $T=250$ slow-time frames on a $(238\times 130)$ spatial grid as little-endian float64 arrays containing I then Q in column-major order (matching the authors' reference MATLAB loader); the effective slow-time sampling is $1$~kHz (post-compounding), with center frequency $f_0\approx 15.6$~MHz \cite{ShinLOCAULM2024}. We treat this dataset as a \emph{real-IQ viability and safety anchor} rather than a labeled detection benchmark: there are no $H_1/H_0$ labels, so we do not report ROC uplift; instead we report prior-regime stability (tilewise band-energy summaries and coverage), shrink-only invariants, and label-free endpoints defined on pixel-level proxy masks (flow/background).
+
+\paragraph{Processing workflow.}
+We mirror the authors' loader and convert IQ clips into a common analysis format used throughout this work (reproduction details in \SuppOrApp{app:repro}). For a chosen clip and time window we:
+\begin{itemize}[nosep]
+  \item Apply an SVD clutter filter on the Casorati matrix $X\in\mathbb{C}^{T\times HW}$ to form a baseline PD-derived map $pd_{\mathrm{base}}$ and a residual IQ cube (the input to STAP).
+  \item Construct pixel-level proxy masks from $pd_{\mathrm{base}}$ (used here as a conventional PD-brightness proxy $\mathrm{PD}^{\uparrow}$ distinct from the ROC score maps): a flow/vessel proxy (top quantile; minimum pixel count) and a background proxy (complement of the flow mask in a central crop).
+  \item Run the temporal STAP core on the residual IQ cube with fixed tile geometry ($8\times 8$ tiles, stride 3) and a longer slow-time aperture $L_t=64$ suited to $1$~kHz slow time (bin spacing $15.6$~Hz), producing a pre-KA PD-mode score map.
+  \item Apply the KA spatial-spectral prior (\ifSTAPSUPPLEMENTONLY described in the main paper\else Section~\ref{sec:ka-contract-v2}\fi) to produce a region index, reason label, and (when active) a non-increasing post-KA score map together with gate/scale maps.
+  \item Record tilewise band-energy statistics (peak frequency, guard fraction, alias/guard risk metrics) and the penalization maps in the same analysis format used throughout this work.
+\end{itemize}
+The proxy masks are used only for label-free proxying/protection; prior-regime decisions and hygiene/robustness proxies follow the same right-tail score convention used elsewhere in this manuscript: operating points are expressed as a threshold on a right-tail PD score map, i.e.\ $S_{\mathrm{PD}}\ge\tau$ at fixed background-proxy tail rate.
+
+\emph{Scale-map convention.} When the KA prior is active ($w<1$ on a nontrivial set), we record an equivalent per-pixel scale factor $\gamma(i)\ge 1$ and apply it to the PD score map as
+\[
+\mathrm{PD}_{\mathrm{post}}(i)=\mathrm{PD}_{\mathrm{pre}}(i)/\gamma(i),\qquad \gamma(i)\ge 1,
+\]
+which makes the PD score map non-increasing on penalized regions. For any fixed threshold $\tau$ this is a pure shrink-only penalty; when thresholds are recalibrated post-KA to match a target background tail rate, any TPR change reflects background-tail suppression rather than score inflation.
+
+\paragraph{Frozen Shin operating profiles and baseline calibration.}
+To avoid retuning the conservative brain Doppler profile to Shin until outcomes appear favorable, we treat Shin as its own frozen operating regime and explicitly calibrate only the baseline clutter filter once. We sweep the MC--SVD energy-fraction cutoff (smallest number of singular modes removed to exceed the target energy fraction) over a calibration subset (10 representative clips; window $0{:}128$) and select a single frozen baseline setting based on band-energy integrity and stability, not on prior-regime counts. Table~\ref{tab:shin_baseline_sweep} reports $\mathcal{R}_1/\mathcal{R}_2$ counts for transparency, but selection is based on the label-free integrity/actionability metrics ($\Delta_{bf}$, $\Delta_{\mathrm{tail}}$) and stability/hygiene proxies. Overly aggressive baseline removal increases Pf peak occupancy but can invert actionability evidence (background-vs-flow separation becomes negative) and suppress $\mathcal{R}_2$ eligibility. We therefore freeze MC--SVD with energy fraction $\approx 0.97$ as a balanced setting for the Shin-U profile (reproducibility details in \SuppOrApp{app:repro}).
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lcccccc}
+\hline
+Energy frac & $\mathcal{R}_1/\mathcal{R}_2$ & $\Delta_{bf}$ med & $\Delta_{\mathrm{tail}}$ med & Pf-peak(flow) med & BG clusters $\Delta$ & BG area $\Delta$ \\
+\hline
+0.90 & 8/2 & $+1.52$ & $+0.65$ & 0.011 & $-17$ & $-32$ \\
+0.95 & 8/2 & $+1.50$ & $+0.65$ & 0.019 & $-17$ & $-32$ \\
+0.97 & 8/2 & $+1.49$ & $+0.73$ & 0.050 & $-19$ & $-45$ \\
+0.975 & 9/1 & $-0.38$ & $+0.77$ & 0.237 & $-30$ & $-89$ \\
+0.98 & 10/0 & $-0.38$ & $+0.78$ & 0.253 & $-30$ & $-89$ \\
+0.99 & 10/0 & $-0.47$ & $+0.58$ & 0.510 & $-6$ & $-59$ \\
+\hline
+\end{tabular}
+\caption{Baseline clutter-filter calibration for the frozen Shin-U profile (10 clips; window $0{:}128$). $\Delta_{bf}$ is the median background-vs-flow proxy separation of the risk metric; $\Delta_{\mathrm{tail}}$ is the background tail association (actionability) metric; Pf-peak(flow) is the fraction of flow-proxy tiles (tiles with high flow-mask coverage) whose PSD peak lies in Pf. BG cluster/area deltas are computed from a fixed background-proxy tail operating point on the PD score map $S_{\mathrm{PD}}$ (clusters/area after KA minus before KA). We freeze energy fraction $\approx 0.97$ because it yields nontrivial Pf realization while preserving positive actionability.}
+\label{tab:shin_baseline_sweep}
+\end{table}
+
+\paragraph{Baseline comparisons (proxy separability on real IQ).}
+Although Shin provides no independent $H_1/H_0$ labels, it is useful to test whether the STAP core improves \emph{proxy} separation on real complex IQ.
+We run a fixed scenario matrix on 10 clips and three overlapping windows ($0{:}128$, $64{:}192$, $122{:}250$), exporting right-tail score maps for MC--SVD, RPCA, HOSVD, STAP (on the MC--SVD residual), and an \emph{STAP-only} ablation that runs STAP directly on raw/registered IQ.
+Proxy masks are derived deterministically from the MC--SVD baseline PD map via a \texttt{pd\_auto} quantile rule (0.995 quantile within depth fraction $[0.25,0.85]$ with dilation), with the generic default-mask union disabled; masks are then held fixed across methods.
+We report (i) AUC between flow-proxy and background-proxy score distributions (threshold-free), and (ii) flow-proxy hit rate at matched background tail rates $\alpha\in\{10^{-1},10^{-2},3\times 10^{-3},10^{-3},3\times 10^{-4},10^{-4}\}$ (Figure~\ref{fig:shin_baseline_matrix_proxy_metrics}; Table~\ref{tab:shin_baseline_matrix_proxy_summary}).
+In this setup $n_{\mathrm{bg}}\approx 2.6\times 10^4$ per scenario ($fpr_{\min}\approx 3.8\times 10^{-5}$), so $\alpha=10^{-4}$ corresponds to roughly $2$--$3$ background pixels.
+
+Across scenarios, STAP improves proxy separation (median AUC 0.951 vs 0.922 for MC--SVD) and yields nonzero flow-proxy hit rates at strict tails where MC--SVD is typically zero (e.g.\ median hit rate 0.070 at $\alpha=10^{-3}$).
+The STAP-only ablation is comparable to STAP-on-residual, indicating that the localized STAP core is the primary driver of the improvement on this dataset.
+At moderate strictness ($\alpha\approx 10^{-2}$), RPCA/HOSVD can exhibit higher proxy hit rates than STAP despite lower AUC, consistent with a broader, lower-contrast score elevation rather than strict-tail selectivity.
+Finally, a conditioning-target sweep ($\kappa_{\mathrm{target}}=80$ vs 200) produced identical STAP score maps under this frozen profile, indicating that the conditioning target is non-binding in this particular configuration.
+Figure~\ref{fig:shin_baseline_matrix_example} shows a representative qualitative comparison.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/paper/shin_baseline_matrix_proxy_metrics.pdf}
+\caption{Shin RatBrain Fig3 baseline comparisons under label-free proxy masks (10 clips; three windows; Shin-U profile). Left: flow-proxy hit rate vs background tail rate $\alpha$ (median and IQR over scenarios). Middle: threshold-free AUC between flow-proxy and background-proxy score distributions. Right: runtime distribution per scenario in this CPU-only environment (baseline time for MC--SVD/RPCA/HOSVD; baseline+STAP total time for STAP variants), using compute-time telemetry captured in bundle metadata (excludes disk I/O and figure rendering). Full per-scenario outputs are in \path{reports/shin_ratbrain_baseline_matrix_shinU_e970_Lt64_nomaskunion_k80.csv}.}
+\label{fig:shin_baseline_matrix_proxy_metrics}
+\end{figure}
+
+\paragraph{Measured rigid-motion telemetry.}
+Because Shin clips are short ($\approx 0.25$~s) and there are no external motion sensors, we treat rigid registration telemetry as a descriptive motion proxy rather than a full motion benchmark. Figure~\ref{fig:shin_motion_telemetry} summarizes the phase-correlation shifts estimated during baseline preprocessing (RMS shift magnitude per scenario) and relates them to the proxy AUC uplift (STAP minus MC--SVD). In these windows the estimated rigid motion is typically subpixel, so we do not treat Shin as a stratified motion-stress regime; the proxy-separation gains are not explained by measured rigid shifts.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/paper/shin_motion_telemetry.pdf}
+\caption{Shin RatBrain Fig3 measured rigid-motion telemetry across the 30 baseline-matrix scenarios (10 clips $\times$ 3 windows). Left: histogram of estimated rigid shift RMS (pixels) from phase-correlation registration used in baseline preprocessing. Right: proxy-separation uplift $\Delta$AUC (STAP minus MC--SVD) versus the same shift statistic. Full extracted telemetry is in \path{reports/shin_motion_telemetry.csv}.}
+\label{fig:shin_motion_telemetry}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/paper/shin_baseline_matrix_example.png}
+\caption{Representative Shin RatBrain Fig3 qualitative comparison (clip \texttt{IQData001}, window $0{:}128$). Panels show log-scaled right-tail score maps for MC--SVD baseline PD, STAP on the MC--SVD residual, and STAP-only on raw/registered IQ, with the shared flow-proxy mask overlaid (cyan contour).}
+\label{fig:shin_baseline_matrix_example}
+\end{figure}
+
+\noindent \textbf{Proxy circularity audit.} To reduce dependence on any single baseline-derived proxy mask, we report metrics under (i) a flow-proxy mask derived from MC--SVD ($pd_{\mathrm{base}}$ via \texttt{pd\_auto}) and (ii) a consensus proxy mask formed by majority vote over MC--SVD/RPCA/HOSVD \texttt{pd\_auto} masks; rankings are consistent under this cross-mask audit.
+
+\begin{table}[t]
+\centering
+\small
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lccc ccc}
+\hline
+\multicolumn{1}{c}{} & \multicolumn{3}{c}{MC--SVD proxy mask} & \multicolumn{3}{c}{Consensus proxy mask} \\
+Method & AUC (med [IQR]) & hit@$\alpha=10^{-3}$ (med [IQR]) & hit@$\alpha=10^{-4}$ (med [IQR]) & AUC (med [IQR]) & hit@$\alpha=10^{-3}$ (med [IQR]) & hit@$\alpha=10^{-4}$ (med [IQR]) \\
+\hline
+MC--SVD & 0.922 [0.916, 0.934] & 0.000 [0.000, 0.023] & 0.000 [0.000, 0.000] & 0.913 [0.908, 0.924] & 0.000 [0.000, 0.029] & 0.000 [0.000, 0.000] \\
+RPCA & 0.902 [0.893, 0.907] & 0.024 [0.000, 0.031] & 0.008 [0.000, 0.016] & 0.909 [0.898, 0.915] & 0.028 [0.000, 0.036] & 0.010 [0.000, 0.020] \\
+HOSVD & 0.881 [0.873, 0.906] & 0.040 [0.030, 0.056] & 0.008 [0.000, 0.015] & 0.883 [0.874, 0.909] & 0.055 [0.036, 0.069] & 0.010 [0.000, 0.019] \\
+STAP & 0.951 [0.948, 0.956] & 0.070 [0.034, 0.081] & 0.014 [0.006, 0.025] & 0.944 [0.932, 0.947] & 0.051 [0.018, 0.082] & 0.009 [0.003, 0.032] \\
+STAP-only & 0.948 [0.944, 0.951] & 0.065 [0.024, 0.078] & 0.020 [0.003, 0.032] & 0.939 [0.933, 0.944] & 0.065 [0.012, 0.083] & 0.021 [0.000, 0.033] \\
+\hline
+\end{tabular}
+}%
+\caption{Shin RatBrain Fig3 proxy-metric summary over 30 scenarios (10 clips $\times$ 3 windows) under the frozen Shin-U profile (PRF $=1$~kHz, $L_t=64$, MC--SVD energy fraction $\approx 0.97$). AUC is computed between flow-proxy and background-proxy score distributions; hit@$\alpha$ is the flow-proxy hit rate when the threshold is chosen to achieve background tail rate $\alpha$. Metrics are shown under two proxy-mask definitions: an MC--SVD-derived mask and a consensus mask (majority vote over MC--SVD/RPCA/HOSVD masks). Full per-scenario outputs are in \path{reports/shin_ratbrain_baseline_matrix_shinU_e970_Lt64_nomaskunion_k80.csv} and \path{reports/shin_ratbrain_crossmask_audit_shinU_consensus3.csv}.}
+\label{tab:shin_baseline_matrix_proxy_summary}
+\end{table}
+
+\paragraph{Cross-mask audit (proxy-label sensitivity).}
+Table~\ref{tab:shin_baseline_matrix_proxy_summary} includes both the baseline-derived mask and the consensus mask results; full cross-mask outputs (including per-scenario thresholds and realized FPRs) are in \path{reports/shin_ratbrain_crossmask_audit_shinU_consensus3.csv}.
+
+\paragraph{Profile variants (Shin-U vs Shin-S/L).}
+In addition to Shin-U, we evaluated two alternative frozen band profiles (Shin-S and Shin-L) designed to push the ``flow'' band Pf toward lower frequencies and increase Pf peak occupancy (an interpretability-forward choice for microvascular-like content under 1~kHz slow time). Across the same 10-clip calibration subset, these variants typically increase Pf-peak(flow) but render the contract actionability check $\Delta_{\mathrm{tail}}$ negative under our flow/background proxy sets, so the prior lies predominantly in $\mathcal{R}_1$ (safety-only) rather than $\mathcal{R}_2$ (actionable). We therefore treat Shin-S/L as conservative ``deployment-mode'' profiles ($\mathcal{R}_1$-only by design) and use Shin-U as the primary ``real IQ viability + safety'' anchor reported here.
+
+\paragraph{KA behavior, stability, and hygiene endpoints.}
+Under the frozen Shin-U profile (MC--SVD energy fraction $\approx 0.97$, STAP $L_t=64$, fixed Pf/Pa band definitions, and KA enabled in \texttt{auto} mode), we run the pipeline on 10 pre-selected clips (\texttt{IQData001}--\texttt{IQData005}, \texttt{IQData010}, \texttt{IQData020}, \texttt{IQData040}, \texttt{IQData060}, \texttt{IQData080}) and evaluate stability across three overlapping time windows ($0{:}128$, $64{:}192$, $122{:}250$). Under Shin-U, Pf realization is weak (Pf-peak(flow)$\ll p_{f,\min}$), so Shin is not treated as a KA-uplift feasibility case under R--1; we use it to validate end-to-end determinism, invariants, and robustness proxies. Because there are no labels, we report only label-free endpoints (reproducibility details in \SuppOrApp{app:repro}):
+\begin{itemize}[nosep]
+  \item \textbf{KA regime stability.} $\mathcal{R}_1$ dominates in all windows (8--10 of 10 clips), while $\mathcal{R}_2$ is rare (0--2 clips) due to the Pf-realization eligibility condition for $\mathcal{R}_2$ based on flow-proxy tiles (tiles with high flow-mask coverage); all decisions emit auditable reason labels.
+  \item \textbf{Shrink-only and protected invariance.} When KA is active it applies a mild, localized shrink (median $p_{\mathrm{shrink}}\approx 0.09$; median scaled pixel fraction $\approx 0.20$) and preserves the protected set exactly (maximum absolute PD change on protected pixels is $0$ in all evaluated clips).
+  \item \textbf{Background-tail hygiene.} A label-free background-tail metric shows consistent tail compression on early windows: for each clip/window we choose a threshold $\tau$ so that the background proxy satisfies $\mathbb{P}\{S_{\mathrm{PD}}\ge\tau\mid \text{bg proxy}\}=10^{-3}$ on the pre-KA map, then count clusters/area of pixels satisfying $S_{\mathrm{PD}}\ge\tau$ before vs.\ after KA. Total background-tail clusters decrease from $125\rightarrow 106$ (window $0{:}128$) and $121\rightarrow 104$ (window $64{:}192$), while the late window is closer to neutral ($129\rightarrow 124$). This is interpreted as ``map hygiene'' rather than ROC uplift.
+\end{itemize}
+Table~\ref{tab:shin_contract_summary} summarizes prior-regime counts and key band-energy summaries across windows.
+
+\paragraph{All-clips KA regime summary (n=80).}
+To reduce dependence on the 10-clip subset, we also run a diagnostics-only sweep over all 80 clips (window $0{:}128$), recording the prior regime outputs. In this sweep we skip the STAP pass and do not apply the score-space KA mapping; we treat the result as an activation-rate audit (region/reason frequencies and band-energy summary statistics), not a performance result. On all clips the prior lies in $\mathcal{R}_1$ for 73/80 and in $\mathcal{R}_2$ for 7/80 (all with \texttt{reason=ok}, risk mode \texttt{alias}); median Pf-peak(flow)$\approx 0.091$, guard $q_{0.90}\approx 0.105$, and median predicted $p_{\mathrm{shrink}}\approx 0.095$. Reproducibility details are provided in \SuppOrApp{app:repro}.
+
+\begin{table}[t]
+\centering
+\small
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lcccccc}
+\hline
+Window & $\mathcal{R}_0/\mathcal{R}_1/\mathcal{R}_2$ & Pf-peak(flow) med & guard q90 med & $p_{\mathrm{shrink}}$ med & scaled-px frac med & scale p90 ($\gamma$) med \\
+\hline
+$0{:}128$ & 0/8/2 & 0.050 & 0.104 & 0.091 & 0.201 & 1.167 \\
+$64{:}192$ & 0/10/0 & 0.032 & 0.110 & 0.097 & 0.198 & 1.168 \\
+$122{:}250$ & 0/9/1 & 0.039 & 0.108 & 0.090 & 0.205 & 1.167 \\
+\hline
+\end{tabular}
+}
+\caption{Shin RatBrain Fig3 prior-regime summary band-energy statistics for the frozen Shin-U profile ($e\approx 0.97$, $L_t=64$) across three overlapping windows (10 clips each).}
+\label{tab:shin_contract_summary}
+\end{table}
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lcc}
+\hline
+Window & background clusters (pre$\rightarrow$post) & background area (pre$\rightarrow$post) \\
+\hline
+$0{:}128$ & $125\rightarrow 106$ & $263\rightarrow 218$ \\
+$64{:}192$ & $121\rightarrow 104$ & $264\rightarrow 212$ \\
+$122{:}250$ & $129\rightarrow 124$ & $264\rightarrow 257$ \\
+\hline
+\end{tabular}
+\caption{Shin RatBrain Fig3 label-free hygiene endpoints under Shin-U ($e\approx 0.97$; $L_t=64$; 10 clips). ``Pre'' and ``post'' denote STAP PD-mode outputs before and after the non-increasing KA prior penalty. The background-tail metric targets flow-like tail activations under the right-tail score convention: for each clip/window instance we choose $\tau$ so that the background proxy satisfies $\mathbb{P}\{S_{\mathrm{PD}}\ge\tau\mid \text{bg proxy}\}=10^{-3}$ on the corresponding pre-KA map, then count connected components (clusters) and pixels (area) with $S_{\mathrm{PD}}\ge\tau$. Reproducibility details are provided in \SuppOrApp{app:repro}.}
+\label{tab:shin_hygiene}
+\end{table}
+
+\paragraph{Synthetic motion robustness sweeps (label-free).}
+To probe motion robustness on real IQ without ground-truth labels, we implement controlled motion-injection sweeps on Shin IQ cubes (reproduction details in \SuppOrApp{app:repro}). In addition to simple per-frame subpixel translations, global phase modulation, and spatially smooth low-frequency clutter tones, we define a \emph{brain-like} motion model designed to be mechanistically comparable to Brain-SkullOR: a bulk rigid translation (correctable by phase-correlation registration) plus a smooth, depth-decaying elastic warp with temporally correlated coefficients (not removable by translation-only registration). Motion is applied directly to the beamformed IQ cube (a stress test rather than a full scatterer-level simulator), after which we rerun the same baseline and STAP pipeline (KA disabled to isolate STAP).
+
+We report two label-free robustness endpoints as functions of motion amplitude: (i) PD-mode score-map correlation versus the no-motion reference (after rigid alignment and a boundary crop), and (ii) a flow-proxy hit rate at a matched background-proxy tail operating point (background-proxy tail rate $=10^{-3}$), expressed in score space as $\mathbb{P}\{S_{\mathrm{PD}}\ge\tau\mid \text{bg proxy}\}=10^{-3}$. Concretely, for each clip/window we define a fixed pixel-level flow-proxy mask from the no-motion baseline PD-derived map $pd_{\mathrm{base}}$ (top quantile; minimum pixel count) and a background-proxy mask from its complement; for each run/method we choose $\tau$ on that run's background proxy and then report the fraction of flow-proxy pixels satisfying $S_{\mathrm{PD}}\ge\tau$. As a degeneracy check (to rule out ``stability by collapse''), the sweep also records non-collapse diagnostics (map std/entropy and background variance ratios). A post-hoc sensitivity sweep recomputes correlation under different crop margins and with alignment disabled.
+Over 10 pre-selected clips and three overlapping time windows ($0{:}128$, $64{:}192$, $122{:}250$) under the frozen Shin-U profile (PRF $=1$~kHz, $L_t=64$, baseline MC--SVD with rigid registration enabled), STAP PD-mode score maps are consistently more stable than MC--SVD as motion increases: at a 2~px motion amplitude, median correlation improves from $\approx 0.18$--0.19 (MC--SVD) to $\approx 0.36$--0.45 (STAP) across windows, and the flow-proxy hit rate improves from 0 to $\approx 0.04$ at bg tail rate $=10^{-3}$. Table~\ref{tab:shin_motion_endpoints} summarizes these endpoints; Figures~\ref{fig:shin_motion_agg}--\ref{fig:shin_motion_curve} show motion curves.
+
+\begin{table}[t]
+\centering
+\small
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lcccccc}
+\hline
+Window & corr$_{\mathrm{self}}$ base & corr$_{\mathrm{self}}$ STAP (pre-KA) & frac(STAP$>$base) corr$_{\mathrm{self}}$ & hit rate$_{\mathrm{flow}}$ base @ bg tail $=10^{-3}$ & hit rate$_{\mathrm{flow}}$ STAP @ bg tail $=10^{-3}$ & frac(STAP$>$base) hit rate$_{\mathrm{flow}}$ \\
+\hline
+$0{:}128$ & 0.188 & 0.454 & 1.0 & 0.000 & 0.041 & 1.0 \\
+$64{:}192$ & 0.186 & 0.399 & 0.9 & 0.000 & 0.040 & 1.0 \\
+$122{:}250$ & 0.182 & 0.364 & 0.8 & 0.000 & 0.041 & 1.0 \\
+\hline
+\end{tabular}
+}
+\caption{Shin RatBrain Fig3 motion-sweep endpoints at 2~px amplitude (median over 10 clips) under the frozen Shin-U profile, with rigid registration enabled and KA disabled (STAP reported pre-KA). corr$_{\mathrm{self}}$ is Pearson correlation between each method's PD-mode score map at the given motion amplitude and its own no-motion reference, after phase-correlation alignment and a boundary crop. hit rate$_{\mathrm{flow}}$ is computed on a fixed, method-independent flow-proxy mask derived from the no-motion baseline PD-derived map $pd_{\mathrm{base}}$: for each run/method we choose $\tau$ so that the background proxy achieves a tail rate $10^{-3}$ under the right-tail score rule $\mathbb{P}\{S_{\mathrm{PD}}\ge\tau\mid \text{bg proxy}\}=10^{-3}$, then evaluate the fraction of flow-proxy pixels satisfying $S_{\mathrm{PD}}\ge\tau$. frac(STAP$>$base) reports the paired fraction of clips where STAP exceeds MC--SVD at 2~px on the corresponding endpoint.}
+\label{tab:shin_motion_endpoints}
+\end{table}
+
+Figure~\ref{fig:shin_motion_agg} shows the canonical window ($0{:}128$) motion curves, while Figure~\ref{fig:shin_motion_curve} shows the same endpoints across all three overlapping windows; Figure~\ref{fig:shin_motion_reg_ablation} provides a rigid-registration ablation (\texttt{reg0}).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/paper/shin_motion_brainlike_batch_U_agg.png}
+\caption{Shin RatBrain Fig3: brain-like residual-motion sweep (canonical window $0{:}128$; 10 clips; median $\pm$ IQR) under the frozen Shin-U profile with rigid registration enabled and KA disabled (STAP reported pre-KA). Top: PD-mode score-map stability measured as Pearson correlation between each method's PD-mode score map at a given motion amplitude and its own no-motion reference, after phase-correlation alignment and a boundary crop. Bottom: flow-proxy hit rate (median $\pm$ IQR) at matched background-proxy tail rate $=10^{-3}$, computed under the right-tail score rule $\mathbb{P}\{S_{\mathrm{PD}}\ge\tau\mid \text{bg proxy}\}=10^{-3}$ with a fixed flow-proxy mask derived from the no-motion baseline $pd_{\mathrm{base}}$.}
+\label{fig:shin_motion_agg}
+\end{figure}
+
+Figure~\ref{fig:shin_dashboard} shows the corresponding KA prior summary panel for the frozen Shin-U profile. Figure~\ref{fig:shin_bundle} shows a representative per-clip multipanel view separating the baseline PD-derived map, the STAP PD-mode score map pre-KA, the KA gate/scale, and the final PD-mode score map post-KA, along with key band-energy maps and the flow-proxy mask that defines the protected set.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/paper/shin_motion_brainlike_compare_reg1.png}
+\caption{Shin RatBrain Fig3: brain-like residual-motion sweep across three overlapping windows (10 clips; median $\pm$ IQR) under the frozen Shin-U profile with rigid registration enabled and KA disabled (STAP reported pre-KA). Motion amplitude (x-axis) is the target displacement scale in pixels. ``Brain-like'' motion is applied directly to the beamformed IQ cube and combines (i) a rigid random-walk translation (70\% of the amplitude), (ii) a smooth, depth-decaying elastic warp (30\%; spatial smoothing $\sigma\approx 24$~px; depth weight $\propto \exp(-z/0.8)$; random-walk temporal coefficients), and (iii) per-frame micro-jitter (std $\approx 0.08\times$ amplitude). Endpoints match Figure~\ref{fig:shin_motion_agg}. This stress test is image-domain (IQ warp) rather than a scatterer-level simulator; it is intended to mimic the ``residual rigid + elastic motion after registration'' mismatch in Brain-SkullOR.}
+\label{fig:shin_motion_curve}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/paper/shin_motion_brainlike_compare.png}
+\caption{Shin RatBrain Fig3: registration ablation for the brain-like residual-motion sweep. The rightmost column (\texttt{reg0}) repeats the canonical window ($0{:}128$) with rigid registration disabled in the baseline and STAP pipelines, illustrating that the motion stress test contains a substantial bulk rigid component that phase-correlation registration can correct. Even with registration enabled, a smooth depth-decaying elastic warp remains (by design) and drives the robustness gap between MC--SVD and STAP.}
+\label{fig:shin_motion_reg_ablation}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/paper/shinU_e970_pfpeakflowguard_ka_v2_dashboard.pdf}
+\caption{Shin RatBrain Fig3 (10 clips; window $0{:}128$) KA prior summary panel under the frozen Shin-U profile (MC--SVD energy fraction $\approx 0.97$, $L_t=64$). The panel summarizes prior regions and reasons, Pf peak fractions on flow/non-background proxies, and KA shrink coverage/strength.}
+\label{fig:shin_dashboard}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/paper/shin_IQData001_shinU_pfpeakflowguard_bundle.png}
+\caption{Representative Shin RatBrain Fig3 example (clip \texttt{IQData001}; window $0{:}128$) illustrating the end-to-end real-IQ pipeline: baseline PD-derived map, STAP PD-mode score map (pre-KA), KA gate/scale overlay, and final PD-mode score map (post-KA), together with band-energy maps and the flow-proxy mask that defines protected tiles. The KA layer is shrink-only and preserves protected-set invariance exactly. Reproducibility details are provided in \SuppOrApp{app:repro}.}
+\label{fig:shin_bundle}
+\end{figure}
+
+\paragraph{Limitations and claim boundaries (Shin).}
+The Shin RatBrain Fig3 analysis is intended as an end-to-end \emph{real-IQ viability and generalization} anchor, not a clinical detection benchmark.
+Because there are no task labels and no ground-truth vessel segmentation, quantitative endpoints reported here are label-free proxies: baseline comparisons use deterministic flow/background proxy masks and report both threshold-free proxy separation (AUC) and tail-calibrated flow-proxy hit rates, while motion-sweep endpoints measure within-method consistency relative to each method's own no-motion reference and persistence of a fixed flow proxy under a matched background-proxy tail operating point.
+In addition, the ``brain-like'' motion stress test is an image-domain warp applied to beamformed IQ (rigid + depth-decaying elastic components) rather than a scatterer-level forward model; it is designed to mimic the specific high-rank, spatially varying residual-motion mismatch represented in Brain-SkullOR, not to reproduce full ultrasound physics.
+Accordingly, we interpret Shin results as evidence of (i) deterministic real-IQ ingestion and band-energy summaries, (ii) KA prior auditability and invariants (shrink-only; exact protected-set invariance), and (iii) self-consistency under controlled residual-motion corruption, while leaving ROC uplift claims to labeled regimes (Brain-* simulations) and to future raw-IQ datasets with task/landmark structure.

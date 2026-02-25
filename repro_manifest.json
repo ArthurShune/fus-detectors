@@ -1,10 +1,87 @@
 {
   "git": {
-    "commit": "07f9d144b5edad5f4997c83ab1939402cf0eaebd",
-    "commit_short": "07f9d14",
+    "commit": "6db311e65c1bea51cb6f126709d619630c4532eb",
+    "commit_short": "6db311e",
     "branch": "main",
-    "dirty": false,
-    "dirty_paths": []
+    "dirty": true,
+    "dirty_paths": [
+      "M appendix_ka_contract_theory.tex",
+      "M appendix_repro_manifest.tex",
+      "M pipeline/gpu/linalg.py",
+      "M pipeline/stap/ka_contract_v2.py",
+      "M pipeline/stap/temporal.py",
+      "M pipeline/stap/temporal_shared.py",
+      "M repro_manifest.json",
+      "M scripts/conditional_stap_leakage_ablation.py",
+      "M scripts/generate_repro_manifest.py",
+      "M scripts/hab_contract_check.py",
+      "M scripts/ka_contract_v2_ablation.py",
+      "M scripts/ka_contract_v2_dashboard_fig.py",
+      "M scripts/mace_pdonly_contract_v2_dashboard_fig.py",
+      "M scripts/pd_mode_sanity.py",
+      "M scripts/replay_stap_from_run.py",
+      "M scripts/shin_ratbrain_allclips_contract_hygiene.py",
+      "M scripts/shin_ratbrain_hygiene_metrics.py",
+      "M scripts/shin_ratbrain_motion_aggregate.py",
+      "M scripts/shin_ratbrain_motion_compare.py",
+      "M scripts/shin_ratbrain_motion_sweep.py",
+      "M scripts/shin_ratbrain_plot_bundle.py",
+      "M sim/kwave/common.py",
+      "M sim/kwave/icube_bundle.py",
+      "M sim/kwave/pilot_motion.py",
+      "M stap_fus_methodology.tex",
+      "M stap_fus_paper.tex",
+      "M stap_fus_supplement.tex",
+      "M tests/test_ka_score_shrink_v2.py",
+      "M tests/test_kwave_physics.py",
+      "M tests/test_kwave_pilot_smoke.py",
+      "M tests/test_pilot_meta.py",
+      "?? appendix_bundle_schema.tex",
+      "?? appendix_supp_results.tex",
+      "?? pipeline/realdata/twinkling_artifact.py",
+      "?? pipeline/realdata/twinkling_bmode_mask.py",
+      "?? pipeline/realdata/ulm_zenodo_7883227.py",
+      "?? scripts/brain_crosswindow_calibration.py",
+      "?? scripts/fair_filter_comparison.py",
+      "?? scripts/fig_brain_kwave_roc_curves.py",
+      "?? scripts/fig_doppler_band_geometry_psd.py",
+      "?? scripts/fig_hankelization_local_stap.py",
+      "?? scripts/fig_shin_baseline_matrix_example.py",
+      "?? scripts/fig_shin_baseline_matrix_proxy_metrics.py",
+      "?? scripts/fig_shin_motion_telemetry.py",
+      "?? scripts/fig_shrink_only_tail_suppression.py",
+      "?? scripts/fig_stap_pipeline_bayes_block.py",
+      "?? scripts/fig_twinkling_gammex_ablation_prf_sensitivity.py",
+      "?? scripts/fig_twinkling_gammex_baseline_tail.py",
+      "?? scripts/fig_twinkling_gammex_structural_roc_curves.py",
+      "?? scripts/fig_twinkling_mask_overlay.py",
+      "?? scripts/figure_qc.py",
+      "?? scripts/mace_phase2_summary_fig.py",
+      "?? scripts/shin_ratbrain_baseline_matrix.py",
+      "?? scripts/shin_ratbrain_crossmask_audit.py",
+      "?? scripts/twinkling_backfill_baseline_scores.py",
+      "?? scripts/twinkling_contract_figpack.py",
+      "?? scripts/twinkling_decode_sanity.py",
+      "?? scripts/twinkling_decode_sanity_summary.py",
+      "?? scripts/twinkling_eval_motion_ladder.py",
+      "?? scripts/twinkling_eval_structural.py",
+      "?? scripts/twinkling_gammex_within_ensemble_motion_sweep.py",
+      "?? scripts/twinkling_make_bundles.py",
+      "?? scripts/twinkling_prf_override_table.py",
+      "?? scripts/ulm_zenodo_7883227_baseline_sweep.py",
+      "?? scripts/ulm_zenodo_7883227_make_bundle.py",
+      "?? scripts/ulm_zenodo_7883227_motion_sweep.py",
+      "?? scripts/ulm_zenodo_7883227_motion_sweep_plot.py",
+      "?? scripts/upscale_png_nearest.py",
+      "?? stap_fus_methodology.out",
+      "?? stap_fus_methodology.pdf",
+      "?? stap_fus_paper.out",
+      "?? stap_fus_paper.pdf",
+      "?? stap_fus_supplement.out",
+      "?? stap_fus_supplement.pdf",
+      "?? test_url_spaces.out",
+      "?? test_url_spaces.pdf"
+    ]
   },
   "env": {
     "python": "3.12.8 | packaged by Anaconda, Inc. | (main, Dec 11 2024, 16:31:09) [GCC 11.2.0]",
@@ -24,7 +101,7 @@
       "name": "Brain-* k-Wave pilots (simulated IQ)",
       "purpose": "Labeled low-FPR ROC + ablations.",
       "local_path": "runs/pilot/",
-      "doi_or_url": "(generated locally via sim/kwave/pilot_motion.py / Makefile targets r4c-*)"
+      "doi_or_url": "generated locally via sim/kwave/pilot_motion.py (Makefile targets r4c-*)"
     },
     {
       "name": "Mace/Urban whole-brain mouse fUS (PD-only)",
@@ -34,20 +111,38 @@
     },
     {
       "name": "Shin RatBrain Fig3 (LOCA-ULM) beamformed IQ",
-      "purpose": "Real-IQ ingestion/telemetry/contract + label-free robustness sweeps.",
+      "purpose": "Real-IQ ingestion, telemetry, contract + label-free robustness sweeps.",
       "local_path": "data/shin_zenodo_10711806/RatBrain_Fig3.zip (extracts to data/shin_zenodo_10711806/ratbrain_fig3_raw)",
       "doi_or_url": "https://doi.org/10.5281/zenodo.10711806"
+    },
+    {
+      "name": "Twinkling artifact dataset (RawBCF phantoms)",
+      "purpose": "Structurally labeled phantom ROC (Gammex) + within-ensemble motion ladders + KA hygiene (calculi).",
+      "local_path": "data/twinkling_artifact/",
+      "doi_or_url": "https://doi.org/10.17816/DD76511"
+    },
+    {
+      "name": "ULM Zenodo 7883227 (rat brain kHz IQ)",
+      "purpose": "Label-free motion robustness + one-time baseline calibration sweep.",
+      "local_path": "data/ulm_zenodo_7883227/IQ_001_to_025.zip (extracts to tmp/ulm_zenodo_7883227/)",
+      "doi_or_url": "https://doi.org/10.5281/zenodo.7883227"
     }
   ],
   "selections": {
     "Brain seed sweep (AliasContract pilot)": "seed2-seed12 (n=11).",
     "Shin all-clips telemetry": "IQData001-IQData080 (n=80), window 0:128.",
     "Shin motion subset": "IQData001-005, IQData010, IQData020, IQData040, IQData060, IQData080 (n=10).",
-    "Mace holdout split (deduplicated)": "train: scan1/2 + scan3/6; test: scan4 + scan5."
+    "Mace holdout split (deduplicated)": "train: scan1/2 + scan3/6; test: scan4 + scan5.",
+    "Gammex flow phantom structural ROC (along-linear17)": "frames 0:85 (n=85), PRF=2500 Hz, N=17 shots.",
+    "Gammex flow phantom structural ROC (across-linear17)": "frames 0:200 (n=200), PRF=2500 Hz, N=17 shots.",
+    "Gammex flow phantom within-ensemble motion ladder": "along-linear17, frames 0:85, amps 0..2 px, kinds {rw,step}.",
+    "Twinkling calculi KA hygiene": "calcifications sequence, frames 0:50 (n=50), PRF approx 500 Hz, N=9 shots.",
+    "ULM 7883227 baseline sweep": "blocks 1-3, frames 0:128, MC-SVD energy-frac sweep (label-free).",
+    "ULM 7883227 motion sweeps": "blocks 1-3, frames 0:128, frozen baseline e=0.975, motion kinds {brainlike,elastic}."
   },
   "artifacts": [
     {
-      "name": "PD-mode sanity checks (PD-mode map and score S=-PD)",
+      "name": "PD-mode sanity checks (PD-mode map and score S=PD)",
       "paper_refs": [
         "Notation (PD convention)"
       ],
@@ -55,7 +150,9 @@
         "reports/pd_mode_sanity/ (optional figs)"
       ],
       "commands": [
-        "PYTHONPATH=. python scripts/pd_mode_sanity.py runs/<bundle_root>/pw_* --out-dir reports/pd_mode_sanity"
+        "PYTHONPATH=. python scripts/pd_mode_sanity.py \\",
+        "  runs/<bundle_root>/pw_* \\",
+        "  --out-dir reports/pd_mode_sanity"
       ],
       "notes": "Run on any generated acceptance bundle root containing pw_* directories."
     },
@@ -85,8 +182,8 @@
         "Baseline fairness (Brain-*)"
       ],
       "outputs": [
-        "reports/brain_mcsvd_energy_sweep.csv",
-        "reports/brain_mcsvd_energy_sweep.json"
+        "reports/brain_mcsvd_energy_sweep_seed1.csv",
+        "reports/brain_mcsvd_energy_sweep_seed1.json"
       ],
       "commands": [
         "PYTHONPATH=. python scripts/brain_mcsvd_energy_sweep.py \\",
@@ -96,13 +193,47 @@
         "  --window-length 64 --window-offset 0 \\",
         "  --energy-fracs 0.90,0.95,0.97,0.975,0.98,0.99 \\",
         "  --fprs 1e-4,3e-4,1e-3 \\",
-        "  --summary-csv reports/brain_mcsvd_energy_sweep.csv \\",
-        "  --summary-json reports/brain_mcsvd_energy_sweep.json"
+        "  --summary-csv reports/brain_mcsvd_energy_sweep_seed1.csv \\",
+        "  --summary-json reports/brain_mcsvd_energy_sweep_seed1.json"
       ],
       "notes": null
     },
     {
-      "name": "KA Contract v2 falsifiability ablation (STAP-only vs contract vs forced)",
+      "name": "Brain-* ROC curve figure (median+IQR over disjoint windows)",
+      "paper_refs": [
+        "Figure: brain_kwave_roc_curves.pdf"
+      ],
+      "outputs": [
+        "figs/paper/brain_kwave_roc_curves.pdf"
+      ],
+      "commands": [
+        "PYTHONPATH=. python scripts/fig_brain_kwave_roc_curves.py \\",
+        "  --runs-root runs/pilot/fair_filter_matrix_full_clinical_cpu_v2 \\",
+        "  --out-pdf figs/paper/brain_kwave_roc_curves.pdf"
+      ],
+      "notes": "Reads precomputed per-window score/mask arrays under runs/pilot/fair_filter_matrix_full_clinical_cpu_v2."
+    },
+    {
+      "name": "Brain-* cross-window threshold-transfer audit (STAP)",
+      "paper_refs": [
+        "Appendix: cross-window threshold calibration audit (Brain-*)"
+      ],
+      "outputs": [
+        "reports/brain_crosswindow_calibration.csv",
+        "reports/brain_crosswindow_calibration_summary.json",
+        "reports/brain_crosswindow_calibration_table.tex"
+      ],
+      "commands": [
+        "PYTHONPATH=. python scripts/brain_crosswindow_calibration.py \\",
+        "  --runs-root runs/pilot/fair_filter_matrix_full_clinical_cpu_v2 \\",
+        "  --alphas 1e-4,3e-4,1e-3 \\",
+        "  --out-csv reports/brain_crosswindow_calibration.csv \\",
+        "  --out-json reports/brain_crosswindow_calibration_summary.json"
+      ],
+      "notes": "Calibrates thresholds on one 64-frame window's negatives and evaluates on disjoint windows (ordered pairs)."
+    },
+    {
+      "name": "Knowledge-aided prior falsifiability ablation (STAP-only vs contract vs forced)",
       "paper_refs": [
         "KA evaluation discipline"
       ],
@@ -124,6 +255,46 @@
       "notes": null
     },
     {
+      "name": "Knowledge-aided prior positive-control ablation (OpenSkull shallow-alias + high-rank ghosts)",
+      "paper_refs": [
+        "KA evaluation discipline (positive control)"
+      ],
+      "outputs": [
+        "reports/ka_v2_ablation_openskull_shallowalias_e50.csv",
+        "reports/ka_v2_ablation_openskull_shallowalias_e50.json"
+      ],
+      "commands": [
+        "PYTHONPATH=. python scripts/ka_contract_v2_ablation.py \\",
+        "  --pilot runs/pilot/r4_kwave_seed1 \\",
+        "  --profile Brain-OpenSkull \\",
+        "  --out-root runs/ablation/openskull_shallowalias_e50 \\",
+        "  --stap-device cpu \\",
+        "  --window-length 64 \\",
+        "  --window-offsets 0 64 128 192 256 \\",
+        "  --summary-csv reports/ka_v2_ablation_openskull_shallowalias_e50.csv \\",
+        "  --summary-json reports/ka_v2_ablation_openskull_shallowalias_e50.json \\",
+        "  --replay-extra \\",
+        "    --svd-energy-frac 0.50 \\",
+        "    --flow-doppler-min-hz 60 --flow-doppler-max-hz 180 \\",
+        "    --flow-doppler-noise-amp 60 --flow-doppler-noise-mode fft_band \\",
+        "    --bg-alias-hz 650 --bg-alias-fraction 0.7 \\",
+        "    --bg-alias-depth-min-frac 0.12 --bg-alias-depth-max-frac 0.28 \\",
+        "    --bg-alias-jitter-hz 35 \\",
+        "    --flow-mask-suppress-alias-depth \\",
+        "    --clutter-beta 1.0 --clutter-snr-db 20 \\",
+        "    --clutter-depth-min-frac 0.20 --clutter-depth-max-frac 0.95 \\",
+        "    --aperture-phase-std 0.8 --aperture-phase-corr-len 14 \\",
+        "    --bg-alias-highrank-mode gw_reverb_add \\",
+        "    --bg-alias-highrank-coverage 0.3 --bg-alias-highrank-amp 0.3 \\",
+        "    --bg-alias-highrank-margin-px 3 \\",
+        "    --bg-alias-highrank-freq-jitter-hz 25 \\",
+        "    --bg-alias-highrank-drift-step-hz 12 \\",
+        "    --bg-alias-highrank-pf-leak-eta 0.0 \\",
+        "    --ka-score-contract-v2-mode auto"
+      ],
+      "notes": "Synthetic, replay-only KA-positive regime used as a contract-mechanics positive control; not a realism benchmark."
+    },
+    {
       "name": "Mace PD-only holdout alias-gate evaluation (label-free thresholds)",
       "paper_refs": [
         "Table: Mace hold-out alias gate"
@@ -142,7 +313,7 @@
     {
       "name": "Mace pixel-level vascular-atlas check (independent structural labels)",
       "paper_refs": [
-        "Mac\u00e9 section: vascular atlas pixel-level check"
+        "Mace section: vascular atlas pixel-level check"
       ],
       "outputs": [
         "reports/mace_vascular_pixel_eval.csv",
@@ -158,7 +329,7 @@
     {
       "name": "Mace atlas-alignment sanity overlay figure",
       "paper_refs": [
-        "Appendix: Mac\u00e9 atlas alignment sanity check"
+        "Appendix: Mace atlas alignment sanity check"
       ],
       "outputs": [
         "figs/paper/mace_atlas_overlay.png"
@@ -203,14 +374,15 @@
         "  --time-window-offset 0 --time-window-offset 64 --time-window-offset 128 \\",
         "  --time-window-offset 192 --time-window-offset 256",
         "",
-        "# Generate the overlay histogram figure (reads Shin bundles and Mac\u00e9 CSV from other artifacts):",
+        "# Generate the overlay histogram figure:",
+        "# (reads Shin bundles and Mace CSV from other artifacts)",
         "PYTHONPATH=. python scripts/telemetry_regime_compare_fig.py \\",
         "  --out-png figs/paper/telemetry_regime_compare.png"
       ],
-      "notes": "Overlays PfPeakFrac(flow), guard_q90, and iqr_alias_bg across Brain-* simulations, Shin real IQ, and Mac\u00e9 PD-only planes; intended as telemetry anchoring (not a claim that sims match real data)."
+      "notes": "Overlays PfPeakFrac(flow), guard_q90, and iqr_alias_bg across Brain-* simulations, Shin real IQ, and Mace PD-only planes; intended as telemetry anchoring (not a claim that sims match real data)."
     },
     {
-      "name": "Mace PD-only contract v2 dashboard (plane sweep + paper figure)",
+      "name": "Mace PD-only prior dashboard (plane sweep + paper figure)",
       "paper_refs": [
         "Figure: mace_pdonly_contract_v2_dashboard.png"
       ],
@@ -229,7 +401,7 @@
       "notes": null
     },
     {
-      "name": "Shin all-clips contract telemetry (n=80; telemetry-only)",
+      "name": "Shin all-clips prior-regime telemetry (n=80; telemetry-only)",
       "paper_refs": [
         "Shin section: all-clips telemetry audit"
       ],
@@ -264,7 +436,7 @@
       ],
       "commands": [
         "# Per-clip sweeps (canonical window 0:128; KA disabled):",
-        "for f in IQData001.dat IQData002.dat IQData003.dat IQData004.dat IQData005.dat IQData010.dat IQData020.dat IQData040.dat IQData060.dat IQData080.dat; do",
+        "for f in IQData{001,002,003,004,005,010,020,040,060,080}.dat; do",
         "  PYTHONPATH=. python -m scripts.shin_ratbrain_motion_sweep \\",
         "    --iq-file \"$f\" --frames 0:128 --profile U --svd-energy-frac 0.97 \\",
         "    --motion-kind brainlike --amp-px-list 0,0.5,1,2 \\",
@@ -285,9 +457,11 @@
         "  --curve \"64:192=reports/shin_motion_brainlike_batch_U_f64_192_reg1_agg.csv\" \\",
         "  --curve \"122:250=reports/shin_motion_brainlike_batch_U_f122_250_reg1_agg.csv\" \\",
         "  --out-png reports/shin_motion_brainlike_compare_reg1.png",
-        "cp -f reports/shin_motion_brainlike_compare_reg1.png figs/paper/shin_motion_brainlike_compare_reg1.png"
+        "cp -f \\",
+        "  reports/shin_motion_brainlike_compare_reg1.png \\",
+        "  figs/paper/shin_motion_brainlike_compare_reg1.png"
       ],
-      "notes": "Window-specific batch runs (64:192, 122:250) follow the same pattern; see scripts/shin_ratbrain_motion_aggregate.py for expected inputs."
+      "notes": "Window-specific batch runs (64:192, 122:250) follow the same pattern."
     },
     {
       "name": "Shin motion crop/alignment sensitivity (post-hoc)",
@@ -304,6 +478,335 @@
         "  --crop-margins 0,4,8,12 \\",
         "  --align-maps-list 0,1 \\",
         "  --out-csv reports/shin_motion_brainlike_batch_U_crop_sensitivity.csv"
+      ],
+      "notes": null
+    },
+    {
+      "name": "Twinkling decode sanity (RawBCF -> B-mode/CFM)",
+      "paper_refs": [
+        "Twinkling section: RawBCF decode sanity"
+      ],
+      "outputs": [
+        "reports/twinkling_decode_sanity/*/decode_report.json"
+      ],
+      "commands": [
+        "SEQ_DIR=\"data/twinkling_artifact/Flow in Gammex phantom\"",
+        "SEQ_DIR=\"$SEQ_DIR/Flow in Gammex phantom (along - linear probe)\"",
+        "PYTHONPATH=. python scripts/twinkling_decode_sanity.py \\",
+        "  --seq-dir \"$SEQ_DIR\" \\",
+        "  --frame-idx 0 \\",
+        "  --out-dir reports/twinkling_decode_sanity"
+      ],
+      "notes": null
+    },
+    {
+      "name": "Gammex flow phantom structural ROC (along-linear17, PRF=2500)",
+      "paper_refs": [
+        "Twinkling section: Table (structural ROC)",
+        "Figure: twinkling_gammex_along_mask_overlay.png"
+      ],
+      "outputs": [
+        "runs/real/twinkling_gammex_alonglinear17_prf2500_str6_msd_ka/",
+        "reports/twinkling_gammex_alonglinear17_prf2500_str6_msd_ka_with_baselines.csv",
+        "reports/twinkling_gammex_alonglinear17_prf2500_str6_msd_ka_with_baselines_summary.json",
+        "figs/paper/twinkling_gammex_along_mask_overlay.png"
+      ],
+      "commands": [
+        "SEQ_DIR=\"data/twinkling_artifact/Flow in Gammex phantom\"",
+        "SEQ_DIR=\"$SEQ_DIR/Flow in Gammex phantom (along - linear probe)\"",
+        "OUT_ROOT=\"runs/real/twinkling_gammex_alonglinear17_prf2500_str6_msd_ka\"",
+        "MASK_GLOB=$OUT_ROOT/*__mask_debug",
+        "",
+        "PYTHONPATH=. python scripts/twinkling_make_bundles.py \\",
+        "  --seq-dir \"$SEQ_DIR\" \\",
+        "  --out-root \"$OUT_ROOT\" \\",
+        "  --frames 0:85 \\",
+        "  --prf-hz 2500 --Lt 16 \\",
+        "  --tile-hw 8 8 --tile-stride 6 \\",
+        "  --cov-estimator tyler_pca --diag-load 0.07 \\",
+        "  --baseline-type svd_bandpass --svd-keep-min 2 --svd-keep-max 17 \\",
+        "  --score-mode msd --score-ka-v2-enable --score-ka-v2-mode auto",
+        "",
+        "PYTHONPATH=. python scripts/twinkling_eval_structural.py \\",
+        "  --root \"$OUT_ROOT\" \\",
+        "  --out-csv reports/twinkling_gammex_alonglinear17_prf2500_str6_msd_ka_with_baselines.csv \\",
+        "  --out-summary-json \\",
+        "    reports/twinkling_gammex_alonglinear17_prf2500_str6_msd_ka_with_baselines_summary.json",
+        "",
+        "PYTHONPATH=. python scripts/fig_twinkling_mask_overlay.py \\",
+        "  --bmode $MASK_GLOB/bmode_roi_ref_norm.png \\",
+        "  --mask-flow $MASK_GLOB/mask_flow.png \\",
+        "  --mask-bg $MASK_GLOB/mask_bg.png \\",
+        "  --out figs/paper/twinkling_gammex_along_mask_overlay.png \\",
+        "  --min-width 1200 --dpi 300"
+      ],
+      "notes": "Along-linear uses stride 6; this matches the fixed geometry-only stride policy (largest stride with >=500 tiles)."
+    },
+    {
+      "name": "Gammex flow phantom structural ROC (across-linear17, PRF=2500)",
+      "paper_refs": [
+        "Twinkling section: Table (structural ROC)",
+        "Figure: twinkling_gammex_across_mask_overlay.png"
+      ],
+      "outputs": [
+        "runs/real/twinkling_gammex_across17_prf2500_str4_msd_ka/",
+        "reports/twinkling_gammex_across17_prf2500_str4_msd_ka_with_baselines.csv",
+        "reports/twinkling_gammex_across17_prf2500_str4_msd_ka_with_baselines_summary.json",
+        "figs/paper/twinkling_gammex_across_mask_overlay.png"
+      ],
+      "commands": [
+        "SEQ_DIR=\"data/twinkling_artifact/Flow in Gammex phantom\"",
+        "SEQ_DIR=\"$SEQ_DIR/Flow in Gammex phantom (across - linear probe)\"",
+        "DAT_PATH=\"$SEQ_DIR/RawBCFCine_08062017_145434_17.dat\"",
+        "PAR_PATH=\"$SEQ_DIR/RawBCFCine_08062017_145434_17.par\"",
+        "OUT_ROOT=\"runs/real/twinkling_gammex_across17_prf2500_str4_msd_ka\"",
+        "MASK_GLOB=$OUT_ROOT/*__mask_debug",
+        "",
+        "PYTHONPATH=. python scripts/twinkling_make_bundles.py \\",
+        "  --seq-dir \"$SEQ_DIR\" \\",
+        "  --dat-path \"$DAT_PATH\" \\",
+        "  --par-path \"$PAR_PATH\" \\",
+        "  --out-root \"$OUT_ROOT\" \\",
+        "  --frames 0:200 \\",
+        "  --prf-hz 2500 --Lt 16 \\",
+        "  --tile-hw 8 8 --tile-stride 4 \\",
+        "  --cov-estimator tyler_pca --diag-load 0.07 \\",
+        "  --baseline-type svd_bandpass --svd-keep-min 2 --svd-keep-max 17 \\",
+        "  --score-mode msd --score-ka-v2-enable --score-ka-v2-mode auto",
+        "",
+        "PYTHONPATH=. python scripts/twinkling_eval_structural.py \\",
+        "  --root \"$OUT_ROOT\" \\",
+        "  --out-csv reports/twinkling_gammex_across17_prf2500_str4_msd_ka_with_baselines.csv \\",
+        "  --out-summary-json \\",
+        "    reports/twinkling_gammex_across17_prf2500_str4_msd_ka_with_baselines_summary.json",
+        "",
+        "PYTHONPATH=. python scripts/fig_twinkling_mask_overlay.py \\",
+        "  --bmode $MASK_GLOB/bmode_roi_ref_norm.png \\",
+        "  --mask-flow $MASK_GLOB/mask_flow.png \\",
+        "  --mask-bg $MASK_GLOB/mask_bg.png \\",
+        "  --out figs/paper/twinkling_gammex_across_mask_overlay.png \\",
+        "  --min-width 780 --dpi 300"
+      ],
+      "notes": "Across-linear uses stride 4; this matches the fixed geometry-only stride policy (largest stride with >=500 tiles)."
+    },
+    {
+      "name": "Gammex within-ensemble motion ladder (along-linear17; PRF=2500)",
+      "paper_refs": [
+        "Twinkling section: Figure (within-ensemble motion ladder)",
+        "Figure: twinkling_gammex_alonglinear17_prf2500_within_ensemble_motion_ladder_rw_ci_v2.png",
+        "Figure: twinkling_gammex_alonglinear17_prf2500_within_ensemble_motion_ladder_step_ci_v2.png"
+      ],
+      "outputs": [
+        "runs/real/twinkling_gammex_alonglinear17_prf2500_within_ensemble_motion_rw_v2/",
+        "runs/real/twinkling_gammex_alonglinear17_prf2500_within_ensemble_motion_step_v2/",
+        "reports/twinkling_gammex_alonglinear17_prf2500_within_ensemble_motion_ladder_rw_ci_v2.json",
+        "reports/twinkling_gammex_alonglinear17_prf2500_within_ensemble_motion_ladder_step_ci_v2.json",
+        "figs/paper/twinkling_gammex_alonglinear17_prf2500_within_ensemble_motion_ladder_rw_ci_v2.png",
+        "figs/paper/twinkling_gammex_alonglinear17_prf2500_within_ensemble_motion_ladder_step_ci_v2.png"
+      ],
+      "commands": [
+        "SEQ_DIR=\"data/twinkling_artifact/Flow in Gammex phantom\"",
+        "SEQ_DIR=\"$SEQ_DIR/Flow in Gammex phantom (along - linear probe)\"",
+        "REF_ROOT=\"runs/real/twinkling_gammex_alonglinear17_prf2500_str6_msd_nomotion_ref_fast_f020\"",
+        "OUT_RW=\"runs/real/twinkling_gammex_alonglinear17_prf2500_within_ensemble_motion_rw_v2\"",
+        "OUT_STEP=\"runs/real/twinkling_gammex_alonglinear17_prf2500_within_ensemble_motion_step_v2\"",
+        "REP_DIR=\"reports\"",
+        "FIG_DIR=\"figs/paper\"",
+        "BASE=\"twinkling_gammex_alonglinear17_prf2500\"",
+        "SUF_RW=\"within_ensemble_motion_ladder_rw_ci_v2\"",
+        "SUF_STEP=\"within_ensemble_motion_ladder_step_ci_v2\"",
+        "RW_PREFIX=\"$REP_DIR/${BASE}_${SUF_RW}\"",
+        "STEP_PREFIX=\"$REP_DIR/${BASE}_${SUF_STEP}\"",
+        "RW_FIG=\"$FIG_DIR/${BASE}_${SUF_RW}.png\"",
+        "STEP_FIG=\"$FIG_DIR/${BASE}_${SUF_STEP}.png\"",
+        "",
+        "# Amp=0 reference bundles for equivalence checks (20 frames):",
+        "PYTHONPATH=. python scripts/twinkling_make_bundles.py \\",
+        "  --seq-dir \"$SEQ_DIR\" \\",
+        "  --out-root \"$REF_ROOT\" \\",
+        "  --frames 0:20 \\",
+        "  --prf-hz 2500 --Lt 16 \\",
+        "  --tile-hw 8 8 --tile-stride 6 \\",
+        "  --cov-estimator tyler_pca --diag-load 0.07 \\",
+        "  --baseline-type svd_bandpass --svd-keep-min 2 --svd-keep-max 17 \\",
+        "  --score-mode msd",
+        "",
+        "# Within-ensemble motion sweeps (85 frames; rw and step):",
+        "PYTHONPATH=. python scripts/twinkling_gammex_within_ensemble_motion_sweep.py \\",
+        "  --seq-dir \"$SEQ_DIR\" \\",
+        "  --out-root \"$OUT_RW\" \\",
+        "  --frames 0:85 --mask-ref-frames 0:20 \\",
+        "  --prf-hz 2500 --Lt 16 \\",
+        "  --tile-hw 8 8 --tile-stride 6 \\",
+        "  --cov-estimator tyler_pca --diag-load 0.07 \\",
+        "  --baseline-type svd_bandpass --svd-keep-min 2 --svd-keep-max 17 \\",
+        "  --score-mode msd \\",
+        "  --motion-kind rw --amp-px-list 0,0.25,0.5,1,1.5,2",
+        "PYTHONPATH=. python scripts/twinkling_gammex_within_ensemble_motion_sweep.py \\",
+        "  --seq-dir \"$SEQ_DIR\" \\",
+        "  --out-root \"$OUT_STEP\" \\",
+        "  --frames 0:85 --mask-ref-frames 0:20 \\",
+        "  --prf-hz 2500 --Lt 16 \\",
+        "  --tile-hw 8 8 --tile-stride 6 \\",
+        "  --cov-estimator tyler_pca --diag-load 0.07 \\",
+        "  --baseline-type svd_bandpass --svd-keep-min 2 --svd-keep-max 17 \\",
+        "  --score-mode msd \\",
+        "  --motion-kind step --amp-px-list 0,0.25,0.5,1,1.5,2",
+        "",
+        "# Aggregate + bootstrap CIs + plots:",
+        "PYTHONPATH=. python scripts/twinkling_eval_motion_ladder.py \\",
+        "  --root \"$OUT_RW\" \\",
+        "  --out-csv \"${RW_PREFIX}.csv\" \\",
+        "  --out-json \"${RW_PREFIX}.json\" \\",
+        "  --out-png \"$RW_FIG\" \\",
+        "  --bootstrap 1000 --bootstrap-seed 0 \\",
+        "  --amp0-ref-root \"$REF_ROOT\" \\",
+        "  --amp0-ref-frames 0:20 --amp0-ref-tol 5e-3",
+        "PYTHONPATH=. python scripts/twinkling_eval_motion_ladder.py \\",
+        "  --root \"$OUT_STEP\" \\",
+        "  --out-csv \"${STEP_PREFIX}.csv\" \\",
+        "  --out-json \"${STEP_PREFIX}.json\" \\",
+        "  --out-png \"$STEP_FIG\" \\",
+        "  --bootstrap 1000 --bootstrap-seed 0 \\",
+        "  --amp0-ref-root \"$REF_ROOT\" \\",
+        "  --amp0-ref-frames 0:20 --amp0-ref-tol 5e-3"
+      ],
+      "notes": null
+    },
+    {
+      "name": "Twinkling calculi KA hygiene + contract telemetry (calcifications; PRF approx 500)",
+      "paper_refs": [
+        "Twinkling section: KA hygiene on calculi",
+        "Figure: twinkling_calculi_tail_example.png"
+      ],
+      "outputs": [
+        "runs/real/twinkling_calculi_calcifications_prf500_str4_Lt8_msd_ka_scm_dl015_f050/",
+        "reports/twinkling_calculi_calcifications_prf500_str4_Lt8_msd_ka_scm_dl015_f050_roc.csv",
+        "reports/twinkling_calculi_calcifications_prf500_str4_Lt8_msd_ka_scm_dl015_f050_summary.json"
+      ],
+      "commands": [
+        "BASE_DIR=\"data/twinkling_artifact/Twinkling artifact on calculi\"",
+        "SEQ_DIR=\"$BASE_DIR/Twinkling and Flash artifacts on artificial calculi\"",
+        "RUN_TAG=\"twinkling_calculi_calcifications_prf500_str4_Lt8_msd_ka_scm_dl015_f050\"",
+        "OUT_ROOT=\"runs/real/${RUN_TAG}\"",
+        "REP_PREFIX=\"reports/${RUN_TAG}\"",
+        "",
+        "PYTHONPATH=. python scripts/twinkling_make_bundles.py \\",
+        "  --seq-dir \"$SEQ_DIR\" \\",
+        "  --out-root \"$OUT_ROOT\" \\",
+        "  --frames 0:50 \\",
+        "  --prf-hz 500 --Lt 8 \\",
+        "  --tile-hw 8 8 --tile-stride 4 \\",
+        "  --cov-estimator scm --diag-load 0.15 \\",
+        "  --baseline-type svd_bandpass --svd-keep-min 2 --svd-keep-max 9 \\",
+        "  --score-mode msd --score-ka-v2-enable --score-ka-v2-mode auto \\",
+        "  --mask-mode none",
+        "",
+        "PYTHONPATH=. python scripts/twinkling_eval_structural.py \\",
+        "  --root \"$OUT_ROOT\" \\",
+        "  --out-csv \"${REP_PREFIX}_roc.csv\" \\",
+        "  --out-summary-json \"${REP_PREFIX}_summary.json\""
+      ],
+      "notes": "Calculi runs use proxy masks (not tube structural masks). Used for contract/tail-hygiene instrumentation (not clinical detection claims)."
+    },
+    {
+      "name": "Twinkling contract figure pack (states/reasons + calculi tail example)",
+      "paper_refs": [
+        "Twinkling section: Figure (twinkling_contract_states_reasons.png)",
+        "Twinkling section: Figure (twinkling_calculi_tail_example.png)"
+      ],
+      "outputs": [
+        "figs/paper/twinkling_contract_states_reasons.png",
+        "figs/paper/twinkling_calculi_tail_example.png",
+        "reports/twinkling_contract_figpack.json"
+      ],
+      "commands": [
+        "ALONG_BASE=\"twinkling_gammex_alonglinear17_prf2500_str6_msd_ka_with_baselines\"",
+        "ACROSS_BASE=\"twinkling_gammex_across17_prf2500_str4_msd_ka_with_baselines\"",
+        "ALONG_SUM=\"reports/${ALONG_BASE}_summary.json\"",
+        "ACROSS_SUM=\"reports/${ACROSS_BASE}_summary.json\"",
+        "CALC_TAG=\"twinkling_calculi_calcifications_prf500_str4_Lt8_msd_ka_scm_dl015_f050\"",
+        "CALC_SUM=\"reports/${CALC_TAG}_summary.json\"",
+        "CALC_ROOT=\"runs/real/${CALC_TAG}\"",
+        "OUT_STATE=\"figs/paper/twinkling_contract_states_reasons.png\"",
+        "OUT_EX=\"figs/paper/twinkling_calculi_tail_example.png\"",
+        "OUT_JSON=\"reports/twinkling_contract_figpack.json\"",
+        "",
+        "PYTHONPATH=. python scripts/twinkling_contract_figpack.py \\",
+        "  --along-summary \"$ALONG_SUM\" \\",
+        "  --across-summary \"$ACROSS_SUM\" \\",
+        "  --calculi-summary \"$CALC_SUM\" \\",
+        "  --calculi-root \"$CALC_ROOT\" \\",
+        "  --out-state-reason-png \"$OUT_STATE\" \\",
+        "  --out-calculi-example-png \"$OUT_EX\" \\",
+        "  --out-json \"$OUT_JSON\""
+      ],
+      "notes": null
+    },
+    {
+      "name": "ULM 7883227 one-time baseline sweep (MC-SVD energy fraction)",
+      "paper_refs": [
+        "ULM section: baseline calibration (frozen svd_energy_frac=0.975)"
+      ],
+      "outputs": [
+        "runs/real/ulm7883227_baseline_mcsvd_energy_sweep_ULM_0000_0128/",
+        "reports/ulm7883227_baseline_mcsvd_energy_sweep_ULM_0000_0128.csv",
+        "reports/ulm7883227_baseline_mcsvd_energy_sweep_ULM_0000_0128.json"
+      ],
+      "commands": [
+        "PYTHONPATH=. python scripts/ulm_zenodo_7883227_baseline_sweep.py \\",
+        "  --block-ids 1,2,3 --frames 0:128 \\",
+        "  --svd-energy-frac-list 0.90,0.95,0.97,0.975,0.98,0.99 \\",
+        "  --profile ULM --prf-hz 1000 --Lt 64 \\",
+        "  --tile-h 8 --tile-w 8 --tile-stride 3 \\",
+        "  --reg-enable --reg-subpixel 4 \\",
+        "  --no-run-stap --bg-tail-fpr 0.001 --stability-split \\",
+        "  --cache-dir tmp/ulm_zenodo_7883227 \\",
+        "  --out-root runs/real/ulm7883227_baseline_mcsvd_energy_sweep_ULM_0000_0128 \\",
+        "  --out-csv reports/ulm7883227_baseline_mcsvd_energy_sweep_ULM_0000_0128.csv \\",
+        "  --out-json reports/ulm7883227_baseline_mcsvd_energy_sweep_ULM_0000_0128.json"
+      ],
+      "notes": null
+    },
+    {
+      "name": "ULM 7883227 motion sweeps (brainlike + elastic; fairness alignment + degeneracy)",
+      "paper_refs": [
+        "ULM section: Figure (ulm7883227_motion_sweep_*_brainlike_e975.png)",
+        "ULM section: Figure (ulm7883227_motion_sweep_*_elastic_e975.png)"
+      ],
+      "outputs": [
+        "reports/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_brainlike_e975.csv",
+        "reports/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_brainlike_e975.json",
+        "figs/paper/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_brainlike_e975.png",
+        "reports/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_elastic_e975.csv",
+        "reports/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_elastic_e975.json",
+        "figs/paper/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_elastic_e975.png"
+      ],
+      "commands": [
+        "PYTHONPATH=. python scripts/ulm_zenodo_7883227_motion_sweep.py \\",
+        "  --block-ids 1,2,3 --frames 0:128 \\",
+        "  --profile ULM --prf-hz 1000 --Lt 64 \\",
+        "  --tile-h 8 --tile-w 8 --tile-stride 3 \\",
+        "  --baseline-type mc_svd --svd-energy-frac 0.975 \\",
+        "  --reg-enable --reg-subpixel 4 \\",
+        "  --cov-estimator scm --diag-load 0.07 \\",
+        "  --motion-kind brainlike --amp-px-list 0,0.5,1,2,3 \\",
+        "  --out-root runs/real/ulm7883227_motion_sweep_ULM_brainlike_e975 \\",
+        "  --out-csv reports/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_brainlike_e975.csv \\",
+        "  --out-json reports/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_brainlike_e975.json \\",
+        "  --out-png figs/paper/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_brainlike_e975.png",
+        "PYTHONPATH=. python scripts/ulm_zenodo_7883227_motion_sweep.py \\",
+        "  --block-ids 1,2,3 --frames 0:128 \\",
+        "  --profile ULM --prf-hz 1000 --Lt 64 \\",
+        "  --tile-h 8 --tile-w 8 --tile-stride 3 \\",
+        "  --baseline-type mc_svd --svd-energy-frac 0.975 \\",
+        "  --reg-enable --reg-subpixel 4 \\",
+        "  --cov-estimator scm --diag-load 0.07 \\",
+        "  --motion-kind elastic --amp-px-list 0,0.5,1,2,3 \\",
+        "  --out-root runs/real/ulm7883227_motion_sweep_ULM_elastic_e975 \\",
+        "  --out-csv reports/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_elastic_e975.csv \\",
+        "  --out-json reports/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_elastic_e975.json \\",
+        "  --out-png figs/paper/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_elastic_e975.png"
       ],
       "notes": null
     },

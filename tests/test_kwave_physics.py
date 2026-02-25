@@ -130,8 +130,8 @@ def test_write_acceptance_bundle_contract(tmp_path):
     pd_stap = np.load(paths["pd_stap"])
     score_pd_base = np.load(paths["score_pd_base"])
     score_pd_stap = np.load(paths["score_pd_stap"])
-    np.testing.assert_allclose(score_pd_base, -pd_base, rtol=0.0, atol=0.0)
-    np.testing.assert_allclose(score_pd_stap, -pd_stap, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(score_pd_base, pd_base, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(score_pd_stap, pd_stap, rtol=0.0, atol=0.0)
 
     # Confirm-2 pairs count matches stap_neg length // 2
     stap_neg = np.load(paths["stap_neg"])

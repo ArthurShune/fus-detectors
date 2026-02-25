@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import json
 import time
 from pathlib import Path
@@ -68,6 +69,15 @@ def write_acceptance_bundle_from_icube(
     svd_energy_frac: float | None = 0.95,
     svd_keep_min: int | None = None,
     svd_keep_max: int | None = None,
+    # Baseline RPCA parameters (used only when baseline_type=rpca).
+    rpca_lambda: float | None = None,
+    rpca_max_iters: int = 250,
+    # Baseline HOSVD parameters (used only when baseline_type=hosvd).
+    hosvd_ranks: tuple[int, int, int] | None = None,
+    hosvd_energy_fracs: tuple[float, float, float] | None = (0.99, 0.99, 0.99),
+    hosvd_spatial_downsample: int = 2,
+    hosvd_t_sub: int | None = None,
+    hosvd_max_iters: int = 1,
     flow_mask_mode: str = "pd_auto",
     flow_mask_pd_quantile: float = 0.995,
     flow_mask_depth_min_frac: float = 0.25,
@@ -79,6 +89,11 @@ def write_acceptance_bundle_from_icube(
     flow_mask_union_default: bool = True,
     psd_tapers: int = 3,
     psd_bandwidth: float = 2.0,
+    # Optional external evaluation masks (e.g., B-mode structural tube masks for phantoms).
+    mask_flow_override: np.ndarray | None = None,
+    mask_bg_override: np.ndarray | None = None,
+    # Optional conditional STAP (compute heuristic). Disable for structural-mask evaluations.
+    stap_conditional_enable: bool = True,
     # Doppler band design for band-ratio telemetry.
     band_ratio_mode: str = "whitened",
     band_ratio_flow_low_hz: float = 30.0,
@@ -102,7 +117,8 @@ def write_acceptance_bundle_from_icube(
       - base_band_ratio_map.npy (+ base_m_alias_map.npy)
       - base_score_map.npy / stap_score_map.npy / stap_score_pool_map.npy
       - pd_base.npy / pd_stap.npy
-      - score_pd_base.npy / score_pd_stap.npy   (explicit right-tail scores S=-pd)
+      - score_pd_base.npy / score_pd_stap.npy   (explicit right-tail PD scores; current convention score_pd=pd)
+      - score_base_pdlog.npy / score_base_kasai.npy (optional baseline score maps; right-tail)
     """
     if Icube.ndim != 3:
         raise ValueError(f"Icube must have shape (T,H,W), got {Icube.shape}")
@@ -119,6 +135,12 @@ def write_acceptance_bundle_from_icube(
         np.save(path, arr, allow_pickle=False)
         paths[name] = str(path)
 
+    def _save_text(key: str, filename: str, text: str) -> None:
+        path = bundle_dir / filename
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        paths[key] = str(path)
+
     # ---- Band-ratio spec ----
     feas_mode = kw._normalize_feasibility_mode(feasibility_mode)
     band_ratio_mode_norm = (band_ratio_mode or "legacy").strip().lower()
@@ -126,7 +148,7 @@ def write_acceptance_bundle_from_icube(
         raise ValueError("band_ratio_mode must be 'legacy' or 'whitened'")
     use_whitened_ratio = band_ratio_mode_norm == "whitened"
     if not use_whitened_ratio:
-        raise ValueError("This entrypoint is intended for whitened telemetry (mc_svd residual).")
+        raise ValueError("This bundle writer requires band_ratio_mode='whitened'.")
     band_ratio_spec = {
         "flow_low_hz": float(band_ratio_flow_low_hz),
         "flow_high_hz": float(band_ratio_flow_high_hz),
@@ -155,6 +177,23 @@ def write_acceptance_bundle_from_icube(
             device=baseline_device,
             return_filtered_cube=True,
         )
+    elif baseline_type_norm in {"raw", "none", "identity"}:
+        # STAP-only / no baseline clutter suppression: keep the (optionally registered) IQ cube
+        # and use PD as a simple magnitude-squared average.
+        if reg_method != "phasecorr":
+            raise ValueError("Only phasecorr registration is supported for baseline_type=raw/none.")
+        t0_raw = time.perf_counter()
+        reg_cube, tele_reg = kw._register_stack_phasecorr(
+            Icube,
+            reg_enable=reg_enable,
+            upsample=max(1, int(reg_subpixel)),
+            ref_strategy=reg_reference,
+        )
+        pd_base = (np.mean(np.abs(reg_cube) ** 2, axis=0)).astype(np.float32, copy=False)
+        baseline_filtered_cube = reg_cube
+        baseline_telemetry = dict(tele_reg or {})
+        baseline_telemetry["baseline_type"] = "raw"
+        baseline_telemetry["baseline_ms"] = float(1000.0 * (time.perf_counter() - t0_raw))
     elif baseline_type_norm in {"svd_bandpass", "svd_range", "ulm_svd"}:
         if svd_keep_min is None:
             raise ValueError("svd_keep_min must be provided for baseline_type=svd_bandpass")
@@ -169,31 +208,111 @@ def write_acceptance_bundle_from_icube(
             device=baseline_device,
             return_filtered_cube=True,
         )
+    elif baseline_type_norm in {"rpca", "hosvd"}:
+        if reg_method != "phasecorr":
+            raise ValueError("Only phasecorr registration is supported for RPCA/HOSVD baselines.")
+        reg_cube, tele_reg = kw._register_stack_phasecorr(
+            Icube,
+            reg_enable=reg_enable,
+            upsample=max(1, int(reg_subpixel)),
+            ref_strategy=reg_reference,
+        )
+        if baseline_type_norm == "rpca":
+            pd_base, baseline_telemetry, baseline_filtered_cube = kw._baseline_pd_rpca(
+                reg_cube,
+                lambda_=rpca_lambda,
+                max_iters=int(rpca_max_iters),
+                return_filtered_cube=True,
+            )
+        else:
+            pd_base, baseline_telemetry, baseline_filtered_cube = kw._baseline_pd_hosvd(
+                reg_cube,
+                ranks=hosvd_ranks,
+                energy_fracs=hosvd_energy_fracs,
+                max_iters=int(hosvd_max_iters),
+                spatial_downsample=max(1, int(hosvd_spatial_downsample)),
+                t_sub=hosvd_t_sub,
+                return_filtered_cube=True,
+            )
+        try:
+            baseline_ms = float((baseline_telemetry or {}).get("baseline_ms", 0.0) or 0.0)
+            reg_ms = float((tele_reg or {}).get("reg_ms", 0.0) or 0.0)
+            baseline_telemetry = dict(baseline_telemetry or {})
+            baseline_telemetry["baseline_ms"] = baseline_ms + reg_ms
+        except Exception:
+            baseline_telemetry = dict(baseline_telemetry or {})
+        baseline_telemetry = {**dict(tele_reg or {}), **dict(baseline_telemetry or {})}
     else:
         raise ValueError(
             f"Unsupported baseline_type={baseline_type_norm!r} for IQ bundle writer. "
-            "Use mc_svd or svd_bandpass."
+            "Use mc_svd, raw/none, svd_bandpass, rpca, or hosvd."
         )
 
     H, W = pd_base.shape
     tile_count = kw._tile_count((H, W), tile_hw, tile_stride)
 
+    # ---- Additional baseline score maps (standard Doppler short-ensemble scores) ----
+    # These are derived *only* from the baseline-filtered cube and are intended to
+    # strengthen baseline fairness in short-ensemble real-data evaluations.
+    #
+    # score_base_pdlog: log power Doppler (monotone transform of pd_base; right-tail).
+    # score_base_kasai: log |lag-1 autocorrelation| ("Kasai power"; right-tail).
+    score_base_pdlog: np.ndarray | None = None
+    score_base_kasai: np.ndarray | None = None
+    try:
+        eps = 1e-12
+        score_base_pdlog = np.log(pd_base.astype(np.float64, copy=False) + eps).astype(
+            np.float32, copy=False
+        )
+        if baseline_filtered_cube is not None and baseline_filtered_cube.shape[0] >= 2:
+            y = baseline_filtered_cube.astype(np.complex64, copy=False)
+            r1 = np.sum(y[1:] * np.conj(y[:-1]), axis=0).astype(np.complex64, copy=False)
+            score_base_kasai = np.log(np.abs(r1).astype(np.float64, copy=False) + eps).astype(
+                np.float32, copy=False
+            )
+    except Exception:
+        score_base_pdlog = None
+        score_base_kasai = None
+
     # ---- Masks ----
     mask_flow_default, mask_bg_default = _default_masks_generic(H, W)
-    mask_flow, mask_bg, flow_mask_stats = kw._resolve_flow_mask(
-        pd_base,
-        mask_flow_default,
-        mask_bg_default,
-        mode=(flow_mask_mode or "pd_auto").strip().lower(),
-        pd_quantile=flow_mask_pd_quantile,
-        depth_min_frac=flow_mask_depth_min_frac,
-        depth_max_frac=flow_mask_depth_max_frac,
-        erode_iters=flow_mask_erode_iters,
-        dilate_iters=flow_mask_dilate_iters,
-        min_pixels=flow_mask_min_pixels,
-        min_coverage_frac=flow_mask_min_coverage_fraction,
-        union_with_default=flow_mask_union_default,
-    )
+    if mask_flow_override is not None or mask_bg_override is not None:
+        if mask_flow_override is None or mask_bg_override is None:
+            raise ValueError("mask_flow_override and mask_bg_override must be provided together.")
+        mask_flow = np.asarray(mask_flow_override, dtype=bool)
+        mask_bg = np.asarray(mask_bg_override, dtype=bool)
+        if mask_flow.shape != (H, W) or mask_bg.shape != (H, W):
+            raise ValueError(
+                f"Override mask shape mismatch: got flow={mask_flow.shape}, bg={mask_bg.shape}, "
+                f"expected {(H, W)}"
+            )
+        # Enforce disjointness.
+        mask_bg = mask_bg & (~mask_flow)
+        flow_mask_stats = {
+            "mode": "override",
+            "coverage_default": float(mask_flow_default.mean()),
+            "coverage_pre_union": float(mask_flow.mean()),
+            "coverage_post_union": float(mask_flow.mean()),
+            "union_applied": 0.0,
+            "pd_auto_used": 0.0,
+            "override_flow_coverage": float(mask_flow.mean()),
+            "override_bg_coverage": float(mask_bg.mean()),
+        }
+    else:
+        mask_flow, mask_bg, flow_mask_stats = kw._resolve_flow_mask(
+            pd_base,
+            mask_flow_default,
+            mask_bg_default,
+            mode=(flow_mask_mode or "pd_auto").strip().lower(),
+            pd_quantile=flow_mask_pd_quantile,
+            depth_min_frac=flow_mask_depth_min_frac,
+            depth_max_frac=flow_mask_depth_max_frac,
+            erode_iters=flow_mask_erode_iters,
+            dilate_iters=flow_mask_dilate_iters,
+            min_pixels=flow_mask_min_pixels,
+            min_coverage_frac=flow_mask_min_coverage_fraction,
+            union_with_default=flow_mask_union_default,
+        )
 
     # ---- Whitened band-ratio telemetry (baseline + STAP) ----
     base_br_recorder = kw.BandRatioRecorder(
@@ -236,6 +355,12 @@ def write_acceptance_bundle_from_icube(
         tile_hw,
         tile_stride,
     )
+    base_peak_bin_map = kw._tile_scores_to_map(
+        np.asarray(base_br_recorder.peak_bins, dtype=np.int32),
+        (H, W),
+        tile_hw,
+        tile_stride,
+    ).astype(np.int16, copy=False)
 
     # ---- STAP PD + optional STAP band-ratio recorder ----
     if run_stap:
@@ -247,6 +372,9 @@ def write_acceptance_bundle_from_icube(
             bandwidth=psd_bandwidth,
         )
         t_stap_start = time.time()
+        stap_device_resolved = kw._resolve_stap_device(stap_device)
+        env_fast = os.getenv("STAP_FAST_PATH", "").lower() in {"1", "true", "yes", "on"}
+        tile_batch_eff = 192 if stap_device_resolved.startswith("cuda") else (64 if env_fast else 1)
         pd_stap, stap_scores, stap_info = kw._stap_pd(
             cube_for_stap,
             tile_hw=tile_hw,
@@ -273,11 +401,12 @@ def write_acceptance_bundle_from_icube(
             msd_ratio_rho=msd_ratio_rho,
             motion_half_span_rel=motion_half_span_rel,
             msd_contrast_alpha=msd_contrast_alpha,
-            stap_device=kw._resolve_stap_device(stap_device),
-            tile_batch=192 if kw._resolve_stap_device(stap_device).startswith("cuda") else 1,
+            stap_device=stap_device_resolved,
+            tile_batch=tile_batch_eff,
             pd_base_full=pd_base,
             mask_flow=mask_flow,
             mask_bg=mask_bg,
+            conditional_enable=bool(stap_conditional_enable),
             ka_mode="none",
             ka_prior_library=None,
             ka_opts=None,
@@ -306,6 +435,7 @@ def write_acceptance_bundle_from_icube(
         baseline_telemetry.setdefault("band_ratio_mt_params", mt_meta)
         stap_info["stap_ms"] = float(1000.0 * (time.time() - t_stap_start))
         stap_info["flow_mask_stats"] = flow_mask_stats
+        stap_info["stap_conditional_enable"] = bool(stap_conditional_enable)
         stap_tile_scores, stap_br_stats = stap_br_recorder.finalize()
         stap_info["band_ratio_br_stats"] = stap_br_stats or {"count": 0}
         if stap_tile_scores.size == tile_count:
@@ -321,6 +451,7 @@ def write_acceptance_bundle_from_icube(
         stap_info = {
             "stap_ms": 0.0,
             "flow_mask_stats": flow_mask_stats,
+            "stap_conditional_enable": bool(stap_conditional_enable),
             "band_ratio_bands_hz": dict(band_ratio_spec),
             "band_ratio_mode_requested": band_ratio_mode_norm,
             "band_ratio_mode_effective": band_ratio_mode_norm,
@@ -330,13 +461,28 @@ def write_acceptance_bundle_from_icube(
             "stap_input_cube": "baseline_filtered",
         }
 
+    score_mode_norm = str(score_mode or "pd").strip().lower()
+    if score_mode_norm not in {"pd", "msd", "band_ratio"}:
+        raise ValueError("score_mode must be 'pd', 'msd', or 'band_ratio'")
+    if score_mode_norm == "pd":
+        stap_score_pool_map = pd_stap
+    elif score_mode_norm == "band_ratio":
+        stap_score_pool_map = stap_band_ratio_map
+    else:
+        stap_score_pool_map = stap_scores
+
     # ---- Contract v2 telemetry (label-free) ----
     ka_contract_v2_report: dict[str, Any] | None = None
     ka_contract_v2_inputs: dict[str, Any] | None = None
     if kw.evaluate_ka_contract_v2 is not None:
         tile_cov_flow, tile_coords = kw._tile_coverages(mask_flow, tile_hw, tile_stride)
         th, tw = tile_hw
-        score_map_for_contract = -pd_stap  # higher = more flow evidence (PD mode)
+        if score_mode_norm == "pd":
+            score_map_for_contract = pd_stap  # right-tail (higher = more flow evidence)
+        elif score_mode_norm == "band_ratio":
+            score_map_for_contract = stap_band_ratio_map
+        else:
+            score_map_for_contract = stap_scores
         s_base_tiles = np.zeros(tile_cov_flow.shape[0], dtype=np.float32)
         for idx, (y0, x0) in enumerate(tile_coords):
             s_base_tiles[idx] = float(np.mean(score_map_for_contract[y0 : y0 + th, x0 : x0 + tw]))
@@ -364,6 +510,27 @@ def write_acceptance_bundle_from_icube(
             c_flow=tile_cov_flow,
             valid_mask=valid_tiles,
         )
+        # Band-sanity sentinel for short slow-time sequences: refuse to declare
+        # C1/C2 eligibility when the requested bands collapse to DC-only bins or
+        # overlap after discrete binning.
+        try:
+            br_stats = baseline_telemetry.get("band_ratio_stats") or {}
+            reasons: list[str] = []
+            if isinstance(br_stats, dict):
+                if br_stats.get("br_bins_overlap"):
+                    reasons.append("bands_overlap")
+                if int(br_stats.get("br_flow_bins_nodc") or 0) <= 0:
+                    reasons.append("flow_band_empty_nodc")
+                if int(br_stats.get("br_alias_bins_nodc") or 0) <= 0:
+                    reasons.append("alias_band_empty_nodc")
+            if reasons:
+                ka_contract_v2_report = {
+                    "state": "C0_OFF",
+                    "reason": "band_sanity_invalid",
+                    "metrics": {"band_sanity_reasons": reasons},
+                }
+        except Exception:
+            pass
         try:
             stap_info["ka_contract_v2_state"] = str(ka_contract_v2_report.get("state"))
             stap_info["ka_contract_v2_reason"] = str(ka_contract_v2_report.get("reason"))
@@ -381,16 +548,20 @@ def write_acceptance_bundle_from_icube(
             pass
 
     # ---- Optional score-space KA v2 (shrink-only, contract-driven) ----
-    # This modifies pd_stap only (PD mode) by inflating PD on high-risk tiles so
-    # that a score defined as S=-PD is shrunk. High-confidence flow pixels are
-    # explicitly protected.
+    # This modifies pd_stap only (PD mode) by shrinking PD on high-risk tiles so
+    # that the PD score S=PD is shrunk. High-confidence flow pixels are explicitly
+    # protected.
     ka_gate_map: np.ndarray | None = None
     ka_scale_map: np.ndarray | None = None
     pd_stap_pre_ka: np.ndarray | None = None
+    score_stap_preka_map = stap_scores.astype(np.float32, copy=False)
+    score_stap_map = score_stap_preka_map
     if score_ka_v2_enable and kw.derive_score_shrink_v2_tile_scales is not None:
         stap_info["score_ka_v2_requested"] = True
         if ka_contract_v2_report is None or ka_contract_v2_inputs is None:
             stap_info["score_ka_v2_disabled_reason"] = "missing_contract_v2"
+        elif score_mode_norm not in {"pd", "msd"}:
+            stap_info["score_ka_v2_disabled_reason"] = "score_mode_not_supported"
         else:
             state = str(ka_contract_v2_report.get("state") or "C0_OFF")
             reason = str(ka_contract_v2_report.get("reason") or "")
@@ -447,21 +618,35 @@ def write_acceptance_bundle_from_icube(
                             scale_final = np.ones_like(scale_map, dtype=np.float32)
                             scale_final[gate_union] = scale_map[gate_union].astype(np.float32, copy=False)
 
-                            # Protected pixels: never modify flow mask or extreme-score pixels.
-                            pd_stap_orig = pd_stap.astype(np.float32, copy=False)
-                            s_base_pix = -pd_stap_orig
+                            # Protected pixels: never modify flow mask and, optionally,
+                            # extreme-score pixels (configurable in KaContractV2Config).
+                            if score_mode_norm == "pd":
+                                score_pre = pd_stap.astype(np.float32, copy=False)
+                            else:
+                                score_pre = score_stap_preka_map
+                            s_base_pix = score_pre
                             # IMPORTANT: never mutate `mask_flow` (evaluation mask).
                             prot_pix = np.asarray(mask_flow, dtype=bool).copy()
                             cfg = ka_contract_v2_report.get("config") or {}
-                            q_hi = float(cfg.get("q_hi_protect", 0.995))
-                            finite = np.isfinite(s_base_pix)
-                            if finite.any():
-                                thr_hi = float(np.quantile(s_base_pix[finite], q_hi))
-                                prot_pix |= s_base_pix >= thr_hi
+                            protect_hi_by_score = bool(cfg.get("protect_hi_by_score", True))
+                            if protect_hi_by_score:
+                                q_hi = float(cfg.get("q_hi_protect", 0.99999))
+                                finite = np.isfinite(s_base_pix)
+                                if finite.any():
+                                    thr_hi = float(np.quantile(s_base_pix[finite], q_hi))
+                                    prot_pix |= s_base_pix >= thr_hi
                             scale_final[prot_pix] = 1.0
 
-                            pd_stap_pre_ka = pd_stap_orig
-                            pd_stap = (pd_stap_orig * scale_final).astype(np.float32, copy=False)
+                            score_post = (score_pre / np.maximum(scale_final, 1e-12)).astype(
+                                np.float32, copy=False
+                            )
+                            if score_mode_norm == "pd":
+                                pd_stap_pre_ka = score_pre
+                                pd_stap = score_post
+                                stap_score_pool_map = pd_stap
+                            else:
+                                score_stap_map = score_post
+                                stap_score_pool_map = score_stap_map
                             ka_scale_map = scale_final
                             ka_gate_map = gate_union
 
@@ -479,21 +664,35 @@ def write_acceptance_bundle_from_icube(
     # ---- Save maps ----
     _save("pd_base", pd_base.astype(np.float32, copy=False))
     _save("pd_stap", pd_stap.astype(np.float32, copy=False))
-    _save("score_pd_base", (-pd_base).astype(np.float32, copy=False))
-    _save("score_pd_stap", (-pd_stap).astype(np.float32, copy=False))
+    _save("score_pd_base", (pd_base).astype(np.float32, copy=False))
+    _save("score_pd_stap", (pd_stap).astype(np.float32, copy=False))
+    # Score vNext: primary detector scores (right tail).
+    _save("score_base", pd_base.astype(np.float32, copy=False))
+    if score_base_pdlog is not None:
+        _save("score_base_pdlog", score_base_pdlog.astype(np.float32, copy=False))
+    if score_base_kasai is not None:
+        _save("score_base_kasai", score_base_kasai.astype(np.float32, copy=False))
+    _save("score_stap_preka", score_stap_preka_map.astype(np.float32, copy=False))
+    _save("score_stap", score_stap_map.astype(np.float32, copy=False))
+    _save_text(
+        "score_name",
+        "score_name.txt",
+        "stap_score_v1: whitened flow matched-subspace ratio (right tail)\n",
+    )
     if pd_stap_pre_ka is not None:
         _save("pd_stap_pre_ka", pd_stap_pre_ka.astype(np.float32, copy=False))
-        _save("score_pd_stap_pre_ka", (-pd_stap_pre_ka).astype(np.float32, copy=False))
+        _save("score_pd_stap_pre_ka", (pd_stap_pre_ka).astype(np.float32, copy=False))
     _save("mask_flow", mask_flow.astype(np.bool_, copy=False))
     _save("mask_bg", mask_bg.astype(np.bool_, copy=False))
     _save("base_band_ratio_map", base_band_ratio_map.astype(np.float32, copy=False))
     _save("base_m_alias_map", base_m_alias_map.astype(np.float32, copy=False))
     _save("base_guard_frac_map", base_guard_frac_map.astype(np.float32, copy=False))
     _save("base_peak_freq_map", base_peak_freq_map.astype(np.float32, copy=False))
+    _save("base_peak_bin_map", base_peak_bin_map.astype(np.int16, copy=False))
     _save("stap_band_ratio_map", stap_band_ratio_map.astype(np.float32, copy=False))
     _save("base_score_map", pd_base.astype(np.float32, copy=False))
     _save("stap_score_map", stap_scores.astype(np.float32, copy=False))
-    _save("stap_score_pool_map", pd_stap.astype(np.float32, copy=False))
+    _save("stap_score_pool_map", stap_score_pool_map.astype(np.float32, copy=False))
     if ka_scale_map is not None:
         _save("ka_scale_map", ka_scale_map.astype(np.float32, copy=False))
     if ka_gate_map is not None:
@@ -516,6 +715,29 @@ def write_acceptance_bundle_from_icube(
         "tile_hw": [int(tile_hw[0]), int(tile_hw[1])],
         "tile_stride": int(tile_stride),
         "score_stats": {"mode": str((score_mode or "pd").strip().lower())},
+        "stap_conditional_enable": bool(stap_conditional_enable),
+        "score_vnext": {
+            "score_files": {
+                "base": "score_base.npy",
+                "base_pdlog": "score_base_pdlog.npy" if score_base_pdlog is not None else None,
+                "base_kasai": "score_base_kasai.npy" if score_base_kasai is not None else None,
+                "stap_pre_ka": "score_stap_preka.npy",
+                "stap": "score_stap.npy",
+            },
+            "score_name_file": "score_name.txt",
+            "score_convention": "right_tail (higher = more flow evidence)",
+            "score_base_definition": (
+                "score_base is the baseline PD score map (right-tail); optional "
+                "baseline extras may include score_base_pdlog (log power Doppler) "
+                "and score_base_kasai (log |lag-1 autocorr|, Kasai power)."
+            ),
+            "score_stap_definition": (
+                "score_stap_preka is the STAP matched-subspace ratio computed from the "
+                "baseline-filtered IQ cube via local covariance whitening and fixed Pf "
+                "subspace projection; score_stap equals score_stap_preka unless a "
+                "score-space KA veto is applied."
+            ),
+        },
         "pd_mode": {
             "pd_files": {
                 "base": "pd_base.npy",
@@ -529,7 +751,7 @@ def write_acceptance_bundle_from_icube(
                     "score_pd_stap_pre_ka.npy" if pd_stap_pre_ka is not None else None
                 ),
             },
-            "roc_convention": "lower_tail_on_pd (equivalently right_tail_on_score=-pd)",
+            "roc_convention": "right_tail_on_pd (equivalently score_pd=pd)",
         },
         "baseline_stats": baseline_telemetry,
         "stap_fallback_telemetry": telemetry_combined,

@@ -19,7 +19,15 @@ class KaContractV2Config:
 
     # Candidate/protection quantiles on the baseline score
     q_lo_candidate: float = 0.30
-    q_hi_protect: float = 0.995
+    # Upper score quantile for the candidate set. Set to 1.0 to allow KA to act
+    # on extreme-score background tails (needed for ultra-low-FPR reporting).
+    q_hi_candidate: float = 1.0
+    # Optional extra protection: exclude the top score quantile from gating. When
+    # enabled, this should be set strictly above the smallest evaluated FPR, i.e.
+    # protect < alpha_min fraction of the score mass, otherwise KA cannot shift
+    # the negative tail quantiles at that FPR.
+    protect_hi_by_score: bool = True
+    q_hi_protect: float = 0.99999
 
     # Risk threshold (quantile of m_alias on background-proxy tiles)
     q_risk: float = 0.90
@@ -36,6 +44,13 @@ class KaContractV2Config:
     # R2 differential evidence (label-free) for uplift eligibility (C2)
     delta_bf_min: float = 0.30
     delta_tail_min: float = 0.20
+    # Tail association is evaluated by comparing the risk metric on an extreme
+    # right-tail subset of background-proxy tiles versus a mid-quantile subset.
+    # For small sample sizes, we enforce a minimum tail size via `n_tail_min`
+    # by expanding the tail fraction as needed (see implementation).
+    tail_frac_bg: float = 0.01
+    mid_q_lo_bg: float = 0.40
+    mid_q_hi_bg: float = 0.60
 
     # C2 guardrail: require minimum Pf realization (label-free proxy). This is
     # intentionally modest; it is meant to prevent "uplift-eligible" states
@@ -234,14 +249,30 @@ def evaluate_ka_contract_v2(
 
     s_bg = s_base[T_bg]
     if s_bg.size >= 5:
-        q99 = float(np.quantile(s_bg, 0.99))
-        q40 = float(np.quantile(s_bg, 0.40))
-        q60 = float(np.quantile(s_bg, 0.60))
+        # Size-aware tail definition: for small n_bg, a fixed 1% tail can be
+        # smaller than `n_tail_min` and make delta_tail undefined. Enforce a
+        # minimum tail count by expanding the tail fraction as needed.
+        tail_frac = max(float(cfg.tail_frac_bg), float(cfg.n_tail_min) / float(max(n_bg, 1)))
+        tail_frac = float(np.clip(tail_frac, 0.0, 1.0))
+        tail_q = float(np.clip(1.0 - tail_frac, 0.0, 1.0))
+        mid_q_lo = float(np.clip(cfg.mid_q_lo_bg, 0.0, 1.0))
+        mid_q_hi = float(np.clip(cfg.mid_q_hi_bg, 0.0, 1.0))
+        if mid_q_hi < mid_q_lo:
+            mid_q_lo, mid_q_hi = mid_q_hi, mid_q_lo
+
+        tail_thr = float(np.quantile(s_bg, tail_q))
+        mid_thr_lo = float(np.quantile(s_bg, mid_q_lo))
+        mid_thr_hi = float(np.quantile(s_bg, mid_q_hi))
     else:
-        q99 = float(np.max(s_bg)) if s_bg.size else float(np.max(s_base[valid]))
-        q40, q60 = float("-inf"), float("inf")
-    T_tail = T_bg & (s_base >= q99)
-    T_mid = T_bg & (s_base >= q40) & (s_base <= q60)
+        tail_frac = float(cfg.tail_frac_bg)
+        tail_q = 0.99
+        mid_q_lo = float(cfg.mid_q_lo_bg)
+        mid_q_hi = float(cfg.mid_q_hi_bg)
+        tail_thr = float(np.max(s_bg)) if s_bg.size else float(np.max(s_base[valid]))
+        mid_thr_lo, mid_thr_hi = float("-inf"), float("inf")
+
+    T_tail = T_bg & (s_base >= tail_thr)
+    T_mid = T_bg & (s_base >= mid_thr_lo) & (s_base <= mid_thr_hi)
     n_tail = int(np.sum(T_tail))
     n_mid = int(np.sum(T_mid))
     if n_tail >= int(cfg.n_tail_min) and n_mid >= int(cfg.n_mid_min):
@@ -261,7 +292,13 @@ def evaluate_ka_contract_v2(
             "delta_bg_flow_median": float(delta_bf),
             "delta_tail": float(delta_tail) if np.isfinite(delta_tail) else None,
             "uplift_eligible_raw": uplift_eligible_raw,
-            "tail_q99": float(q99),
+            "tail_frac_bg": float(tail_frac),
+            "tail_q_bg": float(tail_q),
+            "tail_thr_bg": float(tail_thr),
+            "mid_q_lo_bg": float(mid_q_lo),
+            "mid_q_hi_bg": float(mid_q_hi),
+            "mid_thr_lo_bg": float(mid_thr_lo),
+            "mid_thr_hi_bg": float(mid_thr_hi),
             "n_tail": n_tail,
             "n_mid": n_mid,
             "guard_q90_max_uplift": guard_q90_max_uplift,
@@ -351,18 +388,33 @@ def evaluate_ka_contract_v2(
 
     # --- Candidate/protected sets (coverage sentinels) ---
     s_valid = s_base[valid]
-    q_hi = float(np.quantile(s_valid, float(cfg.q_hi_protect)))
-    q_lo = float(np.quantile(s_valid, float(cfg.q_lo_candidate)))
-    T_prot = valid & ((c_flow >= c_flow_thr) | (s_base >= q_hi))
-    T_cand = valid & (~T_prot) & (s_base >= q_lo) & (s_base <= q_hi)
+    score_q_lo = float(np.quantile(s_valid, float(cfg.q_lo_candidate)))
+    score_q_hi_candidate = float(np.quantile(s_valid, float(cfg.q_hi_candidate)))
+    if score_q_hi_candidate < score_q_lo:
+        score_q_hi_candidate = score_q_lo
+    score_q_hi_protect = float(np.quantile(s_valid, float(cfg.q_hi_protect)))
+
+    T_prot = valid & (c_flow >= c_flow_thr)
+    if bool(cfg.protect_hi_by_score):
+        T_prot |= valid & (s_base >= score_q_hi_protect)
+
+    T_cand = (
+        valid
+        & (~T_prot)
+        & (s_base >= score_q_lo)
+        & (s_base <= score_q_hi_candidate)
+    )
     n_prot = int(np.sum(T_prot))
     n_cand = int(np.sum(T_cand))
     report["metrics"].update(
         {
             "q_lo_candidate": float(cfg.q_lo_candidate),
+            "q_hi_candidate": float(cfg.q_hi_candidate),
+            "protect_hi_by_score": bool(cfg.protect_hi_by_score),
             "q_hi_protect": float(cfg.q_hi_protect),
-            "score_q_lo": float(q_lo),
-            "score_q_hi": float(q_hi),
+            "score_q_lo": float(score_q_lo),
+            "score_q_hi_candidate": float(score_q_hi_candidate),
+            "score_q_hi_protect": float(score_q_hi_protect),
             "n_protected": n_prot,
             "n_candidates": n_cand,
         }
@@ -441,8 +493,9 @@ def derive_score_shrink_v2_tile_scales(
 ) -> dict[str, Any]:
     """Derive per-tile shrink-only scale factors from a v2 contract report.
 
-    This helper computes scale factors >= 1 that can be applied to PD maps so
-    that a score defined as S = -PD is shrunk (i.e. made smaller) on risky tiles.
+    This helper computes scale factors >= 1 that can be applied as a *division*
+    on PD score maps so that the PD score is shrunk on risky tiles:
+      S_post = S_pre / scale,  scale >= 1.
 
     Parameters
     ----------
@@ -450,7 +503,8 @@ def derive_score_shrink_v2_tile_scales(
         Output of evaluate_ka_contract_v2.
     s_base:
         Baseline per-tile detector score used by the contract state machine
-        (higher = more flow evidence). For PD scoring, this should be -PD.
+        (higher = more flow evidence). For PD scoring, this should be PD
+        (i.e., the right-tail PD score map).
     m_alias:
         Per-tile alias metric (larger = more alias-like), e.g. log(Ea/Ef).
     c_flow:
@@ -482,9 +536,14 @@ def derive_score_shrink_v2_tile_scales(
     tau_alias = metrics.get("tau_alias")
     mad_alias = metrics.get("mad_alias")
     score_q_lo = metrics.get("score_q_lo")
-    score_q_hi = metrics.get("score_q_hi")
-    if tau_alias is None or mad_alias is None or score_q_lo is None or score_q_hi is None:
+    score_q_hi_candidate = metrics.get("score_q_hi_candidate", metrics.get("score_q_hi"))
+    score_q_hi_protect = metrics.get("score_q_hi_protect", metrics.get("score_q_hi"))
+    protect_hi_by_score = bool(cfg.get("protect_hi_by_score", True))
+    if tau_alias is None or mad_alias is None or score_q_lo is None or score_q_hi_candidate is None:
         out["reason"] = "missing_thresholds"
+        return out
+    if protect_hi_by_score and score_q_hi_protect is None:
+        out["reason"] = "missing_protect_threshold"
         return out
 
     try:
@@ -529,8 +588,15 @@ def derive_score_shrink_v2_tile_scales(
     # Reconstruct candidate/protected and gate conditions using the same
     # thresholds recorded in the report.
     T_bg = valid & (c_flow <= c_bg)
-    T_prot = valid & ((c_flow >= c_flow_thr) | (s_base >= float(score_q_hi)))
-    T_cand = valid & (~T_prot) & (s_base >= float(score_q_lo)) & (s_base <= float(score_q_hi))
+    T_prot = valid & (c_flow >= c_flow_thr)
+    if protect_hi_by_score:
+        T_prot |= valid & (s_base >= float(score_q_hi_protect))
+    T_cand = (
+        valid
+        & (~T_prot)
+        & (s_base >= float(score_q_lo))
+        & (s_base <= float(score_q_hi_candidate))
+    )
     gated = T_cand & (m_alias >= float(tau_alias))
 
     eps = float(cfg.get("eps", 1e-12))
@@ -656,11 +722,22 @@ def derive_score_shrink_v2_tile_scales_forced(
     eps = float(cfg_obj.eps)
 
     s_valid = s_base[valid]
-    q_hi = float(np.quantile(s_valid, float(cfg_obj.q_hi_protect)))
-    q_lo = float(np.quantile(s_valid, float(cfg_obj.q_lo_candidate)))
+    score_q_lo = float(np.quantile(s_valid, float(cfg_obj.q_lo_candidate)))
+    score_q_hi_candidate = float(np.quantile(s_valid, float(cfg_obj.q_hi_candidate)))
+    if score_q_hi_candidate < score_q_lo:
+        score_q_hi_candidate = score_q_lo
+    score_q_hi_protect = float(np.quantile(s_valid, float(cfg_obj.q_hi_protect)))
 
-    T_prot = valid & ((c_flow >= c_flow_thr) | (s_base >= q_hi))
-    T_cand = valid & (~T_prot) & (s_base >= q_lo) & (s_base <= q_hi)
+    T_prot = valid & (c_flow >= c_flow_thr)
+    if bool(cfg_obj.protect_hi_by_score):
+        T_prot |= valid & (s_base >= score_q_hi_protect)
+
+    T_cand = (
+        valid
+        & (~T_prot)
+        & (s_base >= score_q_lo)
+        & (s_base <= score_q_hi_candidate)
+    )
 
     T_bg = valid & (c_flow <= c_bg)
     risk_bg = m_alias[T_bg]

@@ -277,6 +277,23 @@ def main() -> None:
         help="Band-ratio flavor to record (legacy PD ratio vs. whitened multi-taper).",
     )
     ap.add_argument(
+        "--band-ratio-tile-mode",
+        type=str,
+        default="mean",
+        choices=[
+            "mean",
+            "incoherent",
+            "incoherent_max",
+            "incoherent_q90",
+            "incoherent_q95",
+        ],
+        help=(
+            "Tile PSD for band-ratio telemetry: 'mean' (coherent tile-mean series), "
+            "'incoherent' (avg per-pixel PSD), 'incoherent_max' (max per-pixel PSD), "
+            "or 'incoherent_qNN' (e.g. incoherent_q90)."
+        ),
+    )
+    ap.add_argument(
         "--band-ratio-flow-low-hz",
         type=float,
         default=120.0,
@@ -432,6 +449,75 @@ def main() -> None:
         help="Uniform ±jitter applied to the background alias tone per seed (Hz).",
     )
     ap.add_argument(
+        "--bg-alias-highrank-mode",
+        type=str,
+        default="none",
+        choices=["none", "gw_reverb", "gw_reverb_add", "gw_reverb_muladd"],
+        help=(
+            "Optional high-rank background alias overlay. 'gw_reverb' injects a "
+            "spatially varying multi-mode Pa artifact with reverberation-like deep "
+            "ghost patches. 'gw_reverb_add' applies the same construction additively "
+            "(more aggressive; intended to survive MC--SVD and impact band telemetry). "
+            "'gw_reverb_muladd' applies both multiplicative and additive forms."
+        ),
+    )
+    ap.add_argument(
+        "--bg-alias-highrank-coverage",
+        type=float,
+        default=0.0,
+        help="Target deep ghost patch coverage fraction in [0,1] for bg-alias-highrank-mode.",
+    )
+    ap.add_argument(
+        "--bg-alias-highrank-shallow-coverage",
+        type=float,
+        default=1.0,
+        help="Fraction of shallow-layer bg pixels included in the high-rank alias mask (1.0 uses the full shallow layer).",
+    )
+    ap.add_argument(
+        "--bg-alias-highrank-margin-px",
+        type=int,
+        default=0,
+        help=(
+            "Optional erosion margin (pixels) applied to the eligible deep bg region "
+            "before placing high-rank alias ghost patches. This keeps deep patches away "
+            "from flow/bg boundaries (reduces mixed-tile overlap)."
+        ),
+    )
+    ap.add_argument(
+        "--bg-alias-highrank-freq-jitter-hz",
+        type=float,
+        default=25.0,
+        help="Std dev (Hz) of the spatial frequency-offset field for high-rank alias modes.",
+    )
+    ap.add_argument(
+        "--bg-alias-highrank-drift-step-hz",
+        type=float,
+        default=12.0,
+        help="Std dev (Hz) of the per-ensemble alias frequency random-walk step (0 disables drift).",
+    )
+    ap.add_argument(
+        "--bg-alias-highrank-drift-block-len",
+        type=int,
+        default=None,
+        help=(
+            "Optional drift block length (frames) for high-rank alias modes. "
+            "When set to a value smaller than pulses_per_set, the alias frequency "
+            "random walk is applied across blocks within a replay window."
+        ),
+    )
+    ap.add_argument(
+        "--bg-alias-highrank-pf-leak-eta",
+        type=float,
+        default=0.0,
+        help="Pf leakage coupling factor for high-rank alias modes (relative to Pa mode amplitudes).",
+    )
+    ap.add_argument(
+        "--bg-alias-highrank-amp",
+        type=float,
+        default=0.20,
+        help="Overall complex amplitude scale for high-rank alias modes (0 disables).",
+    )
+    ap.add_argument(
         "--flow-doppler-min-hz",
         type=float,
         default=None,
@@ -442,6 +528,15 @@ def main() -> None:
         type=float,
         default=None,
         help="Maximum synthetic flow Doppler frequency (Hz) applied on the flow mask.",
+    )
+    ap.add_argument(
+        "--flow-doppler-tone-amp",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional additive narrowband flow tone amplitude (relative to flow-mask RMS). "
+            "0 disables; when >0, adds a per-pixel tone at the synthetic Doppler frequency."
+        ),
     )
     ap.add_argument(
         "--vibration-hz",
@@ -1010,6 +1105,7 @@ def main() -> None:
         alias_psd_select_ratio_thresh=float(args.alias_psd_select_ratio),
         alias_psd_select_bins=int(args.alias_psd_select_bins),
         band_ratio_mode=str(args.band_ratio_mode).lower(),
+        band_ratio_tile_mode=str(args.band_ratio_tile_mode).lower(),
         band_ratio_flow_low_hz=float(args.band_ratio_flow_low_hz),
         band_ratio_flow_high_hz=float(args.band_ratio_flow_high_hz),
         band_ratio_alias_center_hz=float(args.band_ratio_alias_center_hz),
@@ -1025,11 +1121,27 @@ def main() -> None:
         flow_alias_jitter_hz=float(args.flow_alias_jitter_hz),
         flow_doppler_min_hz=args.flow_doppler_min_hz,
         flow_doppler_max_hz=args.flow_doppler_max_hz,
+        flow_doppler_tone_amp=float(args.flow_doppler_tone_amp),
         bg_alias_hz=args.bg_alias_hz,
         bg_alias_fraction=float(args.bg_alias_fraction),
         bg_alias_depth_min_frac=args.bg_alias_depth_min_frac,
         bg_alias_depth_max_frac=args.bg_alias_depth_max_frac,
         bg_alias_jitter_hz=float(args.bg_alias_jitter_hz),
+        bg_alias_highrank_mode=None
+        if str(args.bg_alias_highrank_mode).lower() == "none"
+        else str(args.bg_alias_highrank_mode),
+        bg_alias_highrank_deep_patch_coverage=float(args.bg_alias_highrank_coverage),
+        bg_alias_highrank_shallow_patch_coverage=float(args.bg_alias_highrank_shallow_coverage),
+        bg_alias_highrank_margin_px=int(args.bg_alias_highrank_margin_px),
+        bg_alias_highrank_freq_jitter_hz=float(args.bg_alias_highrank_freq_jitter_hz),
+        bg_alias_highrank_drift_step_hz=float(args.bg_alias_highrank_drift_step_hz),
+        bg_alias_highrank_drift_block_len=(
+            int(args.bg_alias_highrank_drift_block_len)
+            if args.bg_alias_highrank_drift_block_len is not None
+            else None
+        ),
+        bg_alias_highrank_pf_leak_eta=float(args.bg_alias_highrank_pf_leak_eta),
+        bg_alias_highrank_amp=float(args.bg_alias_highrank_amp),
         flow_amp_scale=float(args.flow_amp_scale),
         flow_amp_shallow_scale=float(args.flow_amp_shallow_scale),
         flow_amp_mid_scale=float(args.flow_amp_mid_scale),
@@ -1092,6 +1204,21 @@ def main() -> None:
             "bg_alias_depth_min_frac": float(args.bg_alias_depth_min_frac),
             "bg_alias_depth_max_frac": float(args.bg_alias_depth_max_frac),
             "bg_alias_jitter_hz": float(args.bg_alias_jitter_hz),
+            "bg_alias_highrank_mode": (
+                None
+                if str(args.bg_alias_highrank_mode).lower() == "none"
+                else str(args.bg_alias_highrank_mode)
+            ),
+            "bg_alias_highrank_coverage": float(args.bg_alias_highrank_coverage),
+            "bg_alias_highrank_freq_jitter_hz": float(args.bg_alias_highrank_freq_jitter_hz),
+            "bg_alias_highrank_drift_step_hz": float(args.bg_alias_highrank_drift_step_hz),
+            "bg_alias_highrank_drift_block_len": (
+                int(args.bg_alias_highrank_drift_block_len)
+                if args.bg_alias_highrank_drift_block_len is not None
+                else None
+            ),
+            "bg_alias_highrank_pf_leak_eta": float(args.bg_alias_highrank_pf_leak_eta),
+            "bg_alias_highrank_amp": float(args.bg_alias_highrank_amp),
             "flow_doppler_min_hz": (
                 float(args.flow_doppler_min_hz) if args.flow_doppler_min_hz is not None else None
             ),

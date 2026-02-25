@@ -5,7 +5,7 @@ This script runs a small, labeled-simulation ablation designed to make the KA
 story falsifiable:
 
   (i)   STAP-only (no score-space KA)
-  (ii)  STAP + KA Contract v2 (contract-governed; activates only in C1_SAFETY)
+  (ii)  STAP + KA Contract v2 (contract-governed; activates only when enabled by the contract: C1_SAFETY or C2_UPLIFT)
   (iii) STAP + KA Contract v2 (forced; ablation-only, even when contract disables)
 
 We report ΔTPR at fixed FPR targets (and optional pAUC up to a fixed FPR) with a
@@ -85,15 +85,32 @@ def _existing_bundle_dir(out_dir: Path) -> Path | None:
     return None
 
 
-def _load_score_and_masks(bundle_dir: Path) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _load_score_and_masks(
+    bundle_dir: Path, *, score_mode: str
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     mask_flow = np.load(bundle_dir / "mask_flow.npy").astype(bool)
     mask_bg = np.load(bundle_dir / "mask_bg.npy").astype(bool)
-    score_path = bundle_dir / "score_pd_stap.npy"
-    if score_path.exists():
+    mode = str(score_mode or "pd").strip().lower()
+    if mode == "stap":
+        score_path = bundle_dir / "score_stap.npy"
+        if not score_path.exists():
+            score_path = bundle_dir / "stap_score_map.npy"
         score = np.load(score_path).astype(np.float64, copy=False)
     else:
-        pd = np.load(bundle_dir / "pd_stap.npy").astype(np.float64, copy=False)
-        score = -pd
+        score_path = bundle_dir / "score_pd_stap.npy"
+        if score_path.exists():
+            score = np.load(score_path).astype(np.float64, copy=False)
+        else:
+            roc_conv = ""
+            meta_path = bundle_dir / "meta.json"
+            if meta_path.exists():
+                try:
+                    meta = json.loads(meta_path.read_text())
+                    roc_conv = str((meta.get("pd_mode") or {}).get("roc_convention") or "")
+                except Exception:
+                    roc_conv = ""
+            pd = np.load(bundle_dir / "pd_stap.npy").astype(np.float64, copy=False)
+            score = (-pd) if "lower_tail_on_pd" in roc_conv.lower() else pd
     return score, mask_flow, mask_bg
 
 
@@ -225,6 +242,13 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--out-root", type=Path, required=True, help="Root directory for ablation outputs.")
     ap.add_argument("--window-length", type=int, default=64, help="Replay window length.")
     ap.add_argument(
+        "--eval-score",
+        type=str,
+        default="pd",
+        choices=["pd", "stap"],
+        help="Which score map to evaluate for ΔTPR (default: pd).",
+    )
+    ap.add_argument(
         "--window-offsets",
         nargs="+",
         type=int,
@@ -249,6 +273,16 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--summary-json", type=Path, required=True, help="Write summary JSON.")
     ap.add_argument("--dry-run", action="store_true", help="Print commands without running.")
     ap.add_argument("--bootstrap-seed", type=int, default=1337, help="Seed for bootstrap CIs.")
+    ap.add_argument(
+        "--replay-extra",
+        nargs=argparse.REMAINDER,
+        default=[],
+        help=(
+            "Extra flags forwarded verbatim to replay_stap_from_run.py. "
+            "Place this argument last, e.g. "
+            "--replay-extra --stap-profile clinical --baseline mc_svd --svd-rank 3 ..."
+        ),
+    )
     return ap.parse_args()
 
 
@@ -301,6 +335,8 @@ def main() -> None:
                 "--time-window-offset",
                 str(int(offset)),
             ]
+            if args.replay_extra:
+                cmd.extend([str(x) for x in args.replay_extra])
             cmd.extend(cond.replay_flags)
             if bundle_dir is None:
                 _run_replay(cmd, dry_run=args.dry_run)
@@ -314,7 +350,9 @@ def main() -> None:
                 meta = json.load(f)
             tele = meta.get("stap_fallback_telemetry") or {}
 
-            score, mask_flow, mask_bg = _load_score_and_masks(bundle_dir)
+            score, mask_flow, mask_bg = _load_score_and_masks(
+                bundle_dir, score_mode=str(args.eval_score)
+            )
             if mask_flow_ref is None:
                 mask_flow_ref = mask_flow
                 mask_bg_ref = mask_bg
@@ -334,6 +372,7 @@ def main() -> None:
                 "window_length": int(args.window_length),
                 "condition": cond.key,
                 "condition_label": cond.label,
+                "eval_score": str(args.eval_score),
                 "ka_contract_v2_state": tele.get("ka_contract_v2_state"),
                 "ka_contract_v2_reason": tele.get("ka_contract_v2_reason"),
                 "score_ka_v2_state": tele.get("score_ka_v2_state"),
@@ -399,6 +438,9 @@ def main() -> None:
     # Add any flattened metrics keys (union over rows).
     extra_keys = sorted({k for row in per_row for k in row.keys() if k.startswith("score_ka_v2_stats_")})
     fieldnames.extend(extra_keys)
+    # Keep CSV writing resilient to newly added per-row keys.
+    unknown_keys = sorted({k for row in per_row for k in row.keys() if k not in set(fieldnames)})
+    fieldnames.extend(unknown_keys)
 
     with open(args.summary_csv, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)

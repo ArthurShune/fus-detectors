@@ -94,6 +94,17 @@ def test_pilot_meta_contains_expected_stats(tmp_path):
 
     score_map = np.load(bundle / "stap_score_map.npy")
     assert score_map.shape == pd_base.shape
+    score_base = np.load(bundle / "score_base.npy")
+    score_stap_preka = np.load(bundle / "score_stap_preka.npy")
+    score_stap = np.load(bundle / "score_stap.npy")
+    assert score_base.shape == pd_base.shape
+    assert score_stap_preka.shape == pd_base.shape
+    assert score_stap.shape == pd_base.shape
+    assert np.allclose(score_base, pd_base, rtol=0.0, atol=0.0)
+    assert np.allclose(score_stap_preka, score_map, rtol=0.0, atol=0.0)
+    assert np.allclose(score_stap, score_stap_preka, rtol=0.0, atol=0.0)
+    assert (bundle / "score_name.txt").read_text().strip()
+    assert "score_vnext" in meta
 
     debug_dir = bundle / "stap_debug"
     assert debug_dir.exists()

@@ -65,6 +65,13 @@ def main() -> None:
     parser.add_argument("--bundle", type=Path, required=True, help="Bundle directory (contains meta.json).")
     parser.add_argument("--out", type=Path, required=True, help="Output image path (.png).")
     parser.add_argument(
+        "--title-style",
+        type=str,
+        default="paper",
+        choices=["paper", "debug", "none"],
+        help="Figure title style (default: %(default)s).",
+    )
+    parser.add_argument(
         "--pd-view",
         type=str,
         default="log10",
@@ -163,31 +170,69 @@ def main() -> None:
     nyq = float(prf_hz) / 2.0 if prf_hz is not None else float(np.max(peak_freq))
 
     # ---- Build title string ----
-    ka_v2 = meta.get("ka_contract_v2") or {}
-    ka_state = ka_v2.get("state")
-    ka_reason = ka_v2.get("reason")
-    ka_metrics = (ka_v2.get("metrics") or {}) if isinstance(ka_v2, dict) else {}
-    score_tele = meta.get("stap_fallback_telemetry") or {}
-
-    title = (
-        f"{bundle_dir.name}\n"
-        f"KA v2: {ka_state}/{ka_reason} risk={ka_metrics.get('risk_mode')} "
-        f"p_shrink={_fmt_float(ka_metrics.get('p_shrink'))} "
-        f"pf_peak_flow={_fmt_float(ka_metrics.get('pf_peak_flow'))}"
-        f" (n_flow={ka_metrics.get('n_flow_proxy')}) "
-        f"pf_peak_nonbg={_fmt_float(ka_metrics.get('pf_peak_nonbg'))} "
-        f"guard_q90={_fmt_float(ka_metrics.get('guard_q90'))}\n"
-        f"score_ka_v2_applied={score_tele.get('score_ka_v2_applied')} "
-        f"scaled_px_frac={_fmt_float(score_tele.get('score_ka_v2_scaled_pixel_fraction'))} "
-        f"scale_p90={_fmt_float(score_tele.get('score_ka_v2_scale_p90'))} "
-        f"scale_max={_fmt_float(score_tele.get('score_ka_v2_scale_max'))}"
-    )
+    title_style = str(args.title_style).lower().strip()
+    title = None
+    if title_style != "none":
+        if title_style == "debug":
+            ka_v2 = meta.get("ka_contract_v2") or {}
+            ka_state = ka_v2.get("state") if isinstance(ka_v2, dict) else None
+            ka_reason = ka_v2.get("reason") if isinstance(ka_v2, dict) else None
+            ka_metrics = (ka_v2.get("metrics") or {}) if isinstance(ka_v2, dict) else {}
+            score_tele = meta.get("stap_fallback_telemetry") or {}
+            title = (
+                f"{bundle_dir.name}\n"
+                f"KA v2: {ka_state}/{ka_reason} risk={ka_metrics.get('risk_mode')} "
+                f"p_shrink={_fmt_float(ka_metrics.get('p_shrink'))} "
+                f"pf_peak_flow={_fmt_float(ka_metrics.get('pf_peak_flow'))}"
+                f" (n_flow={ka_metrics.get('n_flow_proxy')}) "
+                f"pf_peak_nonbg={_fmt_float(ka_metrics.get('pf_peak_nonbg'))} "
+                f"guard_q90={_fmt_float(ka_metrics.get('guard_q90'))}\n"
+                f"score_ka_v2_applied={score_tele.get('score_ka_v2_applied')} "
+                f"scaled_px_frac={_fmt_float(score_tele.get('score_ka_v2_scaled_pixel_fraction'))} "
+                f"scale_p90={_fmt_float(score_tele.get('score_ka_v2_scale_p90'))} "
+                f"scale_max={_fmt_float(score_tele.get('score_ka_v2_scale_max'))}"
+            )
+        else:
+            orig = meta.get("orig_data") if isinstance(meta, dict) else None
+            clip = None
+            frames = None
+            if isinstance(orig, dict):
+                iq_file = orig.get("iq_file")
+                if isinstance(iq_file, str) and iq_file:
+                    clip = Path(iq_file).stem
+                frames_spec = orig.get("frames_spec")
+                if isinstance(frames_spec, str) and frames_spec:
+                    frames = frames_spec
+            if clip is None:
+                ds = meta.get("dataset") if isinstance(meta, dict) else None
+                if isinstance(ds, dict):
+                    name = ds.get("name")
+                    if isinstance(name, str) and name:
+                        clip = name
+            title = "Shin RatBrain Fig3 example"
+            if clip or frames:
+                suffix = ", ".join([s for s in [clip, f"frames {frames}" if frames else None] if s])
+                title = f"{title} ({suffix})"
 
     # ---- Plot ----
     import matplotlib.pyplot as plt
 
+    plt.rcParams.update(
+        {
+            "figure.dpi": 220,
+            "font.family": "serif",
+            "mathtext.fontset": "cm",
+            "font.size": 10,
+            "axes.titlesize": 10,
+            "axes.labelsize": 10,
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+        }
+    )
+
     fig, axes = plt.subplots(2, 4, figsize=(16, 8), constrained_layout=True)
-    fig.suptitle(title, fontsize=10)
+    if title:
+        fig.suptitle(title, fontsize=11)
 
     def _imshow(ax, img, title_str, cmap="viridis", vmin=None, vmax=None):
         im = ax.imshow(img, cmap=cmap, vmin=vmin, vmax=vmax, origin="upper")
@@ -196,28 +241,61 @@ def main() -> None:
         ax.set_yticks([])
         return im
 
-    _imshow(axes[0, 0], pd_base_v, "pd_base", vmin=vmin_pd, vmax=vmax_pd)
-    _imshow(axes[0, 1], pd_pre_v, "pd_stap_pre_ka", vmin=vmin_pd, vmax=vmax_pd)
-    _imshow(axes[0, 2], pd_post_v, "pd_stap_post_ka", vmin=vmin_pd, vmax=vmax_pd)
+    _imshow(axes[0, 0], pd_base_v, r"Baseline score $S_{\mathrm{base}}$", vmin=vmin_pd, vmax=vmax_pd)
+    _imshow(axes[0, 1], pd_pre_v, r"STAP score $S_{\mathrm{pre}}$", vmin=vmin_pd, vmax=vmax_pd)
+    _imshow(axes[0, 2], pd_post_v, r"Post-regularization score $S_{\mathrm{post}}$", vmin=vmin_pd, vmax=vmax_pd)
 
     if ka_scale is None:
-        _imshow(axes[0, 3], np.ones_like(pd_base, dtype=np.float32), "ka_scale_map (missing)", vmin=1.0, vmax=1.0)
+        _imshow(
+            axes[0, 3],
+            np.ones_like(pd_base, dtype=np.float32),
+            r"Scale map $\gamma(i)\geq 1$ (missing)",
+            vmin=1.0,
+            vmax=1.0,
+        )
     else:
         scale_show = np.clip(ka_scale.astype(np.float32, copy=False), 1.0, float(args.scale_max))
-        _imshow(axes[0, 3], scale_show, f"ka_scale_map (clip≤{args.scale_max:g})", vmin=1.0, vmax=float(args.scale_max))
+        _imshow(
+            axes[0, 3],
+            scale_show,
+            rf"Scale map $\gamma(i)\geq 1$ (clip$\leq {args.scale_max:g}$)",
+            vmin=1.0,
+            vmax=float(args.scale_max),
+        )
 
     # Overlay gate + flow mask on pd_post for interpretability.
     ax = axes[1, 0]
-    _imshow(ax, pd_post_v, "pd_stap_post + overlays", vmin=vmin_pd, vmax=vmax_pd)
+    _imshow(ax, pd_post_v, r"$S_{\mathrm{post}}$ + overlays", vmin=vmin_pd, vmax=vmax_pd)
     flow = mask_flow.astype(bool)
     ax.contour(flow.astype(float), levels=[0.5], colors="lime", linewidths=0.8)
     if ka_gate is not None:
         gate = ka_gate.astype(bool)
         ax.contour(gate.astype(float), levels=[0.5], colors="cyan", linewidths=0.8)
 
-    _imshow(axes[1, 1], m_alias.astype(np.float32, copy=False), "base_m_alias_map", cmap="coolwarm", vmin=vmin_alias, vmax=vmax_alias)
-    _imshow(axes[1, 2], peak_freq.astype(np.float32, copy=False), "base_peak_freq_map (Hz)", cmap="magma", vmin=0.0, vmax=nyq)
-    _imshow(axes[1, 3], guard_frac.astype(np.float32, copy=False), "base_guard_frac_map", cmap="inferno", vmin=0.0, vmax=1.0)
+    _imshow(
+        axes[1, 1],
+        m_alias.astype(np.float32, copy=False),
+        r"Alias metric $m_{\mathrm{alias}}$",
+        cmap="coolwarm",
+        vmin=vmin_alias,
+        vmax=vmax_alias,
+    )
+    _imshow(
+        axes[1, 2],
+        peak_freq.astype(np.float32, copy=False),
+        r"Peak freq. $f_{\mathrm{peak}}$ (Hz)",
+        cmap="magma",
+        vmin=0.0,
+        vmax=nyq,
+    )
+    _imshow(
+        axes[1, 3],
+        guard_frac.astype(np.float32, copy=False),
+        r"Guard fraction $r_g$",
+        cmap="inferno",
+        vmin=0.0,
+        vmax=1.0,
+    )
 
     out_path = args.out
     out_path.parent.mkdir(parents=True, exist_ok=True)

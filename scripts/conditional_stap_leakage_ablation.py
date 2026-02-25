@@ -81,12 +81,30 @@ def _bundle_dir_from_out(out_dir: Path) -> Path:
 def _load_scores(bundle_dir: Path) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     mask_flow = np.load(bundle_dir / "mask_flow.npy").astype(bool)
     mask_bg = np.load(bundle_dir / "mask_bg.npy").astype(bool)
-    score_path = bundle_dir / "score_pd_stap.npy"
-    if score_path.exists():
-        score = np.load(score_path).astype(np.float64, copy=False)
-    else:
-        pd = np.load(bundle_dir / "pd_stap.npy").astype(np.float64, copy=False)
-        score = -pd
+    # Primary detector score for leakage reporting: use score vNext pre-KA STAP
+    # score (right tail). Fall back to post-KA `score_stap.npy` when needed.
+    score = None
+    for name in ("score_stap_preka.npy", "score_stap.npy"):
+        p = bundle_dir / name
+        if p.exists():
+            score = np.load(p).astype(np.float64, copy=False)
+            break
+    if score is None:
+        # Legacy fallback: PD-mode score. This should not happen for modern bundles.
+        score_path = bundle_dir / "score_pd_stap.npy"
+        if score_path.exists():
+            score = np.load(score_path).astype(np.float64, copy=False)
+        else:
+            roc_conv = ""
+            meta_path = bundle_dir / "meta.json"
+            if meta_path.exists():
+                try:
+                    meta = json.loads(meta_path.read_text())
+                    roc_conv = str((meta.get("pd_mode") or {}).get("roc_convention") or "")
+                except Exception:
+                    roc_conv = ""
+            pd = np.load(bundle_dir / "pd_stap.npy").astype(np.float64, copy=False)
+            score = (-pd) if "lower_tail_on_pd" in roc_conv.lower() else pd
     return score, mask_flow, mask_bg
 
 
@@ -240,6 +258,14 @@ def parse_args() -> argparse.Namespace:
         help="Write summary JSON.",
     )
     ap.add_argument("--dry-run", action="store_true", help="Print commands without running.")
+    ap.add_argument(
+        "--reuse-existing",
+        action="store_true",
+        help=(
+            "Reuse existing bundles under --out-root when present (skip rerunning replays). "
+            "Useful for recomputing summaries with a different score key."
+        ),
+    )
     ap.add_argument("--bootstrap-seed", type=int, default=1337, help="Seed for bootstrap CIs.")
     return ap.parse_args()
 
@@ -275,6 +301,13 @@ def main() -> None:
         out_disjoint = out_root / f"{pilot_name}_disjoint"
         out_random = out_root / f"{pilot_name}_random"
 
+        def _has_bundle(out_dir: Path) -> bool:
+            try:
+                bdir = _bundle_dir_from_out(out_dir)
+                return (bdir / "meta.json").exists()
+            except Exception:
+                return False
+
         # 1) Full STAP (conditional disabled)
         cmd_full = [
             sys.executable,
@@ -299,10 +332,10 @@ def main() -> None:
             "--stap-conditional-mask-tag",
             "full",
         ]
-        if args.dry_run:
-            _run_replay(cmd_full, dry_run=True)
+        if bool(args.reuse_existing) and _has_bundle(out_full):
+            print(f"[condstap] reuse existing: {out_full}", flush=True)
         else:
-            _run_replay(cmd_full, dry_run=False)
+            _run_replay(cmd_full, dry_run=bool(args.dry_run))
         if args.dry_run:
             # Still print the remaining commands, but do not attempt to load bundles.
             bundle_full = None
@@ -347,7 +380,10 @@ def main() -> None:
             "--stap-conditional-mask-tag",
             "same_window",
         ]
-        _run_replay(cmd_same, dry_run=args.dry_run)
+        if bool(args.reuse_existing) and _has_bundle(out_same):
+            print(f"[condstap] reuse existing: {out_same}", flush=True)
+        else:
+            _run_replay(cmd_same, dry_run=bool(args.dry_run))
         bundle_same = None if args.dry_run else _bundle_dir_from_out(out_same)
 
         # 3) Disjoint-window mask bundle (cheap "mask-only" run with all-false conditional mask)
@@ -377,7 +413,10 @@ def main() -> None:
             "--stap-conditional-mask-tag",
             "maskonly_allfalse",
         ]
-        _run_replay(cmd_disjoint_mask, dry_run=args.dry_run)
+        if bool(args.reuse_existing) and _has_bundle(out_disjoint_mask):
+            print(f"[condstap] reuse existing: {out_disjoint_mask}", flush=True)
+        else:
+            _run_replay(cmd_disjoint_mask, dry_run=bool(args.dry_run))
         if args.dry_run:
             disjoint_mask_path = false_mask_path
         else:
@@ -409,7 +448,10 @@ def main() -> None:
             "--stap-conditional-mask-tag",
             f"disjoint_off{int(args.disjoint_offset)}",
         ]
-        _run_replay(cmd_disjoint, dry_run=args.dry_run)
+        if bool(args.reuse_existing) and _has_bundle(out_disjoint):
+            print(f"[condstap] reuse existing: {out_disjoint}", flush=True)
+        else:
+            _run_replay(cmd_disjoint, dry_run=bool(args.dry_run))
         bundle_disjoint = None if args.dry_run else _bundle_dir_from_out(out_disjoint)
 
         # 4) Conditional (random mask with matched tile coverage)
@@ -446,7 +488,10 @@ def main() -> None:
             "--stap-conditional-mask-tag",
             "random_match_tilecov",
         ]
-        _run_replay(cmd_random, dry_run=args.dry_run)
+        if bool(args.reuse_existing) and _has_bundle(out_random):
+            print(f"[condstap] reuse existing: {out_random}", flush=True)
+        else:
+            _run_replay(cmd_random, dry_run=bool(args.dry_run))
         bundle_random = None if args.dry_run else _bundle_dir_from_out(out_random)
 
         if args.dry_run:
@@ -475,6 +520,8 @@ def main() -> None:
             score, mf, mb = _load_scores(bdir)
             pos = score[mf]
             neg = score[mb]
+            n_bg = int(np.isfinite(neg).sum())
+            n_flow = int(np.isfinite(pos).sum())
 
             entry: Dict[str, Any] = {
                 "pilot": pilot_name,
@@ -486,6 +533,9 @@ def main() -> None:
                 "condition": cond.key,
                 "condition_label": cond.label,
                 "eval_mask_mismatch_pixels": int(mask_mismatch.get(cond.key, 0)),
+                "n_bg": n_bg,
+                "n_flow": n_flow,
+                "fpr_min": (1.0 / float(n_bg)) if n_bg > 0 else None,
             }
             for fpr in fprs:
                 thr, tpr = _tpr_at_fpr(pos, neg, fpr)
@@ -510,6 +560,9 @@ def main() -> None:
         "condition",
         "condition_label",
         "eval_mask_mismatch_pixels",
+        "n_bg",
+        "n_flow",
+        "fpr_min",
     ]
     for fpr in fprs:
         fieldnames.extend([f"tpr@{fpr:g}", f"thr@{fpr:g}"])
@@ -528,8 +581,21 @@ def main() -> None:
         "fprs": fprs,
         "n_pilots": len(set(r["pilot"] for r in per_pilot_rows)),
         "conditions": [c.key for c in CONDITIONS],
+        "score_key": "score_stap_preka",
+        "eval": {},
         "delta_tpr_vs_full": {},
     }
+    # Report evaluation sample support on the scored window (use full-STAP rows).
+    n_bg_full = [int(r.get("n_bg") or 0) for r in per_pilot_rows if r.get("condition") == "full"]
+    n_flow_full = [int(r.get("n_flow") or 0) for r in per_pilot_rows if r.get("condition") == "full"]
+    if n_bg_full:
+        summary["eval"] = {
+            "n_bg": n_bg_full,
+            "n_flow": n_flow_full,
+            "n_bg_median": float(np.median(np.asarray(n_bg_full, dtype=np.float64))),
+            "n_flow_median": float(np.median(np.asarray(n_flow_full, dtype=np.float64))),
+            "fpr_min_median": float(np.median(1.0 / (np.asarray(n_bg_full, dtype=np.float64) + 1e-12))),
+        }
     for fpr in fprs:
         # Reconstruct paired order by iterating pilots as they appeared.
         full_vals = np.array(per_condition_tpr["full"][fpr], dtype=np.float64)

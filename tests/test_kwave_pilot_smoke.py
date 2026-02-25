@@ -35,6 +35,10 @@ def test_pilot_r1_smoke(tmp_path):
     pd_base = bundle_dir / "pd_base.npy"
     assert base_pos.exists() and pd_base.exists()
     assert (bundle_dir / "stap_score_map.npy").exists()
+    assert (bundle_dir / "score_base.npy").exists()
+    assert (bundle_dir / "score_stap_preka.npy").exists()
+    assert (bundle_dir / "score_stap.npy").exists()
+    assert (bundle_dir / "score_name.txt").exists()
 
 
 def test_pilot_motion_smoke(tmp_path):
@@ -69,3 +73,7 @@ def test_pilot_motion_smoke(tmp_path):
     assert (bundle_dir / "stap_pos.npy").exists()
     assert (bundle_dir / "mask_flow.npy").exists()
     assert (bundle_dir / "stap_score_map.npy").exists()
+    assert (bundle_dir / "score_base.npy").exists()
+    assert (bundle_dir / "score_stap_preka.npy").exists()
+    assert (bundle_dir / "score_stap.npy").exists()
+    assert (bundle_dir / "score_name.txt").exists()

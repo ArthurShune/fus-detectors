@@ -30,6 +30,23 @@ def _load_bundle(bundle_dir: str) -> Dict:
         out["base_m_alias"] = np.load(base_m_alias_path)
     out["base_score"] = _load("base_score_map.npy")
     out["stap_score"] = _load("stap_score_map.npy")
+    # vNext primary score exports (preferred when present).
+    score_base_path = os.path.join(bundle_dir, "score_base.npy")
+    if os.path.exists(score_base_path):
+        out["score_base"] = np.load(score_base_path)
+    score_stap_preka_path = os.path.join(bundle_dir, "score_stap_preka.npy")
+    if os.path.exists(score_stap_preka_path):
+        out["score_stap_preka"] = np.load(score_stap_preka_path)
+    score_stap_path = os.path.join(bundle_dir, "score_stap.npy")
+    if os.path.exists(score_stap_path):
+        out["score_stap"] = np.load(score_stap_path)
+    score_name_path = os.path.join(bundle_dir, "score_name.txt")
+    if os.path.exists(score_name_path):
+        try:
+            with open(score_name_path, "r", encoding="utf-8") as f:
+                out["score_name"] = f.read()
+        except Exception:
+            pass
     # Optional maps used when we want to align R-3 with the actual
     # detector score used in the run (e.g. band-ratio or PD).
     for key, fname in (
@@ -301,7 +318,8 @@ def main() -> None:
         description=(
             "Check KA-friendly regime conditions (R-1/R-2/R-3) on a HAB k-Wave bundle.\n"
             "Bundle should be a directory containing meta.json, mask_flow.npy, "
-            "mask_bg.npy, base_band_ratio_map.npy, base_score_map.npy, stap_score_map.npy."
+            "mask_bg.npy, base_band_ratio_map.npy, base_score_map.npy, stap_score_map.npy "
+            "(and optionally score_base.npy / score_stap.npy)."
         )
     )
     parser.add_argument(
@@ -338,7 +356,7 @@ def main() -> None:
         "--score-mode",
         type=str,
         default="auto",
-        choices=["auto", "msd", "pd", "band_ratio"],
+        choices=["auto", "msd", "stap", "pd", "band_ratio"],
         help=(
             "Score definition used for R-3 headroom. "
             "'auto' uses meta['score_stats']['mode'] when available, "
@@ -374,6 +392,33 @@ def main() -> None:
         if svd_energy_removed is not None:
             line += f", svd_energy_removed_frac={svd_energy_removed:.3f}"
         print(line)
+    # Band-ratio bin sanity (important for short-ensemble real datasets).
+    br_stats = baseline_stats_root.get("band_ratio_stats") if isinstance(baseline_stats_root, dict) else None
+    if isinstance(br_stats, dict) and br_stats.get("br_series_len") is not None:
+        try:
+            df_hz = br_stats.get("br_df_hz")
+            flow_bins = br_stats.get("br_flow_bins")
+            alias_bins = br_stats.get("br_alias_bins")
+            flow_lo = br_stats.get("br_flow_bin_lo")
+            flow_hi = br_stats.get("br_flow_bin_hi")
+            alias_lo = br_stats.get("br_alias_bin_lo")
+            alias_hi = br_stats.get("br_alias_bin_hi")
+            overlap = br_stats.get("br_bins_overlap")
+            flow_nodc = br_stats.get("br_flow_bins_nodc")
+            alias_nodc = br_stats.get("br_alias_bins_nodc")
+            peak_bin_p50 = br_stats.get("br_peak_bin_p50")
+            peak_bin_p90 = br_stats.get("br_peak_bin_p90")
+            print(
+                "# Band-ratio bins: "
+                f"T={br_stats.get('br_series_len')}, df≈{df_hz:.3g} Hz, "
+                f"flow_bins={flow_bins} (bin {flow_lo}..{flow_hi}, nodc={flow_nodc}), "
+                f"alias_bins={alias_bins} (bin {alias_lo}..{alias_hi}, nodc={alias_nodc}), "
+                f"overlap={overlap}, peak_bin_p50={peak_bin_p50}, peak_bin_p90={peak_bin_p90}"
+            )
+            if bool(overlap) or int(flow_nodc or 0) <= 0 or int(alias_nodc or 0) <= 0:
+                print("# Band-ratio sanity: FAIL (empty/overlap bins) -> treat KA contract as invalid")
+        except Exception:
+            pass
 
     # R-2: alias separation using band-ratio map.
     # Use an explicit alias metric map when present; otherwise invert the
@@ -400,7 +445,7 @@ def main() -> None:
     score_mode = args.score_mode
     if score_mode == "auto":
         score_mode = score_mode_meta or meta.get("score_pool_default") or "msd"
-    if score_mode not in {"msd", "pd", "band_ratio"}:
+    if score_mode not in {"msd", "pd", "band_ratio", "stap"}:
         raise RuntimeError(f"Unrecognized score_mode {score_mode!r}")
     if score_mode == "band_ratio":
         base_score = data["base_band_ratio"]
@@ -419,16 +464,32 @@ def main() -> None:
             raise RuntimeError(
                 "PD score_mode requested but pd_base.npy / pd_stap.npy are missing."
             )
-        # PD-mode convention: ROC is evaluated by thresholding the lower tail
-        # of pd_*.npy (equivalently, use the right-tail score S=-pd).
-        # Prefer explicit score maps when present to avoid sign ambiguity.
+        # PD-mode convention: ROC is evaluated by thresholding the right tail of
+        # the exported PD score map `score_pd_*.npy` (higher = more flow evidence).
+        #
+        # Prefer explicit score maps when present to avoid sign ambiguity across
+        # legacy bundles.
         base_score = data.get("score_pd_base")
         stap_score = data.get("score_pd_stap")
         if base_score is None:
-            base_score = -pd_base
+            roc_conv = (meta.get("pd_mode") or {}).get("roc_convention") if isinstance(meta, dict) else None
+            roc_conv = str(roc_conv or "").lower()
+            base_score = (-pd_base) if "lower_tail_on_pd" in roc_conv else pd_base
         if stap_score is None:
-            stap_score = -pd_stap
-    else:  # "msd"
+            roc_conv = (meta.get("pd_mode") or {}).get("roc_convention") if isinstance(meta, dict) else None
+            roc_conv = str(roc_conv or "").lower()
+            stap_score = (-pd_stap) if "lower_tail_on_pd" in roc_conv else pd_stap
+    elif score_mode == "stap":
+        # vNext primary score exports (right-tail, higher = more flow evidence).
+        base_score = data.get("score_base")
+        if base_score is None:
+            base_score = data["base_score"]
+        stap_score = data.get("score_stap")
+        if stap_score is None:
+            stap_score = data.get("score_stap_preka")
+        if stap_score is None:
+            stap_score = data["stap_score"]
+    else:  # "msd" (legacy stap_score_map)
         base_score = data["base_score"]
         stap_score = data["stap_score"]
 

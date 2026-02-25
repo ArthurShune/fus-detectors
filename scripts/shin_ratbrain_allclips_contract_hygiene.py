@@ -159,14 +159,18 @@ def _compute_hygiene_row(
         # Best-effort: undo scaling if available; otherwise pre==post.
         if ka_scale is not None:
             scale = np.asarray(ka_scale, dtype=np.float32)
-            pd_pre = (pd_post.astype(np.float32) / np.maximum(scale, 1e-12)).astype(np.float32, copy=False)
+            # Bundle convention: pd_post = pd_pre / ka_scale (scale>=1).
+            pd_pre = (pd_post.astype(np.float32) * np.maximum(scale, 1e-12)).astype(
+                np.float32, copy=False
+            )
         else:
             pd_pre = pd_post.astype(np.float32, copy=False)
 
     flow = np.asarray(mask_flow, dtype=bool)
     bg = np.asarray(mask_bg, dtype=bool)
-    s_pre = -np.asarray(pd_pre, dtype=np.float64)
-    s_post = -np.asarray(pd_post, dtype=np.float64)
+    # Score convention: higher = more flow-like evidence (S = PD).
+    s_pre = np.asarray(pd_pre, dtype=np.float64)
+    s_post = np.asarray(pd_post, dtype=np.float64)
 
     q99_pre = _safe_quantile(s_pre[bg], 0.99)
     q99_post = _safe_quantile(s_post[bg], 0.99)
@@ -185,16 +189,18 @@ def _compute_hygiene_row(
     clust_post = _connected_components(hit_post, connectivity=int(connectivity))
 
     q_hi_protect = None
+    protect_hi_by_score = True
     ka_v2 = meta.get("ka_contract_v2") or {}
     if isinstance(ka_v2, dict):
         cfg = ka_v2.get("config") or {}
         if isinstance(cfg, dict):
             try:
-                q_hi_protect = float(cfg.get("q_hi_protect", 0.995))
+                protect_hi_by_score = bool(cfg.get("protect_hi_by_score", True))
+                q_hi_protect = float(cfg.get("q_hi_protect", 0.99999))
             except Exception:
                 q_hi_protect = None
     prot = flow.copy()
-    if q_hi_protect is not None:
+    if protect_hi_by_score and q_hi_protect is not None:
         finite = np.isfinite(s_pre)
         if finite.any():
             thr_hi = float(np.quantile(s_pre[finite], q_hi_protect))

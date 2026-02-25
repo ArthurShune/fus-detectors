@@ -9,6 +9,7 @@ can call the same code without duplicating math.
 
 from __future__ import annotations
 
+import os
 import math
 from typing import Dict, List, Sequence, Tuple
 
@@ -20,11 +21,10 @@ except ImportError:  # pragma: no cover - torch not available
     torch = None  # type: ignore
 
 try:
-    # Reuse existing utilities to avoid diverging behavior.
-    from pipeline.stap.temporal import robust_covariance, split_fd_grid_by_motion
+    # Import directly to avoid circular imports (`temporal.py` depends on this module).
+    from pipeline.stap.robust_cov import robust_covariance
 except Exception:  # pragma: no cover - during partial imports
     robust_covariance = None  # type: ignore
-    split_fd_grid_by_motion = None  # type: ignore
 
 
 def build_temporal_hankels_batch(
@@ -63,6 +63,31 @@ def build_temporal_hankels_batch(
     # torch.unfold returns (B, N, Lt, h, w); permute to (B, Lt, N, h, w)
     S = x.unfold(dimension=1, size=Lt, step=1)
     S = S.permute(0, 2, 1, 3, 4).contiguous()
+
+    # Optional training snapshot subsampling to limit effective support, mirroring
+    # the slow-path behavior. Controlled via env vars:
+    #   STAP_SNAPSHOT_STRIDE : integer stride along the N axis (>=1).
+    #   STAP_MAX_SNAPSHOTS   : integer cap on N after striding.
+    stride_env = os.getenv("STAP_SNAPSHOT_STRIDE", "").strip()
+    max_env = os.getenv("STAP_MAX_SNAPSHOTS", "").strip()
+    try:
+        stride = int(stride_env) if stride_env else 1
+    except ValueError:
+        stride = 1
+    if stride < 1:
+        stride = 1
+    if stride > 1 and S.shape[2] > 1:
+        S = S[:, :, ::stride, :, :].contiguous()
+    try:
+        max_snaps = int(max_env) if max_env else None
+    except ValueError:
+        max_snaps = None
+    if max_snaps is not None and max_snaps > 0 and S.shape[2] > max_snaps:
+        N = int(S.shape[2])
+        idx = torch.linspace(
+            0, N - 1, steps=int(max_snaps), device=S.device, dtype=torch.long
+        )
+        S = S.index_select(2, idx).contiguous()
     if center:
         S = S - S.mean(dim=2, keepdim=True)
 
@@ -126,8 +151,38 @@ def shrinkage_alpha_for_kappa_batch(
         raise ValueError(f"Expected (B,Lt,Lt) tensor, got shape {tuple(R_B_Lt_Lt.shape)}")
     if kappa_target <= 1.0:
         return torch.zeros((R_B_Lt_Lt.shape[0],), device=R_B_Lt_Lt.device, dtype=torch.float32)
-    # Eigenvalues per tile: (B,Lt)
-    evals = torch.linalg.eigvalsh(R_B_Lt_Lt).real
+
+    # Eigenvalues per tile: (B,Lt). In practice, numerical non-Hermitian drift
+    # (or near-repeated eigenvalues) can trigger non-convergence in batched
+    # eigensolvers. Hermitize and fall back to per-tile jittered solves when
+    # needed so the fast path never hard-fails.
+    herm = 0.5 * (R_B_Lt_Lt + R_B_Lt_Lt.conj().transpose(-2, -1))
+    try:
+        evals = torch.linalg.eigvalsh(herm).real
+    except Exception:
+        B, Lt = herm.shape[0], herm.shape[1]
+        eye = torch.eye(Lt, device=herm.device, dtype=herm.dtype)
+        evals_list = []
+        # Jitter ladder is scaled by mu so it is roughly unitless across tiles.
+        jitter_mults = (0.0, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2)
+        for b in range(B):
+            Rb = herm[b]
+            mu_b = torch.real(torch.diagonal(Rb, dim1=-2, dim2=-1)).mean()
+            mu_b_safe = torch.clamp(mu_b, min=0.0) + 1e-12
+            evals_b = None
+            for mult in jitter_mults:
+                try:
+                    evals_b = torch.linalg.eigvalsh(Rb + (float(mult) * mu_b_safe) * eye).real
+                    break
+                except Exception:
+                    evals_b = None
+            if evals_b is None:
+                # Last resort: diagonal approximation (keeps the method defined).
+                evals_b = torch.real(torch.diagonal(Rb, dim1=-2, dim2=-1)).to(dtype=torch.float32)
+            evals_list.append(evals_b)
+        evals = torch.stack(evals_list, dim=0)
+
+    evals = torch.clamp(evals, min=0.0)
     mu = evals.mean(dim=1)
     e_min = evals.min(dim=1).values
     e_max = evals.max(dim=1).values
@@ -162,10 +217,43 @@ def conditioned_lambda_batch(
 
     # Eigenvalues per tile
     herm = 0.5 * (R_B_Lt_Lt + R_B_Lt_Lt.conj().transpose(-2, -1))
-    evals = torch.linalg.eigvalsh(herm).real
-    evals_clamped = torch.clamp(evals, min=0.0)
-    ev_min = evals_clamped[:, 0]
-    ev_max = evals_clamped[:, -1]
+    try:
+        evals = torch.linalg.eigvalsh(herm).real
+        evals_clamped = torch.clamp(evals, min=0.0)
+        ev_min = evals_clamped[:, 0]
+        ev_max = evals_clamped[:, -1]
+    except Exception:
+        # Fall back to per-tile jittered eigensolves; last resort is diagonal min/max.
+        B, Lt = herm.shape[0], herm.shape[1]
+        eye = torch.eye(Lt, device=herm.device, dtype=herm.dtype)
+        jitter_mults = (0.0, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2)
+        ev_min_list = []
+        ev_max_list = []
+        for b in range(B):
+            Rb = herm[b]
+            diag = torch.real(torch.diagonal(Rb, dim1=-2, dim2=-1))
+            mu_b = diag.mean()
+            mu_b_safe = torch.clamp(mu_b, min=0.0) + 1e-12
+            e_min_b = None
+            e_max_b = None
+            for mult in jitter_mults:
+                try:
+                    evals_b = torch.linalg.eigvalsh(Rb + (float(mult) * mu_b_safe) * eye).real
+                    evals_b = torch.clamp(evals_b, min=0.0)
+                    e_min_b = evals_b.min()
+                    e_max_b = evals_b.max()
+                    break
+                except Exception:
+                    e_min_b = None
+                    e_max_b = None
+            if e_min_b is None or e_max_b is None:
+                diag_clamped = torch.clamp(diag, min=0.0)
+                e_min_b = diag_clamped.min()
+                e_max_b = diag_clamped.max()
+            ev_min_list.append(e_min_b)
+            ev_max_list.append(e_max_b)
+        ev_min = torch.stack(ev_min_list, dim=0).to(dtype=torch.float64)
+        ev_max = torch.stack(ev_max_list, dim=0).to(dtype=torch.float64)
 
     denom = torch.clamp(torch.as_tensor(kappa_target - 1.0), min=eps)
     lam_needed = torch.where(
@@ -223,20 +311,87 @@ def build_fd_grid_span(
     return fd_grid, meta
 
 
+def build_fd_grid_flow_band(
+    prf_hz: float,
+    Lt: int,
+    flow_band_hz: Tuple[float, float],
+    *,
+    motion_half_span_hz: float = 0.0,
+    min_pts: int = 3,
+    max_pts: int = 21,
+) -> Tuple[np.ndarray, Dict[str, float]]:
+    """
+    Build a symmetric Doppler grid spanning a fixed flow band.
+
+    This mirrors the slow-path `fd_span_mode="flow_band"` behavior: it does not
+    depend on per-tile PSD, and it avoids collapsing to a single DFT bin when Lt
+    is short by choosing multiple tones across the band.
+    """
+    flow_low_hz, flow_high_hz = flow_band_hz
+    flow_low_hz = float(flow_low_hz)
+    flow_high_hz = float(flow_high_hz)
+    if flow_high_hz < flow_low_hz:
+        flow_low_hz, flow_high_hz = flow_high_hz, flow_low_hz
+
+    nyquist = 0.5 * float(prf_hz)
+    upper = min(float(flow_high_hz), nyquist + 1e-6)
+
+    max_total = int(max_pts) if max_pts is not None else 0
+    if max_total <= 0:
+        max_total = 3
+    max_allowed = int(Lt) if int(Lt) % 2 == 1 else max(int(Lt) - 1, 1)
+    total = min(max_total, max_allowed)
+    total = max(total, int(min_pts))
+    total = min(total, max_allowed)
+    if total >= 3 and total % 2 == 0:
+        # Prefer odd length; keep within [min_pts, max_allowed].
+        if total > int(min_pts):
+            total -= 1
+        elif total + 1 <= max_allowed:
+            total += 1
+
+    if total <= 1:
+        center = float(np.clip(0.5 * (flow_low_hz + upper), 0.0, upper))
+        fd_grid = np.asarray([0.0] if center <= 0.0 else [-center, center], dtype=np.float64)
+        span_hz = float(np.max(np.abs(fd_grid))) if fd_grid.size else 0.0
+        return fd_grid, {"span_hz": span_hz, "grid_step_hz": 0.0, "lines": int(fd_grid.size)}
+
+    n_pos = max(1, (int(total) - 1) // 2) if total >= 3 else 0
+    low_eff = float(flow_low_hz)
+    try:
+        if motion_half_span_hz is not None and float(motion_half_span_hz) > 0.0:
+            low_eff = max(low_eff, float(motion_half_span_hz) + 1e-3)
+    except Exception:
+        pass
+
+    if upper <= 0.0 or n_pos <= 0:
+        mags: list[float] = []
+    elif upper < flow_low_hz:
+        mags = [float(np.clip(0.5 * (flow_low_hz + flow_high_hz), 0.0, upper))]
+    elif n_pos == 1:
+        mags = [0.5 * (low_eff + upper)]
+    else:
+        if upper < low_eff:
+            mags = [float(np.clip(0.5 * (flow_low_hz + flow_high_hz), 0.0, upper))]
+        else:
+            mags = np.linspace(low_eff, upper, n_pos, dtype=np.float32).tolist()
+    mags = [float(f) for f in mags if np.isfinite(f) and float(f) > 0.0]
+    mags = sorted({float(f) for f in mags})
+    if not mags:
+        fd_grid = np.asarray([0.0], dtype=np.float64)
+    else:
+        fd_grid = np.asarray(sorted([-f for f in mags] + [0.0] + mags), dtype=np.float64)
+    span_hz = float(np.max(np.abs(fd_grid))) if fd_grid.size else 0.0
+    grid_step_hz = float(np.median(np.diff(np.sort(np.unique(np.abs(fd_grid)))))) if mags and len(mags) > 1 else 0.0
+    meta = {"span_hz": span_hz, "grid_step_hz": grid_step_hz, "lines": int(fd_grid.size)}
+    return fd_grid, meta
+
+
 __all__ = [
     "build_temporal_hankels_batch",
     "robust_temporal_cov_batch",
     "shrinkage_alpha_for_kappa_batch",
     "conditioned_lambda_batch",
     "build_fd_grid_span",
-    "split_fd_grid_by_motion",
-]
-
-
-__all__ = [
-    "build_temporal_hankels_batch",
-    "robust_temporal_cov_batch",
-    "shrinkage_alpha_for_kappa_batch",
-    "conditioned_lambda_batch",
-    "split_fd_grid_by_motion",
+    "build_fd_grid_flow_band",
 ]
