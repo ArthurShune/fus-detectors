@@ -4,12 +4,12 @@ PD-mode sanity checks for acceptance bundles.
 
 This script is meant to make the repository's PD-mode scoring convention explicit:
   - Bundles store `pd_base.npy` / `pd_stap.npy` as PD-mode maps.
-  - For ROC we typically use the right-tail score S = -PD (equivalently, lower-tail
-    thresholding on the stored PD map).
-  - Newer bundles also export `score_pd_base.npy` / `score_pd_stap.npy` explicitly.
+  - For ROC we use the explicit right-tail PD score map `score_pd_*.npy`
+    (higher = more flow evidence). In current bundles, `score_pd == pd`.
+  - Legacy bundles exported `score_pd == -pd` and used lower-tail thresholding on `pd`.
 
 For each bundle directory, this script:
-  - checks that `score_pd_*.npy == -pd_*.npy` when present
+  - checks that `score_pd_*.npy` matches the bundle's declared convention when present
   - prints flow/background summary statistics (medians, ratios)
   - optionally writes a small diagnostic figure under --out-dir
 
@@ -78,6 +78,17 @@ def summarize_bundle(bundle_dir: Path) -> dict:
 
     score_pd_base = _load_optional(bundle_dir, "score_pd_base.npy")
     score_pd_stap = _load_optional(bundle_dir, "score_pd_stap.npy")
+    meta_path = bundle_dir / "meta.json"
+    roc_conv = ""
+    if meta_path.exists():
+        try:
+            import json as _json  # local alias
+
+            meta = _json.loads(meta_path.read_text())
+            roc_conv = str((meta.get("pd_mode") or {}).get("roc_convention") or "")
+        except Exception:
+            roc_conv = ""
+    sign_expected = -1.0 if "lower_tail_on_pd" in roc_conv.lower() else 1.0
 
     out: dict[str, object] = {"bundle": bundle_dir.name}
 
@@ -86,16 +97,19 @@ def summarize_bundle(bundle_dir: Path) -> dict:
     out["pd_stap_flow_median"] = _median(pd_stap[mask_flow]) if mask_flow.any() else None
     out["pd_stap_bg_median"] = _median(pd_stap[mask_bg]) if mask_bg.any() else None
 
-    # Direction sanity: score is right-tail, PD is left-tail.
-    out["spearman(pd_base, -pd_base)"] = _spearmanr(pd_base, -pd_base)
-    out["spearman(pd_stap, -pd_stap)"] = _spearmanr(pd_stap, -pd_stap)
+    out["roc_convention"] = roc_conv or "unknown"
+    out["expected_score_pd_sign"] = float(sign_expected)
 
     if score_pd_base is not None:
-        out["score_pd_base_max_abs_err"] = float(np.nanmax(np.abs(score_pd_base + pd_base)))
+        out["score_pd_base_max_abs_err"] = float(
+            np.nanmax(np.abs(score_pd_base - sign_expected * pd_base))
+        )
     else:
         out["score_pd_base_max_abs_err"] = None
     if score_pd_stap is not None:
-        out["score_pd_stap_max_abs_err"] = float(np.nanmax(np.abs(score_pd_stap + pd_stap)))
+        out["score_pd_stap_max_abs_err"] = float(
+            np.nanmax(np.abs(score_pd_stap - sign_expected * pd_stap))
+        )
     else:
         out["score_pd_stap_max_abs_err"] = None
 
@@ -187,4 +201,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

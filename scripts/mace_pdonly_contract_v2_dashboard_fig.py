@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Phase 3: Plot a PD-only KA Contract v2 dashboard for Macé/Urban plane sweeps.
+Phase 3: Plot a PD-only KA prior summary panel for Macé/Urban plane sweeps.
 
 This consumes the per-plane CSV produced by:
   PYTHONPATH=. python scripts/mace_pdonly_contract_v2_sweep.py \
     --out-csv reports/mace_pdonly_contract_v2.csv
 
-and writes a compact dashboard figure suitable for inclusion in the paper.
+and writes a compact summary panel suitable for inclusion in the paper.
 
-The dashboard explicitly separates:
-  - runtime label-free contract outputs (states, reasons, coverage/strength)
+The panel explicitly separates:
+  - runtime label-free prior outputs (regimes, reasons, coverage/strength)
   - offline atlas-labeled descriptive context (Pf peak H1 vs H0)
 """
 
@@ -34,7 +34,7 @@ def _format_float(value: float | None, digits: int = 3) -> str:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Plot Macé PD-only KA Contract v2 dashboard from CSV.")
+    ap = argparse.ArgumentParser(description="Plot Macé PD-only KA prior summary panel from CSV.")
     ap.add_argument(
         "--in-csv",
         type=Path,
@@ -48,6 +48,11 @@ def main() -> None:
         help="Output PNG path (paper figure).",
     )
     ap.add_argument("--also-pdf", action="store_true", help="Also write a matching PDF next to the PNG")
+    ap.add_argument(
+        "--show-source",
+        action="store_true",
+        help="Include the input CSV path in the figure title (debug/provenance; not for paper).",
+    )
     ap.add_argument("--max-reasons", type=int, default=8, help="Maximum state/reason bars to plot")
     ap.add_argument(
         "--offline-thresh-h1",
@@ -93,6 +98,11 @@ def main() -> None:
         "C1_SAFETY": "#1f77b4",
         "C2_UPLIFT": "#ff7f0e",
     }
+    state_short = {
+        "C0_OFF": r"$\mathcal{R}_0$",
+        "C1_SAFETY": r"$\mathcal{R}_1$",
+        "C2_UPLIFT": r"$\mathcal{R}_2$",
+    }
 
     state_counts = df["state"].value_counts().reindex(state_order).fillna(0).astype(int)
     state_counts = state_counts[state_counts > 0]
@@ -109,22 +119,27 @@ def main() -> None:
 
     plt.rcParams.update(
         {
-            "figure.dpi": 150,
+            "figure.dpi": 220,
+            "font.family": "serif",
+            "mathtext.fontset": "cm",
             "font.size": 9,
             "axes.titlesize": 10,
             "axes.labelsize": 9,
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
         }
     )
 
     fig, axes = plt.subplots(2, 2, figsize=(11.0, 7.0))
 
-    # Panel A: contract state histogram (runtime / label-free).
+    # Panel A: prior regime histogram (runtime / label-free).
     ax = axes[0, 0]
-    xs = list(state_counts.index)
+    xs_state = list(state_counts.index)
+    xs = [state_short.get(x, x) for x in xs_state]
     ys = state_counts.values
-    colors = [state_colors.get(x, "#cccccc") for x in xs]
+    colors = [state_colors.get(x, "#cccccc") for x in xs_state]
     bars = ax.bar(xs, ys, color=colors)
-    ax.set_title("PD-only Contract v2 State (Runtime, Label-Free)")
+    ax.set_title("PD-only prior regime (Runtime, Label-Free)")
     ax.set_ylabel("Plane count")
     ax.tick_params(axis="x", rotation=25)
     ax.set_ylim(0, max(ys) + 2)
@@ -133,8 +148,17 @@ def main() -> None:
 
     # Panel B: top (state, reason) combos.
     ax = axes[0, 1]
-    ax.set_title("State / Reason (Top)")
-    ylabels = list(sr_counts.index)[::-1]
+    ax.set_title("Regime / Reason (Top)")
+
+    def _pretty_state_reason(sr: str) -> str:
+        if "/" not in sr:
+            return sr
+        st, rsn = sr.split("/", 1)
+        st = state_short.get(st, st)
+        rsn = rsn.replace("_", " ")
+        return f"{st}/{rsn}"
+
+    ylabels = [_pretty_state_reason(x) for x in list(sr_counts.index)[::-1]]
     yvals = list(sr_counts.values)[::-1]
     bars = ax.barh(ylabels, yvals, color="#4c78a8")
     ax.set_xlabel("Plane count")
@@ -159,7 +183,7 @@ def main() -> None:
             s=18,
             c=state_colors.get(state, "#cccccc"),
             alpha=alpha,
-            label=state,
+            label=state_short.get(state, state),
             edgecolors="none",
         )
     # Invariance threshold (from config; plot median if present).
@@ -173,14 +197,14 @@ def main() -> None:
     ax.grid(True, alpha=0.25)
     ax.legend(loc="upper right", frameon=False)
 
-    # Add a small text box summarizing enabled stats.
+    # Add a small text box summarizing "active penalty" stats.
     n_total = int(len(df))
     n_enabled = int(len(df_enabled))
     p50_p = float(np.nanmedian(df_enabled["ka_contract_v2_p_shrink"])) if n_enabled else float("nan")
     p50_iqr = float(np.nanmedian(df_enabled["ka_contract_v2_iqr_logw_gated"])) if n_enabled else float("nan")
     lines = [
         f"planes={n_total}",
-        f"enabled (C1/C2 ok)={n_enabled}",
+        f"penalty active (R1/R2; ok)={n_enabled}",
         f"p_shrink p50={_format_float(p50_p)}",
         f"iqr_logw p50={_format_float(p50_iqr)}",
     ]
@@ -231,7 +255,10 @@ def main() -> None:
         ax.axis("off")
         ax.text(0.0, 1.0, "Offline panel unavailable\n(missing offline_* columns)", va="top", ha="left")
 
-    fig.suptitle(f"Macé PD-only Contract v2 Dashboard ({in_csv.as_posix()})", y=0.98)
+    suptitle = "Macé PD-only KA prior summary panel"
+    if args.show_source:
+        suptitle = f"{suptitle} ({in_csv.as_posix()})"
+    fig.suptitle(suptitle, y=0.98)
     fig.tight_layout(rect=[0, 0, 1, 0.96])
     fig.savefig(out_png, bbox_inches="tight")
     if args.also_pdf:
@@ -245,4 +272,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Generate a small "contract dashboard" figure from KA Contract v2 sweep CSV output.
+Generate a small KA prior summary-panel figure from KA Contract v2 sweep CSV output.
 
 Typical usage:
   PYTHONPATH=. python scripts/ka_contract_v2_dashboard_fig.py \
@@ -35,10 +35,15 @@ def _format_float(value: float | None, digits: int = 3) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Plot a KA Contract v2 dashboard figure from a sweep CSV.")
+    parser = argparse.ArgumentParser(description="Plot a KA prior summary-panel figure from a sweep CSV.")
     parser.add_argument("--in-csv", type=str, required=True, help="Input CSV, e.g. reports/ka_v2_sweep_T64.csv")
     parser.add_argument("--out-png", type=str, required=True, help="Output PNG path")
     parser.add_argument("--also-pdf", action="store_true", help="Also write a matching PDF next to the PNG")
+    parser.add_argument(
+        "--show-source",
+        action="store_true",
+        help="Include the input CSV path in the figure (debug/provenance; not for paper).",
+    )
     parser.add_argument("--max-reasons", type=int, default=6, help="Maximum state/reason bars to plot")
     args = parser.parse_args()
 
@@ -67,6 +72,11 @@ def main() -> None:
         "C0_OFF": "#9e9e9e",
         "C1_SAFETY": "#1f77b4",
         "C2_UPLIFT": "#ff7f0e",
+    }
+    state_short = {
+        "C0_OFF": r"$\mathcal{R}_0$",
+        "C1_SAFETY": r"$\mathcal{R}_1$",
+        "C2_UPLIFT": r"$\mathcal{R}_2$",
     }
 
     state_counts = df["state"].value_counts().reindex(state_order).fillna(0).astype(int)
@@ -113,32 +123,46 @@ def main() -> None:
 
     plt.rcParams.update(
         {
-            "figure.dpi": 150,
+            "figure.dpi": 220,
+            "font.family": "serif",
+            "mathtext.fontset": "cm",
             "font.size": 9,
             "axes.titlesize": 10,
             "axes.labelsize": 9,
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
         }
     )
 
     fig, axes = plt.subplots(1, 3, figsize=(12, 3.6), gridspec_kw={"width_ratios": [1.0, 1.2, 1.1]})
 
-    # Panel A: contract state histogram.
+    # Panel A: prior regime histogram.
     ax = axes[0]
-    xs = list(state_counts.index)
+    xs_state = list(state_counts.index)
+    xs = [state_short.get(x, x) for x in xs_state]
     ys = state_counts.values
-    colors = [state_colors.get(x, "#cccccc") for x in xs]
+    colors = [state_colors.get(x, "#cccccc") for x in xs_state]
     bars = ax.bar(xs, ys, color=colors)
-    ax.set_title("KA Contract v2 State")
+    ax.set_title("KA prior regime")
     ax.set_ylabel("Bundle count")
     ax.set_ylim(0, max(ys) + 1)
     ax.tick_params(axis="x", rotation=30)
     for rect, y in zip(bars, ys):
         ax.text(rect.get_x() + rect.get_width() / 2.0, y + 0.05, f"{int(y)}", ha="center", va="bottom")
 
-    # Panel B: contract reason histogram (state/reason combos).
+    # Panel B: (regime, reason) histogram.
     ax = axes[1]
-    ax.set_title("State / Reason (Top)")
-    ylabels = list(sr_counts.index)[::-1]
+    ax.set_title("Regime / Reason (Top)")
+
+    def _pretty_state_reason(sr: str) -> str:
+        if "/" not in sr:
+            return sr
+        st, rsn = sr.split("/", 1)
+        st = state_short.get(st, st)
+        rsn = rsn.replace("_", " ")
+        return f"{st}/{rsn}"
+
+    ylabels = [_pretty_state_reason(x) for x in list(sr_counts.index)[::-1]]
     yvals = list(sr_counts.values)[::-1]
     bars = ax.barh(ylabels, yvals, color="#4c78a8")
     ax.set_xlabel("Bundle count")
@@ -162,12 +186,12 @@ def main() -> None:
     lines = [
         f"Bundles: {n_bundles}",
         f"KA applied: {n_applied}",
-        f"States: C0={c0}, C1={c1}, C2={c2}",
+        f"Regimes: R0={c0}, R1={c1}, R2={c2}",
     ]
     if n_applied > 0:
         lines += [
             "",
-            "Applied (median unless noted):",
+            "Penalty stats (median unless noted):",
             f"  p_shrink = {_format_float(p_shrink_p50)}",
             f"  scaled_px_frac = {_format_float(scaled_frac_p50)}",
             f"  scale_p90 = {_format_float(scale_p90_p50)}",
@@ -179,7 +203,8 @@ def main() -> None:
     else:
         lines += ["", "Applied: none"]
 
-    lines += ["", f"Source: {in_csv.as_posix()}"]
+    if args.show_source:
+        lines += ["", f"Source: {in_csv.as_posix()}"]
     ax.text(0.0, 1.0, "\n".join(lines), va="top", ha="left", family="monospace")
 
     fig.tight_layout()
@@ -195,4 +220,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -65,12 +65,16 @@ def cholesky_robust(
     jitter_used : float (scale coefficient multiplied by mu*I)
     """
     R = hermitianize(R)
+    # Avoid NaN/Inf poisoning of the jitter scale and factorization.
+    R = torch.nan_to_num(R, nan=0.0, posinf=0.0, neginf=0.0)
     *batch, M, _ = R.shape
     device = R.device
     dtype = R.dtype
-    # Per-batch scale: mu = trace(R)/M  (real, float tensor)
-    tr = torch.real(torch.diagonal(R, dim1=-2, dim2=-1).sum(-1))  # (...,)
-    mu = tr / float(M)
+    # Per-batch scale (real, positive): use mean(|diag|) rather than trace/M.
+    # Using trace can be negative under numerical drift, which would apply a
+    # *negative* "jitter" and worsen non-PD pathologies.
+    diag = torch.real(torch.diagonal(R, dim1=-2, dim2=-1))  # (..., M)
+    mu = torch.amax(torch.abs(diag), dim=-1) + 1e-12  # (...,)
 
     identity = torch.eye(M, dtype=dtype, device=device)
     jitter_dtype = mu.dtype if hasattr(mu, "dtype") else torch.float32
@@ -90,14 +94,24 @@ def cholesky_robust(
         except RuntimeError:  # numerical failure, increase jitter
             jitter = jitter * 10.0
 
-    # Last-resort stronger load
-    load = (1e-3 * mu).to(dtype)
+    # Last-resort stronger load. If this still fails, fall back to a diagonal
+    # proxy (keeps downstream code running deterministically).
+    load = (1.0 * mu + 1e-6).to(dtype)
     if len(batch) == 0:
         Rj = R + load * identity
     else:
         Rj = R + load.reshape(*batch, 1, 1) * identity
-    L = torch.linalg.cholesky(Rj)
-    return L, Rj, 1e-3
+    try:
+        L = torch.linalg.cholesky(Rj)
+        return L, Rj, 1.0
+    except Exception:
+        if len(batch) == 0:
+            Rj = load * identity
+            L = torch.sqrt(load).to(dtype) * identity
+        else:
+            Rj = load.reshape(*batch, 1, 1) * identity
+            L = torch.sqrt(load).reshape(*batch, 1, 1).to(dtype) * identity
+        return L, Rj, 1.0
 
 
 def cholesky_solve_hermitian(

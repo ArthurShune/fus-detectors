@@ -92,7 +92,26 @@ def main() -> None:
     except Exception as e:
         raise SystemExit(f"matplotlib required to plot: {e}")
 
-    fig, axes = plt.subplots(2, n, figsize=(4.0 * n, 6.5), sharex=False, sharey=False)
+    plt.rcParams.update(
+        {
+            "font.family": "serif",
+            "mathtext.fontset": "cm",
+            "font.size": 10,
+            "axes.linewidth": 0.8,
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+            "legend.frameon": False,
+        }
+    )
+
+    fig, axes = plt.subplots(
+        2,
+        n,
+        figsize=(4.2 * n, 6.3),
+        sharex=False,
+        sharey=False,
+        gridspec_kw={"hspace": 0.32, "wspace": 0.18},
+    )
     if n == 1:
         axes = np.asarray(axes).reshape(2, 1)
 
@@ -110,7 +129,6 @@ def main() -> None:
         plot_band(ax0, s["corr_stap_median"], s["corr_stap_q25"], s["corr_stap_q75"], color="tab:blue", name="STAP PD (pre-KA)")
         ax0.set_title(label)
         ax0.set_xlabel("Motion amplitude (px)")
-        ax0.set_ylabel("Map corr vs no-motion (median ± IQR)")
         ax0.set_ylim(-0.05, 1.05)
         ax0.grid(True, alpha=0.3)
 
@@ -118,8 +136,10 @@ def main() -> None:
         plot_band(ax1, s["tpr_base_median"], s["tpr_base_q25"], s["tpr_base_q75"], color="tab:gray", name="MC-SVD PD")
         plot_band(ax1, s["tpr_stap_median"], s["tpr_stap_q25"], s["tpr_stap_q75"], color="tab:blue", name="STAP PD (pre-KA)")
         ax1.set_xlabel("Motion amplitude (px)")
-        ax1.set_ylabel("Flow-proxy TPR @ bg-FPR=1e-3 (median ± IQR)")
-        ax1.set_ylim(-0.01, 1.01)
+        y_max = float(np.nanmax(np.r_[s["tpr_base_q75"], s["tpr_stap_q75"]]))
+        if not np.isfinite(y_max):
+            y_max = 1.0
+        ax1.set_ylim(0.0, min(1.0, max(0.06, 1.05 * y_max)))
         ax1.grid(True, alpha=0.3)
 
         # Small textual summary.
@@ -138,11 +158,23 @@ def main() -> None:
             )
 
     handles, labels = axes[0, 0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=2)
-    fig.suptitle(args.title, y=0.98)
-    fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.95))
+    fig.legend(handles, labels, loc="upper center", ncol=2, bbox_to_anchor=(0.5, 1.10))
+    fig.suptitle(args.title, y=1.17)
+
+    # Use row-level y-labels to avoid overlap between long per-axis labels.
+    fig.text(0.015, 0.69, "Map corr vs no-motion\n(median ± IQR)", rotation="vertical", va="center", ha="left")
+    fig.text(
+        0.015,
+        0.25,
+        "Flow-proxy TPR @ bg-FPR=1e-3\n(median ± IQR)",
+        rotation="vertical",
+        va="center",
+        ha="left",
+    )
+
+    fig.tight_layout(rect=(0.06, 0.0, 1.0, 0.90))
     args.out_png.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(args.out_png, dpi=180)
+    fig.savefig(args.out_png, dpi=300, bbox_inches="tight", pad_inches=0.06)
     plt.close(fig)
 
     print(f"[shin-motion-compare] wrote {args.out_png}")

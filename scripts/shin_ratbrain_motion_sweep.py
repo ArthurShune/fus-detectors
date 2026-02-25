@@ -557,7 +557,7 @@ def main() -> None:
         type=float,
         default=0.99,
         help=(
-            "Reference vessel/flow-proxy mask quantile on the detector score S=-PD (default: %(default)s). "
+            "Reference vessel/flow-proxy mask quantile on the detector score S=PD (default: %(default)s). "
             "Higher means a smaller, more confident proxy set."
         ),
     )
@@ -565,7 +565,7 @@ def main() -> None:
         "--bg-tail-quantile",
         type=float,
         default=0.999,
-        help="BG tail threshold quantile on the detector score S=-PD (default: %(default)s).",
+        help="BG tail threshold quantile on the detector score S=PD (default: %(default)s).",
     )
     parser.add_argument(
         "--fpr-target",
@@ -778,7 +778,8 @@ def main() -> None:
             scale_path = bundle_dir / "ka_scale_map.npy"
             if scale_path.is_file():
                 scale = np.load(scale_path).astype(np.float32)
-                pd_pre = pd_post.astype(np.float32) / np.maximum(scale, 1e-12)
+                # Bundle convention: pd_post = pd_pre / ka_scale (scale>=1).
+                pd_pre = pd_post.astype(np.float32) * np.maximum(scale, 1e-12)
             else:
                 pd_pre = pd_post
 
@@ -786,10 +787,9 @@ def main() -> None:
         mask_bg = np.load(bundle_dir / "mask_bg.npy").astype(bool)
 
         # Detector score convention: in our PD-mode pipeline, higher scores correspond to
-        # more flow-like evidence, and we take s = -PD. This matches the KA v2 protected-set
-        # logic and the low-FPR headroom checks used elsewhere in the repo.
-        base_score_map = (-pd_base).astype(np.float32, copy=False)
-        stap_score_map = (-pd_pre).astype(np.float32, copy=False)
+        # more flow-like evidence, and we take s = PD.
+        base_score_map = (pd_base).astype(np.float32, copy=False)
+        stap_score_map = (pd_pre).astype(np.float32, copy=False)
 
         # Reference thresholds.
         if float(amp_px) == 0.0:
@@ -813,7 +813,7 @@ def main() -> None:
             vessel_stap_ref = ref_stap_score >= float(thr_vessel_stap)
             vessel_ref = vessel_base_ref & vessel_stap_ref
 
-            # Reference BG tail thresholds per method (score S=-PD) on the BG proxy.
+            # Reference BG tail thresholds per method (score S=PD) on the BG proxy.
             thr_bg_tail_base = _safe_quantile(ref_base_score[ref_mask_bg], float(args.bg_tail_quantile))
             thr_bg_tail_stap = _safe_quantile(ref_stap_score[ref_mask_bg], float(args.bg_tail_quantile))
 
@@ -889,7 +889,7 @@ def main() -> None:
         bg_var_ratio_stap = float(np.var(pre_map[sl][bg_sl_mask]) / var_ref_pre_bg)
         bg_var_ratio_ka = float(np.var(post_map[sl][bg_sl_mask]) / var_ref_post_bg)
 
-        # Shared-structure overlap using fixed no-motion thresholds on S=-PD.
+        # Shared-structure overlap using fixed no-motion thresholds on S=PD.
         s_base = -base_map
         s_pre = -pre_map
         s_post = -post_map
@@ -900,7 +900,7 @@ def main() -> None:
         j_stap = _jaccard(vessel_pre, vessel_ref)
         j_ka = _jaccard(vessel_post, vessel_ref)
 
-        # Background tail clusters/area using per-method no-motion BG thresholds on S=-PD.
+        # Background tail clusters/area using per-method no-motion BG thresholds on S=PD.
         hit_base = ref_mask_bg & (base_score_map >= float(thr_bg_tail_base))
         hit_pre = ref_mask_bg & (stap_score_map >= float(thr_bg_tail_stap))
         hit_post = ref_mask_bg & (s_post >= float(thr_bg_tail_stap))

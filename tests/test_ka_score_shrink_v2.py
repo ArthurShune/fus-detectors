@@ -13,9 +13,9 @@ def test_score_shrink_v2_scales_are_shrink_only_for_pd_scores():
     rng = np.random.default_rng(0)
     n = 6000
 
-    # Simulate a PD-like detector score: S = -PD (higher = more flow evidence).
+    # Simulate a PD-like detector score: S = PD (higher = more flow evidence).
     pd = rng.uniform(0.0, 1.0, size=n).astype(np.float32)
-    s_base = (-pd).astype(np.float32)
+    s_base = pd.astype(np.float32)
 
     # Coverage proxy and telemetry.
     c_flow = rng.uniform(0.0, 0.30, size=n).astype(np.float32)
@@ -56,9 +56,9 @@ def test_score_shrink_v2_scales_are_shrink_only_for_pd_scores():
     assert gated.any()
     assert float(np.max(scale[gated])) > 1.0
 
-    # Shrink-only check in score space for S = -PD:
-    pd_new = pd * scale
-    s_new = -pd_new
+    # Shrink-only check in score space for S = PD:
+    pd_new = pd / np.maximum(scale, 1e-12)
+    s_new = pd_new
     assert np.all(s_new <= s_base + 1e-12)
 
 
@@ -68,7 +68,7 @@ def test_score_shrink_v2_forced_applies_even_when_contract_disables():
     n = 6000
 
     pd = rng.uniform(0.0, 1.0, size=n).astype(np.float32)
-    s_base = (-pd).astype(np.float32)
+    s_base = pd.astype(np.float32)
 
     c_flow = rng.uniform(0.0, 0.30, size=n).astype(np.float32)
     # Force a guard-dominant regime so the contract disables in normal mode.
@@ -116,7 +116,7 @@ def test_score_shrink_v2_forced_applies_even_when_contract_disables():
     prot = np.asarray(forced["protected_tiles"], dtype=bool)
     assert np.all(scale[prot] == 1.0)
 
-    # Shrink-only check in score space for S = -PD:
-    pd_new = pd * scale
-    s_new = -pd_new
+    # Shrink-only check in score space for S = PD:
+    pd_new = pd / np.maximum(scale, 1e-12)
+    s_new = pd_new
     assert np.all(s_new <= s_base + 1e-12)

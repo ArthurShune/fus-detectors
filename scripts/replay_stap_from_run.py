@@ -163,6 +163,18 @@ def parse_args() -> argparse.Namespace:
             "Baseline PD computation: plain SVD, motion-compensated SVD, RPCA, or tensor HOSVD."
         ),
     )
+    ap.add_argument(
+        "--baseline-support",
+        type=str,
+        default="window",
+        choices=["window", "full"],
+        help=(
+            "Slow-time support used to fit the baseline filter. 'window' fits the "
+            "baseline on the requested time window (default). 'full' fits MC--SVD "
+            "on the full slow-time stack and applies that projector to the requested "
+            "window (other baselines fall back to 'window')."
+        ),
+    )
     ap.add_argument("--reg-enable", dest="reg_enable", action="store_true")
     ap.add_argument("--reg-disable", dest="reg_enable", action="store_false")
     ap.set_defaults(reg_enable=False)
@@ -369,8 +381,8 @@ def parse_args() -> argparse.Namespace:
         default=0.0,
         help=(
             "Score-space KA shrink strength in [0,1]. When >0 and a score model "
-            "is provided, PD scores on high-risk tiles are inflated so that "
-            "S = -PD is shrunk."
+            "is provided, PD scores on high-risk tiles are shrunk so that "
+            "S = PD is shrunk."
         ),
     )
     ap.add_argument(
@@ -379,7 +391,7 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Enable KA Contract v2 score-space shrink-only mode (Phase 2). "
             "This uses alias/guard telemetry + flow coverage to localize a "
-            "bounded shrink on PD scores (S=-PD). By default this applies in "
+            "bounded shrink on PD scores (S=PD). By default this applies in "
             "C1_SAFETY; use --ka-score-contract-v2-mode to also allow C2_UPLIFT "
             "(research-only)."
         ),
@@ -415,6 +427,19 @@ def parse_args() -> argparse.Namespace:
             "'pd' uses the PD-derived proxy mask (label-free; default). "
             "'eval' uses the evaluation flow mask (simulator-truth in Brain-* sims; "
             "ablation/oracle mode)."
+        ),
+    )
+    ap.add_argument(
+        "--ka-contract-v2-alias-source",
+        type=str,
+        default="peak",
+        choices=["peak", "sum", "whitened", "auto"],
+        help=(
+            "Choose the alias-risk metric source for the v2 contract: "
+            "'peak' uses log(peak Pa / peak Pf) (default), "
+            "'sum' uses log(sum Pa / sum Pf), "
+            "'whitened' uses the whitened band-ratio tile score (-log Ef/Ea), "
+            "'auto' prefers peak then falls back to sum."
         ),
     )
     ap.add_argument(
@@ -555,6 +580,14 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional tag recorded in meta for the conditional mask source.",
     )
+    ap.add_argument(
+        "--stap-disable",
+        action="store_true",
+        help=(
+            "Skip the STAP core and write a baseline-only bundle "
+            "(pd_stap := pd_base; score_pd_stap := score_pd_base)."
+        ),
+    )
     ap.add_argument("--bg-guard-target-med", type=float, default=0.45)
     ap.add_argument("--bg-guard-target-low", type=float, default=0.16)
     ap.add_argument("--bg-guard-percentile-low", type=float, default=0.10)
@@ -628,6 +661,100 @@ def parse_args() -> argparse.Namespace:
         help="Uniform ±jitter applied to the background alias tone per seed (Hz).",
     )
     ap.add_argument(
+        "--bg-alias-highrank-mode",
+        type=str,
+        default="none",
+        choices=["none", "gw_reverb", "gw_reverb_add", "gw_reverb_muladd"],
+        help=(
+            "Optional high-rank background alias overlay. 'gw_reverb' injects a "
+            "spatially varying multi-mode Pa artifact with reverberation-like deep "
+            "ghost patches. 'gw_reverb_add' applies the same construction additively "
+            "(more aggressive; intended to survive MC--SVD and impact band telemetry). "
+            "'gw_reverb_muladd' applies both multiplicative and additive forms."
+        ),
+    )
+    ap.add_argument(
+        "--bg-alias-highrank-coverage",
+        type=float,
+        default=0.0,
+        help="Target deep ghost patch coverage fraction in [0,1] for bg-alias-highrank-mode.",
+    )
+    ap.add_argument(
+        "--bg-alias-highrank-shallow-coverage",
+        type=float,
+        default=1.0,
+        help="Fraction of shallow-layer bg pixels included in the high-rank alias mask (1.0 uses the full shallow layer).",
+    )
+    ap.add_argument(
+        "--bg-alias-highrank-margin-px",
+        type=int,
+        default=0,
+        help=(
+            "Optional erosion margin (pixels) applied to the eligible deep bg region "
+            "before placing high-rank alias ghost patches. This keeps deep patches away "
+            "from flow/bg boundaries (reduces mixed-tile overlap)."
+        ),
+    )
+    ap.add_argument(
+        "--bg-alias-highrank-freq-jitter-hz",
+        type=float,
+        default=25.0,
+        help="Std dev (Hz) of the spatial frequency-offset field for high-rank alias modes.",
+    )
+    ap.add_argument(
+        "--bg-alias-highrank-drift-step-hz",
+        type=float,
+        default=12.0,
+        help="Std dev (Hz) of the per-ensemble alias frequency random-walk step (0 disables drift).",
+    )
+    ap.add_argument(
+        "--bg-alias-highrank-drift-block-len",
+        type=int,
+        default=None,
+        help=(
+            "Optional drift block length (frames) for high-rank alias modes. "
+            "When set to a value smaller than pulses_per_set, the alias frequency "
+            "random walk is applied across blocks within a replay window (helps "
+            "create within-window high-rank behavior for 64-frame windows)."
+        ),
+    )
+    ap.add_argument(
+        "--bg-alias-highrank-pf-leak-eta",
+        type=float,
+        default=0.0,
+        help="Pf leakage coupling factor for high-rank alias modes (relative to Pa mode amplitudes).",
+    )
+    ap.add_argument(
+        "--bg-alias-highrank-amp",
+        type=float,
+        default=0.20,
+        help="Overall complex amplitude scale for high-rank alias modes (0 disables).",
+    )
+    ap.add_argument(
+        "--synth-amp-jitter",
+        type=float,
+        default=0.05,
+        help="Per-pulse amplitude jitter used when synthesizing the compounded slow-time cube (pre-injection).",
+    )
+    ap.add_argument(
+        "--synth-phase-jitter",
+        type=float,
+        default=0.25,
+        help="Per-pulse phase jitter (radians) used when synthesizing the compounded slow-time cube (pre-injection).",
+    )
+    ap.add_argument(
+        "--synth-noise-level",
+        type=float,
+        default=0.01,
+        help="Additive complex noise level used during slow-time cube synthesis (pre-injection).",
+    )
+    ap.add_argument(
+        "--synth-shift-max-px",
+        type=int,
+        default=1,
+        help="Max absolute integer per-pulse spatial shift (px) during cube synthesis; 0 disables shifts.",
+    )
+    ap.add_argument(
         "--flow-amp-scale",
         type=float,
         default=1.0,
@@ -650,6 +777,46 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=None,
         help="Maximum synthetic flow Doppler frequency (Hz) applied on the flow mask.",
+    )
+    ap.add_argument(
+        "--flow-doppler-tone-amp",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional additive narrowband flow tone amplitude (relative to flow-mask RMS). "
+            "0 disables; when >0, adds a per-pixel tone at the synthetic Doppler frequency."
+        ),
+    )
+    ap.add_argument(
+        "--flow-doppler-noise-amp",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional additive high-rank flow noise amplitude (relative to flow-mask RMS). "
+            "0 disables; when >0, adds a per-pixel temporally correlated complex noise "
+            "process centered at the synthetic Doppler frequency."
+        ),
+    )
+    ap.add_argument(
+        "--flow-doppler-noise-rho",
+        type=float,
+        default=0.97,
+        help=(
+            "AR(1) correlation coefficient for --flow-doppler-noise-amp (0..1). "
+            "Higher values yield a narrowerband Doppler-like spectrum around the "
+            "per-pixel Doppler frequency."
+        ),
+    )
+    ap.add_argument(
+        "--flow-doppler-noise-mode",
+        type=str,
+        default="fft_band",
+        choices=["fft_band", "ar1_shift"],
+        help=(
+            "Noise model used when --flow-doppler-noise-amp>0. "
+            "'fft_band' injects band-limited complex noise in [flow_doppler_min_hz,flow_doppler_max_hz]. "
+            "'ar1_shift' injects AR(1) noise shifted by the per-pixel Doppler frequency."
+        ),
     )
     ap.add_argument(
         "--aperture-phase-std",
@@ -694,6 +861,23 @@ def parse_args() -> argparse.Namespace:
         help="Maximum depth fraction for clutter injection.",
     )
     ap.add_argument(
+        "--clutter-mode",
+        type=str,
+        default="fullrank",
+        choices=["fullrank", "lowrank"],
+        help=(
+            "Temporal clutter model used when --clutter-beta>0. "
+            "'fullrank' injects independent colored noise per pixel; "
+            "'lowrank' injects a small number of global colored temporal modes mixed spatially."
+        ),
+    )
+    ap.add_argument(
+        "--clutter-rank",
+        type=int,
+        default=3,
+        help="Rank used when --clutter-mode=lowrank (number of global temporal modes).",
+    )
+    ap.add_argument(
         "--vibration-hz",
         type=float,
         default=None,
@@ -731,6 +915,18 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="legacy",
         help="Band-ratio flavor: 'legacy' PD ratio or 'whitened' PSD log-ratio.",
+    )
+    ap.add_argument(
+        "--psd-br-tile-mode",
+        type=str,
+        default="mean",
+        help=(
+            "Whitened band-ratio tile PSD aggregation mode: "
+            "'mean' (coherent tile-mean series), "
+            "'incoherent' (avg per-pixel PSD), "
+            "'incoherent_max' (max per-pixel PSD), "
+            "or 'incoherent_qNN' (e.g. incoherent_q90)."
+        ),
     )
     ap.add_argument(
         "--psd-br-flow-low",
@@ -787,7 +983,12 @@ def _apply_brain_profile_defaults(args: argparse.Namespace) -> None:
 
     # Common defaults for all Brain-* profiles: MC-SVD baseline with
     # registration, clinical STAP PD preset, and PD-based flow masks.
-    args.baseline = "mc_svd"
+    #
+    # IMPORTANT: allow callers to override the baseline (e.g. RPCA/HOSVD) for
+    # fair baseline comparisons. We only force MC-SVD when the caller left the
+    # baseline at its parser default ("svd").
+    if getattr(args, "baseline", "svd") == "svd":
+        args.baseline = "mc_svd"
     args.reg_enable = True
     args.reg_method = "phasecorr"
     args.reg_subpixel = 4
@@ -801,6 +1002,29 @@ def _apply_brain_profile_defaults(args: argparse.Namespace) -> None:
 
     args.stap_profile = "clinical"
     args.score_mode = "pd"
+
+    # Slow-time cube synthesis (pre-injection): for Brain-* pilots we prefer a
+    # largely coherent, low-rank tissue stack so that MC--SVD removes a small
+    # clutter subspace and the explicit Doppler/alias/clutter injections drive
+    # spectral structure. The legacy synth jitter defaults can make the stack
+    # unrealistically high-rank for short windows (e.g. 64 frames), causing
+    # MC--SVD to remove dozens of modes and wiping out flow evidence.
+    if getattr(args, "synth_amp_jitter", 0.05) == 0.05:
+        args.synth_amp_jitter = 0.0
+    if getattr(args, "synth_phase_jitter", 0.25) == 0.25:
+        args.synth_phase_jitter = 0.0
+    if getattr(args, "synth_noise_level", 0.01) == 0.01:
+        args.synth_noise_level = 0.0
+    if getattr(args, "synth_shift_max_px", 1) == 1:
+        args.synth_shift_max_px = 0
+
+    # Temporal clutter injection: model clutter as low-rank global modes to
+    # match the MC--SVD "low-rank clutter" assumption used throughout the
+    # Brain-* methodology. Users can still override to fullrank explicitly.
+    if getattr(args, "clutter_mode", "fullrank") == "fullrank":
+        args.clutter_mode = "lowrank"
+    if getattr(args, "clutter_rank", 3) == 3:
+        args.clutter_rank = 3
 
     # Evaluation masks for Brain-* simulations should reflect simulator truth
     # (default geometric/injection masks). A separate PD-derived proxy mask is
@@ -845,11 +1069,21 @@ def main() -> None:
         args.diag_load = 0.07
         args.cov_estimator = "tyler_pca"
         args.huber_c = 5.0
-        args.fd_span_mode = "psd"
+        # Primary STAP score uses a *fixed* Doppler grid (frozen per profile)
+        # rather than a per-tile PSD-adaptive grid. This avoids silent regime
+        # shifts where alias-dominant tiles drive the "flow" subspace selection.
+        #
+        # Use a fixed span covering Pf (up to ~250 Hz for PRF~1.5 kHz brain fUS).
+        # The underlying tile kernel will cap the effective grid to fit Lt.
+        args.fd_span_mode = "fixed"
         args.fd_span_rel = "0.30,1.10"
+        args.fd_fixed_span_hz = 250.0
         args.grid_step_rel = 0.20
-        args.max_pts = 3
-        args.fd_min_pts = 3
+        # Keep a small but nontrivial grid. A tiny grid (e.g. 3 points) can
+        # under-represent heterogeneous flow Dopplers; a very dense grid is
+        # unnecessary for the conservative profile.
+        args.max_pts = 15
+        args.fd_min_pts = 9
         args.constraint_mode = "exp+deriv"
         args.constraint_ridge = 0.18
         args.mvdr_load_mode = "auto"
@@ -887,6 +1121,11 @@ def main() -> None:
         # already set by the user.
         os.environ.setdefault("STAP_SNAPSHOT_STRIDE", "4")
         os.environ.setdefault("STAP_MAX_SNAPSHOTS", "64")
+
+        # Enable the batched fast-path by default for the clinical preset.
+        # The core will fall back to the slow path automatically if it is not
+        # eligible (e.g., torch unavailable, KA enabled, debug requested).
+        os.environ.setdefault("STAP_FAST_PATH", "1")
 
         # For PD-based clinical runs, default to the PD-only fast path so that
         # the GPU batched core uses the lighter band-energy computation instead
@@ -997,6 +1236,31 @@ def main() -> None:
         if alias_path.exists():
             alias_vessels_arr = np.load(alias_path)
 
+    # For k-Wave Brain-* pilots, prefer simulator-truth masks from an existing
+    # acceptance bundle under the source directory when present. This ensures
+    # synthetic injections (flow/alias/clutter) and evaluation masks share the
+    # same geometry, avoiding accidental injection on a fallback circular mask.
+    if flow_mask_default is None or bg_mask_default is None:
+        try:
+            pw_dirs = sorted(p for p in src_root.iterdir() if p.is_dir() and p.name.startswith("pw_"))
+        except Exception:
+            pw_dirs = []
+        for pw_dir in pw_dirs:
+            mask_flow_path = pw_dir / "mask_flow.npy"
+            mask_bg_path = pw_dir / "mask_bg.npy"
+            if not (mask_flow_path.exists() and mask_bg_path.exists()):
+                continue
+            try:
+                flow_mask_candidate = np.load(mask_flow_path)
+                bg_mask_candidate = np.load(mask_bg_path)
+                flow_mask_candidate = _maybe_resize_roi_mask(flow_mask_candidate, geom)
+                bg_mask_candidate = _maybe_resize_roi_mask(bg_mask_candidate, geom)
+            except Exception:
+                continue
+            flow_mask_default = flow_mask_candidate.astype(bool, copy=False)
+            bg_mask_default = bg_mask_candidate.astype(bool, copy=False)
+            break
+
     hosvd_ranks: tuple[int, int, int] | None = None
     if args.hosvd_ranks:
         parts = [p.strip() for p in str(args.hosvd_ranks).split(",") if p.strip()]
@@ -1099,6 +1363,8 @@ def main() -> None:
         "aperture_phase_corr_len": float(args.aperture_phase_corr_len),
         "clutter_beta": float(args.clutter_beta),
         "clutter_snr_db": float(args.clutter_snr_db),
+        "clutter_mode": str(args.clutter_mode),
+        "clutter_rank": int(args.clutter_rank),
         "clutter_depth_min_frac": float(args.clutter_depth_min_frac),
         "clutter_depth_max_frac": float(args.clutter_depth_max_frac),
         "flow_alias_hz": (float(args.flow_alias_hz) if args.flow_alias_hz is not None else None),
@@ -1195,6 +1461,9 @@ def main() -> None:
             ka_opts_extra["score_contract_v2_proxy_source"] = str(
                 getattr(args, "ka_contract_v2_proxy_source", "pd")
             )
+            ka_opts_extra["score_contract_v2_alias_source"] = str(
+                getattr(args, "ka_contract_v2_alias_source", "peak")
+            )
         if args.ka_score_contract_v2_force:
             ka_opts_extra["score_contract_v2_force"] = 1.0
 
@@ -1209,6 +1478,10 @@ def main() -> None:
             pulses_per_set=pulses_window,
             prf_hz=prf,
             seed=seed,
+            synth_amp_jitter=float(args.synth_amp_jitter),
+            synth_phase_jitter=float(args.synth_phase_jitter),
+            synth_noise_level=float(args.synth_noise_level),
+            synth_shift_max_px=int(args.synth_shift_max_px),
             tile_hw=(int(args.tile_h), int(args.tile_w)),
             tile_stride=int(args.tile_stride),
             Lt=int(args.lt),
@@ -1263,10 +1536,12 @@ def main() -> None:
             flow_mask_min_coverage_fraction=float(args.flow_mask_min_coverage_frac),
             flow_mask_union_default=bool(args.flow_mask_union_default),
             flow_mask_suppress_alias_depth=bool(args.flow_mask_suppress_alias_depth),
+            stap_enable=not bool(getattr(args, "stap_disable", False)),
             stap_conditional_enable=bool(args.stap_conditional_enable),
             stap_conditional_flow_mask=stap_conditional_mask,
             stap_conditional_mask_tag=args.stap_conditional_mask_tag,
             baseline_type=str(args.baseline).lower(),
+            baseline_support=str(args.baseline_support),
             reg_enable=bool(args.reg_enable),
             reg_method=str(args.reg_method),
             reg_subpixel=int(args.reg_subpixel),
@@ -1283,11 +1558,30 @@ def main() -> None:
             flow_alias_jitter_hz=float(args.flow_alias_jitter_hz),
             flow_doppler_min_hz=args.flow_doppler_min_hz,
             flow_doppler_max_hz=args.flow_doppler_max_hz,
+            flow_doppler_tone_amp=float(args.flow_doppler_tone_amp),
+            flow_doppler_noise_amp=float(args.flow_doppler_noise_amp),
+            flow_doppler_noise_rho=float(args.flow_doppler_noise_rho),
+            flow_doppler_noise_mode=str(args.flow_doppler_noise_mode),
             bg_alias_hz=args.bg_alias_hz,
             bg_alias_fraction=float(args.bg_alias_fraction),
             bg_alias_depth_min_frac=args.bg_alias_depth_min_frac,
             bg_alias_depth_max_frac=args.bg_alias_depth_max_frac,
             bg_alias_jitter_hz=float(args.bg_alias_jitter_hz),
+            bg_alias_highrank_mode=None
+            if str(args.bg_alias_highrank_mode).lower() == "none"
+            else str(args.bg_alias_highrank_mode),
+            bg_alias_highrank_deep_patch_coverage=float(args.bg_alias_highrank_coverage),
+            bg_alias_highrank_shallow_patch_coverage=float(args.bg_alias_highrank_shallow_coverage),
+            bg_alias_highrank_margin_px=int(args.bg_alias_highrank_margin_px),
+            bg_alias_highrank_freq_jitter_hz=float(args.bg_alias_highrank_freq_jitter_hz),
+            bg_alias_highrank_drift_step_hz=float(args.bg_alias_highrank_drift_step_hz),
+            bg_alias_highrank_drift_block_len=(
+                int(args.bg_alias_highrank_drift_block_len)
+                if args.bg_alias_highrank_drift_block_len is not None
+                else None
+            ),
+            bg_alias_highrank_pf_leak_eta=float(args.bg_alias_highrank_pf_leak_eta),
+            bg_alias_highrank_amp=float(args.bg_alias_highrank_amp),
             flow_amp_scale=float(args.flow_amp_scale),
             alias_amp_scale=float(args.alias_amp_scale),
             vibration_hz=args.vibration_hz,
@@ -1299,12 +1593,15 @@ def main() -> None:
             aperture_phase_seed=int(args.aperture_phase_seed),
             clutter_beta=float(args.clutter_beta),
             clutter_snr_db=float(args.clutter_snr_db),
+            clutter_mode=str(args.clutter_mode),
+            clutter_rank=int(args.clutter_rank),
             clutter_depth_min_frac=float(args.clutter_depth_min_frac),
             clutter_depth_max_frac=float(args.clutter_depth_max_frac),
             psd_telemetry=bool(args.psd_telemetry),
             psd_tapers=int(args.psd_tapers),
             psd_bandwidth=float(args.psd_bandwidth),
             band_ratio_mode=str(args.band_ratio_mode),
+            band_ratio_tile_mode=str(args.psd_br_tile_mode),
             band_ratio_flow_low_hz=float(args.psd_br_flow_low),
             band_ratio_flow_high_hz=float(args.psd_br_flow_high),
             band_ratio_alias_center_hz=float(args.psd_br_alias_center),

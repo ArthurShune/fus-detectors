@@ -96,7 +96,7 @@ def main() -> None:
         "--bg-tail-quantile",
         type=float,
         default=0.999,
-        help="Quantile for background tail threshold on score S=-PD (default: %(default)s).",
+        help="Quantile for background tail threshold on score S=PD (default: %(default)s).",
     )
     parser.add_argument(
         "--connectivity",
@@ -130,7 +130,8 @@ def main() -> None:
         if pd_pre is None:
             if ka_scale is not None:
                 eps = 1e-12
-                pd_pre = pd_post.astype(np.float32, copy=False) / np.maximum(
+                # Bundle convention: pd_post = pd_pre / ka_scale (scale>=1).
+                pd_pre = pd_post.astype(np.float32, copy=False) * np.maximum(
                     ka_scale.astype(np.float32, copy=False), eps
                 )
             else:
@@ -142,9 +143,9 @@ def main() -> None:
         flow = mask_flow.astype(bool)
 
         # Score convention matches PD score_mode in hab_contract_check.py
-        # (higher = more flow-like): S = -PD.
-        s_pre = -pd_pre
-        s_post = -pd_post
+        # (higher = more flow-like): S = PD.
+        s_pre = pd_pre
+        s_post = pd_post
 
         q99_pre = _safe_quantile(s_pre[bg], 0.99)
         q999_pre = _safe_quantile(s_pre[bg], 0.999)
@@ -162,18 +163,20 @@ def main() -> None:
         clust_pre = _connected_components(hit_pre, connectivity=int(args.connectivity))
         clust_post = _connected_components(hit_post, connectivity=int(args.connectivity))
 
-        # Protected-set invariance (mask_flow + top-score pixels, if possible).
+        # Protected-set invariance (mask_flow + optional top-score pixels).
         q_hi_protect = None
+        protect_hi_by_score = True
         ka_v2 = meta.get("ka_contract_v2") or {}
         if isinstance(ka_v2, dict):
             cfg = ka_v2.get("config") or {}
             if isinstance(cfg, dict):
                 try:
-                    q_hi_protect = float(cfg.get("q_hi_protect", 0.995))
+                    protect_hi_by_score = bool(cfg.get("protect_hi_by_score", True))
+                    q_hi_protect = float(cfg.get("q_hi_protect", 0.99999))
                 except Exception:
                     q_hi_protect = None
         prot = flow.copy()
-        if q_hi_protect is not None:
+        if protect_hi_by_score and q_hi_protect is not None:
             finite = np.isfinite(s_pre)
             if finite.any():
                 thr_hi = float(np.quantile(s_pre[finite], q_hi_protect))

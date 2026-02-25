@@ -131,12 +131,25 @@ def main() -> None:
 
     if args.out_png is not None:
         try:
+            import matplotlib as mpl  # type: ignore
             import matplotlib.pyplot as plt  # type: ignore
 
             args.out_png.parent.mkdir(parents=True, exist_ok=True)
             amps_np = np.array([r["amp_px"] for r in rows_out], dtype=float)
 
-            fig, axes = plt.subplots(1, 2, figsize=(11, 4), constrained_layout=True)
+            mpl.rcParams.update(
+                {
+                    "font.family": "serif",
+                    "mathtext.fontset": "cm",
+                    "font.size": 9,
+                    "axes.linewidth": 0.8,
+                    "pdf.fonttype": 42,
+                    "ps.fonttype": 42,
+                    "legend.frameon": False,
+                }
+            )
+
+            fig, axes = plt.subplots(2, 1, figsize=(6.8, 4.8), sharex=True, constrained_layout=True)
 
             ax = axes[0]
             base_med = np.array([r["corr_base_median"] for r in rows_out], dtype=float)
@@ -145,15 +158,16 @@ def main() -> None:
             stap_med = np.array([r["corr_stap_median"] for r in rows_out], dtype=float)
             stap_q25 = np.array([r["corr_stap_q25"] for r in rows_out], dtype=float)
             stap_q75 = np.array([r["corr_stap_q75"] for r in rows_out], dtype=float)
-            ax.plot(amps_np, base_med, "o-", label="baseline PD", color="C0")
-            ax.fill_between(amps_np, base_q25, base_q75, color="C0", alpha=0.15, linewidth=0)
-            ax.plot(amps_np, stap_med, "o-", label="STAP PD (pre-KA)", color="C1")
-            ax.fill_between(amps_np, stap_q25, stap_q75, color="C1", alpha=0.15, linewidth=0)
+            ax.plot(amps_np, base_med, "o-", label="Baseline", color="#666666", lw=1.6, ms=4)
+            ax.fill_between(amps_np, base_q25, base_q75, color="#666666", alpha=0.15, linewidth=0)
+            ax.plot(amps_np, stap_med, "o-", label="STAP (pre-KA)", color="#1f77b4", lw=1.7, ms=4)
+            ax.fill_between(amps_np, stap_q25, stap_q75, color="#1f77b4", alpha=0.15, linewidth=0)
             ax.set_xlabel("motion amplitude (px)")
             ax.set_ylabel("corr vs no-motion")
             ax.set_title("Map Stability (median ± IQR)")
             ax.grid(True, alpha=0.3)
-            ax.legend()
+            ax.set_ylim(-0.02, 1.02)
+            ax.legend(loc="upper right", fontsize=8)
 
             ax = axes[1]
             base_med = np.array([r["tpr_base_median"] for r in rows_out], dtype=float)
@@ -162,18 +176,18 @@ def main() -> None:
             stap_med = np.array([r["tpr_stap_median"] for r in rows_out], dtype=float)
             stap_q25 = np.array([r["tpr_stap_q25"] for r in rows_out], dtype=float)
             stap_q75 = np.array([r["tpr_stap_q75"] for r in rows_out], dtype=float)
-            ax.plot(amps_np, base_med, "o-", label="baseline", color="C0")
-            ax.fill_between(amps_np, base_q25, base_q75, color="C0", alpha=0.15, linewidth=0)
-            ax.plot(amps_np, stap_med, "o-", label="STAP", color="C1")
-            ax.fill_between(amps_np, stap_q25, stap_q75, color="C1", alpha=0.15, linewidth=0)
+            ax.plot(amps_np, base_med, "o-", label="Baseline", color="#666666", lw=1.6, ms=4)
+            ax.fill_between(amps_np, base_q25, base_q75, color="#666666", alpha=0.15, linewidth=0)
+            ax.plot(amps_np, stap_med, "o-", label="STAP", color="#1f77b4", lw=1.7, ms=4)
+            ax.fill_between(amps_np, stap_q25, stap_q75, color="#1f77b4", alpha=0.15, linewidth=0)
             ax.set_xlabel("motion amplitude (px)")
             ax.set_ylabel("TPR on flow-proxy")
             ax.set_title("Flow-Proxy TPR (median ± IQR)")
             ax.grid(True, alpha=0.3)
-            ax.legend()
+            ax.set_ylim(bottom=0.0)
 
-            fig.suptitle(f"Shin motion sweep aggregate ({len(files_seen)} files)", fontsize=11)
-            fig.savefig(args.out_png, dpi=200)
+            # Slightly larger pad to avoid tight margins in paper figures.
+            fig.savefig(args.out_png, dpi=300, bbox_inches="tight", pad_inches=0.06)
             plt.close(fig)
             print(f"[shin-motion-agg] wrote {args.out_png}")
         except Exception as exc:

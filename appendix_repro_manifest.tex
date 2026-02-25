@@ -7,19 +7,33 @@ The manifest lists the minimal set of commands/outputs needed to reproduce the m
 Run \path{PYTHONPATH=. python scripts/generate_repro_manifest.py} to refresh this manifest.
 
 \paragraph{Repository state.}
-Commit: \texttt{07f9d14} (full: \texttt{07f9d144b5edad5f4997c83ab1939402cf0eaebd}); branch: \texttt{main}; dirty: \texttt{false}.
+Commit: \texttt{6db311e} (full: \texttt{6db311e65c1bea51cb6f126709d619630c4532eb}); branch: \texttt{main}; dirty: \texttt{true}.
 
 \paragraph{Environment.}
-Python: \texttt{3.12.8 | packaged by Anaconda, Inc. | (main, Dec 11 2024, 16:31:09) [GCC 11.2.0]}.
-Platform: \texttt{Linux-6.6.87.2-microsoft-standard-WSL2-x86\_64-with-glibc2.39}.
+Python: \path{3.12.8 | packaged by Anaconda, Inc. | (main, Dec 11 2024, 16:31:09) [GCC 11.2.0]}.
+Platform: \path{Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39}.
 Packages: \texttt{numpy}={1.26.4}, \texttt{scipy}={1.14.1}, \texttt{torch}={2.2.2+cpu}, \texttt{matplotlib}={3.10.0}.
 
 \paragraph{Datasets.}
 Paths below are the expected on-disk locations used by the scripts in this repository. Large outputs under \path{runs/} and \path{reports/} are not tracked.
 \begin{itemize}[nosep]
-  \item \textbf{Brain-* k-Wave pilots (simulated IQ)}: Labeled low-FPR ROC + ablations. (local: \path{runs/pilot/}; source: \path{(generated locally via sim/kwave/pilot_motion.py / Makefile targets r4c-*)}).
-  \item \textbf{Mace/Urban whole-brain mouse fUS (PD-only)}: PD-only telemetry + hold-out alias-gate evaluation (no Doppler IQ). (local: \path{data/whole-brain-fUS}; source: \path{https://doi.org/10.5281/zenodo.4905862}).
-  \item \textbf{Shin RatBrain Fig3 (LOCA-ULM) beamformed IQ}: Real-IQ ingestion/telemetry/contract + label-free robustness sweeps. (local: \path{data/shin_zenodo_10711806/RatBrain_Fig3.zip (extracts to data/shin_zenodo_10711806/ratbrain_fig3_raw)}; source: \path{https://doi.org/10.5281/zenodo.10711806}).
+  \item \textbf{Brain-* k-Wave pilots (simulated IQ)}: Labeled low-FPR ROC + ablations.
+    \\ Local: \path{runs/pilot/}.
+    \\ Source: generated locally via sim/kwave/pilot\_motion.py (Makefile targets r4c-*).
+  \item \textbf{Mace/Urban whole-brain mouse fUS (PD-only)}: PD-only telemetry + hold-out alias-gate evaluation (no Doppler IQ).
+    \\ Local: \path{data/whole-brain-fUS}.
+    \\ Source: \path{https://doi.org/10.5281/zenodo.4905862}.
+  \item \textbf{Shin RatBrain Fig3 (LOCA-ULM) beamformed IQ}: Real-IQ ingestion, telemetry, contract + label-free robustness sweeps.
+    \\ Local archive: \path{data/shin_zenodo_10711806/RatBrain_Fig3.zip}.
+    \\ Extracts to: \path{data/shin_zenodo_10711806/ratbrain_fig3_raw}.
+    \\ Source: \path{https://doi.org/10.5281/zenodo.10711806}.
+  \item \textbf{Twinkling artifact dataset (RawBCF phantoms)}: Structurally labeled phantom ROC (Gammex) + within-ensemble motion ladders + KA hygiene (calculi).
+    \\ Local: \path{data/twinkling_artifact/}.
+    \\ Source: \path{https://doi.org/10.17816/DD76511}.
+  \item \textbf{ULM Zenodo 7883227 (rat brain kHz IQ)}: Label-free motion robustness + one-time baseline calibration sweep.
+    \\ Local archive: \path{data/ulm_zenodo_7883227/IQ_001_to_025.zip}.
+    \\ Extracts to: \path{tmp/ulm_zenodo_7883227/}.
+    \\ Source: \path{https://doi.org/10.5281/zenodo.7883227}.
 \end{itemize}
 
 \paragraph{Pre-registered selections used in this manuscript.}
@@ -28,22 +42,44 @@ Paths below are the expected on-disk locations used by the scripts in this repos
   \item \textbf{Shin all-clips telemetry}: IQData001-IQData080 (n=80), window 0:128.
   \item \textbf{Shin motion subset}: IQData001-005, IQData010, IQData020, IQData040, IQData060, IQData080 (n=10).
   \item \textbf{Mace holdout split (deduplicated)}: train: scan1/2 + scan3/6; test: scan4 + scan5.
+  \item \textbf{Gammex flow phantom structural ROC (along-linear17)}: frames 0:85 (n=85), PRF=2500 Hz, N=17 shots.
+  \item \textbf{Gammex flow phantom structural ROC (across-linear17)}: frames 0:200 (n=200), PRF=2500 Hz, N=17 shots.
+  \item \textbf{Gammex flow phantom within-ensemble motion ladder}: along-linear17, frames 0:85, amps 0..2 px, kinds {rw,step}.
+  \item \textbf{Twinkling calculi KA hygiene}: calcifications sequence, frames 0:50 (n=50), PRF approx 500 Hz, N=9 shots.
+  \item \textbf{ULM 7883227 baseline sweep}: blocks 1-3, frames 0:128, MC-SVD energy-frac sweep (label-free).
+  \item \textbf{ULM 7883227 motion sweeps}: blocks 1-3, frames 0:128, frozen baseline e=0.975, motion kinds {brainlike,elastic}.
 \end{itemize}
 
 \paragraph{Artifact commands.}
 Each entry below lists the command(s) used to regenerate the referenced paper artifact(s). Most scripts write a JSON summary containing the full parameterization and are safe to rerun.
 \begin{enumerate}[label=(R\arabic*),nosep]
-  \item \textbf{PD-mode sanity checks (PD-mode map and score S=-PD)}
+  \item \textbf{PD-mode sanity checks (PD-mode map and score S=PD)}
     (paper refs: Notation (PD convention)).
-    Outputs: \path{reports/pd_mode_sanity/ (optional figs)}.
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{pd_mode_sanity/ (optional figs)}
+    \end{itemize}
+    \endgroup
     Notes: Run on any generated acceptance bundle root containing pw\_* directories.
+{\footnotesize
 \begin{verbatim}
-PYTHONPATH=. python scripts/pd_mode_sanity.py runs/<bundle_root>/pw_* --out-dir reports/pd_mode_sanity
+PYTHONPATH=. python scripts/pd_mode_sanity.py \
+  runs/<bundle_root>/pw_* \
+  --out-dir reports/pd_mode_sanity
 \end{verbatim}
+}
 
   \item \textbf{Conditional STAP leakage ablation (full vs conditional masks)}
     (paper refs: Results (Brain-k-Wave): conditional STAP ablation).
-    Outputs: \path{reports/condstap_leakage.csv}, \path{reports/condstap_leakage.json}.
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{condstap_leakage.csv}
+      \item \path{reports/}\allowbreak\path{condstap_leakage.json}
+    \end{itemize}
+    \endgroup
+{\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python scripts/conditional_stap_leakage_ablation.py \
   --pilots runs/pilot/r4_kwave_seed1 runs/pilot/r4_kwave_seed2 \
@@ -53,10 +89,18 @@ PYTHONPATH=. python scripts/conditional_stap_leakage_ablation.py \
   --summary-csv reports/condstap_leakage.csv \
   --summary-json reports/condstap_leakage.json
 \end{verbatim}
+}
 
   \item \textbf{Brain-* baseline fairness: MC--SVD(e) tune-once sweep}
     (paper refs: Baseline fairness (Brain-*)).
-    Outputs: \path{reports/brain_mcsvd_energy_sweep.csv}, \path{reports/brain_mcsvd_energy_sweep.json}.
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{brain_mcsvd_energy_sweep_seed1.csv}
+      \item \path{reports/}\allowbreak\path{brain_mcsvd_energy_sweep_seed1.json}
+    \end{itemize}
+    \endgroup
+{\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python scripts/brain_mcsvd_energy_sweep.py \
   --pilot runs/pilot/r4_kwave_seed1 \
@@ -65,13 +109,59 @@ PYTHONPATH=. python scripts/brain_mcsvd_energy_sweep.py \
   --window-length 64 --window-offset 0 \
   --energy-fracs 0.90,0.95,0.97,0.975,0.98,0.99 \
   --fprs 1e-4,3e-4,1e-3 \
-  --summary-csv reports/brain_mcsvd_energy_sweep.csv \
-  --summary-json reports/brain_mcsvd_energy_sweep.json
+  --summary-csv reports/brain_mcsvd_energy_sweep_seed1.csv \
+  --summary-json reports/brain_mcsvd_energy_sweep_seed1.json
 \end{verbatim}
+}
 
-  \item \textbf{KA Contract v2 falsifiability ablation (STAP-only vs contract vs forced)}
+  \item \textbf{Brain-* ROC curve figure (median+IQR over disjoint windows)}
+    (paper refs: Figure: \path{brain_kwave_roc_curves.pdf}).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{figs/paper/}\allowbreak\path{brain_kwave_roc_curves.pdf}
+    \end{itemize}
+    \endgroup
+    Notes: Reads precomputed per-window score/mask arrays under runs/pilot/fair\_filter\_matrix\_full\_clinical\_cpu\_v2.
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. python scripts/fig_brain_kwave_roc_curves.py \
+  --runs-root runs/pilot/fair_filter_matrix_full_clinical_cpu_v2 \
+  --out-pdf figs/paper/brain_kwave_roc_curves.pdf
+\end{verbatim}
+}
+
+  \item \textbf{Brain-* cross-window threshold-transfer audit (STAP)}
+    (paper refs: Appendix: cross-window threshold calibration audit (Brain-*)).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{brain_crosswindow_calibration.csv}
+      \item \path{reports/}\allowbreak\path{brain_crosswindow_calibration_summary.json}
+      \item \path{reports/}\allowbreak\path{brain_crosswindow_calibration_table.tex}
+    \end{itemize}
+    \endgroup
+    Notes: Calibrates thresholds on one 64-frame window's negatives and evaluates on disjoint windows (ordered pairs).
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. python scripts/brain_crosswindow_calibration.py \
+  --runs-root runs/pilot/fair_filter_matrix_full_clinical_cpu_v2 \
+  --alphas 1e-4,3e-4,1e-3 \
+  --out-csv reports/brain_crosswindow_calibration.csv \
+  --out-json reports/brain_crosswindow_calibration_summary.json
+\end{verbatim}
+}
+
+  \item \textbf{Knowledge-aided prior falsifiability ablation (STAP-only vs contract vs forced)}
     (paper refs: KA evaluation discipline).
-    Outputs: \path{reports/ka_v2_ablation.csv}, \path{reports/ka_v2_ablation.json}.
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{ka_v2_ablation.csv}
+      \item \path{reports/}\allowbreak\path{ka_v2_ablation.json}
+    \end{itemize}
+    \endgroup
+{\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python scripts/ka_contract_v2_ablation.py \
   --pilot runs/pilot/r4c_kwave_hab_contract_seed2 \
@@ -83,41 +173,113 @@ PYTHONPATH=. python scripts/ka_contract_v2_ablation.py \
   --summary-csv reports/ka_v2_ablation.csv \
   --summary-json reports/ka_v2_ablation.json
 \end{verbatim}
+}
+
+  \item \textbf{Knowledge-aided prior positive-control ablation (OpenSkull shallow-alias + high-rank ghosts)}
+    (paper refs: KA evaluation discipline (positive control)).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{ka_v2_ablation_openskull_shallowalias_}\allowbreak\path{e50.csv}
+      \item \path{reports/}\allowbreak\path{ka_v2_ablation_openskull_shallowalias_}\allowbreak\path{e50.json}
+    \end{itemize}
+    \endgroup
+    Notes: Synthetic, replay-only KA-positive regime used as a contract-mechanics positive control; not a realism benchmark.
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. python scripts/ka_contract_v2_ablation.py \
+  --pilot runs/pilot/r4_kwave_seed1 \
+  --profile Brain-OpenSkull \
+  --out-root runs/ablation/openskull_shallowalias_e50 \
+  --stap-device cpu \
+  --window-length 64 \
+  --window-offsets 0 64 128 192 256 \
+  --summary-csv reports/ka_v2_ablation_openskull_shallowalias_e50.csv \
+  --summary-json reports/ka_v2_ablation_openskull_shallowalias_e50.json \
+  --replay-extra \
+    --svd-energy-frac 0.50 \
+    --flow-doppler-min-hz 60 --flow-doppler-max-hz 180 \
+    --flow-doppler-noise-amp 60 --flow-doppler-noise-mode fft_band \
+    --bg-alias-hz 650 --bg-alias-fraction 0.7 \
+    --bg-alias-depth-min-frac 0.12 --bg-alias-depth-max-frac 0.28 \
+    --bg-alias-jitter-hz 35 \
+    --flow-mask-suppress-alias-depth \
+    --clutter-beta 1.0 --clutter-snr-db 20 \
+    --clutter-depth-min-frac 0.20 --clutter-depth-max-frac 0.95 \
+    --aperture-phase-std 0.8 --aperture-phase-corr-len 14 \
+    --bg-alias-highrank-mode gw_reverb_add \
+    --bg-alias-highrank-coverage 0.3 --bg-alias-highrank-amp 0.3 \
+    --bg-alias-highrank-margin-px 3 \
+    --bg-alias-highrank-freq-jitter-hz 25 \
+    --bg-alias-highrank-drift-step-hz 12 \
+    --bg-alias-highrank-pf-leak-eta 0.0 \
+    --ka-score-contract-v2-mode auto
+\end{verbatim}
+}
 
   \item \textbf{Mace PD-only holdout alias-gate evaluation (label-free thresholds)}
     (paper refs: Table: Mace hold-out alias gate).
-    Outputs: \path{reports/mace_alias_gate_holdout.csv}, \path{reports/mace_alias_gate_holdout.json}.
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{mace_alias_gate_holdout.csv}
+      \item \path{reports/}\allowbreak\path{mace_alias_gate_holdout.json}
+    \end{itemize}
+    \endgroup
+{\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python scripts/mace_alias_gate_holdout.py \
   --out-csv reports/mace_alias_gate_holdout.csv \
   --out-json reports/mace_alias_gate_holdout.json
 \end{verbatim}
+}
 
   \item \textbf{Mace pixel-level vascular-atlas check (independent structural labels)}
-    (paper refs: Macé section: vascular atlas pixel-level check).
-    Outputs: \path{reports/mace_vascular_pixel_eval.csv}, \path{reports/mace_vascular_pixel_eval.json}.
+    (paper refs: Mace section: vascular atlas pixel-level check).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{mace_vascular_pixel_eval.csv}
+      \item \path{reports/}\allowbreak\path{mace_vascular_pixel_eval.json}
+    \end{itemize}
+    \endgroup
     Notes: Maps atlas.Vascular into each scan plane using Transformation.mat; evaluates vascular vs non-vascular pixels (structural, not clinical efficacy).
+{\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python scripts/mace_vascular_pixel_eval.py \
   --out-csv reports/mace_vascular_pixel_eval.csv \
   --out-json reports/mace_vascular_pixel_eval.json
 \end{verbatim}
+}
 
   \item \textbf{Mace atlas-alignment sanity overlay figure}
-    (paper refs: Appendix: Macé atlas alignment sanity check).
-    Outputs: \path{figs/paper/mace_atlas_overlay.png}.
+    (paper refs: Appendix: Mace atlas alignment sanity check).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{figs/paper/}\allowbreak\path{mace_atlas_overlay.png}
+    \end{itemize}
+    \endgroup
     Notes: Overlays atlas ROIs and atlas.Vascular contours on mean PD for representative planes (sanity check of Transformation.mat alignment).
+{\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python scripts/mace_atlas_overlay_fig.py \
   --scan-name scan1 \
   --plane-indices 5 10 15 \
   --out-png figs/paper/mace_atlas_overlay.png
 \end{verbatim}
+}
 
   \item \textbf{Telemetry regime comparison (sim vs real; contract-v2 scalars)}
-    (paper refs: Figure: telemetry\_regime\_compare.png).
-    Outputs: \path{figs/paper/telemetry_regime_compare.png}.
-    Notes: Overlays PfPeakFrac(flow), guard\_q90, and iqr\_alias\_bg across Brain-* simulations, Shin real IQ, and Macé PD-only planes; intended as telemetry anchoring (not a claim that sims match real data).
+    (paper refs: Figure: \path{telemetry_regime_compare.png}).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{figs/paper/}\allowbreak\path{telemetry_regime_compare.png}
+    \end{itemize}
+    \endgroup
+    Notes: Overlays PfPeakFrac(flow), guard\_q90, and iqr\_alias\_bg across Brain-* simulations, Shin real IQ, and Mace PD-only planes; intended as telemetry anchoring (not a claim that sims match real data).
+{\footnotesize
 \begin{verbatim}
 # Sample Brain-* replay bundles (write meta.json with ka_contract_v2 telemetry):
 PYTHONPATH=. python scripts/replay_stap_from_run.py \
@@ -142,14 +304,23 @@ PYTHONPATH=. python scripts/replay_stap_from_run.py \
   --time-window-offset 0 --time-window-offset 64 --time-window-offset 128 \
   --time-window-offset 192 --time-window-offset 256
 
-# Generate the overlay histogram figure (reads Shin bundles and Macé CSV from other artifacts):
+# Generate the overlay histogram figure:
+# (reads Shin bundles and Mace CSV from other artifacts)
 PYTHONPATH=. python scripts/telemetry_regime_compare_fig.py \
   --out-png figs/paper/telemetry_regime_compare.png
 \end{verbatim}
+}
 
-  \item \textbf{Mace PD-only contract v2 dashboard (plane sweep + paper figure)}
-    (paper refs: Figure: mace\_pdonly\_contract\_v2\_dashboard.png).
-    Outputs: \path{reports/mace_pdonly_contract_v2.csv}, \path{figs/paper/mace_pdonly_contract_v2_dashboard.png}.
+  \item \textbf{Mace PD-only prior dashboard (plane sweep + paper figure)}
+    (paper refs: Figure: \path{mace_pdonly_contract_v2_dashboard.png}).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{mace_pdonly_contract_v2.csv}
+      \item \path{figs/paper/}\allowbreak\path{mace_pdonly_contract_v2_dashboard.png}
+    \end{itemize}
+    \endgroup
+{\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python scripts/mace_pdonly_contract_v2_sweep.py \
   --out-csv reports/mace_pdonly_contract_v2.csv
@@ -158,10 +329,18 @@ PYTHONPATH=. python scripts/mace_pdonly_contract_v2_dashboard_fig.py \
   --in-csv reports/mace_pdonly_contract_v2.csv \
   --out-png figs/paper/mace_pdonly_contract_v2_dashboard.png
 \end{verbatim}
+}
 
-  \item \textbf{Shin all-clips contract telemetry (n=80; telemetry-only)}
+  \item \textbf{Shin all-clips prior-regime telemetry (n=80; telemetry-only)}
     (paper refs: Shin section: all-clips telemetry audit).
-    Outputs: \path{reports/shin_ratbrain_shinU_e970_telemetry_only_0_128_all80.csv}, \path{reports/shin_ratbrain_shinU_e970_telemetry_only_0_128_all80_summary.json}.
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{shin_ratbrain_shinU_e970_telemetry_only_0_}\allowbreak\path{128_all80.csv}
+      \item \path{reports/}\allowbreak\path{shin_ratbrain_shinU_e970_telemetry_only_0_}\allowbreak\path{128_all80_summary.json}
+    \end{itemize}
+    \endgroup
+{\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python -m scripts.shin_ratbrain_allclips_contract_hygiene \
   --extract-from-zip --no-run-stap --no-score-ka-v2 \
@@ -170,14 +349,31 @@ PYTHONPATH=. python -m scripts.shin_ratbrain_allclips_contract_hygiene \
   --out-csv reports/shin_ratbrain_shinU_e970_telemetry_only_0_128_all80.csv \
   --out-json reports/shin_ratbrain_shinU_e970_telemetry_only_0_128_all80_summary.json
 \end{verbatim}
+}
 
   \item \textbf{Shin brainlike motion sweep (10 clips) + aggregate plots}
-    (paper refs: Table: Shin motion endpoints, Figure: shin\_motion\_brainlike\_batch\_U\_agg.png, Figure: shin\_motion\_brainlike\_compare\_reg1.png, Figure: shin\_motion\_brainlike\_compare.png).
-    Outputs: \path{reports/shin_motion_brainlike_batch_U/*.csv}, \path{reports/shin_motion_brainlike_batch_U_agg.csv}, \path{figs/paper/shin_motion_brainlike_batch_U_agg.png}, \path{figs/paper/shin_motion_brainlike_compare_reg1.png}, \path{figs/paper/shin_motion_brainlike_compare.png}.
-    Notes: Window-specific batch runs (64:192, 122:250) follow the same pattern; see scripts/shin\_ratbrain\_motion\_aggregate.py for expected inputs.
+    Paper refs:
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item Table: Shin motion endpoints
+      \item Figure: \path{shin_motion_brainlike_batch_U_agg.png}
+      \item Figure: \path{shin_motion_brainlike_compare_reg1.png}
+      \item Figure: \path{shin_motion_brainlike_compare.png}
+    \end{itemize}
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{shin_motion_brainlike_batch_U/*.csv}
+      \item \path{reports/}\allowbreak\path{shin_motion_brainlike_batch_U_agg.csv}
+      \item \path{figs/paper/}\allowbreak\path{shin_motion_brainlike_batch_U_agg.png}
+      \item \path{figs/paper/}\allowbreak\path{shin_motion_brainlike_compare_reg1.png}
+      \item \path{figs/paper/}\allowbreak\path{shin_motion_brainlike_compare.png}
+    \end{itemize}
+    \endgroup
+    Notes: Window-specific batch runs (64:192, 122:250) follow the same pattern.
+{\footnotesize
 \begin{verbatim}
 # Per-clip sweeps (canonical window 0:128; KA disabled):
-for f in IQData001.dat IQData002.dat IQData003.dat IQData004.dat IQData005.dat IQData010.dat IQData020.dat IQData040.dat IQData060.dat IQData080.dat; do
+for f in IQData{001,002,003,004,005,010,020,040,060,080}.dat; do
   PYTHONPATH=. python -m scripts.shin_ratbrain_motion_sweep \
     --iq-file "$f" --frames 0:128 --profile U --svd-energy-frac 0.97 \
     --motion-kind brainlike --amp-px-list 0,0.5,1,2 \
@@ -198,12 +394,21 @@ PYTHONPATH=. python -m scripts.shin_ratbrain_motion_compare \
   --curve "64:192=reports/shin_motion_brainlike_batch_U_f64_192_reg1_agg.csv" \
   --curve "122:250=reports/shin_motion_brainlike_batch_U_f122_250_reg1_agg.csv" \
   --out-png reports/shin_motion_brainlike_compare_reg1.png
-cp -f reports/shin_motion_brainlike_compare_reg1.png figs/paper/shin_motion_brainlike_compare_reg1.png
+cp -f \
+  reports/shin_motion_brainlike_compare_reg1.png \
+  figs/paper/shin_motion_brainlike_compare_reg1.png
 \end{verbatim}
+}
 
   \item \textbf{Shin motion crop/alignment sensitivity (post-hoc)}
     (paper refs: Shin motion section: crop sensitivity note).
-    Outputs: \path{reports/shin_motion_brainlike_batch_U_crop_sensitivity.csv}.
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{shin_motion_brainlike_batch_U_crop_}\allowbreak\path{sensitivity.csv}
+    \end{itemize}
+    \endgroup
+{\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python -m scripts.shin_ratbrain_motion_sensitivity_posthoc \
   --run-root runs/shin_motion_brainlike_batch_U \
@@ -212,15 +417,383 @@ PYTHONPATH=. python -m scripts.shin_ratbrain_motion_sensitivity_posthoc \
   --align-maps-list 0,1 \
   --out-csv reports/shin_motion_brainlike_batch_U_crop_sensitivity.csv
 \end{verbatim}
+}
+
+  \item \textbf{Twinkling decode sanity (RawBCF -> B-mode/CFM)}
+    (paper refs: Twinkling section: RawBCF decode sanity).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{twinkling_decode_sanity/*/decode_report.json}
+    \end{itemize}
+    \endgroup
+{\footnotesize
+\begin{verbatim}
+SEQ_DIR="data/twinkling_artifact/Flow in Gammex phantom"
+SEQ_DIR="$SEQ_DIR/Flow in Gammex phantom (along - linear probe)"
+PYTHONPATH=. python scripts/twinkling_decode_sanity.py \
+  --seq-dir "$SEQ_DIR" \
+  --frame-idx 0 \
+  --out-dir reports/twinkling_decode_sanity
+\end{verbatim}
+}
+
+  \item \textbf{Gammex flow phantom structural ROC (along-linear17, PRF=2500)}
+    Paper refs:
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item Twinkling section: Table (structural ROC)
+      \item Figure: \path{twinkling_gammex_along_mask_overlay.png}
+    \end{itemize}
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{runs/real/}\allowbreak\path{twinkling_gammex_alonglinear17_prf2500_str6_}\allowbreak\path{msd_ka/}
+      \item \path{reports/}\allowbreak\path{twinkling_gammex_alonglinear17_prf2500_str6_}\allowbreak\path{msd_ka_with_baselines.csv}
+      \item \path{reports/}\allowbreak\path{twinkling_gammex_alonglinear17_prf2500_str6_}\allowbreak\path{msd_ka_with_baselines_summary.json}
+      \item \path{figs/paper/}\allowbreak\path{twinkling_gammex_along_mask_overlay.png}
+    \end{itemize}
+    \endgroup
+    Notes: Along-linear uses stride 6; this matches the fixed geometry-only stride policy (largest stride with >=500 tiles).
+{\footnotesize
+\begin{verbatim}
+SEQ_DIR="data/twinkling_artifact/Flow in Gammex phantom"
+SEQ_DIR="$SEQ_DIR/Flow in Gammex phantom (along - linear probe)"
+OUT_ROOT="runs/real/twinkling_gammex_alonglinear17_prf2500_str6_msd_ka"
+MASK_GLOB=$OUT_ROOT/*__mask_debug
+
+PYTHONPATH=. python scripts/twinkling_make_bundles.py \
+  --seq-dir "$SEQ_DIR" \
+  --out-root "$OUT_ROOT" \
+  --frames 0:85 \
+  --prf-hz 2500 --Lt 16 \
+  --tile-hw 8 8 --tile-stride 6 \
+  --cov-estimator tyler_pca --diag-load 0.07 \
+  --baseline-type svd_bandpass --svd-keep-min 2 --svd-keep-max 17 \
+  --score-mode msd --score-ka-v2-enable --score-ka-v2-mode auto
+
+PYTHONPATH=. python scripts/twinkling_eval_structural.py \
+  --root "$OUT_ROOT" \
+  --out-csv reports/twinkling_gammex_alonglinear17_prf2500_str6_msd_ka_with_baselines.csv \
+  --out-summary-json \
+    reports/twinkling_gammex_alonglinear17_prf2500_str6_msd_ka_with_baselines_summary.json
+
+PYTHONPATH=. python scripts/fig_twinkling_mask_overlay.py \
+  --bmode $MASK_GLOB/bmode_roi_ref_norm.png \
+  --mask-flow $MASK_GLOB/mask_flow.png \
+  --mask-bg $MASK_GLOB/mask_bg.png \
+  --out figs/paper/twinkling_gammex_along_mask_overlay.png \
+  --min-width 1200 --dpi 300
+\end{verbatim}
+}
+
+  \item \textbf{Gammex flow phantom structural ROC (across-linear17, PRF=2500)}
+    Paper refs:
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item Twinkling section: Table (structural ROC)
+      \item Figure: \path{twinkling_gammex_across_mask_overlay.png}
+    \end{itemize}
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{runs/real/}\allowbreak\path{twinkling_gammex_across17_prf2500_str4_msd_}\allowbreak\path{ka/}
+      \item \path{reports/}\allowbreak\path{twinkling_gammex_across17_prf2500_str4_msd_}\allowbreak\path{ka_with_baselines.csv}
+      \item \path{reports/}\allowbreak\path{twinkling_gammex_across17_prf2500_str4_msd_}\allowbreak\path{ka_with_baselines_summary.json}
+      \item \path{figs/paper/}\allowbreak\path{twinkling_gammex_across_mask_overlay.png}
+    \end{itemize}
+    \endgroup
+    Notes: Across-linear uses stride 4; this matches the fixed geometry-only stride policy (largest stride with >=500 tiles).
+{\footnotesize
+\begin{verbatim}
+SEQ_DIR="data/twinkling_artifact/Flow in Gammex phantom"
+SEQ_DIR="$SEQ_DIR/Flow in Gammex phantom (across - linear probe)"
+DAT_PATH="$SEQ_DIR/RawBCFCine_08062017_145434_17.dat"
+PAR_PATH="$SEQ_DIR/RawBCFCine_08062017_145434_17.par"
+OUT_ROOT="runs/real/twinkling_gammex_across17_prf2500_str4_msd_ka"
+MASK_GLOB=$OUT_ROOT/*__mask_debug
+
+PYTHONPATH=. python scripts/twinkling_make_bundles.py \
+  --seq-dir "$SEQ_DIR" \
+  --dat-path "$DAT_PATH" \
+  --par-path "$PAR_PATH" \
+  --out-root "$OUT_ROOT" \
+  --frames 0:200 \
+  --prf-hz 2500 --Lt 16 \
+  --tile-hw 8 8 --tile-stride 4 \
+  --cov-estimator tyler_pca --diag-load 0.07 \
+  --baseline-type svd_bandpass --svd-keep-min 2 --svd-keep-max 17 \
+  --score-mode msd --score-ka-v2-enable --score-ka-v2-mode auto
+
+PYTHONPATH=. python scripts/twinkling_eval_structural.py \
+  --root "$OUT_ROOT" \
+  --out-csv reports/twinkling_gammex_across17_prf2500_str4_msd_ka_with_baselines.csv \
+  --out-summary-json \
+    reports/twinkling_gammex_across17_prf2500_str4_msd_ka_with_baselines_summary.json
+
+PYTHONPATH=. python scripts/fig_twinkling_mask_overlay.py \
+  --bmode $MASK_GLOB/bmode_roi_ref_norm.png \
+  --mask-flow $MASK_GLOB/mask_flow.png \
+  --mask-bg $MASK_GLOB/mask_bg.png \
+  --out figs/paper/twinkling_gammex_across_mask_overlay.png \
+  --min-width 780 --dpi 300
+\end{verbatim}
+}
+
+  \item \textbf{Gammex within-ensemble motion ladder (along-linear17; PRF=2500)}
+    Paper refs:
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item Twinkling section: Figure (within-ensemble motion ladder)
+      \item Figure: \path{twinkling_gammex_alonglinear17_prf2500_within_ensemble_motion_ladder_rw_ci_v2.png}
+      \item Figure: \path{twinkling_gammex_alonglinear17_prf2500_within_ensemble_motion_ladder_step_ci_v2.png}
+    \end{itemize}
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{runs/real/}\allowbreak\path{twinkling_gammex_alonglinear17_prf2500_}\allowbreak\path{within_ensemble_motion_rw_v2/}
+      \item \path{runs/real/}\allowbreak\path{twinkling_gammex_alonglinear17_prf2500_}\allowbreak\path{within_ensemble_motion_step_v2/}
+      \item \path{reports/}\allowbreak\path{twinkling_gammex_alonglinear17_prf2500_}\allowbreak\path{within_ensemble_motion_ladder_rw_ci_v2.json}
+      \item \path{reports/}\allowbreak\path{twinkling_gammex_alonglinear17_prf2500_}\allowbreak\path{within_ensemble_motion_ladder_step_ci_}\allowbreak\path{v2.json}
+      \item \path{figs/paper/}\allowbreak\path{twinkling_gammex_alonglinear17_prf2500_}\allowbreak\path{within_ensemble_motion_ladder_rw_ci_v2.png}
+      \item \path{figs/paper/}\allowbreak\path{twinkling_gammex_alonglinear17_prf2500_}\allowbreak\path{within_ensemble_motion_ladder_step_ci_v2.png}
+    \end{itemize}
+    \endgroup
+{\footnotesize
+\begin{verbatim}
+SEQ_DIR="data/twinkling_artifact/Flow in Gammex phantom"
+SEQ_DIR="$SEQ_DIR/Flow in Gammex phantom (along - linear probe)"
+REF_ROOT="runs/real/twinkling_gammex_alonglinear17_prf2500_str6_msd_nomotion_ref_fast_f020"
+OUT_RW="runs/real/twinkling_gammex_alonglinear17_prf2500_within_ensemble_motion_rw_v2"
+OUT_STEP="runs/real/twinkling_gammex_alonglinear17_prf2500_within_ensemble_motion_step_v2"
+REP_DIR="reports"
+FIG_DIR="figs/paper"
+BASE="twinkling_gammex_alonglinear17_prf2500"
+SUF_RW="within_ensemble_motion_ladder_rw_ci_v2"
+SUF_STEP="within_ensemble_motion_ladder_step_ci_v2"
+RW_PREFIX="$REP_DIR/${BASE}_${SUF_RW}"
+STEP_PREFIX="$REP_DIR/${BASE}_${SUF_STEP}"
+RW_FIG="$FIG_DIR/${BASE}_${SUF_RW}.png"
+STEP_FIG="$FIG_DIR/${BASE}_${SUF_STEP}.png"
+
+# Amp=0 reference bundles for equivalence checks (20 frames):
+PYTHONPATH=. python scripts/twinkling_make_bundles.py \
+  --seq-dir "$SEQ_DIR" \
+  --out-root "$REF_ROOT" \
+  --frames 0:20 \
+  --prf-hz 2500 --Lt 16 \
+  --tile-hw 8 8 --tile-stride 6 \
+  --cov-estimator tyler_pca --diag-load 0.07 \
+  --baseline-type svd_bandpass --svd-keep-min 2 --svd-keep-max 17 \
+  --score-mode msd
+
+# Within-ensemble motion sweeps (85 frames; rw and step):
+PYTHONPATH=. python scripts/twinkling_gammex_within_ensemble_motion_sweep.py \
+  --seq-dir "$SEQ_DIR" \
+  --out-root "$OUT_RW" \
+  --frames 0:85 --mask-ref-frames 0:20 \
+  --prf-hz 2500 --Lt 16 \
+  --tile-hw 8 8 --tile-stride 6 \
+  --cov-estimator tyler_pca --diag-load 0.07 \
+  --baseline-type svd_bandpass --svd-keep-min 2 --svd-keep-max 17 \
+  --score-mode msd \
+  --motion-kind rw --amp-px-list 0,0.25,0.5,1,1.5,2
+PYTHONPATH=. python scripts/twinkling_gammex_within_ensemble_motion_sweep.py \
+  --seq-dir "$SEQ_DIR" \
+  --out-root "$OUT_STEP" \
+  --frames 0:85 --mask-ref-frames 0:20 \
+  --prf-hz 2500 --Lt 16 \
+  --tile-hw 8 8 --tile-stride 6 \
+  --cov-estimator tyler_pca --diag-load 0.07 \
+  --baseline-type svd_bandpass --svd-keep-min 2 --svd-keep-max 17 \
+  --score-mode msd \
+  --motion-kind step --amp-px-list 0,0.25,0.5,1,1.5,2
+
+# Aggregate + bootstrap CIs + plots:
+PYTHONPATH=. python scripts/twinkling_eval_motion_ladder.py \
+  --root "$OUT_RW" \
+  --out-csv "${RW_PREFIX}.csv" \
+  --out-json "${RW_PREFIX}.json" \
+  --out-png "$RW_FIG" \
+  --bootstrap 1000 --bootstrap-seed 0 \
+  --amp0-ref-root "$REF_ROOT" \
+  --amp0-ref-frames 0:20 --amp0-ref-tol 5e-3
+PYTHONPATH=. python scripts/twinkling_eval_motion_ladder.py \
+  --root "$OUT_STEP" \
+  --out-csv "${STEP_PREFIX}.csv" \
+  --out-json "${STEP_PREFIX}.json" \
+  --out-png "$STEP_FIG" \
+  --bootstrap 1000 --bootstrap-seed 0 \
+  --amp0-ref-root "$REF_ROOT" \
+  --amp0-ref-frames 0:20 --amp0-ref-tol 5e-3
+\end{verbatim}
+}
+
+  \item \textbf{Twinkling calculi KA hygiene + contract telemetry (calcifications; PRF approx 500)}
+    Paper refs:
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item Twinkling section: KA hygiene on calculi
+      \item Figure: \path{twinkling_calculi_tail_example.png}
+    \end{itemize}
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{runs/real/}\allowbreak\path{twinkling_calculi_calcifications_prf500_}\allowbreak\path{str4_Lt8_msd_ka_scm_dl015_f050/}
+      \item \path{reports/}\allowbreak\path{twinkling_calculi_calcifications_prf500_}\allowbreak\path{str4_Lt8_msd_ka_scm_dl015_f050_roc.csv}
+      \item \path{reports/}\allowbreak\path{twinkling_calculi_calcifications_prf500_}\allowbreak\path{str4_Lt8_msd_ka_scm_dl015_f050_summary.json}
+    \end{itemize}
+    \endgroup
+    Notes: Calculi runs use proxy masks (not tube structural masks). Used for contract/tail-hygiene instrumentation (not clinical detection claims).
+{\footnotesize
+\begin{verbatim}
+BASE_DIR="data/twinkling_artifact/Twinkling artifact on calculi"
+SEQ_DIR="$BASE_DIR/Twinkling and Flash artifacts on artificial calculi"
+RUN_TAG="twinkling_calculi_calcifications_prf500_str4_Lt8_msd_ka_scm_dl015_f050"
+OUT_ROOT="runs/real/${RUN_TAG}"
+REP_PREFIX="reports/${RUN_TAG}"
+
+PYTHONPATH=. python scripts/twinkling_make_bundles.py \
+  --seq-dir "$SEQ_DIR" \
+  --out-root "$OUT_ROOT" \
+  --frames 0:50 \
+  --prf-hz 500 --Lt 8 \
+  --tile-hw 8 8 --tile-stride 4 \
+  --cov-estimator scm --diag-load 0.15 \
+  --baseline-type svd_bandpass --svd-keep-min 2 --svd-keep-max 9 \
+  --score-mode msd --score-ka-v2-enable --score-ka-v2-mode auto \
+  --mask-mode none
+
+PYTHONPATH=. python scripts/twinkling_eval_structural.py \
+  --root "$OUT_ROOT" \
+  --out-csv "${REP_PREFIX}_roc.csv" \
+  --out-summary-json "${REP_PREFIX}_summary.json"
+\end{verbatim}
+}
+
+  \item \textbf{Twinkling contract figure pack (states/reasons + calculi tail example)}
+    Paper refs:
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item Twinkling section: Figure (twinkling\_contract\_states\_reasons.png)
+      \item Twinkling section: Figure (twinkling\_calculi\_tail\_example.png)
+    \end{itemize}
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{figs/paper/}\allowbreak\path{twinkling_contract_states_reasons.png}
+      \item \path{figs/paper/}\allowbreak\path{twinkling_calculi_tail_example.png}
+      \item \path{reports/}\allowbreak\path{twinkling_contract_figpack.json}
+    \end{itemize}
+    \endgroup
+{\footnotesize
+\begin{verbatim}
+ALONG_BASE="twinkling_gammex_alonglinear17_prf2500_str6_msd_ka_with_baselines"
+ACROSS_BASE="twinkling_gammex_across17_prf2500_str4_msd_ka_with_baselines"
+ALONG_SUM="reports/${ALONG_BASE}_summary.json"
+ACROSS_SUM="reports/${ACROSS_BASE}_summary.json"
+CALC_TAG="twinkling_calculi_calcifications_prf500_str4_Lt8_msd_ka_scm_dl015_f050"
+CALC_SUM="reports/${CALC_TAG}_summary.json"
+CALC_ROOT="runs/real/${CALC_TAG}"
+OUT_STATE="figs/paper/twinkling_contract_states_reasons.png"
+OUT_EX="figs/paper/twinkling_calculi_tail_example.png"
+OUT_JSON="reports/twinkling_contract_figpack.json"
+
+PYTHONPATH=. python scripts/twinkling_contract_figpack.py \
+  --along-summary "$ALONG_SUM" \
+  --across-summary "$ACROSS_SUM" \
+  --calculi-summary "$CALC_SUM" \
+  --calculi-root "$CALC_ROOT" \
+  --out-state-reason-png "$OUT_STATE" \
+  --out-calculi-example-png "$OUT_EX" \
+  --out-json "$OUT_JSON"
+\end{verbatim}
+}
+
+  \item \textbf{ULM 7883227 one-time baseline sweep (MC-SVD energy fraction)}
+    (paper refs: ULM section: baseline calibration (frozen svd\_energy\_frac=0.975)).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{runs/real/}\allowbreak\path{ulm7883227_baseline_mcsvd_energy_sweep_ULM_}\allowbreak\path{0000_0128/}
+      \item \path{reports/}\allowbreak\path{ulm7883227_baseline_mcsvd_energy_sweep_ULM_}\allowbreak\path{0000_0128.csv}
+      \item \path{reports/}\allowbreak\path{ulm7883227_baseline_mcsvd_energy_sweep_ULM_}\allowbreak\path{0000_0128.json}
+    \end{itemize}
+    \endgroup
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. python scripts/ulm_zenodo_7883227_baseline_sweep.py \
+  --block-ids 1,2,3 --frames 0:128 \
+  --svd-energy-frac-list 0.90,0.95,0.97,0.975,0.98,0.99 \
+  --profile ULM --prf-hz 1000 --Lt 64 \
+  --tile-h 8 --tile-w 8 --tile-stride 3 \
+  --reg-enable --reg-subpixel 4 \
+  --no-run-stap --bg-tail-fpr 0.001 --stability-split \
+  --cache-dir tmp/ulm_zenodo_7883227 \
+  --out-root runs/real/ulm7883227_baseline_mcsvd_energy_sweep_ULM_0000_0128 \
+  --out-csv reports/ulm7883227_baseline_mcsvd_energy_sweep_ULM_0000_0128.csv \
+  --out-json reports/ulm7883227_baseline_mcsvd_energy_sweep_ULM_0000_0128.json
+\end{verbatim}
+}
+
+  \item \textbf{ULM 7883227 motion sweeps (brainlike + elastic; fairness alignment + degeneracy)}
+    Paper refs:
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item ULM section: Figure (ulm7883227\_motion\_sweep\_*\_brainlike\_e975.png)
+      \item ULM section: Figure (ulm7883227\_motion\_sweep\_*\_elastic\_e975.png)
+    \end{itemize}
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{ulm7883227_motion_sweep_ULM_blocks1_3_0000_}\allowbreak\path{0128_brainlike_e975.csv}
+      \item \path{reports/}\allowbreak\path{ulm7883227_motion_sweep_ULM_blocks1_3_0000_}\allowbreak\path{0128_brainlike_e975.json}
+      \item \path{figs/paper/}\allowbreak\path{ulm7883227_motion_sweep_ULM_blocks1_3_0000_}\allowbreak\path{0128_brainlike_e975.png}
+      \item \path{reports/}\allowbreak\path{ulm7883227_motion_sweep_ULM_blocks1_3_0000_}\allowbreak\path{0128_elastic_e975.csv}
+      \item \path{reports/}\allowbreak\path{ulm7883227_motion_sweep_ULM_blocks1_3_0000_}\allowbreak\path{0128_elastic_e975.json}
+      \item \path{figs/paper/}\allowbreak\path{ulm7883227_motion_sweep_ULM_blocks1_3_0000_}\allowbreak\path{0128_elastic_e975.png}
+    \end{itemize}
+    \endgroup
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. python scripts/ulm_zenodo_7883227_motion_sweep.py \
+  --block-ids 1,2,3 --frames 0:128 \
+  --profile ULM --prf-hz 1000 --Lt 64 \
+  --tile-h 8 --tile-w 8 --tile-stride 3 \
+  --baseline-type mc_svd --svd-energy-frac 0.975 \
+  --reg-enable --reg-subpixel 4 \
+  --cov-estimator scm --diag-load 0.07 \
+  --motion-kind brainlike --amp-px-list 0,0.5,1,2,3 \
+  --out-root runs/real/ulm7883227_motion_sweep_ULM_brainlike_e975 \
+  --out-csv reports/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_brainlike_e975.csv \
+  --out-json reports/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_brainlike_e975.json \
+  --out-png figs/paper/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_brainlike_e975.png
+PYTHONPATH=. python scripts/ulm_zenodo_7883227_motion_sweep.py \
+  --block-ids 1,2,3 --frames 0:128 \
+  --profile ULM --prf-hz 1000 --Lt 64 \
+  --tile-h 8 --tile-w 8 --tile-stride 3 \
+  --baseline-type mc_svd --svd-energy-frac 0.975 \
+  --reg-enable --reg-subpixel 4 \
+  --cov-estimator scm --diag-load 0.07 \
+  --motion-kind elastic --amp-px-list 0,0.5,1,2,3 \
+  --out-root runs/real/ulm7883227_motion_sweep_ULM_elastic_e975 \
+  --out-csv reports/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_elastic_e975.csv \
+  --out-json reports/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_elastic_e975.json \
+  --out-png figs/paper/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_elastic_e975.png
+\end{verbatim}
+}
 
   \item \textbf{Paper build modes (paper vs supplement vs full)}
     (paper refs: Build packaging (Phase 7)).
-    Outputs: \path{stap_fus_paper.pdf}, \path{stap_fus_supplement.pdf}, \path{stap_fus_methodology.pdf}.
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{stap_fus_paper.pdf}
+      \item \path{stap_fus_supplement.pdf}
+      \item \path{stap_fus_methodology.pdf}
+    \end{itemize}
+    \endgroup
+{\footnotesize
 \begin{verbatim}
 pdflatex stap_fus_methodology.tex   # full (default)
 pdflatex stap_fus_paper.tex         # paper-only (no appendices)
 pdflatex stap_fus_supplement.tex    # supplement-only (appendices only)
 \end{verbatim}
+}
 
 \end{enumerate}
 
