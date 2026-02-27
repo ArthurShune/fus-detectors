@@ -1390,7 +1390,40 @@ def main() -> None:
                             eye = torch.eye(Lt_warm, device=dev, dtype=herm.dtype).unsqueeze(0)
                             R_lam = herm + (1e-2 * eye)
                             L = torch.linalg.cholesky(R_lam)
-                            _ = torch.linalg.solve_triangular(L, S, upper=False)
+                            Y = torch.linalg.solve_triangular(L, S, upper=False)
+
+                            # Optional warmup: Triton-fused Tyler weights kernel (if enabled).
+                            # Without this, the first real STAP window can include Triton JIT
+                            # compilation overhead in latency telemetry.
+                            triton_env = os.getenv("STAP_TYLER_TRITON_WEIGHTS", "").strip().lower()
+                            if triton_env in {"1", "true", "yes", "on"}:
+                                warm_triton = True
+                            elif triton_env in {"0", "false", "no", "off"}:
+                                warm_triton = False
+                            else:
+                                # Mirror the runtime default: only enable Triton
+                                # weights fusion for larger Lt regimes.
+                                warm_triton = int(Lt_warm) >= 32
+                            if warm_triton:
+                                try:
+                                    from pipeline.stap.triton_ops import (
+                                        TylerWeightsConfig,
+                                        triton_available as _triton_available,
+                                        tyler_weights_scale_triton,
+                                    )
+
+                                    if _triton_available():
+                                        out = torch.empty_like(S)
+                                        tyler_weights_scale_triton(
+                                            Y,
+                                            S,
+                                            out,
+                                            Lt=int(Lt_warm),
+                                            eps=1e-8,
+                                            cfg=TylerWeightsConfig(),
+                                        )
+                                except Exception:
+                                    pass
 
                             cr = torch.randn(
                                 (B_warm, Lt_warm, K_warm), device=dev, dtype=torch.float32
