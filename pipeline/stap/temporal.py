@@ -4013,9 +4013,12 @@ def _tyler_covariance_batched(
     solve_mode_env = os.getenv("STAP_TYLER_SOLVE_MODE", "").strip().lower()
     if not solve_mode_env or solve_mode_env == "auto":
         # Heuristic:
-        # - For small Lt (e.g., Lt=8 in Brain-*), direct TRSM is typically faster.
         # - For large Lt + wide RHS on CUDA, inverse+GEMM can be significantly faster.
-        use_inv_gemm = bool(S_flat.is_cuda) and int(Lt) >= 32 and int(P) >= 2 * int(Lt)
+        # - For small Lt, inverse+GEMM can still win when the RHS is very wide.
+        Lt_i = int(Lt)
+        P_i = int(P)
+        rhs_wide = P_i >= 2 * Lt_i
+        use_inv_gemm = bool(S_flat.is_cuda) and rhs_wide and (Lt_i >= 32 or P_i >= 512)
         solve_mode = "inv_gemm" if use_inv_gemm else "direct"
     elif solve_mode_env in {"direct", "trsm", "solve", "triangular"}:
         solve_mode = "direct"
