@@ -3964,6 +3964,16 @@ def _tyler_covariance_batched(
             pass
     early_stop_env = os.getenv("STAP_TYLER_EARLY_STOP", "").strip().lower()
     early_stop = early_stop_env not in {"0", "false", "no", "off"}
+    check_every_env = os.getenv("STAP_TYLER_CONV_CHECK_EVERY", "").strip()
+    if check_every_env:
+        try:
+            check_every = int(check_every_env)
+        except Exception:
+            check_every = 1
+    else:
+        # Default: reduce per-iteration host sync + Frobenius-norm work on CUDA.
+        check_every = 2 if S_flat.is_cuda else 1
+    check_every = max(1, int(check_every))
     B, Lt, P = S_flat.shape
     eye = torch.eye(Lt, dtype=S_flat.dtype, device=S_flat.device)
     eye_B = eye.unsqueeze(0)
@@ -3978,8 +3988,11 @@ def _tyler_covariance_batched(
     # the fixed point in exact arithmetic).
     solve_mode_env = os.getenv("STAP_TYLER_SOLVE_MODE", "").strip().lower()
     if not solve_mode_env or solve_mode_env == "auto":
-        # Heuristic threshold: inverse+GEMM wins when RHS width is large enough.
-        solve_mode = "inv_gemm" if (S_flat.is_cuda and int(P) >= 2 * int(Lt)) else "direct"
+        # Heuristic:
+        # - For small Lt (e.g., Lt=8 in Brain-*), direct TRSM is typically faster.
+        # - For large Lt + wide RHS on CUDA, inverse+GEMM can be significantly faster.
+        use_inv_gemm = bool(S_flat.is_cuda) and int(Lt) >= 32 and int(P) >= 2 * int(Lt)
+        solve_mode = "inv_gemm" if use_inv_gemm else "direct"
     elif solve_mode_env in {"direct", "trsm", "solve", "triangular"}:
         solve_mode = "direct"
     elif solve_mode_env in {"inv", "invgemm", "inv_gemm", "gemm", "matmul"}:
@@ -4010,7 +4023,8 @@ def _tyler_covariance_batched(
     R_new = torch.empty_like(R)
     diff = torch.empty_like(R)
     with _prof_ctx("stap:covariance:tyler"):
-        for _ in range(max_iter):
+        tol2 = float(tol) * float(tol)
+        for it in range(max_iter):
             # Numerical hygiene: enforce Hermitian symmetry before factorization.
             # On CUDA, small non-Hermitian drift can lead to `cholesky_ex` failures
             # and NaNs downstream (especially for short ensembles like T=17, Lt=16).
@@ -4075,16 +4089,21 @@ def _tyler_covariance_batched(
             if early_stop:
                 # Convergence check (relative Frobenius change), matching the
                 # scalar criterion used by the reference per-tile Tyler solver.
-                with _prof_ctx("stap:covariance:tyler:conv"):
-                    torch.sub(R_new, R, out=diff)
-                    diff_ri = torch.view_as_real(diff)  # (B,Lt,Lt,2)
-                    num = torch.sum(diff_ri * diff_ri, dim=(1, 2, 3)).sqrt()
-                    R_ri = torch.view_as_real(R)
-                    den = torch.sum(R_ri * R_ri, dim=(1, 2, 3)).sqrt().clamp_min(1e-12)
-                    rel = num / den
-                    if float(rel.max()) < tol:
-                        R = R_new
-                        break
+                # NOTE: `float(rel.max())` forces a CUDA sync; avoid doing that
+                # every iteration for latency. Checking every N iterations keeps
+                # outputs essentially unchanged while reducing control-plane sync.
+                do_check = ((it + 1) % check_every == 0) or (it == max_iter - 1)
+                if do_check:
+                    with _prof_ctx("stap:covariance:tyler:conv"):
+                        torch.sub(R_new, R, out=diff)
+                        diff_ri = torch.view_as_real(diff)  # (B,Lt,Lt,2)
+                        num2 = torch.sum(diff_ri * diff_ri, dim=(1, 2, 3))
+                        R_ri = torch.view_as_real(R)
+                        den2 = torch.sum(R_ri * R_ri, dim=(1, 2, 3)).clamp_min(1e-24)
+                        rel2 = num2 / den2
+                        if float(rel2.max()) < tol2:
+                            R = R_new
+                            break
             R, R_new = R_new, R
     return R
 
