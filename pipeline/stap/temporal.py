@@ -4071,7 +4071,7 @@ def _tyler_covariance_batched(
                 tr64 = torch.where(torch.isfinite(tr64), tr64, torch.zeros_like(tr64))
                 tr64 = torch.clamp(tr64, min=1e-30)
                 scale = (float(Lt) / tr64).to(dtype=torch.float32).view(B, 1, 1)
-                R_new.mul_(scale.to(dtype=R_new.dtype))
+                R_new.mul_(scale)
             if early_stop:
                 # Convergence check (relative Frobenius change), matching the
                 # scalar criterion used by the reference per-tile Tyler solver.
