@@ -60,9 +60,11 @@ def build_temporal_hankels_batch(
     if Lt < 2 or Lt >= T:
         raise ValueError(f"Need 2 <= Lt < T (got Lt={Lt}, T={T})")
 
-    # torch.unfold returns (B, N, Lt, h, w); permute to (B, Lt, N, h, w)
+    # torch.unfold appends the window dimension at the end:
+    #   (B, N, h, w, Lt) for an input (B, T, h, w) unfolded along dim=1.
+    # Reorder to the canonical (B, Lt, N, h, w) layout used throughout STAP.
     S = x.unfold(dimension=1, size=Lt, step=1)
-    S = S.permute(0, 2, 1, 3, 4).contiguous()
+    S = S.permute(0, 4, 1, 2, 3).contiguous()
 
     # Optional training snapshot subsampling to limit effective support, mirroring
     # the slow-path behavior. Controlled via env vars:
@@ -139,7 +141,8 @@ def shrinkage_alpha_for_kappa_batch(
     R_B_Lt_Lt: "torch.Tensor",
     *,
     kappa_target: float = 200.0,
-) -> "torch.Tensor":
+    return_eigs: bool = False,
+) -> "torch.Tensor" | Tuple["torch.Tensor", "torch.Tensor", "torch.Tensor"]:
     """
     Per-tile shrinkage alpha toward mu*I using the same heuristic as
     `_shrinkage_alpha_for_kappa`, but implemented directly to avoid
@@ -182,15 +185,20 @@ def shrinkage_alpha_for_kappa_batch(
             evals_list.append(evals_b)
         evals = torch.stack(evals_list, dim=0)
 
-    evals = torch.clamp(evals, min=0.0)
-    mu = evals.mean(dim=1)
-    e_min = evals.min(dim=1).values
-    e_max = evals.max(dim=1).values
+    ev_min = evals.min(dim=1).values
+    ev_max = evals.max(dim=1).values
+
+    evals_clamped = torch.clamp(evals, min=0.0)
+    mu = evals_clamped.mean(dim=1)
+    e_min = evals_clamped.min(dim=1).values
+    e_max = evals_clamped.max(dim=1).values
     num = e_max - float(kappa_target) * e_min
     den = (float(kappa_target) - 1.0) * mu + (e_max - float(kappa_target) * e_min)
     alpha = torch.where(den > 0.0, num / den, torch.zeros_like(den))
-    alpha_clamped = torch.clamp(alpha, 0.0, 1.0)
-    return alpha_clamped.to(dtype=torch.float32)
+    alpha_clamped = torch.clamp(alpha, 0.0, 1.0).to(dtype=torch.float32)
+    if not return_eigs:
+        return alpha_clamped
+    return alpha_clamped, ev_min.to(dtype=torch.float32), ev_max.to(dtype=torch.float32)
 
 
 def conditioned_lambda_batch(
