@@ -4112,12 +4112,20 @@ def _tyler_covariance_batched(
                         # Triton kernel fails for any reason.
                         use_triton_weights = False
                 if not use_triton_weights:
-                    Y_ri = torch.view_as_real(Y)  # (B,Lt,P,2)
-                    q = torch.sum(Y_ri * Y_ri, dim=(1, 3)).clamp_min(eps)  # (B,P)
-                    w = (float(Lt) / q).clamp_max(1e6)
+                    # Torch fallback: compute q = ||Y||^2 without complex multiplies.
+                    #
+                    # NOTE: `Y` is not used after this stage, so it's safe (and faster)
+                    # to square the float32 view in-place to avoid allocating the
+                    # intermediate `Y_ri * Y_ri` tensor.
+                    Y_ri = torch.view_as_real(Y)  # (B,Lt,P,2) float32 view
+                    Y_ri.mul_(Y_ri)
+                    q = torch.sum(Y_ri, dim=(1, 3))  # (B,P)
+                    q.clamp_min_(eps)
+                    # Reuse `q` storage for the weights to save an allocation.
+                    q.reciprocal_().mul_(float(Lt)).clamp_max_(1e6)
                     # Single-pass weighting into the preallocated buffer (avoids an
                     # extra full-tensor copy each iteration).
-                    torch.mul(S_flat, w.unsqueeze(1), out=Xw)
+                    torch.mul(S_flat, q.unsqueeze(1), out=Xw)
             with _prof_ctx("stap:covariance:tyler:update"):
                 torch.bmm(Xw, Xw.conj().transpose(-2, -1), out=R_new)
                 R_new.mul_(1.0 / float(P))
