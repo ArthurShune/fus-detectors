@@ -4057,11 +4057,17 @@ def _tyler_covariance_batched(
         # Force-enable (for experiments).
         use_triton_weights = True
     else:
-        # Auto: only enable for larger Lt regimes where weights is a clear hotspot.
-        # For small Lt (e.g., Brain-* Lt=8), the Triton path can regress end-to-end
-        # wall time due to launch/dispatch overhead dominating the relatively small
-        # weights workload.
-        use_triton_weights = int(Lt) >= 32
+        # Auto: enable whenever available on CUDA.
+        #
+        # This fuses:
+        #   q[p] = ||L^{-1} x_p||^2  (per snapshot)
+        #   w[p] = Lt / max(q[p], eps)
+        #   Xw[:,p] = X[:,p] * w[p]
+        #
+        # into a single kernel. It is numerically identical to the torch fallback
+        # (same accumulation order) but can substantially reduce kernel launches
+        # and memory traffic, even for small Lt regimes like Brain-* (Lt=8).
+        use_triton_weights = True
     use_triton_weights = bool(S_flat.is_cuda) and S_flat.dtype == torch.complex64 and use_triton_weights
     tyler_weights_triton = None
     tyler_weights_triton_cfg = None
