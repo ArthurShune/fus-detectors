@@ -4299,7 +4299,6 @@ def stap_temporal_core_batched(
     mu_trace: torch.Tensor | None = None
     with _prof_ctx("stap:shrinkage"):
         kappa_shrink = float(max(kappa_shrink, 1.01))
-        eye = torch.eye(Lt, device=device, dtype=R_hat.dtype)
         if shrinkage_alpha_for_kappa_batch is not None:
             alphas_f, ev_min_herm, ev_max_herm = shrinkage_alpha_for_kappa_batch(
                 R_hat, kappa_target=kappa_shrink, return_eigs=True
@@ -4314,7 +4313,12 @@ def stap_temporal_core_batched(
             dtype=torch.float32
         ) / float(Lt)
         alpha = alphas_f.view(-1, 1, 1) if alphas_f is not None else torch.zeros((B, 1, 1), device=device)
-        R_hat = (1.0 - alpha) * R_hat + alpha * mu_trace.view(-1, 1, 1) * eye
+        # Apply shrinkage in-place:
+        #   R' = (1-a) R + a * mu * I
+        # Off-diagonals scale by (1-a); the diagonal additionally gets +a*mu.
+        R_hat.mul_(1.0 - alpha)
+        diag_add = (alpha.view(B) * mu_trace).to(dtype=R_hat.dtype).view(B, 1)
+        torch.diagonal(R_hat, dim1=1, dim2=2).add_(diag_add)
     t_shrink = time.perf_counter() - t2
 
     eye = torch.eye(Lt, device=device, dtype=R_hat.dtype)
