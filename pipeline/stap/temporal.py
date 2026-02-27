@@ -3967,6 +3967,30 @@ def _tyler_covariance_batched(
     B, Lt, P = S_flat.shape
     eye = torch.eye(Lt, dtype=S_flat.dtype, device=S_flat.device)
     eye_B = eye.unsqueeze(0)
+    # Solve strategy for the Tyler whitening step (L^{-1} X):
+    #
+    # - direct: use batched TRSM (`solve_triangular`) on the full RHS.
+    # - inv_gemm: compute L^{-1} via TRSM on I (small RHS) then use GEMM (bmm).
+    #
+    # On CUDA, TRSM can be significantly slower than GEMM when the RHS has many
+    # columns (P). The inverse+GEMM strategy is usually faster for large P, at
+    # the cost of slightly different floating-point rounding (should not change
+    # the fixed point in exact arithmetic).
+    solve_mode_env = os.getenv("STAP_TYLER_SOLVE_MODE", "").strip().lower()
+    if not solve_mode_env or solve_mode_env == "auto":
+        # Heuristic threshold: inverse+GEMM wins when RHS width is large enough.
+        solve_mode = "inv_gemm" if (S_flat.is_cuda and int(P) >= 2 * int(Lt)) else "direct"
+    elif solve_mode_env in {"direct", "trsm", "solve", "triangular"}:
+        solve_mode = "direct"
+    elif solve_mode_env in {"inv", "invgemm", "inv_gemm", "gemm", "matmul"}:
+        solve_mode = "inv_gemm"
+    else:
+        raise ValueError(
+            f"Unknown STAP_TYLER_SOLVE_MODE='{solve_mode_env}'. Expected auto|direct|inv_gemm."
+        )
+    # Note: expanded identity is used as the RHS for the triangular solve; this
+    # avoids allocating a (B,Lt,Lt) tensor in the common case.
+    eye_expand = eye.expand(B, Lt, Lt)
     Xw = torch.empty_like(S_flat)
     if R_init is None:
         R = eye_B.expand(B, Lt, Lt).clone()
@@ -4009,7 +4033,13 @@ def _tyler_covariance_batched(
                     if not torch.any(info != 0):
                         break
             with _prof_ctx("stap:covariance:tyler:solve"):
-                Y = torch.linalg.solve_triangular(L, S_flat, upper=False)
+                if solve_mode == "inv_gemm":
+                    # L^{-1} X via explicit triangular inverse + GEMM.
+                    Linv = torch.linalg.solve_triangular(L, eye_expand, upper=False)
+                    Y = torch.bmm(Linv, S_flat)
+                else:
+                    # L^{-1} X via batched TRSM.
+                    Y = torch.linalg.solve_triangular(L, S_flat, upper=False)
             q = torch.sum(torch.conj(Y) * Y, dim=1).real.clamp_min(eps)  # (B, P)
             w = (float(Lt) / q).clamp_max(1e6)
             # Single-pass weighting into the preallocated buffer (avoids an
