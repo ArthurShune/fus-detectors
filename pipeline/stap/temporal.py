@@ -3944,6 +3944,11 @@ def _tyler_covariance_batched(
     Lightweight Tyler iteration, batched over tiles.
     """
     # Optional runtime knobs for latency experiments (default preserves behavior).
+    #
+    # NOTE: Hard-capping Tyler iterations (e.g., STAP_TYLER_MAX_ITER=10) is
+    # known to regress strict-tail performance on real-data audits (e.g., Shin
+    # RatBrain / Twinkling-Gammex). Treat it as a latency-only knob and avoid
+    # recording it in any "configs of record" tied to manuscript results.
     max_iter_env = os.getenv("STAP_TYLER_MAX_ITER", "").strip()
     if max_iter_env:
         try:
@@ -4268,27 +4273,59 @@ def stap_temporal_core_batched(
     t_shrink = time.perf_counter() - t2
 
     eye = torch.eye(Lt, device=device, dtype=R_hat.dtype)
-    # Per-tile lambda for MSD via conditioned_lambda (approximate lam_for_msd)
+    # Per-tile lambda for MSD via conditioned_lambda.
     with _prof_ctx("stap:lambda"):
         kappa_msd = float(max(kappa_msd, 1.01))
         lam_init = float(msd_lambda) if msd_lambda is not None else float(diag_load)
-        if conditioned_lambda_batch_shared is not None:
+        if (
+            ev_min_herm is not None
+            and ev_max_herm is not None
+            and alphas_f is not None
+            and mu_trace is not None
+        ):
+            # Fast exact path: avoid a second batched eigendecomposition by reusing
+            # eigen-extrema already computed in the shrinkage stage.
+            #
+            # After shrinkage: R' = (1-a) R + a * mu * I, where a=alpha per tile.
+            # For Hermitian R, eigenvalues transform exactly as e' = (1-a) e + a * mu.
+            a64 = alphas_f.to(device=device, dtype=torch.float64).flatten()
+            mu64 = mu_trace.to(device=device, dtype=torch.float64).flatten()
+            ev_min64 = ev_min_herm.to(device=device, dtype=torch.float64).flatten()
+            ev_max64 = ev_max_herm.to(device=device, dtype=torch.float64).flatten()
+
+            ev_min_post = (1.0 - a64) * ev_min64 + a64 * mu64
+            ev_max_post = (1.0 - a64) * ev_max64 + a64 * mu64
+            # Match conditioned_lambda_batch: clamp eigenvalues to non-negative.
+            ev_min_post = torch.clamp(ev_min_post, min=0.0)
+            ev_max_post = torch.clamp(ev_max_post, min=0.0)
+
+            denom = torch.clamp(
+                torch.as_tensor(kappa_msd - 1.0, device=device, dtype=torch.float64),
+                min=1e-8,
+            )
+            lam_needed = torch.where(
+                ev_min_post > 0.0,
+                torch.clamp((ev_max_post - kappa_msd * ev_min_post) / denom, min=0.0),
+                torch.clamp(ev_max_post / denom, min=0.0),
+            )
+            base = torch.full((B,), lam_init, device=device, dtype=torch.float64)
+            lam_out = torch.maximum(base, lam_needed)
+            lam_msd_tensor = lam_out.to(R_hat.dtype)
+            lam_needed_tensor = lam_needed.to(R_hat.dtype)
+        elif conditioned_lambda_batch_shared is not None:
             # Preserve manuscript baseline behavior: compute per-tile loading via the
             # shared conditioned-lambda helper (no eigenvalue-bound shortcut).
-            lam_batch, _, lam_needed_batch = conditioned_lambda_batch_shared(
-                R_hat, lam_init, kappa_msd
-            )
+            lam_batch, _, lam_needed_batch = conditioned_lambda_batch_shared(R_hat, lam_init, kappa_msd)
             lam_msd_tensor = lam_batch.to(R_hat.dtype)
             lam_needed_tensor = lam_needed_batch.to(R_hat.dtype)
         else:
             lam_list = []
             lam_needed_list = []
             for b in range(B):
-                lam_for_msd, sigma_max, sigma_min_lb = conditioned_lambda(
+                lam_for_msd, _, _ = conditioned_lambda(
                     R_hat[b], lam_requested=lam_init, kappa_target=kappa_msd
                 )
                 lam_list.append(lam_for_msd)
-                # Approximate needed loading from sigma bounds
                 lam_needed_list.append(max(0.0, lam_for_msd - lam_init))
             lam_msd_tensor = torch.as_tensor(lam_list, device=device, dtype=R_hat.dtype)
             lam_needed_tensor = torch.as_tensor(lam_needed_list, device=device, dtype=R_hat.dtype)
@@ -4677,12 +4714,39 @@ def pd_temporal_core_batched(
     kappa_msd = float(max(kappa_msd, 1.01))
     lam_init = float(msd_lambda) if msd_lambda is not None else float(diag_load)
     with _prof_ctx("stap:lambda"):
-        if conditioned_lambda_batch_shared is not None:
+        if (
+            ev_min_herm is not None
+            and ev_max_herm is not None
+            and alphas_f is not None
+            and mu_trace is not None
+        ):
+            a64 = alphas_f.to(device=device, dtype=torch.float64).flatten()
+            mu64 = mu_trace.to(device=device, dtype=torch.float64).flatten()
+            ev_min64 = ev_min_herm.to(device=device, dtype=torch.float64).flatten()
+            ev_max64 = ev_max_herm.to(device=device, dtype=torch.float64).flatten()
+
+            ev_min_post = (1.0 - a64) * ev_min64 + a64 * mu64
+            ev_max_post = (1.0 - a64) * ev_max64 + a64 * mu64
+            ev_min_post = torch.clamp(ev_min_post, min=0.0)
+            ev_max_post = torch.clamp(ev_max_post, min=0.0)
+
+            denom = torch.clamp(
+                torch.as_tensor(kappa_msd - 1.0, device=device, dtype=torch.float64),
+                min=1e-8,
+            )
+            lam_needed = torch.where(
+                ev_min_post > 0.0,
+                torch.clamp((ev_max_post - kappa_msd * ev_min_post) / denom, min=0.0),
+                torch.clamp(ev_max_post / denom, min=0.0),
+            )
+            base = torch.full((B,), lam_init, device=device, dtype=torch.float64)
+            lam_out = torch.maximum(base, lam_needed)
+            lam_msd_tensor = lam_out.to(R_hat.dtype)
+            lam_needed_tensor = lam_needed.to(R_hat.dtype)
+        elif conditioned_lambda_batch_shared is not None:
             # Preserve manuscript baseline behavior: compute per-tile loading via the
             # shared conditioned-lambda helper (no eigenvalue-bound shortcut).
-            lam_batch, _, lam_needed_batch = conditioned_lambda_batch_shared(
-                R_hat, lam_init, kappa_msd
-            )
+            lam_batch, _, lam_needed_batch = conditioned_lambda_batch_shared(R_hat, lam_init, kappa_msd)
             lam_msd_tensor = lam_batch.to(R_hat.dtype)
             lam_needed_tensor = lam_needed_batch.to(R_hat.dtype)
         else:
