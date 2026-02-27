@@ -1401,9 +1401,9 @@ def main() -> None:
                             elif triton_env in {"0", "false", "no", "off"}:
                                 warm_triton = False
                             else:
-                                # Mirror the runtime default: only enable Triton
-                                # weights fusion for larger Lt regimes.
-                                warm_triton = int(Lt_warm) >= 32
+                                # Mirror the runtime default: enable Triton
+                                # Tyler weights fusion when available on CUDA.
+                                warm_triton = True
                             if warm_triton:
                                 try:
                                     from pipeline.stap.triton_ops import (
