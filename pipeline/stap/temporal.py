@@ -4029,6 +4029,7 @@ def _tyler_covariance_batched(
     # avoids allocating a (B,Lt,Lt) tensor in the common case.
     eye_expand = eye.expand(B, Lt, Lt)
     Xw = torch.empty_like(S_flat)
+    Linv = torch.empty((B, Lt, Lt), device=S_flat.device, dtype=S_flat.dtype) if solve_mode == "inv_gemm" else None
     if R_init is None:
         R = eye_B.expand(B, Lt, Lt).clone()
     else:
@@ -4112,12 +4113,12 @@ def _tyler_covariance_batched(
             with _prof_ctx("stap:covariance:tyler:solve"):
                 if solve_mode == "inv_gemm":
                     # L^{-1} X via explicit triangular inverse + GEMM.
-                    Linv = torch.linalg.solve_triangular(L, eye_expand, upper=False)
+                    torch.linalg.solve_triangular(L, eye_expand, upper=False, out=Linv)
                     torch.bmm(Linv, S_flat, out=Xw)
-                    Y = Xw
                 else:
                     # L^{-1} X via batched TRSM.
-                    Y = torch.linalg.solve_triangular(L, S_flat, upper=False)
+                    torch.linalg.solve_triangular(L, S_flat, upper=False, out=Xw)
+                Y = Xw
             with _prof_ctx("stap:covariance:tyler:weights"):
                 # q_p = ||L^{-1} x_p||^2 (per snapshot), but compute it without
                 # complex multiply to reduce kernel time.
