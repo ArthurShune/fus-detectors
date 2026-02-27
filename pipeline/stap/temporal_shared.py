@@ -174,25 +174,40 @@ def shrinkage_alpha_for_kappa_batch(
         q = torch.ones((B, N), device=A_B_N_N.device, dtype=A_B_N_N.dtype)
         q = q / torch.linalg.norm(q, dim=1, keepdim=True).clamp_min(eps)
         q_prev = torch.zeros_like(q)
+        q_next = torch.empty_like(q)
         beta_prev = torch.zeros((B,), device=A_B_N_N.device, dtype=torch.float32)
 
         alphas = torch.empty((B, m), device=A_B_N_N.device, dtype=torch.float32)
         betas = torch.empty((B, max(0, m - 1)), device=A_B_N_N.device, dtype=torch.float32)
+
+        # Reusable buffers: reduce per-iteration allocations and dtype casts.
+        w3 = torch.empty((B, N, 1), device=A_B_N_N.device, dtype=A_B_N_N.dtype)
+        tmp = torch.empty((B, N), device=A_B_N_N.device, dtype=A_B_N_N.dtype)
         for j in range(m):
-            w = torch.bmm(A_B_N_N, q.unsqueeze(-1)).squeeze(-1)
+            # w = A @ q
+            torch.bmm(A_B_N_N, q.unsqueeze(-1), out=w3)
+            w = w3.squeeze(-1)
             if j > 0:
-                w = w - beta_prev.view(B, 1).to(dtype=w.dtype) * q_prev
-            alpha_j = torch.real(torch.sum(q.conj() * w, dim=1))
-            alphas[:, j] = alpha_j.to(dtype=torch.float32)
-            w = w - alpha_j.view(B, 1).to(dtype=w.dtype) * q
+                # w -= beta_prev * q_prev
+                torch.mul(q_prev, beta_prev.view(B, 1), out=tmp)
+                w.sub_(tmp)
+
+            # alpha_j = Re{q^H w} (real for Hermitian A).
+            q_ri = torch.view_as_real(q)
+            w_ri = torch.view_as_real(w)
+            alpha_j = torch.sum(q_ri[..., 0] * w_ri[..., 0] + q_ri[..., 1] * w_ri[..., 1], dim=1)
+            alphas[:, j] = alpha_j
+
+            # w -= alpha_j * q
+            torch.mul(q, alpha_j.view(B, 1), out=tmp)
+            w.sub_(tmp)
             if j < m - 1:
                 beta_j = torch.linalg.norm(w, dim=1)
-                betas[:, j] = beta_j.to(dtype=torch.float32)
+                betas[:, j] = beta_j
                 beta_safe = beta_j.clamp_min(eps)
-                q_next = w / beta_safe.view(B, 1).to(dtype=w.dtype)
-                q_prev = q
-                q = q_next
-                beta_prev = beta_j.to(dtype=torch.float32)
+                torch.div(w, beta_safe.view(B, 1), out=q_next)
+                q_prev, q, q_next = q, q_next, q_prev
+                beta_prev = beta_j
 
         T = torch.diag_embed(alphas)  # (B,m,m)
         if m > 1:
