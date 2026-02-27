@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+from contextlib import ExitStack
+from contextlib import nullcontext
+from contextlib import contextmanager
+import contextvars
 import os
+import math
 import time
+import warnings
 from dataclasses import asdict
 from typing import Dict, List, Literal, Optional, Sequence, Tuple
 
@@ -21,6 +27,105 @@ from pipeline.stap.temporal_shared import (
 from pipeline.stap.temporal_shared import (
     conditioned_lambda_batch as conditioned_lambda_batch_shared,
 )
+
+try:  # Optional; only used when profiling is enabled.
+    from torch.profiler import record_function as _record_function
+except Exception:  # pragma: no cover - profiler optional
+    _record_function = None
+
+
+class _StapCudaStageTimer:
+    def __init__(self, enabled: bool):
+        self.enabled = bool(enabled) and torch.cuda.is_available()
+        self._events: list[tuple[str, "torch.cuda.Event", "torch.cuda.Event"]] = []
+
+    @contextmanager
+    def stage(self, name: str):
+        if not self.enabled:
+            yield
+            return
+        stream = torch.cuda.current_stream()
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
+        start.record(stream)
+        try:
+            yield
+        finally:
+            end.record(stream)
+            self._events.append((str(name), start, end))
+
+    def summary_ms(self) -> dict[str, float]:
+        if not self.enabled or not self._events:
+            return {}
+        torch.cuda.synchronize()
+        out: dict[str, float] = {}
+        for name, start, end in self._events:
+            out[name] = out.get(name, 0.0) + float(start.elapsed_time(end))
+        return out
+
+
+_STAP_CUDA_STAGE_TIMER: contextvars.ContextVar[_StapCudaStageTimer | None] = contextvars.ContextVar(
+    "STAP_CUDA_STAGE_TIMER", default=None
+)
+
+_STAP_TILE_STATISTIC_WARNED = False
+
+
+def _warn_tile_statistic_experimental() -> None:
+    global _STAP_TILE_STATISTIC_WARNED
+    if _STAP_TILE_STATISTIC_WARNED:
+        return
+    _STAP_TILE_STATISTIC_WARNED = True
+    warnings.warn(
+        "Tile-statistic / cov-only STAP scoring is EXPERIMENTAL and is NOT ROC-equivalent to the "
+        "manuscript detector. It replaces per-snapshot nonlinear MSD aggregation with a "
+        "ratio-of-means approximation (mean(f) != f(mean)) and is known to catastrophically "
+        "regress strict-FPR ROC on Twinkling/Gammex. Do not use for paper results or production configs.",
+        UserWarning,
+        stacklevel=2,
+    )
+
+
+@contextmanager
+def stap_cuda_event_timing(*, enabled: bool | None = None):
+    """
+    Enable per-stage CUDA timing via CUDA events.
+
+    This is an opt-in profiling helper: it does not change algorithm outputs.
+    Stage boundaries are defined by existing `with _prof_ctx("stap:...")` markers.
+    """
+    if enabled is None:
+        enabled = os.getenv("STAP_CUDA_EVENT_TIMING", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+    timer = _StapCudaStageTimer(enabled=bool(enabled))
+    token = _STAP_CUDA_STAGE_TIMER.set(timer)
+    try:
+        yield timer
+    finally:
+        _STAP_CUDA_STAGE_TIMER.reset(token)
+
+
+@contextmanager
+def _prof_ctx(name: str):
+    prof_enabled = os.getenv("STAP_PROFILE_MARKERS", "").strip().lower() in {"1", "true", "yes", "on"}
+    timer = _STAP_CUDA_STAGE_TIMER.get()
+    cuda_enabled = (timer is not None) and bool(timer.enabled)
+    if (not prof_enabled or _record_function is None) and not cuda_enabled:
+        yield
+        return
+    with ExitStack() as stack:
+        if prof_enabled and _record_function is not None:
+            stack.enter_context(_record_function(str(name)))
+        if cuda_enabled and timer is not None:
+            stack.enter_context(timer.stage(str(name)))
+        yield
+
+
+stap_stage_ctx = _prof_ctx
 
 
 def _power_iteration_max(R: torch.Tensor, num_iters: int = 3) -> float:
@@ -3138,7 +3243,8 @@ def _band_energy_whitened_batched(
     R_lam = 0.5 * (R + lam_mat + (R + lam_mat).conj().transpose(-2, -1))
 
     try:
-        L = torch.linalg.cholesky(R_lam)
+        with _prof_ctx("stap:band_energy:chol_R"):
+            L = torch.linalg.cholesky(R_lam)
     except RuntimeError:
         # Per-tile adaptive jitter (scaled by mu) fallback.
         eye_b = torch.eye(Lt, dtype=work_dtype, device=device)
@@ -3151,7 +3257,8 @@ def _band_energy_whitened_batched(
             Lb = None
             for mult in jitter_mults:
                 try:
-                    Lb = torch.linalg.cholesky(Rb + (float(mult) * diag_scale[b]) * eye_b)
+                    with _prof_ctx("stap:band_energy:chol_R"):
+                        Lb = torch.linalg.cholesky(Rb + (float(mult) * diag_scale[b]) * eye_b)
                     break
                 except RuntimeError:
                     Lb = None
@@ -3163,13 +3270,24 @@ def _band_energy_whitened_batched(
         L = torch.stack(L_list, dim=0)
 
     # Whiten snapshots: reshape to (B, Lt, P) where P = N*h*w
+    if S.ndim == 4:
+        # (B, Lt, N, h) -> (B, Lt, N, h, 1) so downstream logic can stay uniform.
+        S = S.unsqueeze(-1)
     Bsz, Lt_dim, N, h, w = S.shape
+    # NOTE: preserve the legacy flattening order (h,w,N) used by the manuscript
+    # baselines. This intentionally matches the historical (permute+view) layout
+    # so downstream score maps remain bitwise-comparable across latency work.
     S_flat = S.permute(0, 1, 3, 4, 2).contiguous().view(Bsz, Lt_dim, -1)
-    Sw = torch.linalg.solve_triangular(L, S_flat, upper=False)
+    with _prof_ctx("stap:band_energy:whiten_snapshots"):
+        Sw = torch.linalg.solve_triangular(L, S_flat, upper=False)
 
     # Whiten constraints: expand Ct across batch
     Ct_exp = Ct.unsqueeze(0).expand(Bsz, -1, -1)  # (B,Lt,K)
-    Cw = torch.linalg.solve_triangular(L, Ct_exp, upper=False)
+    with _prof_ctx("stap:band_energy:whiten_constraints"):
+        Cw = torch.linalg.solve_triangular(L, Ct_exp, upper=False)
+
+    # Total whitened power (used both for output and for the dual-form projector).
+    sw_pow_flat = torch.sum(Sw.conj() * Sw, dim=1).real  # (B, P)
 
     # Project onto band subspace.
     #
@@ -3177,34 +3295,375 @@ def _band_energy_whitened_batched(
     # rather than ||z||^2. The latter assumes Cw columns are (approximately)
     # orthonormal; after whitening and conditioning this is often false, and the
     # resulting band-fraction score can become numerically degenerate.
-    z = torch.bmm(Cw.conj().transpose(1, 2), Sw)  # (B, K, P)
-    Gram = torch.bmm(Cw.conj().transpose(1, 2), Cw)  # (B, K, K)
-    ridge_eff = float(ridge)
-    if ridge_eff > 0.0:
-        # Scale-aware ridge (mirrors `_pd_band_energy_attempt` in the slow path):
-        # when Gram is tiny in the whitened basis, an absolute ridge (e.g. 0.1)
-        # can dominate and collapse projected energy toward ~0.
-        evals = torch.linalg.eigvalsh(Gram).real
-        evals = torch.clamp(evals, min=1e-12)
-        evals_max = evals.max(dim=1).values  # (B,)
-        ridge_vec = ridge_eff * torch.where(evals_max < 1.0, evals_max, torch.ones_like(evals_max))
-        eye_k = torch.eye(Gram.shape[-1], dtype=Gram.dtype, device=Gram.device).unsqueeze(0)
-        Gram = Gram + ridge_vec.view(-1, 1, 1) * eye_k
-    try:
-        Lg = torch.linalg.cholesky(Gram)
-        tmp = torch.linalg.solve_triangular(Lg, z, upper=False)
-        proj = torch.linalg.solve_triangular(Lg.conj().transpose(-2, -1), tmp, upper=True)
-    except RuntimeError:
-        proj, _ = cholesky_solve_hermitian(Gram, z, jitter_init=1e-8, max_tries=3)
-    T_band_flat = torch.sum(z.conj() * proj, dim=1).real  # (B, P)
+    with _prof_ctx("stap:band_energy:project"):
+        ridge_eff = float(ridge)
+        try:
+            project_mode = os.getenv("STAP_BAND_PROJECT_MODE", "").strip().lower()
+            mode_pf = project_mode in {"pf", "proj", "projection"}
+            mode_dual = project_mode in {"dual", "lt", "woodbury", "small"}
+            mode_gram = project_mode in {"gram", "k", "reference", "chol"}
 
-    # Total whitened power
-    sw_pow_flat = torch.sum(Sw.conj() * Sw, dim=1).real  # (B, P)
+            Bm, Lt_m, K = Cw.shape
+            CwH = Cw.conj().transpose(1, 2)  # (B, K, Lt)
+            ridge_vec: torch.Tensor
+
+            if not mode_pf and not mode_dual and not mode_gram:
+                # Auto selection: when K is large relative to Lt, avoid the
+                # K×K solve by using the mathematically equivalent dual form.
+                mode_dual = bool(K > Lt_m)
+
+            if mode_dual:
+                # Dual/Woodbury form:
+                #   y^H C (C^H C + λI)^{-1} C^H y
+                #     = y^H y - λ y^H (C C^H + λI)^{-1} y
+                # which replaces a (K×K) solve with an (Lt×Lt) solve when K > Lt.
+                #
+                # NOTE: the non-zero eigenvalues of (C^H C) and (C C^H) are
+                # identical, so we can compute the ridge scaling using the much
+                # smaller Lt×Lt matrix without changing the intended behavior.
+                M = torch.bmm(Cw, CwH)  # (B, Lt, Lt)
+                M = 0.5 * (M + M.conj().transpose(-2, -1))
+
+                if ridge_eff > 0.0:
+                    evals = torch.linalg.eigvalsh(M).real
+                    evals = torch.clamp(evals, min=1e-12)
+                    evals_max = evals.max(dim=1).values  # (B,)
+                    ridge_vec = ridge_eff * torch.where(
+                        evals_max < 1.0, evals_max, torch.ones_like(evals_max)
+                    )
+                    eye_lt = torch.eye(Lt_m, dtype=M.dtype, device=M.device).unsqueeze(0)
+                    M = M + ridge_vec.view(-1, 1, 1) * eye_lt
+                else:
+                    ridge_vec = torch.zeros((Bm,), dtype=torch.float32, device=Cw.device)
+
+                Lm = torch.linalg.cholesky(M)
+                v = torch.cholesky_solve(Sw, Lm)  # (B, Lt, P) = (C C^H + λI)^{-1} y
+                quad = torch.sum(Sw.conj() * v, dim=1).real  # (B, P)
+                T_band_flat = sw_pow_flat - ridge_vec.view(-1, 1) * quad
+            else:
+                Gram = torch.bmm(CwH, Cw)  # (B, K, K)
+                if ridge_eff > 0.0:
+                    # Scale-aware ridge (mirrors head baseline behavior): when Gram is
+                    # tiny in the whitened basis, an absolute ridge can dominate and
+                    # collapse projected energy toward ~0.
+                    evals = torch.linalg.eigvalsh(Gram).real
+                    evals = torch.clamp(evals, min=1e-12)
+                    evals_max = evals.max(dim=1).values  # (B,)
+                    ridge_vec = ridge_eff * torch.where(
+                        evals_max < 1.0, evals_max, torch.ones_like(evals_max)
+                    )
+                    eye_k = torch.eye(K, dtype=Gram.dtype, device=Gram.device).unsqueeze(0)
+                    Gram = Gram + ridge_vec.view(-1, 1, 1) * eye_k
+                else:
+                    ridge_vec = torch.zeros((Bm,), dtype=torch.float32, device=Cw.device)
+
+                if mode_pf:
+                    # Fast exact form: precompute the projection matrix Pf and apply it
+                    # directly to whitened snapshots. This avoids solving Gram against a
+                    # large RHS (K×P) and replaces it with:
+                    #   1) a small solve (K×Lt) to form Pf, then
+                    #   2) a batched GEMM (Lt×Lt) on the large RHS (Lt×P).
+                    #
+                    # This is mathematically identical to z^H Gram^{-1} z because:
+                    #   Pf = Cw Gram^{-1} Cw^H,  so  y^H Pf y = z^H Gram^{-1} z.
+                    Lg = torch.linalg.cholesky(Gram)
+                    X = torch.cholesky_solve(CwH, Lg)  # (B, K, Lt) = Gram^{-1} Cw^H
+                    Pf = torch.bmm(Cw, X)  # (B, Lt, Lt)
+                    Pf = 0.5 * (Pf + Pf.conj().transpose(-2, -1))
+                    u = torch.bmm(Pf, Sw)  # (B, Lt, P)
+                    T_band_flat = torch.sum(Sw.conj() * u, dim=1).real  # (B, P)
+                else:
+                    # Stable reference implementation: solve on the full RHS.
+                    #
+                    # We intentionally keep this form as the default because some
+                    # profiles (e.g., very short N=T-Lt+1) can be numerically sensitive
+                    # and historically exhibited heavy-tail artifacts under precomputed
+                    # projection-matrix formulations. The env-controlled fast mode above
+                    # lets latency experiments opt into Pf explicitly.
+                    Lg = torch.linalg.cholesky(Gram)
+                    # Projection energy: z^H Gram^{-1} z with Gram=Lg Lg^H.
+                    #
+                    # Algebra: ||Lg^{-1} z||^2 with z=(Cw^H)Sw.
+                    # Prefer forming A = Lg^{-1} Cw^H once (small RHS K×Lt) then
+                    # GEMM against the large RHS Sw (Lt×P) to avoid a TRSM on a
+                    # very wide (K×P) matrix.
+                    A = torch.linalg.solve_triangular(Lg, CwH, upper=False)  # (B, K, Lt)
+                    tmp = torch.bmm(A, Sw)  # (B, K, P) = Lg^{-1} z
+                    T_band_flat = torch.sum(tmp.conj() * tmp, dim=1).real  # (B, P)
+        except RuntimeError:
+            # Fallback: use robust Hermitian solve on the full RHS.
+            CwH = Cw.conj().transpose(1, 2)  # (B, K, Lt)
+            Gram = torch.bmm(CwH, Cw)  # (B, K, K)
+            if ridge_eff > 0.0:
+                evals = torch.linalg.eigvalsh(Gram).real
+                evals = torch.clamp(evals, min=1e-12)
+                evals_max = evals.max(dim=1).values  # (B,)
+                ridge_vec = ridge_eff * torch.where(
+                    evals_max < 1.0, evals_max, torch.ones_like(evals_max)
+                )
+                eye_k = torch.eye(Gram.shape[-1], dtype=Gram.dtype, device=Gram.device).unsqueeze(0)
+                Gram = Gram + ridge_vec.view(-1, 1, 1) * eye_k
+            z = torch.bmm(CwH, Sw)  # (B, K, P)
+            proj, _ = cholesky_solve_hermitian(Gram, z, jitter_init=1e-8, max_tries=3)
+            T_band_flat = torch.sum(z.conj() * proj, dim=1).real  # (B, P)
 
     # Reshape back to (B, N, h, w)
     T_band = T_band_flat.view(Bsz, N, h, w)
     sw_pow = sw_pow_flat.view(Bsz, N, h, w)
     return T_band, sw_pow
+
+
+def _band_energy_whitened_covonly_batched(
+    R_B_Lt_Lt: torch.Tensor,
+    R_scm_B_Lt_Lt: torch.Tensor,
+    C_t: torch.Tensor,
+    lam_B: torch.Tensor,
+    *,
+    ridge: float = 0.10,
+    device: Optional[str] = None,
+    dtype: torch.dtype = torch.complex64,
+    eps: float = 1e-10,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Covariance-only band-energy computation (tile statistic).
+
+    This computes mean projected band energy and mean total whitened power per
+    tile using only covariances, avoiding the (B, Lt, P) snapshot whitening path.
+
+    Parameters
+    ----------
+    R_B_Lt_Lt : (B, Lt, Lt) covariance used for whitening (after shrinkage).
+    R_scm_B_Lt_Lt : (B, Lt, Lt) pooled SCM covariance of the centered Hankel snapshots.
+    C_t : (Lt, K) constraint matrix.
+    lam_B : (B,) per-tile absolute loading used in whitening.
+
+    Returns
+    -------
+    T_band_mean : (B,) float32
+        Mean projected band energy.
+    sw_pow_mean : (B,) float32
+        Mean total whitened power (trace of whitened SCM covariance).
+    """
+    if device is None:
+        device = R_B_Lt_Lt.device
+
+    # Optional precision override for numerical experiments.
+    prec = os.getenv("STAP_BAND_PRECISION", "").strip().lower()
+    work_dtype = torch.complex128 if prec == "fp64" else dtype
+
+    R = R_B_Lt_Lt.to(device=device, dtype=work_dtype)
+    R_scm = R_scm_B_Lt_Lt.to(device=device, dtype=work_dtype)
+    Ct = C_t.to(device=device, dtype=work_dtype)
+    lam_vec = lam_B.to(device=device).flatten()
+    if lam_vec.is_complex():
+        lam_vec = lam_vec.real
+
+    B, Lt, _ = R.shape
+    if Ct.numel() == 0:
+        zeros = torch.zeros((B,), dtype=torch.float32, device=device)
+        return zeros, zeros
+
+    # Numerical hygiene: enforce Hermitian symmetry and robustify the factorization.
+    R = 0.5 * (R + R.conj().transpose(-2, -1))
+    R_scm = 0.5 * (R_scm + R_scm.conj().transpose(-2, -1))
+    eye = torch.eye(Lt, dtype=work_dtype, device=device).unsqueeze(0)  # (1,Lt,Lt)
+    R_lam = R + lam_vec.view(B, 1, 1) * eye
+    R_lam = 0.5 * (R_lam + R_lam.conj().transpose(-2, -1))
+
+    try:
+        with _prof_ctx("stap:band_energy_covonly:chol_R"):
+            L = torch.linalg.cholesky(R_lam)
+    except RuntimeError:
+        # Per-tile adaptive jitter (scaled by mu) fallback.
+        eye_b = torch.eye(Lt, dtype=work_dtype, device=device)
+        diag = torch.real(torch.diagonal(R_lam, dim1=-2, dim2=-1))
+        diag_scale = torch.mean(torch.abs(diag), dim=1) + 1e-12
+        jitter_mults = (0.0, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2, 1e-1, 1.0, 10.0)
+        L_list = []
+        for b in range(B):
+            Rb = R_lam[b]
+            Lb = None
+            for mult in jitter_mults:
+                try:
+                    with _prof_ctx("stap:band_energy_covonly:chol_R"):
+                        Lb = torch.linalg.cholesky(Rb + (float(mult) * diag_scale[b]) * eye_b)
+                    break
+                except RuntimeError:
+                    Lb = None
+            if Lb is None:
+                # Last resort: diagonal approximation.
+                d = torch.clamp(torch.real(torch.diagonal(Rb, dim1=-2, dim2=-1)), min=1e-8)
+                Lb = torch.diag(torch.sqrt(d.to(dtype=torch.float32))).to(dtype=work_dtype)
+            L_list.append(Lb)
+        L = torch.stack(L_list, dim=0)
+
+    # Whiten constraints (batched).
+    K = int(Ct.shape[-1])
+    Ct_exp = Ct.unsqueeze(0).expand(B, Lt, K)
+    with _prof_ctx("stap:band_energy_covonly:whiten_constraints"):
+        Cw = torch.linalg.solve_triangular(L, Ct_exp, upper=False)  # (B, Lt, K)
+
+    Gram = torch.bmm(Cw.conj().transpose(1, 2), Cw)  # (B, K, K)
+    ridge_eff = float(ridge)
+    if ridge_eff > 0.0:
+        # Scale-aware ridge (mirrors `_band_energy_whitened_batched`).
+        evals = torch.linalg.eigvalsh(Gram).real
+        evals = torch.clamp(evals, min=1e-12)
+        evals_max = evals.max(dim=1).values  # (B,)
+        ridge_vec = ridge_eff * torch.where(evals_max < 1.0, evals_max, torch.ones_like(evals_max))
+        eye_k = torch.eye(K, dtype=Gram.dtype, device=Gram.device).unsqueeze(0)
+        Gram = Gram + ridge_vec.view(-1, 1, 1) * eye_k
+
+    # Whiten SCM covariance: Rw = L^{-1} R_scm L^{-H}.
+    with _prof_ctx("stap:band_energy_covonly:whiten_cov"):
+        Y = torch.linalg.solve_triangular(L, R_scm, upper=False)
+        Rw_h = torch.linalg.solve_triangular(L, Y.conj().transpose(-2, -1), upper=False)
+    Rw = Rw_h.conj().transpose(-2, -1)
+    Rw = 0.5 * (Rw + Rw.conj().transpose(-2, -1))
+
+    sw_pow_mean = torch.real(torch.diagonal(Rw, dim1=-2, dim2=-1)).sum(dim=1).to(torch.float32)
+    sw_pow_mean = torch.clamp(sw_pow_mean, min=float(eps))
+
+    # Mean band energy: tr(G^{-1} Cw^H Rw Cw).
+    with _prof_ctx("stap:band_energy_covonly:project"):
+        Q = torch.bmm(Rw, Cw)  # (B, Lt, K)
+        A = torch.bmm(Cw.conj().transpose(1, 2), Q)  # (B, K, K)
+        A = 0.5 * (A + A.conj().transpose(-2, -1))
+        try:
+            Lg = torch.linalg.cholesky(Gram)
+            X = torch.cholesky_solve(A, Lg)
+        except RuntimeError:
+            X, _ = cholesky_solve_hermitian(Gram, A, jitter_init=1e-8, max_tries=3)
+        T_band_mean = torch.real(torch.diagonal(X, dim1=-2, dim2=-1)).sum(dim=1)
+    T_band_mean = torch.clamp(T_band_mean, min=0.0).to(torch.float32)
+    return T_band_mean, sw_pow_mean
+
+
+def _band_energy_whitened_covonly_perpixel_batched(
+    R_B_Lt_Lt: torch.Tensor,
+    S_B_Lt_N_hw: torch.Tensor,
+    C_t: torch.Tensor,
+    lam_B: torch.Tensor,
+    *,
+    ridge: float = 0.10,
+    device: Optional[str] = None,
+    dtype: torch.dtype = torch.complex64,
+    eps: float = 1e-10,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Covariance-only band-energy computation (per-pixel mean across snapshots).
+
+    This produces spatially varying maps (B,h,w) using only covariances, avoiding
+    the large (B, K, P) projection RHS in the snapshot path. It still requires
+    the Hankel snapshot tensor `S_B_Lt_N_hw` (already constructed in the fast core)
+    to form per-pixel SCM covariances.
+
+    Returns
+    -------
+    T_band_mean_hw : (B,h,w) float32
+        Mean projected band energy per pixel (averaged across the N snapshots).
+    sw_pow_mean_hw : (B,h,w) float32
+        Mean total whitened power per pixel (trace of whitened SCM covariance).
+    """
+    if device is None:
+        device = R_B_Lt_Lt.device
+
+    prec = os.getenv("STAP_BAND_PRECISION", "").strip().lower()
+    work_dtype = torch.complex128 if prec == "fp64" else dtype
+
+    R = R_B_Lt_Lt.to(device=device, dtype=work_dtype)
+    S = S_B_Lt_N_hw.to(device=device, dtype=work_dtype)
+    Ct = C_t.to(device=device, dtype=work_dtype)
+    lam_vec = lam_B.to(device=device).flatten()
+    if lam_vec.is_complex():
+        lam_vec = lam_vec.real
+
+    B, Lt, N, h, w = S.shape
+    if Ct.numel() == 0:
+        zeros = torch.zeros((B, h, w), dtype=torch.float32, device=device)
+        return zeros, zeros
+
+    # Hermitize and load.
+    R = 0.5 * (R + R.conj().transpose(-2, -1))
+    eye = torch.eye(Lt, dtype=work_dtype, device=device).unsqueeze(0)  # (1,Lt,Lt)
+    R_lam = R + lam_vec.view(B, 1, 1) * eye
+    R_lam = 0.5 * (R_lam + R_lam.conj().transpose(-2, -1))
+
+    try:
+        with _prof_ctx("stap:band_energy_covonly_pixel:chol_R"):
+            L = torch.linalg.cholesky(R_lam)
+    except RuntimeError:
+        # Per-tile adaptive jitter (scaled by mu) fallback.
+        eye_b = torch.eye(Lt, dtype=work_dtype, device=device)
+        diag = torch.real(torch.diagonal(R_lam, dim1=-2, dim2=-1))
+        diag_scale = torch.mean(torch.abs(diag), dim=1) + 1e-12
+        jitter_mults = (0.0, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2, 1e-1, 1.0, 10.0)
+        L_list = []
+        for b in range(B):
+            Rb = R_lam[b]
+            Lb = None
+            for mult in jitter_mults:
+                try:
+                    with _prof_ctx("stap:band_energy_covonly_pixel:chol_R"):
+                        Lb = torch.linalg.cholesky(Rb + (float(mult) * diag_scale[b]) * eye_b)
+                    break
+                except RuntimeError:
+                    Lb = None
+            if Lb is None:
+                d = torch.clamp(torch.real(torch.diagonal(Rb, dim1=-2, dim2=-1)), min=1e-8)
+                Lb = torch.diag(torch.sqrt(d.to(dtype=torch.float32))).to(dtype=work_dtype)
+            L_list.append(Lb)
+        L = torch.stack(L_list, dim=0)
+
+    # Whiten constraints (batched).
+    K = int(Ct.shape[-1])
+    Ct_exp = Ct.unsqueeze(0).expand(B, Lt, K)
+    with _prof_ctx("stap:band_energy_covonly_pixel:whiten_constraints"):
+        Cw = torch.linalg.solve_triangular(L, Ct_exp, upper=False)  # (B,Lt,K)
+    CwH = Cw.conj().transpose(1, 2)  # (B,K,Lt)
+    Gram = torch.bmm(CwH, Cw)  # (B,K,K)
+    ridge_eff = float(ridge)
+    if ridge_eff > 0.0:
+        evals = torch.linalg.eigvalsh(Gram).real
+        evals = torch.clamp(evals, min=1e-12)
+        evals_max = evals.max(dim=1).values  # (B,)
+        ridge_vec = ridge_eff * torch.where(evals_max < 1.0, evals_max, torch.ones_like(evals_max))
+        eye_k = torch.eye(K, dtype=Gram.dtype, device=Gram.device).unsqueeze(0)
+        Gram = Gram + ridge_vec.view(-1, 1, 1) * eye_k
+
+    # Precompute Pf = Cw Gram^{-1} Cw^H (batched).
+    with _prof_ctx("stap:band_energy_covonly_pixel:Pf"):
+        try:
+            Lg = torch.linalg.cholesky(Gram)
+            X = torch.cholesky_solve(CwH, Lg)  # (B,K,Lt)
+        except RuntimeError:
+            X, _ = cholesky_solve_hermitian(Gram, CwH, jitter_init=1e-8, max_tries=3)
+        Pf = torch.bmm(Cw, X)  # (B,Lt,Lt)
+        Pf = 0.5 * (Pf + Pf.conj().transpose(-2, -1))
+
+    # Per-pixel SCM covariances: (B,hw,Lt,Lt) with hw=h*w.
+    hw = int(h * w)
+    S_pix = S.reshape(B, Lt, N, hw).permute(0, 3, 1, 2).contiguous()  # (B,hw,Lt,N)
+    with _prof_ctx("stap:band_energy_covonly_pixel:scm"):
+        R_pix = torch.matmul(S_pix, S_pix.conj().transpose(-2, -1)) / float(max(int(N), 1))
+        R_pix = 0.5 * (R_pix + R_pix.conj().transpose(-2, -1))
+
+    # Whiten per-pixel covariances: Rw = L^{-1} R_pix L^{-H}.
+    with _prof_ctx("stap:band_energy_covonly_pixel:whiten_cov"):
+        L_exp = L.unsqueeze(1)  # (B,1,Lt,Lt) -> broadcast over hw
+        Y = torch.linalg.solve_triangular(L_exp, R_pix, upper=False)
+        Rw_h = torch.linalg.solve_triangular(L_exp, Y.conj().transpose(-2, -1), upper=False)
+        Rw = Rw_h.conj().transpose(-2, -1)
+    Rw = 0.5 * (Rw + Rw.conj().transpose(-2, -1))
+
+    sw_pow = torch.real(torch.diagonal(Rw, dim1=-2, dim2=-1)).sum(dim=-1).to(torch.float32)
+    sw_pow = torch.clamp(sw_pow, min=float(eps))  # (B,hw)
+
+    with _prof_ctx("stap:band_energy_covonly_pixel:project"):
+        T_band = torch.real(torch.sum(Pf.unsqueeze(1).conj() * Rw, dim=(-2, -1))).to(torch.float32)
+    T_band = torch.clamp(T_band, min=0.0)  # (B,hw)
+
+    return T_band.view(B, h, w), sw_pow.view(B, h, w)
 
 
 def aggregate_over_snapshots(
@@ -3227,6 +3686,33 @@ def aggregate_over_snapshots(
         x_sorted, _ = torch.sort(x_N_hw, dim=0)
         x_trim = x_sorted[k:-k]
         return x_trim.mean(dim=0)
+    raise ValueError(f"Unsupported aggregation mode: {mode}")
+
+
+def aggregate_over_snapshots_batched(
+    x_B_N_hw: torch.Tensor,
+    *,
+    mode: Literal["mean", "median", "trim10"] = "mean",
+) -> torch.Tensor:
+    """
+    Batched variant of `aggregate_over_snapshots`.
+
+    x_B_N_hw: (B, N, h, w) -> returns (B, h, w)
+    """
+    if x_B_N_hw.ndim != 4:
+        raise ValueError(f"Expected (B,N,h,w) input, got shape {tuple(x_B_N_hw.shape)}")
+    if mode == "mean":
+        return x_B_N_hw.mean(dim=1)
+    if mode == "median":
+        return x_B_N_hw.median(dim=1).values
+    if mode == "trim10":
+        N = int(x_B_N_hw.shape[1])
+        k = max(1, int(0.1 * N))
+        if 2 * k >= N:
+            return x_B_N_hw.mean(dim=1)
+        x_sorted, _ = torch.sort(x_B_N_hw, dim=1)
+        x_trim = x_sorted[:, k:-k]
+        return x_trim.mean(dim=1)
     raise ValueError(f"Unsupported aggregation mode: {mode}")
 
 
@@ -3436,6 +3922,10 @@ def _build_hankel_batch(
     S_B_Lt_N_hw = torch.stack(rows, dim=1)  # (B, Lt, N, h, w)
     if center:
         S_B_Lt_N_hw = S_B_Lt_N_hw - S_B_Lt_N_hw.mean(dim=2, keepdim=True)
+    # Preserve the manuscript baseline flattening order (h,w,N) before
+    # collapsing to snapshots. This is mathematically irrelevant for covariance
+    # estimation but keeps downstream fast-path mappings consistent when this
+    # helper is used for profiling/experiments.
     S_flat = S_B_Lt_N_hw.permute(0, 1, 3, 4, 2).contiguous().view(B, Lt, -1)  # (B, Lt, P)
     P = S_flat.shape[-1]
     R = torch.matmul(S_flat, S_flat.conj().transpose(-2, -1)) / float(P)
@@ -3445,6 +3935,7 @@ def _build_hankel_batch(
 def _tyler_covariance_batched(
     S_flat: torch.Tensor,
     *,
+    R_init: torch.Tensor | None = None,
     max_iter: int = 25,
     tol: float = 1e-4,
     eps: float = 1e-8,
@@ -3452,27 +3943,172 @@ def _tyler_covariance_batched(
     """
     Lightweight Tyler iteration, batched over tiles.
     """
-    B, Lt, P = S_flat.shape
-    R = torch.eye(Lt, dtype=S_flat.dtype, device=S_flat.device).expand(B, Lt, Lt).clone()
-    for _ in range(max_iter):
+    # Optional runtime knobs for latency experiments (default preserves behavior).
+    max_iter_env = os.getenv("STAP_TYLER_MAX_ITER", "").strip()
+    if max_iter_env:
         try:
-            L = torch.linalg.cholesky(R)
-        except RuntimeError:
-            jitter = eps * torch.eye(Lt, device=S_flat.device, dtype=S_flat.dtype)
-            R = R + jitter
-            L = torch.linalg.cholesky(R)
-        Y = torch.linalg.solve_triangular(L, S_flat, upper=False)
-        q = torch.sum(torch.conj(Y) * Y, dim=1).real.clamp_min(eps)  # (B, P)
-        w = (Lt / q).clamp_max(1e6)
-        Xw = S_flat * w.unsqueeze(1)
-        R_new = torch.matmul(Xw, Xw.conj().transpose(-2, -1)) / float(P)
-        tr = torch.real(torch.diagonal(R_new, dim1=1, dim2=2).sum(dim=1)).clamp_min(eps)
-        scale = (Lt / tr).view(B, 1, 1)
-        R_new = R_new * scale
-        delta = torch.max(torch.abs(R_new - R))
-        R = R_new
-        if float(delta) < tol:
-            break
+            max_iter = int(max_iter_env)
+        except Exception:
+            pass
+    max_iter = max(1, int(max_iter))
+    tol_env = os.getenv("STAP_TYLER_TOL", "").strip()
+    if tol_env:
+        try:
+            tol = float(tol_env)
+        except Exception:
+            pass
+    early_stop_env = os.getenv("STAP_TYLER_EARLY_STOP", "").strip().lower()
+    early_stop = early_stop_env not in {"0", "false", "no", "off"}
+    B, Lt, P = S_flat.shape
+    eye = torch.eye(Lt, dtype=S_flat.dtype, device=S_flat.device)
+    eye_B = eye.unsqueeze(0)
+    Xw = torch.empty_like(S_flat)
+    if R_init is None:
+        R = eye_B.expand(B, Lt, Lt).clone()
+    else:
+        if R_init.shape != (B, Lt, Lt):
+            raise ValueError(
+                f"R_init must have shape (B,Lt,Lt)={B,Lt,Lt}, got {tuple(R_init.shape)}"
+            )
+        R = R_init.to(device=S_flat.device, dtype=S_flat.dtype)
+        R = 0.5 * (R + R.conj().transpose(-2, -1))
+        tr = torch.real(torch.diagonal(R, dim1=1, dim2=2).sum(dim=1)).clamp_min(eps)
+        R = R * (float(Lt) / tr).view(B, 1, 1)
+        # Keep the init strictly PD to avoid hard failures on the first Cholesky.
+        mu = torch.real(torch.diagonal(R, dim1=1, dim2=2)).mean(dim=1).clamp_min(eps)
+        R = R + (eps * mu).view(B, 1, 1) * eye_B
+    with _prof_ctx("stap:covariance:tyler"):
+        for _ in range(max_iter):
+            # Numerical hygiene: enforce Hermitian symmetry before factorization.
+            # On CUDA, small non-Hermitian drift can lead to `cholesky_ex` failures
+            # and NaNs downstream (especially for short ensembles like T=17, Lt=16).
+            R = 0.5 * (R + R.conj().transpose(-2, -1))
+            with _prof_ctx("stap:covariance:tyler:chol"):
+                try:
+                    # Fast path: avoid per-iteration host synchronization on the
+                    # `info` tensor when everything is PD (the common case).
+                    L = torch.linalg.cholesky(R)
+                    info = None
+                except RuntimeError:
+                    # Rare path: fall back to `cholesky_ex` + adaptive jitter.
+                    L, info = torch.linalg.cholesky_ex(R)
+            if info is not None and torch.any(info != 0):
+                # Adaptive jitter ladder (scaled by mu) so a few bad tiles do not
+                # poison the whole batch with NaNs.
+                mu = torch.real(torch.diagonal(R, dim1=1, dim2=2)).mean(dim=1).clamp_min(eps)
+                # Start near the legacy epsilon and increase aggressively only if needed.
+                for mult in (1.0, 1e2, 1e4, 1e6):
+                    R = R + (float(mult) * eps * mu).view(B, 1, 1) * eye_B
+                    with _prof_ctx("stap:covariance:tyler:chol"):
+                        L, info = torch.linalg.cholesky_ex(R)
+                    if not torch.any(info != 0):
+                        break
+            with _prof_ctx("stap:covariance:tyler:solve"):
+                Y = torch.linalg.solve_triangular(L, S_flat, upper=False)
+            q = torch.sum(torch.conj(Y) * Y, dim=1).real.clamp_min(eps)  # (B, P)
+            w = (float(Lt) / q).clamp_max(1e6)
+            # Single-pass weighting into the preallocated buffer (avoids an
+            # extra full-tensor copy each iteration).
+            torch.mul(S_flat, w.unsqueeze(1), out=Xw)
+            with _prof_ctx("stap:covariance:tyler:update"):
+                R_new = torch.matmul(Xw, Xw.conj().transpose(-2, -1)) / float(P)
+            R_new = 0.5 * (R_new + R_new.conj().transpose(-2, -1))
+            # Trace normalization (Tyler is scale-invariant): enforce Tr(R)=Lt.
+            #
+            # IMPORTANT: compute the trace in float64 and avoid an overly-large
+            # absolute clamp. Some regimes (notably Twinkling/Gammex after strong
+            # baseline filtering) can produce extremely small intermediate traces
+            # in float32, and clamping to `eps=1e-8` prevents proper normalization
+            # (leading to near-zero covariances and downstream score regressions).
+            tr64 = torch.real(torch.diagonal(R_new, dim1=1, dim2=2).sum(dim=1)).to(torch.float64)
+            tr64 = torch.where(torch.isfinite(tr64), tr64, torch.zeros_like(tr64))
+            tr64 = torch.clamp(tr64, min=1e-30)
+            scale = (float(Lt) / tr64).to(dtype=torch.float32).view(B, 1, 1)
+            R_new = R_new * scale.to(dtype=R_new.dtype)
+            if early_stop:
+                # Convergence check (relative Frobenius change), matching the
+                # scalar criterion used by the reference per-tile Tyler solver.
+                diff = R_new - R
+                num = torch.sum((diff.conj() * diff).real, dim=(1, 2)).sqrt()
+                den = torch.sum((R.conj() * R).real, dim=(1, 2)).sqrt().clamp_min(1e-12)
+                rel = num / den
+                if float(rel.max()) < tol:
+                    R = R_new
+                    break
+            R = R_new
+    return R
+
+
+def _huber_covariance_batched(
+    S_flat: torch.Tensor,
+    *,
+    c: float = 5.0,
+    max_iter: int = 50,
+    tol: float = 1e-4,
+    eps: float = 1e-12,
+) -> torch.Tensor:
+    """
+    Batched complex Huber covariance estimator via IRLS on scatter.
+
+    This mirrors `pipeline.stap.robust_cov.huber_covariance`, but operates on
+    an entire tile batch at once. The estimator preserves the SCM trace by
+    re-scaling at each IRLS iteration.
+    """
+    B, Lt, P = S_flat.shape
+    eye = torch.eye(Lt, dtype=S_flat.dtype, device=S_flat.device).unsqueeze(0)  # (1,Lt,Lt)
+
+    # SCM initialization
+    R = torch.matmul(S_flat, S_flat.conj().transpose(-2, -1)) / float(max(int(P), 1))
+    R = 0.5 * (R + R.conj().transpose(-2, -1))
+
+    tr0 = torch.real(torch.diagonal(R, dim1=1, dim2=2).sum(dim=1)).to(torch.float64)
+    tr0 = torch.where(torch.isfinite(tr0), tr0, torch.zeros_like(tr0))
+    mu0 = tr0 / float(max(int(Lt), 1))
+    # Same tiny diagonal load as the reference implementation (scaled by mu).
+    R = R + (1e-8 * mu0).to(dtype=torch.float32).view(B, 1, 1) * eye
+
+    rel_change = torch.full((B,), float("inf"), device=S_flat.device, dtype=torch.float32)
+    c_val = torch.as_tensor(float(c), device=S_flat.device, dtype=torch.float32)
+
+    with _prof_ctx("stap:covariance:huber"):
+        for _ in range(max(1, int(max_iter))):
+            R = 0.5 * (R + R.conj().transpose(-2, -1))
+
+            # Robust Cholesky per tile (jitter ladder scaled by mu).
+            L, info = torch.linalg.cholesky_ex(R)
+            if torch.any(info != 0):
+                diag = torch.real(torch.diagonal(R, dim1=1, dim2=2)).to(torch.float32)
+                mu = diag.mean(dim=1).clamp_min(1e-12)
+                for mult in (1.0, 1e2, 1e4, 1e6):
+                    R = R + (float(mult) * 1e-8 * mu).view(B, 1, 1) * eye
+                    L, info = torch.linalg.cholesky_ex(R)
+                    if not torch.any(info != 0):
+                        break
+
+            # Solve R^{-1} X via Cholesky solve.
+            Y = torch.cholesky_solve(S_flat, L)  # (B,Lt,P)
+
+            # d_i = Re{x_i^H R^{-1} x_i} / Lt
+            d = torch.real(torch.sum(S_flat.conj() * Y, dim=1)) / float(Lt)  # (B,P)
+            w = torch.minimum(torch.ones_like(d, dtype=torch.float32), c_val / torch.clamp(d, min=eps))
+
+            R_new = torch.matmul(S_flat * w.unsqueeze(1), S_flat.conj().transpose(-2, -1)) / float(
+                max(int(P), 1)
+            )
+            R_new = 0.5 * (R_new + R_new.conj().transpose(-2, -1))
+
+            tr = torch.real(torch.diagonal(R_new, dim1=1, dim2=2).sum(dim=1)).to(torch.float64)
+            tr = torch.where(torch.isfinite(tr), tr, torch.zeros_like(tr))
+            scale = tr0 / torch.clamp(tr, min=1e-30)
+            R_new = R_new * scale.to(dtype=torch.float32).view(B, 1, 1)
+
+            num = torch.linalg.norm(R_new - R, ord="fro", dim=(-2, -1))
+            den = torch.clamp(torch.linalg.norm(R, ord="fro", dim=(-2, -1)), min=1e-30)
+            rel_change = (num / den).to(torch.float32)
+            R = R_new
+            if float(rel_change.max().item()) < float(tol):
+                break
+
     return R
 
 
@@ -3534,12 +4170,24 @@ def stap_temporal_core_batched(
     use_ref_cov: bool = False,
     fd_span_mode: str = "psd",
     flow_band_hz: Optional[Tuple[float, float]] = None,
-) -> Tuple[np.ndarray, np.ndarray, List[dict]]:
+    return_torch: bool = False,
+) -> Tuple[np.ndarray | torch.Tensor, np.ndarray | torch.Tensor, List[dict]]:
     """
     Fast-path batched STAP core (KA/debug disabled).
     """
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    telemetry_env = os.getenv("STAP_FAST_TELEMETRY", "").strip().lower()
+    telemetry_enabled = telemetry_env not in {"0", "false", "no", "off"}
+
+    env_tile_stat = os.getenv("STAP_FAST_TILE_STATISTIC", "").strip().lower()
+    tile_statistic = env_tile_stat in {"1", "true", "yes", "on"}
+    if not tile_statistic:
+        env_tile_stat = os.getenv("STAP_TILE_STATISTIC", "").strip().lower()
+        tile_statistic = env_tile_stat in {"1", "true", "yes", "on"}
+    if tile_statistic:
+        _warn_tile_statistic_experimental()
 
     # Fine-grained runtime breakdown (seconds) for profiling.
     t_hankel = 0.0
@@ -3549,76 +4197,101 @@ def stap_temporal_core_batched(
     t_msd = 0.0
 
     t0 = time.perf_counter()
-    S_B_Lt_N_hw, R_scm = build_temporal_hankels_batch(
-        cube_batch_T_hw, Lt, center=True, device=device, dtype=cube_batch_T_hw.dtype
-    )
+    with _prof_ctx("stap:hankel"):
+        S_B_Lt_N_hw, R_scm = build_temporal_hankels_batch(
+            cube_batch_T_hw, Lt, center=True, device=device, dtype=cube_batch_T_hw.dtype
+        )
     t_hankel = time.perf_counter() - t0
 
     B, _, N, h, w = S_B_Lt_N_hw.shape
+    # Match the manuscript baseline snapshot flattening order (h,w,N) to avoid
+    # silent stride/reshape-dependent behavior changes on non-contiguous Hankel
+    # tensors (and to keep fast-path score maps comparable to the slow path).
     S_flat = S_B_Lt_N_hw.permute(0, 1, 3, 4, 2).contiguous().view(B, Lt, -1)
     cov_est = cov_estimator.lower()
     t1 = time.perf_counter()
-    if use_ref_cov:
-        R_hat, _ = robust_temporal_cov_batch(
-            S_flat, estimator=cov_estimator, huber_c=huber_c, max_iter=100, tol=1e-4
-        )
-    else:
-        if cov_est == "scm":
-            R_hat = R_scm
-        elif cov_est in {"huber", "huber_s"}:
-            norms = torch.sum(torch.abs(S_flat) ** 2, dim=1, keepdim=True).sqrt()
-            scale = torch.clamp(norms, max=float(huber_c))
-            S_weighted = S_flat * (scale / (norms + 1e-8))
-            R_hat = torch.matmul(S_weighted, S_weighted.conj().transpose(-2, -1)) / float(
-                S_weighted.shape[-1]
+    with _prof_ctx("stap:covariance"):
+        if use_ref_cov:
+            R_hat, _ = robust_temporal_cov_batch(
+                S_flat, estimator=cov_estimator, huber_c=huber_c, max_iter=100, tol=1e-4
             )
         else:
-            try:
-                R_hat = _tyler_covariance_batched(S_flat)
-            except Exception:
-                R_hat, _ = robust_temporal_cov_batch(
-                    S_flat, estimator="huber", huber_c=huber_c, max_iter=50, tol=1e-4
+            if cov_est == "scm":
+                R_hat = R_scm
+            elif cov_est in {"huber", "huber_s"}:
+                R_hat = _huber_covariance_batched(
+                    S_flat, c=float(huber_c), max_iter=50, tol=1e-4
                 )
+            else:
+                # Very short ensembles (e.g., Twinkling/Gammex with T=17, Lt=16 -> N=2)
+                # are numerically fragile for Tyler; match legacy behavior by using
+                # a robust Huber IRLS covariance directly in this regime.
+                if cov_est in {"tyler_pca", "tylerpca", "tyler-pca"} and int(N) <= 4:
+                    R_hat = _huber_covariance_batched(
+                        S_flat, c=float(huber_c), max_iter=50, tol=1e-4
+                    )
+                else:
+                    try:
+                        tyler_init_env = os.getenv("STAP_TYLER_INIT", "").strip().lower()
+                        R_init = R_scm if tyler_init_env in {"scm", "r_scm", "cov_scm"} else None
+                        R_hat = _tyler_covariance_batched(S_flat, R_init=R_init)
+                    except Exception:
+                        R_hat = _huber_covariance_batched(
+                            S_flat, c=float(huber_c), max_iter=50, tol=1e-4
+                        )
     t_cov = time.perf_counter() - t1
 
     t2 = time.perf_counter()
     # Per-tile shrinkage toward mu*I to match slow path.
-    kappa_shrink = float(max(kappa_shrink, 1.01))
-    eye = torch.eye(Lt, device=device, dtype=R_hat.dtype)
-    if shrinkage_alpha_for_kappa_batch is not None:
-        alphas = shrinkage_alpha_for_kappa_batch(R_hat, kappa_target=kappa_shrink).to(R_hat.dtype)
-    else:
-        alphas = torch.as_tensor(
-            [float(_shrinkage_alpha_for_kappa(R_hat[b], kappa_shrink)) for b in range(B)],
-            device=device,
-            dtype=R_hat.dtype,
-        )
-    mu = torch.real(torch.diagonal(R_hat, dim1=1, dim2=2).sum(dim=1)) / float(Lt)
-    R_hat = (1.0 - alphas.view(-1, 1, 1)) * R_hat + alphas.view(-1, 1, 1) * mu.view(-1, 1, 1) * eye
+    ev_min_herm: torch.Tensor | None = None
+    ev_max_herm: torch.Tensor | None = None
+    alphas_f: torch.Tensor | None = None
+    mu_trace: torch.Tensor | None = None
+    with _prof_ctx("stap:shrinkage"):
+        kappa_shrink = float(max(kappa_shrink, 1.01))
+        eye = torch.eye(Lt, device=device, dtype=R_hat.dtype)
+        if shrinkage_alpha_for_kappa_batch is not None:
+            alphas_f, ev_min_herm, ev_max_herm = shrinkage_alpha_for_kappa_batch(
+                R_hat, kappa_target=kappa_shrink, return_eigs=True
+            )
+        else:
+            alphas_f = torch.as_tensor(
+                [float(_shrinkage_alpha_for_kappa(R_hat[b], kappa_shrink)) for b in range(B)],
+                device=device,
+                dtype=torch.float32,
+            )
+        mu_trace = torch.real(torch.diagonal(R_hat, dim1=1, dim2=2).sum(dim=1)).to(
+            dtype=torch.float32
+        ) / float(Lt)
+        alpha = alphas_f.view(-1, 1, 1) if alphas_f is not None else torch.zeros((B, 1, 1), device=device)
+        R_hat = (1.0 - alpha) * R_hat + alpha * mu_trace.view(-1, 1, 1) * eye
     t_shrink = time.perf_counter() - t2
 
     eye = torch.eye(Lt, device=device, dtype=R_hat.dtype)
     # Per-tile lambda for MSD via conditioned_lambda (approximate lam_for_msd)
-    kappa_msd = float(max(kappa_msd, 1.01))
-    lam_init = float(msd_lambda) if msd_lambda is not None else float(diag_load)
-    if conditioned_lambda_batch_shared is not None:
-        lam_batch, _, lam_needed_batch = conditioned_lambda_batch_shared(
-            R_hat, lam_init, kappa_msd
-        )
-        lam_msd_tensor = lam_batch.to(R_hat.dtype)
-        lam_needed_tensor = lam_needed_batch.to(R_hat.dtype)
-    else:
-        lam_list = []
-        lam_needed_list = []
-        for b in range(B):
-            lam_for_msd, sigma_max, sigma_min_lb = conditioned_lambda(
-                R_hat[b], lam_requested=lam_init, kappa_target=kappa_msd
+    with _prof_ctx("stap:lambda"):
+        kappa_msd = float(max(kappa_msd, 1.01))
+        lam_init = float(msd_lambda) if msd_lambda is not None else float(diag_load)
+        if conditioned_lambda_batch_shared is not None:
+            # Preserve manuscript baseline behavior: compute per-tile loading via the
+            # shared conditioned-lambda helper (no eigenvalue-bound shortcut).
+            lam_batch, _, lam_needed_batch = conditioned_lambda_batch_shared(
+                R_hat, lam_init, kappa_msd
             )
-            lam_list.append(lam_for_msd)
-            # Approximate needed loading from sigma bounds
-            lam_needed_list.append(max(0.0, lam_for_msd - lam_init))
-        lam_msd_tensor = torch.as_tensor(lam_list, device=device, dtype=R_hat.dtype)
-        lam_needed_tensor = torch.as_tensor(lam_needed_list, device=device, dtype=R_hat.dtype)
+            lam_msd_tensor = lam_batch.to(R_hat.dtype)
+            lam_needed_tensor = lam_needed_batch.to(R_hat.dtype)
+        else:
+            lam_list = []
+            lam_needed_list = []
+            for b in range(B):
+                lam_for_msd, sigma_max, sigma_min_lb = conditioned_lambda(
+                    R_hat[b], lam_requested=lam_init, kappa_target=kappa_msd
+                )
+                lam_list.append(lam_for_msd)
+                # Approximate needed loading from sigma bounds
+                lam_needed_list.append(max(0.0, lam_for_msd - lam_init))
+            lam_msd_tensor = torch.as_tensor(lam_list, device=device, dtype=R_hat.dtype)
+            lam_needed_tensor = torch.as_tensor(lam_needed_list, device=device, dtype=R_hat.dtype)
 
     motion_half_span_hz = 0.0
     base = prf_hz / float(Lt)
@@ -3631,21 +4304,32 @@ def stap_temporal_core_batched(
     fd_mode = str(fd_span_mode or "psd").strip().lower()
     fd_grid_source = "span"
     flow_band_used: Tuple[float, float] | None = None
-    if fd_mode in {"flow_band", "band"} and flow_band_hz is not None:
-        try:
-            flow_band_used = (float(flow_band_hz[0]), float(flow_band_hz[1]))
-        except Exception:
-            flow_band_used = None
-        if flow_band_used is not None:
-            fd_grid, fd_meta = build_fd_grid_flow_band(
-                prf_hz,
-                Lt,
-                flow_band_used,
-                motion_half_span_hz=float(motion_half_span_hz),
-                min_pts=min_pts,
-                max_pts=max_pts,
-            )
-            fd_grid_source = "flow_band"
+    with _prof_ctx("stap:fd_grid"):
+        if fd_mode in {"flow_band", "band"} and flow_band_hz is not None:
+            try:
+                flow_band_used = (float(flow_band_hz[0]), float(flow_band_hz[1]))
+            except Exception:
+                flow_band_used = None
+            if flow_band_used is not None:
+                fd_grid, fd_meta = build_fd_grid_flow_band(
+                    prf_hz,
+                    Lt,
+                    flow_band_used,
+                    motion_half_span_hz=float(motion_half_span_hz),
+                    min_pts=min_pts,
+                    max_pts=max_pts,
+                )
+                fd_grid_source = "flow_band"
+            else:
+                fd_grid, fd_meta = build_fd_grid_span(
+                    prf_hz,
+                    Lt,
+                    fd_span_rel=fd_span_rel,
+                    grid_step_rel=grid_step_rel,
+                    fd_min_abs_hz=fd_min_abs_hz,
+                    min_pts=min_pts,
+                    max_pts=max_pts,
+                )
         else:
             fd_grid, fd_meta = build_fd_grid_span(
                 prf_hz,
@@ -3656,138 +4340,213 @@ def stap_temporal_core_batched(
                 min_pts=min_pts,
                 max_pts=max_pts,
             )
-    else:
-        fd_grid, fd_meta = build_fd_grid_span(
-            prf_hz,
-            Lt,
-            fd_span_rel=fd_span_rel,
-            grid_step_rel=grid_step_rel,
-            fd_min_abs_hz=fd_min_abs_hz,
-            min_pts=min_pts,
-            max_pts=max_pts,
-        )
     t_fdgrid = time.perf_counter() - t3
 
-    Ct = bandpass_constraints_temporal(
-        Lt,
-        prf_hz,
-        fd_grid_hz=fd_grid.tolist(),
-        device=device,
-        dtype=R_hat.dtype,
-        mode="exp+deriv",
-    )
+    with _prof_ctx("stap:constraints"):
+        Ct = bandpass_constraints_temporal(
+            Lt,
+            prf_hz,
+            fd_grid_hz=fd_grid.tolist(),
+            device=device,
+            dtype=R_hat.dtype,
+            mode="exp+deriv",
+        )
 
     # Batched band-energy computation (PD-focused fast path)
     t4 = time.perf_counter()
-    try:
-        T_band, sw_pow = _band_energy_whitened_batched(
-            R_hat,
-            S_B_Lt_N_hw,
-            Ct,
-            lam_msd_tensor,
-            ridge=msd_ridge,
-            ratio_rho=msd_ratio_rho,
-            kappa_target=kappa_msd,
-            device=device,
-            dtype=R_hat.dtype,
-            eps=1e-10,
-        )
-        sw_pow_safe = torch.clamp(sw_pow, min=1e-10)
-        r_flow = torch.clamp(T_band / sw_pow_safe, min=0.0, max=1.0)
-        denom = torch.clamp(sw_pow_safe - T_band + float(msd_ratio_rho) * sw_pow_safe, min=1e-10)
-        ratio = torch.clamp(T_band / denom, min=0.0)
-        band_frac_stack = torch.stack(
-            [aggregate_over_snapshots(r_flow[b], mode=msd_agg_mode) for b in range(B)], dim=0
-        )
-        score_stack = torch.stack(
-            [aggregate_over_snapshots(ratio[b], mode=msd_agg_mode) for b in range(B)], dim=0
-        )
-        det_list = [{} for _ in range(B)]
-        t_msd = time.perf_counter() - t4
-    except Exception:
-        # Fallback to per-tile band-energy computation if batched path fails.
-        band_frac_list = []
-        score_list = []
-        det_list = []
+    if tile_statistic:
+        covonly_pixel_env = os.getenv("STAP_FAST_TILE_STATISTIC_PIXEL", "").strip().lower()
+        covonly_per_pixel = covonly_pixel_env in {"1", "true", "yes", "on"}
+        try:
+            with _prof_ctx("stap:band_energy:covonly"):
+                if covonly_per_pixel:
+                    T_band_mean_hw, sw_pow_mean_hw = _band_energy_whitened_covonly_perpixel_batched(
+                        R_hat,
+                        S_B_Lt_N_hw,
+                        Ct,
+                        lam_msd_tensor,
+                        ridge=msd_ridge,
+                        device=device,
+                        dtype=R_hat.dtype,
+                        eps=1e-10,
+                    )
+                    sw_pow_safe = torch.clamp(sw_pow_mean_hw, min=1e-10)
+                    band_frac_stack = torch.clamp(T_band_mean_hw / sw_pow_safe, min=0.0, max=1.0)
+                    denom = torch.clamp(
+                        sw_pow_safe - T_band_mean_hw + float(msd_ratio_rho) * sw_pow_safe, min=1e-10
+                    )
+                    score_stack = torch.clamp(T_band_mean_hw / denom, min=0.0)
+                else:
+                    T_band_mean, sw_pow_mean = _band_energy_whitened_covonly_batched(
+                        R_hat,
+                        R_scm,
+                        Ct,
+                        lam_msd_tensor,
+                        ridge=msd_ridge,
+                        device=device,
+                        dtype=R_hat.dtype,
+                        eps=1e-10,
+                    )
+                    sw_pow_safe = torch.clamp(sw_pow_mean, min=1e-10)
+                    band_frac_scalar = torch.clamp(T_band_mean / sw_pow_safe, min=0.0, max=1.0)
+                    denom = torch.clamp(
+                        sw_pow_safe - T_band_mean + float(msd_ratio_rho) * sw_pow_safe, min=1e-10
+                    )
+                    ratio_scalar = torch.clamp(T_band_mean / denom, min=0.0)
+                    band_frac_stack = band_frac_scalar.view(B, 1, 1).expand(B, h, w)
+                    score_stack = ratio_scalar.view(B, 1, 1).expand(B, h, w)
+            det_list = [{} for _ in range(B)]
+            t_msd = time.perf_counter() - t4
+        except Exception:
+            tile_statistic = False
+
+    if not tile_statistic:
+        try:
+            with _prof_ctx("stap:band_energy:snapshots"):
+                T_band, sw_pow = _band_energy_whitened_batched(
+                    R_hat,
+                    S_B_Lt_N_hw,
+                    Ct,
+                    lam_msd_tensor,
+                    ridge=msd_ridge,
+                    ratio_rho=msd_ratio_rho,
+                    kappa_target=kappa_msd,
+                    device=device,
+                    dtype=R_hat.dtype,
+                    eps=1e-10,
+                )
+            sw_pow_safe = torch.clamp(sw_pow, min=1e-10)
+            r_flow = torch.clamp(T_band / sw_pow_safe, min=0.0, max=1.0)
+            denom = torch.clamp(
+                sw_pow_safe - T_band + float(msd_ratio_rho) * sw_pow_safe, min=1e-10
+            )
+            ratio = torch.clamp(T_band / denom, min=0.0)
+            with _prof_ctx("stap:aggregate"):
+                band_frac_stack = aggregate_over_snapshots_batched(r_flow, mode=msd_agg_mode)
+                score_stack = aggregate_over_snapshots_batched(ratio, mode=msd_agg_mode)
+            det_list = [{} for _ in range(B)]
+            t_msd = time.perf_counter() - t4
+        except Exception:
+            # Fallback to per-tile band-energy computation if batched path fails.
+            band_frac_list = []
+            score_list = []
+            det_list = []
+            for b in range(B):
+                T_band_b, sw_pow_b = msd_snapshot_energies_batched(
+                    R_hat[b],
+                    S_B_Lt_N_hw[b],
+                    Ct,
+                    lam_abs=float(lam_msd_tensor[b].real.item()),
+                    kappa_target=kappa_msd,
+                    ridge=msd_ridge,
+                    ratio_rho=msd_ratio_rho,
+                    R0_prior=None,
+                    Cf_flow=None,
+                    ka_opts=None,
+                    ka_details=None,
+                    device=device,
+                    dtype=R_hat.dtype,
+                )
+                sw_pow_b_safe = torch.clamp(sw_pow_b, min=1e-10)
+                r_flow_b = torch.clamp(T_band_b / sw_pow_b_safe, min=0.0, max=1.0)
+                denom_b = torch.clamp(
+                    sw_pow_b_safe - T_band_b + float(msd_ratio_rho) * sw_pow_b_safe,
+                    min=1e-10,
+                )
+                ratio_b = torch.clamp(T_band_b / denom_b, min=0.0)
+                band_frac_list.append(aggregate_over_snapshots(r_flow_b, mode=msd_agg_mode))
+                score_list.append(aggregate_over_snapshots(ratio_b, mode=msd_agg_mode))
+                det_list.append({})
+            band_frac_stack = torch.stack(band_frac_list, dim=0)
+            score_stack = torch.stack(score_list, dim=0)
+            t_msd = time.perf_counter() - t4
+
+    band_frac_out = band_frac_stack.to(dtype=torch.float32)
+    score_out = score_stack.to(dtype=torch.float32)
+
+    if not telemetry_enabled:
+        infos = [{} for _ in range(int(B))]
+        if return_torch:
+            return band_frac_out.detach(), score_out.detach(), infos
+        band_frac_np = band_frac_out.detach().cpu().numpy().astype(np.float32, copy=False)
+        score_np = score_out.detach().cpu().numpy().astype(np.float32, copy=False)
+        return band_frac_np, score_np, infos
+
+    with _prof_ctx("stap:telemetry"):
+        band_flat = band_frac_out.reshape(B, -1)
+        vals_sorted, _ = torch.sort(band_flat, dim=1)
+        K = int(vals_sorted.shape[1])
+        if K <= 0:
+            band_med_t = torch.zeros((B,), dtype=torch.float32, device=band_flat.device)
+            band_p90_t = band_med_t
+        else:
+            if K % 2 == 1:
+                band_med_t = vals_sorted[:, K // 2]
+            else:
+                band_med_t = 0.5 * (vals_sorted[:, K // 2 - 1] + vals_sorted[:, K // 2])
+            pos = 0.90 * float(K - 1)
+            i0 = int(math.floor(pos))
+            i1 = min(K - 1, i0 + 1)
+            frac = float(pos - i0)
+            band_p90_t = (1.0 - frac) * vals_sorted[:, i0] + frac * vals_sorted[:, i1]
+
+        flow_mean_t = band_flat.mean(dim=1)
+        band_med = band_med_t.detach().cpu().numpy()
+        band_p90 = band_p90_t.detach().cpu().numpy()
+        flow_mean = flow_mean_t.detach().cpu().numpy()
+        lam_cond = lam_msd_tensor.real.detach().cpu().numpy()
+        lam_need = lam_needed_tensor.real.detach().cpu().numpy()
+
+        if not return_torch:
+            band_frac_np = band_frac_out.detach().cpu().numpy().astype(np.float32, copy=False)
+            score_np = score_out.detach().cpu().numpy().astype(np.float32, copy=False)
+
+        infos: List[dict] = []
+        msd_lambda_base = float(msd_lambda) if msd_lambda is not None else float(diag_load)
         for b in range(B):
-            T_band_b, sw_pow_b = msd_snapshot_energies_batched(
-                R_hat[b],
-                S_B_Lt_N_hw[b],
-                Ct,
-                lam_abs=float(lam_msd_tensor[b].real.item()),
-                kappa_target=kappa_msd,
-                ridge=msd_ridge,
-                ratio_rho=msd_ratio_rho,
-                R0_prior=None,
-                Cf_flow=None,
-                ka_opts=None,
-                ka_details=None,
-                device=device,
-                dtype=R_hat.dtype,
+            det = det_list[b] if b < len(det_list) else {}
+            flow = float(flow_mean[b])
+            mot = 0.0
+            alias = max(0.0, 1.0 - flow - mot)
+            # Attach identical profiling timings to each tile; aggregators can
+            # summarize these across tiles for stap_fallback_telemetry.
+            infos.append(
+                {
+                    "Lt": Lt,
+                    "fd_grid_len": int(len(fd_grid)),
+                    "fd_grid_source": str(fd_grid_source),
+                    "span_hz": float(fd_meta.get("span_hz", 0.0)),
+                    "grid_step_hz": float(fd_meta.get("grid_step_hz", 0.0)),
+                    "flow_band_hz": (
+                        [float(flow_band_used[0]), float(flow_band_used[1])]
+                        if flow_band_used is not None
+                        else None
+                    ),
+                    "cov_estimator": cov_estimator,
+                    "diag_load": float(diag_load),
+                    "motion_half_span_hz": float(motion_half_span_hz),
+                    "msd_lambda": float(msd_lambda_base),
+                    "msd_lambda_conditioned": float(lam_cond[b]),
+                    "msd_lambda_needed": float(lam_need[b]),
+                    "kc_flow_cap": int(len(fd_grid)),
+                    "band_fraction_median": float(band_med[b]),
+                    "band_fraction_p90": float(band_p90[b]),
+                    "flow_fraction_tile": flow,
+                    "motion_fraction_tile": mot,
+                    "alias_fraction_tile": alias,
+                    "stap_tile_statistic_used": bool(tile_statistic),
+                    "stap_hankel_ms": float(1000.0 * t_hankel),
+                    "stap_cov_ms": float(1000.0 * t_cov),
+                    "stap_shrink_ms": float(1000.0 * t_shrink),
+                    "stap_fdgrid_ms": float(1000.0 * t_fdgrid),
+                    "stap_msd_ms": float(1000.0 * t_msd),
+                }
             )
-            sw_pow_b_safe = torch.clamp(sw_pow_b, min=1e-10)
-            r_flow_b = torch.clamp(T_band_b / sw_pow_b_safe, min=0.0, max=1.0)
-            denom_b = torch.clamp(
-                sw_pow_b_safe - T_band_b + float(msd_ratio_rho) * sw_pow_b_safe, min=1e-10
-            )
-            ratio_b = torch.clamp(T_band_b / denom_b, min=0.0)
-            band_frac_list.append(aggregate_over_snapshots(r_flow_b, mode=msd_agg_mode))
-            score_list.append(aggregate_over_snapshots(ratio_b, mode=msd_agg_mode))
-            det_list.append({})
-        band_frac_stack = torch.stack(band_frac_list, dim=0)
-        score_stack = torch.stack(score_list, dim=0)
-        t_msd = time.perf_counter() - t4
+            infos[-1].update(det)
 
-    band_frac_np = band_frac_stack.detach().cpu().numpy().astype(np.float32, copy=False)
-    score_np = score_stack.detach().cpu().numpy().astype(np.float32, copy=False)
-
-    infos: List[dict] = []
-    msd_lambda_base = float(msd_lambda) if msd_lambda is not None else float(diag_load)
-    for b in range(B):
-        det = det_list[b] if b < len(det_list) else {}
-        flow = float(np.mean(band_frac_np[b]))
-        mot = 0.0
-        alias = max(0.0, 1.0 - flow - mot)
-        # Attach identical profiling timings to each tile; aggregators can
-        # summarize these across tiles for stap_fallback_telemetry.
-        infos.append(
-            {
-                "Lt": Lt,
-                "fd_grid_len": int(len(fd_grid)),
-                "fd_grid_source": str(fd_grid_source),
-                "span_hz": float(fd_meta.get("span_hz", 0.0)),
-                "grid_step_hz": float(fd_meta.get("grid_step_hz", 0.0)),
-                "flow_band_hz": (
-                    [float(flow_band_used[0]), float(flow_band_used[1])]
-                    if flow_band_used is not None
-                    else None
-                ),
-                "cov_estimator": cov_estimator,
-                "diag_load": float(diag_load),
-                "motion_half_span_hz": float(motion_half_span_hz),
-                "msd_lambda": float(msd_lambda_base),
-                "msd_lambda_conditioned": float(lam_msd_tensor[b].real.item()),
-                "msd_lambda_needed": float(lam_needed_tensor[b].real.item()),
-                "kc_flow_cap": int(len(fd_grid)),
-                "band_fraction_median": float(np.median(band_frac_np[b])),
-                "band_fraction_p90": float(np.quantile(band_frac_np[b], 0.90)),
-                "flow_fraction_tile": flow,
-                "motion_fraction_tile": mot,
-                "alias_fraction_tile": alias,
-                "stap_hankel_ms": float(1000.0 * t_hankel),
-                "stap_cov_ms": float(1000.0 * t_cov),
-                "stap_shrink_ms": float(1000.0 * t_shrink),
-                "stap_fdgrid_ms": float(1000.0 * t_fdgrid),
-                "stap_msd_ms": float(1000.0 * t_msd),
-            }
-        )
-        infos[-1].update(det)
-
-    return (
-        band_frac_np,
-        score_np,
-        infos,
-    )
+    if return_torch:
+        return band_frac_out.detach(), score_out.detach(), infos
+    return band_frac_np, score_np, infos
 
 
 def pd_temporal_core_batched(
@@ -3815,7 +4574,8 @@ def pd_temporal_core_batched(
     use_ref_cov: bool = False,
     fd_span_mode: str = "psd",
     flow_band_hz: Optional[Tuple[float, float]] = None,
-) -> Tuple[np.ndarray, np.ndarray, List[dict]]:
+    return_torch: bool = False,
+) -> Tuple[np.ndarray | torch.Tensor, np.ndarray | torch.Tensor, List[dict]]:
     """
     PD-oriented fast-path core: compute band fraction maps only, skipping MSD contrast.
 
@@ -3826,6 +4586,17 @@ def pd_temporal_core_batched(
     """
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    telemetry_env = os.getenv("STAP_FAST_TELEMETRY", "").strip().lower()
+    telemetry_enabled = telemetry_env not in {"0", "false", "no", "off"}
+
+    env_tile_stat = os.getenv("STAP_FAST_TILE_STATISTIC", "").strip().lower()
+    tile_statistic = env_tile_stat in {"1", "true", "yes", "on"}
+    if not tile_statistic:
+        env_tile_stat = os.getenv("STAP_TILE_STATISTIC", "").strip().lower()
+        tile_statistic = env_tile_stat in {"1", "true", "yes", "on"}
+    if tile_statistic:
+        _warn_tile_statistic_experimental()
 
     # Runtime breakdown (seconds) for profiling.
     t_hankel = 0.0
@@ -3841,6 +4612,9 @@ def pd_temporal_core_batched(
     t_hankel = time.perf_counter() - t0
 
     B, _, N, h, w = S_B_Lt_N_hw.shape
+    # Match the manuscript baseline snapshot flattening order (h,w,N) to avoid
+    # silent stride/reshape-dependent behavior changes on non-contiguous Hankel
+    # tensors (and to keep fast-path score maps comparable to the slow path).
     S_flat = S_B_Lt_N_hw.permute(0, 1, 3, 4, 2).contiguous().view(B, Lt, -1)
     cov_est = cov_estimator.lower()
 
@@ -3853,58 +4627,75 @@ def pd_temporal_core_batched(
         if cov_est == "scm":
             R_hat = R_scm
         elif cov_est in {"huber", "huber_s"}:
-            norms = torch.sum(torch.abs(S_flat) ** 2, dim=1, keepdim=True).sqrt()
-            scale = torch.clamp(norms, max=float(huber_c))
-            S_weighted = S_flat * (scale / (norms + 1e-8))
-            R_hat = torch.matmul(S_weighted, S_weighted.conj().transpose(-2, -1)) / float(
-                S_weighted.shape[-1]
+            R_hat = _huber_covariance_batched(
+                S_flat, c=float(huber_c), max_iter=50, tol=1e-4
             )
         else:
-            try:
-                R_hat = _tyler_covariance_batched(S_flat)
-            except Exception:
-                R_hat, _ = robust_temporal_cov_batch(
-                    S_flat, estimator="huber", huber_c=huber_c, max_iter=50, tol=1e-4
+            if cov_est in {"tyler_pca", "tylerpca", "tyler-pca"} and int(N) <= 4:
+                R_hat = _huber_covariance_batched(
+                    S_flat, c=float(huber_c), max_iter=50, tol=1e-4
                 )
+            else:
+                try:
+                    tyler_init_env = os.getenv("STAP_TYLER_INIT", "").strip().lower()
+                    R_init = R_scm if tyler_init_env in {"scm", "r_scm", "cov_scm"} else None
+                    R_hat = _tyler_covariance_batched(S_flat, R_init=R_init)
+                except Exception:
+                    R_hat = _huber_covariance_batched(
+                        S_flat, c=float(huber_c), max_iter=50, tol=1e-4
+                    )
     t_cov = time.perf_counter() - t1
 
     # Per-tile shrinkage toward mu*I to match slow path.
     t2 = time.perf_counter()
-    kappa_shrink = float(max(kappa_shrink, 1.01))
-    eye = torch.eye(Lt, device=device, dtype=R_hat.dtype)
-    if shrinkage_alpha_for_kappa_batch is not None:
-        alphas = shrinkage_alpha_for_kappa_batch(R_hat, kappa_target=kappa_shrink).to(R_hat.dtype)
-    else:
-        alphas = torch.as_tensor(
-            [float(_shrinkage_alpha_for_kappa(R_hat[b], kappa_shrink)) for b in range(B)],
-            device=device,
-            dtype=R_hat.dtype,
-        )
-    mu = torch.real(torch.diagonal(R_hat, dim1=1, dim2=2).sum(dim=1)) / float(Lt)
-    R_hat = (1.0 - alphas.view(-1, 1, 1)) * R_hat + alphas.view(-1, 1, 1) * mu.view(-1, 1, 1) * eye
+    ev_min_herm: torch.Tensor | None = None
+    ev_max_herm: torch.Tensor | None = None
+    alphas_f: torch.Tensor | None = None
+    mu_trace: torch.Tensor | None = None
+    with _prof_ctx("stap:shrinkage"):
+        kappa_shrink = float(max(kappa_shrink, 1.01))
+        eye = torch.eye(Lt, device=device, dtype=R_hat.dtype)
+        if shrinkage_alpha_for_kappa_batch is not None:
+            alphas_f, ev_min_herm, ev_max_herm = shrinkage_alpha_for_kappa_batch(
+                R_hat, kappa_target=kappa_shrink, return_eigs=True
+            )
+        else:
+            alphas_f = torch.as_tensor(
+                [float(_shrinkage_alpha_for_kappa(R_hat[b], kappa_shrink)) for b in range(B)],
+                device=device,
+                dtype=torch.float32,
+            )
+        mu_trace = torch.real(torch.diagonal(R_hat, dim1=1, dim2=2).sum(dim=1)).to(
+            dtype=torch.float32
+        ) / float(Lt)
+        alpha = alphas_f.view(-1, 1, 1) if alphas_f is not None else torch.zeros((B, 1, 1), device=device)
+        R_hat = (1.0 - alpha) * R_hat + alpha * mu_trace.view(-1, 1, 1) * eye
     t_shrink = time.perf_counter() - t2
 
     # Per-tile lambda consistent with MSD loading.
     eye = torch.eye(Lt, device=device, dtype=R_hat.dtype)
     kappa_msd = float(max(kappa_msd, 1.01))
     lam_init = float(msd_lambda) if msd_lambda is not None else float(diag_load)
-    if conditioned_lambda_batch_shared is not None:
-        lam_batch, _, lam_needed_batch = conditioned_lambda_batch_shared(
-            R_hat, lam_init, kappa_msd
-        )
-        lam_msd_tensor = lam_batch.to(R_hat.dtype)
-        lam_needed_tensor = lam_needed_batch.to(R_hat.dtype)
-    else:
-        lam_list = []
-        lam_needed_list = []
-        for b in range(B):
-            lam_for_msd, _, _ = conditioned_lambda(
-                R_hat[b], lam_requested=lam_init, kappa_target=kappa_msd
+    with _prof_ctx("stap:lambda"):
+        if conditioned_lambda_batch_shared is not None:
+            # Preserve manuscript baseline behavior: compute per-tile loading via the
+            # shared conditioned-lambda helper (no eigenvalue-bound shortcut).
+            lam_batch, _, lam_needed_batch = conditioned_lambda_batch_shared(
+                R_hat, lam_init, kappa_msd
             )
-            lam_list.append(lam_for_msd)
-            lam_needed_list.append(max(0.0, lam_for_msd - lam_init))
-        lam_msd_tensor = torch.as_tensor(lam_list, device=device, dtype=R_hat.dtype)
-        lam_needed_tensor = torch.as_tensor(lam_needed_list, device=device, dtype=R_hat.dtype)
+            lam_msd_tensor = lam_batch.to(R_hat.dtype)
+            lam_needed_tensor = lam_needed_batch.to(R_hat.dtype)
+        else:
+            lam_list = []
+            lam_needed_list = []
+            for b in range(B):
+                lam_for_msd, _, _ = conditioned_lambda(
+                    R_hat[b], lam_requested=lam_init, kappa_target=kappa_msd
+                )
+                lam_list.append(lam_for_msd)
+                lam_needed_list.append(max(0.0, lam_for_msd - lam_init))
+            lam_msd_tensor = torch.as_tensor(lam_list, device=device, dtype=R_hat.dtype)
+            lam_needed_tensor = torch.as_tensor(lam_needed_list, device=device, dtype=R_hat.dtype)
 
     motion_half_span_hz = 0.0
     base = prf_hz / float(Lt)
@@ -3918,21 +4709,32 @@ def pd_temporal_core_batched(
     fd_mode = str(fd_span_mode or "psd").strip().lower()
     fd_grid_source = "span"
     flow_band_used: Tuple[float, float] | None = None
-    if fd_mode in {"flow_band", "band"} and flow_band_hz is not None:
-        try:
-            flow_band_used = (float(flow_band_hz[0]), float(flow_band_hz[1]))
-        except Exception:
-            flow_band_used = None
-        if flow_band_used is not None:
-            fd_grid, fd_meta = build_fd_grid_flow_band(
-                prf_hz,
-                Lt,
-                flow_band_used,
-                motion_half_span_hz=float(motion_half_span_hz),
-                min_pts=min_pts,
-                max_pts=max_pts,
-            )
-            fd_grid_source = "flow_band"
+    with _prof_ctx("stap:fd_grid"):
+        if fd_mode in {"flow_band", "band"} and flow_band_hz is not None:
+            try:
+                flow_band_used = (float(flow_band_hz[0]), float(flow_band_hz[1]))
+            except Exception:
+                flow_band_used = None
+            if flow_band_used is not None:
+                fd_grid, fd_meta = build_fd_grid_flow_band(
+                    prf_hz,
+                    Lt,
+                    flow_band_used,
+                    motion_half_span_hz=float(motion_half_span_hz),
+                    min_pts=min_pts,
+                    max_pts=max_pts,
+                )
+                fd_grid_source = "flow_band"
+            else:
+                fd_grid, fd_meta = build_fd_grid_span(
+                    prf_hz,
+                    Lt,
+                    fd_span_rel=fd_span_rel,
+                    grid_step_rel=grid_step_rel,
+                    fd_min_abs_hz=fd_min_abs_hz,
+                    min_pts=min_pts,
+                    max_pts=max_pts,
+                )
         else:
             fd_grid, fd_meta = build_fd_grid_span(
                 prf_hz,
@@ -3943,105 +4745,161 @@ def pd_temporal_core_batched(
                 min_pts=min_pts,
                 max_pts=max_pts,
             )
-    else:
-        fd_grid, fd_meta = build_fd_grid_span(
-            prf_hz,
-            Lt,
-            fd_span_rel=fd_span_rel,
-            grid_step_rel=grid_step_rel,
-            fd_min_abs_hz=fd_min_abs_hz,
-            min_pts=min_pts,
-            max_pts=max_pts,
-        )
     t_fdgrid = time.perf_counter() - t3
 
     # Constraints for the entire band (no motion/alias split in this PD-only mode).
-    Ct = bandpass_constraints_temporal(
-        Lt,
-        prf_hz,
-        fd_grid_hz=fd_grid.tolist(),
-        device=device,
-        dtype=R_hat.dtype,
-        mode="exp+deriv",
-    )
+    with _prof_ctx("stap:constraints"):
+        Ct = bandpass_constraints_temporal(
+            Lt,
+            prf_hz,
+            fd_grid_hz=fd_grid.tolist(),
+            device=device,
+            dtype=R_hat.dtype,
+            mode="exp+deriv",
+        )
 
     # Compute per-snapshot band energy and total whitened power, then aggregate.
     t4 = time.perf_counter()
-    band_frac_list: List[torch.Tensor] = []
-    score_list: List[torch.Tensor] = []
-    h_proj, w_proj = h, w
-    for b in range(B):
-        T_band, sw_pow = msd_snapshot_energies_batched(
-            R_hat[b],
-            S_B_Lt_N_hw[b],
-            Ct,
-            lam_abs=float(lam_msd_tensor[b].real.item()),
-            kappa_target=kappa_msd,
-            ridge=msd_ridge,
-            ratio_rho=msd_ratio_rho,
-            R0_prior=None,
-            Cf_flow=None,
-            ka_opts=None,
-            ka_details=None,
-            device=device,
-            dtype=R_hat.dtype,
-        )
-        # T_band, sw_pow: (N,h,w). Band fraction is energy in band / total whitened energy.
-        sw_pow_safe = torch.clamp(sw_pow, min=1e-10)
-        r_flow = torch.clamp(T_band / sw_pow_safe, min=0.0, max=1.0)
-        ratio_denom = torch.clamp(sw_pow_safe - T_band + float(msd_ratio_rho) * sw_pow_safe, min=1e-10)
-        ratio = torch.clamp(T_band / ratio_denom, min=0.0)
-        r_flow_agg = aggregate_over_snapshots(r_flow, mode=msd_agg_mode)  # (h,w)
-        ratio_agg = aggregate_over_snapshots(ratio, mode=msd_agg_mode)  # (h,w)
-        band_frac_list.append(r_flow_agg)
-        score_list.append(ratio_agg)
-        h_proj, w_proj = r_flow_agg.shape
+    with _prof_ctx("stap:band_energy"):
+        if tile_statistic:
+            covonly_pixel_env = os.getenv("STAP_FAST_TILE_STATISTIC_PIXEL", "").strip().lower()
+            covonly_per_pixel = covonly_pixel_env in {"1", "true", "yes", "on"}
+            if covonly_per_pixel:
+                T_band_mean_hw, sw_pow_mean_hw = _band_energy_whitened_covonly_perpixel_batched(
+                    R_hat,
+                    S_B_Lt_N_hw,
+                    Ct,
+                    lam_msd_tensor,
+                    ridge=msd_ridge,
+                    device=device,
+                    dtype=R_hat.dtype,
+                    eps=1e-10,
+                )
+                sw_pow_safe = torch.clamp(sw_pow_mean_hw, min=1e-10)
+                band_frac_stack = torch.clamp(T_band_mean_hw / sw_pow_safe, min=0.0, max=1.0)
+                ratio_denom = torch.clamp(
+                    sw_pow_safe - T_band_mean_hw + float(msd_ratio_rho) * sw_pow_safe, min=1e-10
+                )
+                score_stack = torch.clamp(T_band_mean_hw / ratio_denom, min=0.0)
+            else:
+                T_band_mean, sw_pow_mean = _band_energy_whitened_covonly_batched(
+                    R_hat,
+                    R_scm,
+                    Ct,
+                    lam_msd_tensor,
+                    ridge=msd_ridge,
+                    device=device,
+                    dtype=R_hat.dtype,
+                    eps=1e-10,
+                )
+                sw_pow_safe = torch.clamp(sw_pow_mean, min=1e-10)
+                band_frac_scalar = torch.clamp(T_band_mean / sw_pow_safe, min=0.0, max=1.0)
+                ratio_denom = torch.clamp(
+                    sw_pow_safe - T_band_mean + float(msd_ratio_rho) * sw_pow_safe, min=1e-10
+                )
+                ratio_scalar = torch.clamp(T_band_mean / ratio_denom, min=0.0)
+                band_frac_stack = band_frac_scalar.view(B, 1, 1).expand(B, h, w)
+                score_stack = ratio_scalar.view(B, 1, 1).expand(B, h, w)
+        else:
+            # Use the same batched whitening + projection path as the full STAP fast core.
+            T_band, sw_pow = _band_energy_whitened_batched(
+                R_hat,
+                S_B_Lt_N_hw,
+                Ct,
+                lam_msd_tensor,
+                ridge=msd_ridge,
+                ratio_rho=msd_ratio_rho,
+                kappa_target=kappa_msd,
+                device=device,
+                dtype=R_hat.dtype,
+                eps=1e-10,
+            )
+            sw_pow_safe = torch.clamp(sw_pow, min=1e-10)
+            r_flow = torch.clamp(T_band / sw_pow_safe, min=0.0, max=1.0)
+            ratio_denom = torch.clamp(
+                sw_pow_safe - T_band + float(msd_ratio_rho) * sw_pow_safe, min=1e-10
+            )
+            ratio = torch.clamp(T_band / ratio_denom, min=0.0)
+            with _prof_ctx("stap:aggregate"):
+                band_frac_stack = aggregate_over_snapshots_batched(r_flow, mode=msd_agg_mode)
+                score_stack = aggregate_over_snapshots_batched(ratio, mode=msd_agg_mode)
     t_band = time.perf_counter() - t4
 
-    if band_frac_list:
-        band_frac_stack = torch.stack(band_frac_list, dim=0)
-        score_stack = torch.stack(score_list, dim=0) if score_list else band_frac_stack
-    else:
-        band_frac_stack = torch.zeros((B, h_proj, w_proj), dtype=torch.float32, device=device)
-        score_stack = band_frac_stack
+    band_frac_out = band_frac_stack.to(dtype=torch.float32)
+    score_out = score_stack.to(dtype=torch.float32)
+    if not telemetry_enabled:
+        infos = [{} for _ in range(int(B))]
+        if return_torch:
+            return band_frac_out.detach(), score_out.detach(), infos
+        band_frac_np = band_frac_out.detach().cpu().numpy().astype(np.float32, copy=False)
+        score_np = score_out.detach().cpu().numpy().astype(np.float32, copy=False)
+        return band_frac_np, score_np, infos
+    with _prof_ctx("stap:telemetry"):
+        band_flat = band_frac_out.reshape(B, -1)
+        vals_sorted, _ = torch.sort(band_flat, dim=1)
+        K = int(vals_sorted.shape[1])
+        if K <= 0:
+            band_med_t = torch.zeros((B,), dtype=torch.float32, device=band_flat.device)
+            band_p90_t = band_med_t
+        else:
+            if K % 2 == 1:
+                band_med_t = vals_sorted[:, K // 2]
+            else:
+                band_med_t = 0.5 * (vals_sorted[:, K // 2 - 1] + vals_sorted[:, K // 2])
+            pos = 0.90 * float(K - 1)
+            i0 = int(math.floor(pos))
+            i1 = min(K - 1, i0 + 1)
+            frac = float(pos - i0)
+            band_p90_t = (1.0 - frac) * vals_sorted[:, i0] + frac * vals_sorted[:, i1]
 
-    band_frac_np = band_frac_stack.detach().cpu().numpy().astype(np.float32, copy=False)
-    score_np = score_stack.detach().cpu().numpy().astype(np.float32, copy=False)
+        flow_mean_t = band_flat.mean(dim=1)
+        band_med = band_med_t.detach().cpu().numpy()
+        band_p90 = band_p90_t.detach().cpu().numpy()
+        flow_mean = flow_mean_t.detach().cpu().numpy()
+        lam_cond = lam_msd_tensor.real.detach().cpu().numpy()
+        lam_need = lam_needed_tensor.real.detach().cpu().numpy()
 
-    infos: List[dict] = []
-    msd_lambda_base = float(msd_lambda) if msd_lambda is not None else float(diag_load)
-    for b in range(B):
-        flow = float(np.mean(band_frac_np[b]))
-        alias = max(0.0, 1.0 - flow)
-        info = {
-            "Lt": Lt,
-            "fd_grid_len": int(len(fd_grid)),
-            "fd_grid_source": str(fd_grid_source),
-            "span_hz": float(fd_meta.get("span_hz", 0.0)),
-            "grid_step_hz": float(fd_meta.get("grid_step_hz", 0.0)),
-            "flow_band_hz": (
-                [float(flow_band_used[0]), float(flow_band_used[1])]
-                if flow_band_used is not None
-                else None
-            ),
-            "cov_estimator": cov_estimator,
-            "diag_load": float(diag_load),
-            "motion_half_span_hz": float(motion_half_span_hz),
-            "msd_lambda": float(msd_lambda_base),
-            "msd_lambda_conditioned": float(lam_msd_tensor[b].real.item()),
-            "msd_lambda_needed": float(lam_needed_tensor[b].real.item()),
-            "kc_flow_cap": int(len(fd_grid)),
-            "band_fraction_median": float(np.median(band_frac_np[b])),
-            "band_fraction_p90": float(np.quantile(band_frac_np[b], 0.90)),
-            "flow_fraction_tile": flow,
-            "motion_fraction_tile": 0.0,
-            "alias_fraction_tile": alias,
-            "stap_hankel_ms": float(1000.0 * t_hankel),
-            "stap_cov_ms": float(1000.0 * t_cov),
-            "stap_shrink_ms": float(1000.0 * t_shrink),
-            "stap_fdgrid_ms": float(1000.0 * t_fdgrid),
-            "stap_msd_ms": float(1000.0 * t_band),
-        }
-        infos.append(info)
+        if not return_torch:
+            band_frac_np = band_frac_out.detach().cpu().numpy().astype(np.float32, copy=False)
+            score_np = score_out.detach().cpu().numpy().astype(np.float32, copy=False)
 
+        infos: List[dict] = []
+        msd_lambda_base = float(msd_lambda) if msd_lambda is not None else float(diag_load)
+        for b in range(B):
+            flow = float(flow_mean[b])
+            alias = max(0.0, 1.0 - flow)
+            info = {
+                "Lt": Lt,
+                "fd_grid_len": int(len(fd_grid)),
+                "fd_grid_source": str(fd_grid_source),
+                "span_hz": float(fd_meta.get("span_hz", 0.0)),
+                "grid_step_hz": float(fd_meta.get("grid_step_hz", 0.0)),
+                "flow_band_hz": (
+                    [float(flow_band_used[0]), float(flow_band_used[1])]
+                    if flow_band_used is not None
+                    else None
+                ),
+                "cov_estimator": cov_estimator,
+                "diag_load": float(diag_load),
+                "motion_half_span_hz": float(motion_half_span_hz),
+                "msd_lambda": float(msd_lambda_base),
+                "msd_lambda_conditioned": float(lam_cond[b]),
+                "msd_lambda_needed": float(lam_need[b]),
+                "kc_flow_cap": int(len(fd_grid)),
+                "band_fraction_median": float(band_med[b]),
+                "band_fraction_p90": float(band_p90[b]),
+                "flow_fraction_tile": flow,
+                "motion_fraction_tile": 0.0,
+                "alias_fraction_tile": alias,
+                "stap_tile_statistic_used": bool(tile_statistic),
+                "stap_hankel_ms": float(1000.0 * t_hankel),
+                "stap_cov_ms": float(1000.0 * t_cov),
+                "stap_shrink_ms": float(1000.0 * t_shrink),
+                "stap_fdgrid_ms": float(1000.0 * t_fdgrid),
+                "stap_msd_ms": float(1000.0 * t_band),
+            }
+            infos.append(info)
+
+    if return_torch:
+        return band_frac_out.detach(), score_out.detach(), infos
     return band_frac_np, score_np, infos

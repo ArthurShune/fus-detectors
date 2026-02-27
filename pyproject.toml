@@ -15,6 +15,7 @@ pythonpath = ["."]
 # turn can make `pytest` exit non-zero during terminal summary even when tests
 # pass. We don't rely on Hypothesis in this repo, so disable its plugin.
 addopts = "-p no:hypothesispytest"
+testpaths = ["tests"]
 
 [build-system]
 requires = ["setuptools>=61.0"]

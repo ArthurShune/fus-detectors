@@ -201,6 +201,16 @@ def main() -> None:
         help="KA v2 mode when enabled (default: auto).",
     )
     parser.add_argument(
+        "--stap-device",
+        type=str,
+        default="auto",
+        choices=["auto", "cpu", "cuda"],
+        help=(
+            "Device for STAP compute inside bundle writer (default: auto). "
+            "Use cpu for paper-repro stability and cuda for latency profiling."
+        ),
+    )
+    parser.add_argument(
         "--svd-keep-min",
         type=int,
         default=2,
@@ -387,6 +397,7 @@ def main() -> None:
             mask_flow_override=mask_flow_override,
             mask_bg_override=mask_bg_override,
             stap_conditional_enable=bool(args.stap_conditional_enable),
+            stap_device=str(args.stap_device),
             meta_extra=meta_extra,
         )
         written.append(str(out_root / dataset_name))

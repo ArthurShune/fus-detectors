@@ -155,6 +155,19 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--stap-debug-samples", type=int, default=32)
     ap.add_argument("--stap-device", type=str, default="cuda")
     ap.add_argument(
+        "--cuda-warmup",
+        dest="cuda_warmup",
+        action="store_true",
+        help="Warm up CUDA (cuBLAS/cuSOLVER/cuFFT) before timing-sensitive replay.",
+    )
+    ap.add_argument(
+        "--no-cuda-warmup",
+        dest="cuda_warmup",
+        action="store_false",
+        help="Disable CUDA warmup step.",
+    )
+    ap.set_defaults(cuda_warmup=True)
+    ap.add_argument(
         "--baseline",
         type=str,
         default="svd",
@@ -1134,6 +1147,44 @@ def main() -> None:
         if getattr(args, "score_mode", "pd") == "pd":
             os.environ.setdefault("STAP_FAST_PD_ONLY", "1")
 
+    if getattr(args, "cuda_warmup", True):
+        dev = str(getattr(args, "stap_device", "cuda") or "")
+        if dev.lower().startswith("cuda"):
+            try:
+                import torch  # local import (torch optional)
+
+                if torch.cuda.is_available():
+                    # Initialize CUDA context + common libraries so baseline/STAP
+                    # telemetry does not include one-time setup overhead.
+                    _ = torch.empty((1,), device=dev)
+                    a = torch.randn((32, 32), device=dev, dtype=torch.float32)
+                    b = torch.randn((32, 32), device=dev, dtype=torch.float32)
+                    ac = (a + 1j * b).to(dtype=torch.complex64)
+                    bc = (b + 1j * a).to(dtype=torch.complex64)
+                    _ = ac @ bc
+                    C = ac @ ac.conj().T
+                    _ = torch.linalg.eigh(C)
+                    # Warm up Cholesky + triangular solves (used heavily by STAP).
+                    C_pd = C + (1e-2 * torch.eye(C.shape[0], device=dev, dtype=C.dtype))
+                    L = torch.linalg.cholesky(C_pd)
+                    rr = torch.randn((C.shape[0], 64), device=dev, dtype=torch.float32)
+                    ri = torch.randn((C.shape[0], 64), device=dev, dtype=torch.float32)
+                    rhs = (rr + 1j * ri).to(dtype=C.dtype)
+                    _ = torch.linalg.solve_triangular(L, rhs, upper=False)
+                    _ = torch.cholesky_solve(rhs, L)
+                    x = torch.randn((32, 32), device=dev, dtype=torch.float32)
+                    xc = (x + 1j * x).to(dtype=torch.complex64)
+                    _ = torch.fft.fft2(xc)
+                    # Warm up common reduction/select kernels used by registration
+                    # and telemetry (sort/topk); this avoids one-time overhead
+                    # polluting latency measurements.
+                    v = torch.rand((1024,), device=dev, dtype=torch.float32)
+                    _ = torch.sort(v)
+                    _ = torch.topk(v, k=32)
+                    torch.cuda.synchronize()
+            except Exception as exc:  # pragma: no cover - optional warmup
+                print(f"[replay_stap_from_run] CUDA warmup skipped: {exc}")
+
     # Optional preset for motion-compensated SVD baseline. When the user
     # selects the 'literature' profile and has not provided an explicit SVD
     # rank or energy fraction, fall back to an energy-fraction rule that
@@ -1192,6 +1243,175 @@ def main() -> None:
             "meta.json missing 'angles_deg'/'angles_deg_sets'/'base_angles_deg'/'angles_used_deg'"
         )
     angle_sets = _load_angle_data(src_root, angles)
+
+    # Optional heavy CUDA warmup for steady-state latency measurements.
+    #
+    # The default warmup above initializes CUDA + small representative kernels,
+    # but cuFFT (and some reductions) can have substantial one-time overhead
+    # that depends on the actual H×W problem size. For latency profiling we want
+    # timings representative of steady state, so allow an opt-in warmup that
+    # runs a full MC--SVD baseline pass on a dummy cube of the same shape.
+    if os.getenv("CUDA_WARMUP_HEAVY", "").strip().lower() in {"1", "true", "yes", "on"}:
+        dev = str(getattr(args, "stap_device", "cuda") or "")
+        if dev.lower().startswith("cuda"):
+            try:
+                import torch  # local import (torch optional)
+
+                if torch.cuda.is_available():
+                    env_mcsvd_torch = os.getenv("MC_SVD_TORCH", "").strip().lower() in {
+                        "1",
+                        "true",
+                        "yes",
+                        "on",
+                    }
+                    env_reg_torch = os.getenv("MC_SVD_REG_TORCH", "").strip().lower() in {
+                        "1",
+                        "true",
+                        "yes",
+                        "on",
+                    }
+                    baseline_type = str(getattr(args, "baseline", "mc_svd") or "").strip().lower()
+                    if (
+                        env_mcsvd_torch
+                        and env_reg_torch
+                        and baseline_type in {"mc_svd", "svd"}
+                        and bool(getattr(args, "reg_enable", False))
+                    ):
+                        from sim.kwave.common import _baseline_pd_mcsvd
+
+                        T_warm = int(getattr(args, "time_window_length", 0) or 32)
+                        H_warm = int(getattr(geom, "Ny", 0) or 0)
+                        W_warm = int(getattr(geom, "Nx", 0) or 0)
+                        if T_warm > 1 and H_warm > 0 and W_warm > 0:
+                            print(
+                                f"[replay_stap_from_run] Heavy CUDA warmup (MC-SVD torch reg): "
+                                f"T={T_warm}, H={H_warm}, W={W_warm}",
+                                flush=True,
+                            )
+                            rng = np.random.default_rng(0)
+                            dummy = (
+                                rng.standard_normal((T_warm, H_warm, W_warm), dtype=np.float32)
+                                + 1j
+                                * rng.standard_normal((T_warm, H_warm, W_warm), dtype=np.float32)
+                            ).astype(np.complex64, copy=False)
+                            _baseline_pd_mcsvd(
+                                dummy,
+                                reg_enable=True,
+                                reg_method=str(getattr(args, "reg_method", "phasecorr")),
+                                reg_subpixel=int(getattr(args, "reg_subpixel", 4)),
+                                reg_reference=str(getattr(args, "reg_reference", "median")),
+                                svd_rank=getattr(args, "svd_rank", None),
+                                svd_energy_frac=getattr(args, "svd_energy_frac", None),
+                                device=dev,
+                                return_filtered_cube=False,
+                            )
+
+                    # Warm up key STAP kernels (batched eigvalsh/cholesky/triangular solves)
+                    # at realistic Lt and snapshot sizes, so STAP timings are closer to
+                    # steady state even when the baseline stage is CPU-heavy (e.g. NumPy
+                    # registration).
+                    env_fast = os.getenv("STAP_FAST_PATH", "").strip().lower() in {
+                        "1",
+                        "true",
+                        "yes",
+                        "on",
+                    }
+                    if env_fast:
+                        Lt_warm = int(getattr(args, "lt", 0) or 0)
+                        T_warm = int(getattr(args, "time_window_length", 0) or 0)
+                        th_warm = int(getattr(args, "tile_h", 0) or 0)
+                        tw_warm = int(getattr(args, "tile_w", 0) or 0)
+                        if T_warm <= 0:
+                            T_warm = 32
+                        if Lt_warm <= 0:
+                            Lt_warm = min(8, max(2, T_warm - 1))
+                        if th_warm <= 0:
+                            th_warm = 8
+                        if tw_warm <= 0:
+                            tw_warm = 8
+                        if 2 <= Lt_warm < T_warm and th_warm > 0 and tw_warm > 0:
+                            stride_env = os.getenv("STAP_SNAPSHOT_STRIDE", "").strip()
+                            max_env = os.getenv("STAP_MAX_SNAPSHOTS", "").strip()
+                            try:
+                                stride = int(stride_env) if stride_env else 1
+                            except ValueError:
+                                stride = 1
+                            stride = max(1, stride)
+                            try:
+                                max_snaps = int(max_env) if max_env else None
+                            except ValueError:
+                                max_snaps = None
+
+                            N_full = T_warm - Lt_warm + 1
+                            N_eff = (N_full + stride - 1) // stride
+                            if max_snaps is not None and max_snaps > 0 and N_eff > max_snaps:
+                                N_eff = int(max_snaps)
+                            P = int(max(1, N_eff) * th_warm * tw_warm)
+
+                            # Choose a warm batch size matching the default CUDA tiler batch,
+                            # but clamp to avoid OOM for larger Lt/P regimes.
+                            B_target = 192
+                            P_target = int(max(1, P))
+                            # Approx bytes per element for rr+ri+complex S ~ 16 bytes.
+                            # Keep this warmup lightweight: it is only to initialize kernels.
+                            max_bytes = 64 * 1024 * 1024
+                            denom = int(max(1, Lt_warm) * max(1, P_target))
+                            max_B = int(max(1, (max_bytes // 16) // denom))
+                            B_warm = int(min(B_target, max_B))
+                            P_warm = P_target
+                            if B_warm < 8:
+                                B_warm = 8
+                                max_P = int(max(1, (max_bytes // 16) // (B_warm * max(1, Lt_warm))))
+                                P_warm = int(min(P_target, max_P))
+                            if P_warm <= 0:
+                                P_warm = 1
+                            try:
+                                K_warm = int(getattr(args, "max_pts", 15) or 15)
+                            except Exception:
+                                K_warm = 15
+                            K_warm = max(3, min(K_warm, 21))
+                            print(
+                                f"[replay_stap_from_run] Heavy CUDA warmup (STAP core): "
+                                f"B={B_warm}, Lt={Lt_warm}, P={P_warm}, K={K_warm}",
+                                flush=True,
+                            )
+
+                            rr = torch.randn(
+                                (B_warm, Lt_warm, P_warm), device=dev, dtype=torch.float32
+                            )
+                            ri = torch.randn(
+                                (B_warm, Lt_warm, P_warm), device=dev, dtype=torch.float32
+                            )
+                            S = (rr + 1j * ri).to(dtype=torch.complex64)
+                            R = torch.matmul(S, S.conj().transpose(-2, -1)) / float(P_warm)
+                            herm = 0.5 * (R + R.conj().transpose(-2, -1))
+                            _ = torch.linalg.eigvalsh(herm).real
+
+                            eye = torch.eye(Lt_warm, device=dev, dtype=herm.dtype).unsqueeze(0)
+                            R_lam = herm + (1e-2 * eye)
+                            L = torch.linalg.cholesky(R_lam)
+                            _ = torch.linalg.solve_triangular(L, S, upper=False)
+
+                            cr = torch.randn(
+                                (B_warm, Lt_warm, K_warm), device=dev, dtype=torch.float32
+                            )
+                            ci = torch.randn(
+                                (B_warm, Lt_warm, K_warm), device=dev, dtype=torch.float32
+                            )
+                            Ct_exp = (cr + 1j * ci).to(dtype=torch.complex64)
+                            Cw = torch.linalg.solve_triangular(L, Ct_exp, upper=False)
+                            Gram = torch.bmm(Cw.conj().transpose(1, 2), Cw)
+                            eye_k = torch.eye(K_warm, device=dev, dtype=Gram.dtype).unsqueeze(0)
+                            Gram = Gram + (1e-2 * eye_k)
+                            Lg = torch.linalg.cholesky(Gram)
+
+                            ar = torch.randn((B_warm, K_warm, K_warm), device=dev, dtype=torch.float32)
+                            ai = torch.randn((B_warm, K_warm, K_warm), device=dev, dtype=torch.float32)
+                            A = (ar + 1j * ai).to(dtype=torch.complex64)
+                            _ = torch.cholesky_solve(A, Lg)
+                            torch.cuda.synchronize()
+            except Exception as exc:  # pragma: no cover - optional warmup
+                print(f"[replay_stap_from_run] Heavy CUDA warmup skipped: {exc}", flush=True)
 
     # Optional Macé/MaceBridge ROI defaults: when a replay run directory
     # contains roi_H1.npy / roi_H0.npy, treat roi_H1 as the default flow

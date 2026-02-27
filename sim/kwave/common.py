@@ -1,6 +1,7 @@
 # sim/kwave/common.py
 from __future__ import annotations
 
+from contextlib import nullcontext
 import json
 import math
 import os
@@ -53,6 +54,7 @@ try:
         project_out_motion_whitened,
         projector_from_tones,
         split_fd_grid_by_motion,
+        stap_stage_ctx,
         stap_temporal_core_batched,
     )
     from pipeline.stap.temporal_shared import (
@@ -76,6 +78,7 @@ except ModuleNotFoundError:
     projector_from_tones = None  # type: ignore[assignment]
     stap_temporal_core_batched = None  # type: ignore[assignment]
     pd_temporal_core_batched = None  # type: ignore[assignment]
+    stap_stage_ctx = None  # type: ignore[assignment]
     choose_lt_from_coherence = None  # type: ignore[assignment]
     choose_fd_grid_auto = None  # type: ignore[assignment]
     evaluate_ka_contract_v2 = None  # type: ignore[assignment]
@@ -2302,6 +2305,177 @@ def _fft_shift_apply(img: np.ndarray, dy: float, dx: float) -> np.ndarray:
     return np.fft.ifft2(np.fft.fft2(img) * phase).astype(np.complex64)
 
 
+def _register_stack_phasecorr_torch(
+    cube: torch.Tensor,
+    reg_enable: bool,
+    upsample: int,
+    ref_strategy: str,
+    psr_thresh: float = 3.0,
+) -> tuple[torch.Tensor, dict]:
+    """Torch/CUDA implementation of phase-correlation registration for a T×H×W cube.
+
+    This mirrors `_register_stack_phasecorr` but keeps all heavy FFT work on the
+    chosen torch device (typically CUDA) for latency-critical pipelines.
+    """
+    if torch is None:  # pragma: no cover - torch optional
+        raise RuntimeError("Torch is required for torch registration path.")
+    if cube.ndim != 3:
+        raise ValueError(f"Expected cube with shape (T,H,W), got {tuple(cube.shape)}")
+    T, H, W = (int(x) for x in cube.shape)
+    t0 = time.perf_counter()
+    telemetry = {
+        "reg_enable": bool(reg_enable),
+        "reg_method": "phasecorr",
+        "reg_reference": ref_strategy,
+        "reg_failed_fraction": 0.0,
+        "reg_shift_rms": 0.0,
+        "reg_shift_p90": 0.0,
+        "reg_ms": 0.0,
+        "reg_psr_median": None,
+        "reg_psr_p10": None,
+        "reg_psr_p90": None,
+        "reg_backend": "torch",
+        "reg_device": str(cube.device),
+    }
+    if not reg_enable:
+        return cube, telemetry
+
+    dev = cube.device
+    if cube.dtype != torch.complex64:
+        cube = cube.to(dtype=torch.complex64)
+
+    # Keep registration math in float32/complex64 for speed.
+    abs_cube = cube.abs().to(dtype=torch.float32)
+    if ref_strategy == "median":
+        # Prefer torch.median for performance; fall back to a deterministic
+        # sort-based median when deterministic algorithms are enforced.
+        try:
+            ref_abs = abs_cube.median(dim=0).values
+        except RuntimeError as exc:
+            msg = str(exc).lower()
+            if "deterministic" not in msg:
+                raise
+            sorted_abs, _ = torch.sort(abs_cube, dim=0)
+            if T % 2 == 1:
+                ref_abs = sorted_abs[T // 2]
+            else:
+                ref_abs = 0.5 * (sorted_abs[T // 2 - 1] + sorted_abs[T // 2])
+    else:
+        ref_abs = abs_cube[0]
+
+    eps = 1e-12
+    # Phase correlation: ref vs each frame.
+    F1 = torch.fft.fft2(ref_abs)  # (H,W)
+    F2 = torch.fft.fft2(abs_cube)  # (T,H,W)
+    cps = F1.unsqueeze(0) * torch.conj(F2)
+    cps = cps / (torch.abs(cps) + eps)
+    cc = torch.fft.ifft2(cps)
+    cc_abs = torch.abs(cc)  # (T,H,W)
+
+    cc_flat = cc_abs.reshape(T, -1)
+    peak_flat = torch.argmax(cc_flat, dim=1)  # (T,)
+    p_y = peak_flat // W
+    p_x = peak_flat - p_y * W
+    # Wrap to signed shifts.
+    p_y = torch.where(p_y > (H // 2), p_y - H, p_y)
+    p_x = torch.where(p_x > (W // 2), p_x - W, p_x)
+
+    idx = torch.arange(T, device=dev)
+    # For subpixel refinement + peak value, gather around the integer peak location.
+    y0 = (peak_flat // W).to(dtype=torch.int64)
+    x0 = (peak_flat - y0 * W).to(dtype=torch.int64)
+    peak_val = cc_abs[idx, y0, x0]
+
+    dy_sub = torch.zeros((T,), device=dev, dtype=torch.float32)
+    dx_sub = torch.zeros((T,), device=dev, dtype=torch.float32)
+    if upsample and upsample > 1:
+        y1 = (y0 - 1) % H
+        y2 = (y0 + 1) % H
+        x1 = (x0 - 1) % W
+        x2 = (x0 + 1) % W
+        cy1 = cc_abs[idx, y1, x0]
+        cy0 = peak_val
+        cy2 = cc_abs[idx, y2, x0]
+        cx1 = cc_abs[idx, y0, x1]
+        cx0 = peak_val
+        cx2 = cc_abs[idx, y0, x2]
+        denom_y = cy1 - 2.0 * cy0 + cy2
+        denom_x = cx1 - 2.0 * cx0 + cx2
+        dy_sub = torch.where(
+            denom_y.abs() < eps, torch.zeros_like(denom_y), 0.5 * (cy1 - cy2) / denom_y
+        ).to(dtype=torch.float32)
+        dx_sub = torch.where(
+            denom_x.abs() < eps, torch.zeros_like(denom_x), 0.5 * (cx1 - cx2) / denom_x
+        ).to(dtype=torch.float32)
+
+    dy = p_y.to(dtype=torch.float32) + dy_sub
+    dx = p_x.to(dtype=torch.float32) + dx_sub
+
+    # PSR: peak / sidelobe(99th percentile). Approximate the 99th percentile via top-k.
+    cc2_flat = cc_flat.clone()
+    cc2_flat[idx, peak_flat] = 0.0
+    n = int(cc2_flat.shape[1])
+    k = max(1, int(math.ceil(0.01 * n)))
+    sidelobe = torch.topk(cc2_flat, k=k, dim=1, largest=True, sorted=False).values.min(dim=1).values
+    psr = peak_val / (sidelobe + eps)
+
+    fail = (~torch.isfinite(psr)) | (psr < float(psr_thresh))
+    if bool(fail.any()):
+        dy = dy.masked_fill(fail, 0.0)
+        dx = dx.masked_fill(fail, 0.0)
+
+    # Apply fractional shift to the complex frames using the Fourier shift theorem.
+    ky = torch.fft.fftfreq(H, device=dev, dtype=torch.float32).reshape(H, 1)
+    kx = torch.fft.fftfreq(W, device=dev, dtype=torch.float32).reshape(1, W)
+    dy_b = dy.reshape(T, 1, 1)
+    dx_b = dx.reshape(T, 1, 1)
+    phase_y = torch.exp((-2j * math.pi) * ky.unsqueeze(0) * dy_b)  # (T,H,1)
+    phase_x = torch.exp((-2j * math.pi) * kx.unsqueeze(0) * dx_b)  # (T,1,W)
+    cube_fft = torch.fft.fft2(cube)
+    cube_fft = cube_fft * phase_y
+    cube_fft = cube_fft * phase_x
+    reg_cube = torch.fft.ifft2(cube_fft).to(dtype=torch.complex64)
+
+    mags = torch.sqrt(dy * dy + dx * dx)
+    failures = int(fail.sum().item()) if T else 0
+    telemetry["reg_failed_fraction"] = float(failures / max(T, 1))
+    telemetry["reg_shift_rms"] = float(torch.sqrt(torch.mean(mags * mags)).item()) if T else 0.0
+
+    def _quantile_from_sorted(vals_sorted: torch.Tensor, q: float) -> torch.Tensor:
+        K = int(vals_sorted.numel())
+        if K <= 0:
+            return torch.zeros((), device=vals_sorted.device, dtype=vals_sorted.dtype)
+        q = float(min(max(float(q), 0.0), 1.0))
+        pos = q * float(K - 1)
+        i0 = int(math.floor(pos))
+        i1 = min(K - 1, i0 + 1)
+        frac = float(pos - float(i0))
+        return (1.0 - frac) * vals_sorted[i0] + frac * vals_sorted[i1]
+
+    if T:
+        mags_sorted, _ = torch.sort(mags)
+        telemetry["reg_shift_p90"] = float(_quantile_from_sorted(mags_sorted, 0.90).item())
+    else:
+        telemetry["reg_shift_p90"] = 0.0
+
+    psr_valid = psr[torch.isfinite(psr)]
+    if int(psr_valid.numel()):
+        psr_sorted, _ = torch.sort(psr_valid)
+        K = int(psr_sorted.numel())
+        if K % 2 == 1:
+            psr_med = psr_sorted[K // 2]
+        else:
+            psr_med = 0.5 * (psr_sorted[K // 2 - 1] + psr_sorted[K // 2])
+        telemetry["reg_psr_median"] = float(psr_med.item())
+        telemetry["reg_psr_p10"] = float(_quantile_from_sorted(psr_sorted, 0.10).item())
+        telemetry["reg_psr_p90"] = float(_quantile_from_sorted(psr_sorted, 0.90).item())
+
+    if cube.is_cuda:
+        torch.cuda.synchronize()
+    telemetry["reg_ms"] = float(1000.0 * (time.perf_counter() - t0))
+    return reg_cube, telemetry
+
+
 def _register_stack_phasecorr(
     cube: np.ndarray,
     reg_enable: bool,
@@ -2311,7 +2485,7 @@ def _register_stack_phasecorr(
 ) -> tuple[np.ndarray, dict]:
     """Register a T×H×W cube frame-wise to reference using phase correlation."""
     T, H, W = cube.shape
-    t0 = time.time()
+    t0 = time.perf_counter()
     telemetry = {
         "reg_enable": bool(reg_enable),
         "reg_method": "phasecorr",
@@ -2354,7 +2528,7 @@ def _register_stack_phasecorr(
         telemetry["reg_psr_median"] = float(np.median(psr_valid))
         telemetry["reg_psr_p10"] = float(np.quantile(psr_valid, 0.10))
         telemetry["reg_psr_p90"] = float(np.quantile(psr_valid, 0.90))
-    telemetry["reg_ms"] = float(1000.0 * (time.time() - t0))
+    telemetry["reg_ms"] = float(1000.0 * (time.perf_counter() - t0))
     return reg_cube, telemetry
 
 
@@ -2376,7 +2550,7 @@ def _svd_temporal_project(
     use_cuda = (
         device and device.lower().startswith("cuda") and _HAS_TORCH and torch.cuda.is_available()
     )
-    t0 = time.time()
+    t0 = time.perf_counter()
     if use_cuda:
         At = torch.from_numpy(A)
         if not At.is_cuda:
@@ -2415,7 +2589,64 @@ def _svd_temporal_project(
         "svd_rank_removed": int(rank),
         "svd_energy_removed_frac": float(np.sum(s2_vals[:rank]) / (np.sum(s2_vals) + 1e-12)),
         "svd_top_singular_vals": [float(x) for x in s_top],
-        "svd_ms": float(1000.0 * (time.time() - t0)),
+        "svd_ms": float(1000.0 * (time.perf_counter() - t0)),
+    }
+    return Af, tele
+
+
+def _svd_temporal_project_torch(
+    A: torch.Tensor,
+    *,
+    rank: Optional[int] = None,
+    energy_frac: Optional[float] = None,
+) -> tuple[torch.Tensor, dict]:
+    """Torch implementation of `_svd_temporal_project` operating on a tensor A (T×N)."""
+    if torch is None:  # pragma: no cover - torch optional
+        raise RuntimeError("Torch is required for torch SVD projection path.")
+    if A.ndim != 2:
+        raise ValueError(f"Expected A with shape (T,N), got {tuple(A.shape)}")
+
+    T, _N = (int(x) for x in A.shape)
+    rank = int(rank) if rank is not None else None
+    if rank is not None:
+        rank = max(1, min(rank, T))
+    if energy_frac is not None:
+        energy_frac = float(np.clip(float(energy_frac), 0.0, 1.0))
+
+    if A.dtype != torch.complex64:
+        A = A.to(dtype=torch.complex64)
+
+    if A.is_cuda:
+        torch.cuda.synchronize()
+    t0 = time.perf_counter()
+
+    C = A @ A.conj().T
+    evals, U = torch.linalg.eigh(C)
+    idx = torch.argsort(evals, descending=True)
+    s2 = torch.clamp(evals[idx].real, min=0.0)
+    U = U[:, idx]
+    s2_vals = s2.detach().cpu().numpy()
+
+    rank_removed = rank
+    if rank_removed is None and energy_frac is not None:
+        cum = np.cumsum(s2_vals) / (np.sum(s2_vals) + 1e-12)
+        rank_removed = int(np.searchsorted(cum, energy_frac) + 1)
+    rank_removed = rank_removed or 3
+    rank_removed = int(max(1, min(rank_removed, T)))
+
+    U_k = U[:, :rank_removed]
+    Af = (A - U_k @ (U_k.conj().T @ A)).to(dtype=torch.complex64)
+
+    if Af.is_cuda:
+        torch.cuda.synchronize()
+    s_top = np.sqrt(s2_vals[: min(5, s2_vals.size)])
+    tele = {
+        "svd_rank_removed": int(rank_removed),
+        "svd_energy_removed_frac": float(np.sum(s2_vals[:rank_removed]) / (np.sum(s2_vals) + 1e-12)),
+        "svd_top_singular_vals": [float(x) for x in s_top],
+        "svd_ms": float(1000.0 * (time.perf_counter() - t0)),
+        "svd_backend": "torch",
+        "svd_device": str(A.device),
     }
     return Af, tele
 
@@ -2444,7 +2675,7 @@ def _svd_temporal_keep_range(
     use_cuda = (
         device and device.lower().startswith("cuda") and _HAS_TORCH and torch.cuda.is_available()
     )
-    t0 = time.time()
+    t0 = time.perf_counter()
     if use_cuda:
         At = torch.from_numpy(A)
         if not At.is_cuda:
@@ -2485,7 +2716,7 @@ def _svd_temporal_keep_range(
         "svd_energy_kept_frac": float(kept / total),
         "svd_energy_removed_frac": float(1.0 - kept / total),
         "svd_top_singular_vals": [float(x) for x in s_top],
-        "svd_ms": float(1000.0 * (time.time() - t0)),
+        "svd_ms": float(1000.0 * (time.perf_counter() - t0)),
     }
     return Af, tele
 
@@ -2503,23 +2734,89 @@ def _baseline_pd_mcsvd(
     return_filtered_cube: bool = False,
 ) -> tuple:
     """Motion-compensated SVD baseline."""
-    t_start = time.time()
+    use_cuda = (
+        device and device.lower().startswith("cuda") and _HAS_TORCH and torch.cuda.is_available()
+    )
+    use_torch_core = use_cuda and os.getenv("MC_SVD_TORCH", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    use_torch_reg = use_cuda and os.getenv("MC_SVD_REG_TORCH", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+    t_start = time.perf_counter()
     if reg_method != "phasecorr":
         raise ValueError("Only phasecorr registration is supported for MC-SVD baseline.")
+    if use_torch_core:
+        # Registration can remain on CPU (NumPy) while still keeping the main
+        # MC--SVD projector + PD computation on-device to avoid large round-trips.
+        if use_torch_reg:
+            cube_t = torch.as_tensor(Icube, dtype=torch.complex64)
+            if not cube_t.is_cuda:
+                cube_t = cube_t.to(device)
+            if cube_t.is_cuda:
+                torch.cuda.synchronize()
+            reg_cube_t, tele_reg = _register_stack_phasecorr_torch(
+                cube_t,
+                reg_enable=reg_enable,
+                upsample=reg_subpixel,
+                ref_strategy=reg_reference,
+            )
+        else:
+            reg_cube_np, tele_reg = _register_stack_phasecorr(
+                Icube,
+                reg_enable=reg_enable,
+                upsample=reg_subpixel,
+                ref_strategy=reg_reference,
+            )
+            reg_cube_t = torch.as_tensor(reg_cube_np, dtype=torch.complex64, device=device)
+
+        A_t = reg_cube_t.reshape(reg_cube_t.shape[0], -1)
+        A_f_t, tele_svd = _svd_temporal_project_torch(
+            A_t, rank=svd_rank, energy_frac=svd_energy_frac
+        )
+        cube_f_t = A_f_t.reshape(reg_cube_t.shape)
+        pd_t = (cube_f_t.abs() ** 2).mean(dim=0).to(dtype=torch.float32)
+        pd = pd_t.detach().cpu().numpy().astype(np.float32, copy=False)
+
+        telemetry = {
+            "baseline_type": "mc_svd",
+            **tele_reg,
+            **tele_svd,
+        }
+        if cube_f_t.is_cuda:
+            torch.cuda.synchronize()
+        telemetry["baseline_ms"] = float(1000.0 * (time.perf_counter() - t_start))
+
+        if return_filtered_cube:
+            keep_torch = (
+                os.getenv("MC_SVD_TORCH_RETURN_CUBE", "").strip().lower()
+                in {"1", "true", "yes", "on"}
+            )
+            if keep_torch:
+                return pd, telemetry, cube_f_t
+            cube_f = cube_f_t.detach().cpu().numpy().astype(np.complex64, copy=False)
+            return pd, telemetry, cube_f
+        return pd, telemetry
+
     reg_cube, tele_reg = _register_stack_phasecorr(
         Icube, reg_enable=reg_enable, upsample=reg_subpixel, ref_strategy=reg_reference
     )
     A = reg_cube.reshape(reg_cube.shape[0], -1)
-    A_f, tele_svd = _svd_temporal_project(
-        A, rank=svd_rank, energy_frac=svd_energy_frac, device=device
-    )
+    A_f, tele_svd = _svd_temporal_project(A, rank=svd_rank, energy_frac=svd_energy_frac, device=device)
     A_f = A_f.reshape(reg_cube.shape)
     pd = np.mean((np.abs(A_f) ** 2).astype(np.float32), axis=0)
     telemetry = {
         "baseline_type": "mc_svd",
         **tele_reg,
         **tele_svd,
-        "baseline_ms": float(1000.0 * (time.time() - t_start)),
+        "baseline_ms": float(1000.0 * (time.perf_counter() - t_start)),
     }
     if return_filtered_cube:
         return pd.astype(np.float32), telemetry, A_f.astype(np.complex64, copy=False)
@@ -2539,7 +2836,7 @@ def _baseline_pd_svd_bandpass(
     return_filtered_cube: bool = False,
 ) -> tuple:
     """SVD band-pass baseline (ULM-style): keep singular components in a range."""
-    t_start = time.time()
+    t_start = time.perf_counter()
     if reg_method != "phasecorr":
         raise ValueError("Only phasecorr registration is supported for SVD baselines.")
     reg_cube, tele_reg = _register_stack_phasecorr(
@@ -2555,7 +2852,7 @@ def _baseline_pd_svd_bandpass(
         "baseline_type": "svd_bandpass",
         **tele_reg,
         **tele_svd,
-        "baseline_ms": float(1000.0 * (time.time() - t_start)),
+        "baseline_ms": float(1000.0 * (time.perf_counter() - t_start)),
     }
     if return_filtered_cube:
         return pd.astype(np.float32), telemetry, A_f.astype(np.complex64, copy=False)
@@ -2575,7 +2872,7 @@ def _baseline_pd_rpca(
     low-rank background and sparse foreground component and defines PD from
     the sparse part. Tuned for k-Wave brain fUS–scale problems but used universally.
     """
-    t_start = time.time()
+    t_start = time.perf_counter()
     T, H, W = Icube.shape
 
     # Use windowed + downsampled + truncated SVD PCP.
@@ -2758,7 +3055,7 @@ def _baseline_pd_rpca(
     pd_ds = (S_energy_sum / float(T_ds)).astype(np.float32)
     pd_full = _upsample_nn(pd_ds, spatial_downsample, (H, W)).astype(np.float32)
 
-    baseline_ms = float(1000.0 * (time.time() - t_start))
+    baseline_ms = float(1000.0 * (time.perf_counter() - t_start))
     energy_frac = float(total_L_energy / (total_X_energy + 1e-12)) if total_X_energy > 0.0 else 0.0
 
     tele = {
@@ -5379,16 +5676,22 @@ def _stap_pd_tile_lcmv_batch(
     """
 
     batch_is_tensor = torch is not None and isinstance(cube_batch_T_hw, torch.Tensor)
+    cube_batch_np: np.ndarray | None = None
     if batch_is_tensor:
-        cube_batch_np = cube_batch_T_hw.detach().cpu().numpy()
+        cube_shape = tuple(int(x) for x in cube_batch_T_hw.shape)
     else:
         cube_batch_np = np.asarray(cube_batch_T_hw)
-    if cube_batch_np.ndim != 4:
+        cube_shape = tuple(int(x) for x in cube_batch_np.shape)
+    if len(cube_shape) != 4:
         raise ValueError(
-            f"Expected cube_batch_T_hw with 4 dims [B,T,h,w], got {cube_batch_np.shape}"
+            f"Expected cube_batch_T_hw with 4 dims [B,T,h,w], got shape {cube_shape}"
         )
-    B = cube_batch_np.shape[0]
-    lt_for_batch = int(cube_batch_np.shape[1] if Lt_fixed is None else Lt_fixed)
+    B, T, _, _ = cube_shape
+    if Lt_fixed is None:
+        # Mirror `_stap_pd_tile_lcmv` default Lt selection when not explicitly provided.
+        lt_for_batch = int(max(3, min(8, max(T - 1, 3))))
+    else:
+        lt_for_batch = int(Lt_fixed)
 
     # Optional fast-path (batched STAP core) when explicitly enabled.
     fast_flag = bool(enable_fast_path) if enable_fast_path is not None else False
@@ -5408,7 +5711,14 @@ def _stap_pd_tile_lcmv_batch(
     )
     if fast_eligible:
         dev = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        cube_tensor = torch.as_tensor(cube_batch_np, dtype=torch.complex64, device=dev)
+        if batch_is_tensor:
+            cube_tensor = cube_batch_T_hw.detach().to(
+                device=dev, dtype=torch.complex64, copy=False
+            )
+        else:
+            if cube_batch_np is None:  # pragma: no cover - defensive
+                cube_batch_np = np.asarray(cube_batch_T_hw)
+            cube_tensor = torch.as_tensor(cube_batch_np, dtype=torch.complex64, device=dev)
         use_ref_cov = os.getenv("STAP_FAST_COV_REF", "").lower() in {"1", "true", "yes", "on"}
         pd_only = os.getenv("STAP_FAST_PD_ONLY", "").lower() in {"1", "true", "yes", "on"}
         try:
@@ -5477,6 +5787,10 @@ def _stap_pd_tile_lcmv_batch(
         band_frac_batch = np.asarray(band_frac_fast, dtype=np.float32)
         score_batch = np.asarray(score_fast, dtype=np.float32)
         return band_frac_batch, score_batch, info_fast, debug_list_fast
+
+    if cube_batch_np is None:
+        # Slow path needs a NumPy view for control-plane logic and debug capture.
+        cube_batch_np = cube_batch_T_hw.detach().cpu().numpy()  # type: ignore[union-attr]
 
     band_frac_list: list[np.ndarray] = []
     score_list: list[np.ndarray] = []
@@ -6103,7 +6417,7 @@ def _stap_pd(
         if flow_mask_tile is None and mask_flow is not None:
             flow_mask_tile = mask_flow[y0 : y0 + th, x0 : x0 + tw]
             flow_mask_empty = not bool(flow_mask_tile.any())
-            if flow_mask_empty:
+            if flow_mask_empty and conditional_enable:
                 pd_tile = base_tile.copy()
                 # For tiles with zero flow support, we explicitly fall back to
                 # baseline PD. Reflect that choice in the band-fraction output
@@ -6181,7 +6495,7 @@ def _stap_pd(
                     info_tile["bg_edge_clamped_count"] = int(diff_mask.sum())
                     bg_edge_clamp_total += int(diff_mask.sum())
         info_tile["flow_mask_empty"] = bool(flow_mask_empty)
-        if flow_mask_empty and not background_uniformized:
+        if conditional_enable and flow_mask_empty and not background_uniformized:
             raise RuntimeError(
                 "flow coverage is zero but background_uniformized flag was not triggered"
             )
@@ -6532,53 +6846,474 @@ def _stap_pd(
         tile_capture_coord_flags = []
         tile_batch_indices = []
 
-    for _cov_flow, y0, x0 in coords_ordered:
-        coord = (y0, x0)
-        capture_by_index = tile_counter in capture_indices
-        capture_by_coord = coord in remaining_coord_requests
-        capture_requested = capture_by_index or capture_by_coord
+    used_unfold_tiling = False
+    use_unfold_env = os.getenv("STAP_TILING_UNFOLD", "").strip().lower() in {"1", "true", "yes", "on"}
+    unfold_error: str | None = None
+    unfold_eligible = (
+        use_unfold_env
+        and torch is not None
+        and stap_temporal_core_batched is not None
+        and ka_mode_overall == "none"
+        and debug_max_samples <= 0
+        and not debug_tile_coords
+        and tile_debug_limit is None
+        and not psd_telemetry
+        and device_resolved is not None
+    )
+    if unfold_eligible:
+        try:
+            import torch.nn.functional as F  # local import (torch optional)
 
-        # Optional conditional STAP: if the tile has no flow coverage at all,
-        # we can safely fall back to the baseline PD map for this tile and
-        # skip STAP entirely. When debug capture is requested for a tile,
-        # do not skip: run the normal STAP path so debug_samples are populated.
-        if conditional_enable and mask_flow is not None:
-            flow_mask_tile = mask_flow[y0 : y0 + th, x0 : x0 + tw]
-            if not bool(flow_mask_tile.any()) and not capture_requested:
-                base_tile = None
-                if pd_base_full is not None:
-                    base_tile = pd_base_full[y0 : y0 + th, x0 : x0 + tw]
-                else:
-                    t0_ext = time.perf_counter()
-                    cube_tmp = Icube[:, y0 : y0 + th, x0 : x0 + tw]
-                    t_extract += time.perf_counter() - t0_ext
-                    base_tile = np.mean(np.abs(cube_tmp) ** 2, axis=0)
-                pd[y0 : y0 + th, x0 : x0 + tw] += base_tile
-                counts[y0 : y0 + th, x0 : x0 + tw] += 1.0
-                stap_tiles_skipped_flow0 += 1
-                tile_counter += 1
-                if tile_debug_limit is not None and tile_counter >= int(tile_debug_limit):
-                    break
-                continue
+            # Tile-grid shape (matches loop bounds used for coords_ordered).
+            nY = max(0, (H - th) // stride + 1)
+            nX = max(0, (W - tw) // stride + 1)
+            if nY > 0 and nX > 0:
+                dev = device_resolved
 
-        t0_ext = time.perf_counter()
-        cube_np = np.ascontiguousarray(Icube[:, y0 : y0 + th, x0 : x0 + tw], dtype=np.complex64)
-        t_extract += time.perf_counter() - t0_ext
-        if capture_by_coord:
-            remaining_coord_requests.discard(coord)
-        tile_batch_items.append(cube_np)
-        tile_positions.append((y0, x0))
-        tile_capture_flags.append(capture_requested)
-        tile_capture_coord_flags.append(capture_by_coord)
-        tile_batch_indices.append(tile_counter)
-        tile_counter += 1
-        if tile_debug_limit is not None and tile_counter >= int(tile_debug_limit):
-            flush_batch()
-            break
-        if len(tile_batch_items) >= tile_batch_size:
-            flush_batch()
+                with (
+                    stap_stage_ctx("stap:tiling:prep")
+                    if stap_stage_ctx is not None
+                    else nullcontext()
+                ):
+                    cube_t = torch.as_tensor(Icube, dtype=torch.complex64, device=dev)
+                    if pd_base_full is not None:
+                        base_pd_t = torch.as_tensor(pd_base_full, dtype=torch.float32, device=dev)
+                    else:
+                        base_pd_t = torch.mean(torch.abs(cube_t) ** 2, dim=0).to(dtype=torch.float32)
+                    base_tiles = (
+                        base_pd_t.unfold(0, th, stride)
+                        .unfold(1, tw, stride)
+                        .contiguous()
+                    )  # (nY,nX,th,tw)
 
-    flush_batch()
+                    flow_tiles = None
+                    tile_has_flow = None
+                    if mask_flow is not None:
+                        flow_t = torch.as_tensor(
+                            mask_flow.astype(bool, copy=False), dtype=torch.bool, device=dev
+                        )
+                        flow_tiles = (
+                            flow_t.unfold(0, th, stride)
+                            .unfold(1, tw, stride)
+                            .contiguous()
+                        )
+                        tile_has_flow = flow_tiles.any(dim=(2, 3))  # (nY,nX)
+                    bg_tiles = None
+                    tile_is_bg = None
+                    if mask_bg is not None:
+                        bg_t = torch.as_tensor(mask_bg.astype(bool, copy=False), dtype=torch.bool, device=dev)
+                        bg_tiles = (
+                            bg_t.unfold(0, th, stride)
+                            .unfold(1, tw, stride)
+                            .contiguous()
+                        )
+                        tile_is_bg = bg_tiles.all(dim=(2, 3))  # (nY,nX)
+
+                # Prepare per-tile patch buffers for overlap-add reconstruction.
+                # Keep these float32: overlap counts are small and the final maps
+                # are float32, while float64 tile buffers can be much slower on
+                # commodity GPUs.
+                band_frac_tiles = torch.ones((nY, nX, th, tw), dtype=torch.float32, device=dev)
+                score_tiles = torch.zeros((nY, nX, th, tw), dtype=torch.float32, device=dev)
+
+                # Fast-path STAP core settings (mirror `_stap_pd_tile_lcmv_batch`).
+                use_ref_cov = os.getenv("STAP_FAST_COV_REF", "").lower() in {"1", "true", "yes", "on"}
+                pd_only = os.getenv("STAP_FAST_PD_ONLY", "").lower() in {"1", "true", "yes", "on"}
+                try:
+                    kappa_shrink = float(os.getenv("STAP_KAPPA_SHRINK", "200.0"))
+                except Exception:
+                    kappa_shrink = 200.0
+                try:
+                    kappa_msd = float(os.getenv("STAP_KAPPA_MSD", "200.0"))
+                except Exception:
+                    kappa_msd = 200.0
+
+                # Cube tile view (T,nY,th,nX,tw).
+                # Note: unfold inserts the window dimension at the end, so after unfolding
+                # height then width we permute to place `th` before `nX`.
+                with (
+                    stap_stage_ctx("stap:tiling:cube_unfold")
+                    if stap_stage_ctx is not None
+                    else nullcontext()
+                ):
+                    cube_tiles = (
+                        cube_t.unfold(1, th, stride)
+                        .unfold(2, tw, stride)
+                        .permute(0, 1, 3, 2, 4)
+                    )
+
+                # Process active tiles in flat-index chunks. This avoids materializing
+                # contiguous blocks (and copying skipped tiles) when conditional
+                # execution leaves most tiles inactive.
+                target_tiles = max(1, int(tile_batch_size))
+                B_total = int(nY * nX)
+                band_frac_flat = band_frac_tiles.view(B_total, th, tw)
+                score_flat = score_tiles.view(B_total, th, tw)
+                base_tiles_f64 = base_tiles.to(dtype=torch.float64).view(B_total, th, tw)
+                flow_tiles_flat = flow_tiles.view(B_total, th, tw) if flow_tiles is not None else None
+                bg_tiles_flat = bg_tiles.view(B_total, th, tw) if bg_tiles is not None else None
+                tile_is_bg_flat = tile_is_bg.reshape(-1) if tile_is_bg is not None else None
+                tile_has_flow_flat = tile_has_flow.reshape(-1) if tile_has_flow is not None else None
+
+                active_idx_all: torch.Tensor
+                stap_tiles_skipped_flow0 = 0
+                with (
+                    stap_stage_ctx("stap:tiling:active_index")
+                    if stap_stage_ctx is not None
+                    else nullcontext()
+                ):
+                    if conditional_enable and tile_has_flow_flat is not None:
+                        active_idx_all = tile_has_flow_flat.nonzero(as_tuple=False).flatten()
+                        stap_tiles_skipped_flow0 = int((~tile_has_flow_flat).sum().item())
+                    else:
+                        active_idx_all = torch.arange(B_total, device=dev, dtype=torch.long)
+
+                stap_fast_any = False
+                tile_infos = []
+                t_core_total = 0.0
+                t_post_total = 0.0
+
+                # Core compute + telemetry per chunk.
+                for start in range(0, int(active_idx_all.numel()), target_tiles):
+                    idx = active_idx_all[start : start + target_tiles]
+                    if idx.numel() == 0:
+                        continue
+                    y_inds = idx // int(nX)
+                    x_inds = idx % int(nX)
+
+                    t0_core = time.perf_counter()
+                    with (
+                        stap_stage_ctx("stap:tiling:gather")
+                        if stap_stage_ctx is not None
+                        else nullcontext()
+                    ):
+                        cube_active = cube_tiles[:, y_inds, :, x_inds, :]  # (B,T,th,tw) contiguous via gather
+                    with (
+                        stap_stage_ctx("stap:core")
+                        if stap_stage_ctx is not None
+                        else nullcontext()
+                    ):
+                        if pd_only:
+                            band_act, score_act, info_act = pd_temporal_core_batched(
+                                cube_active,
+                                prf_hz=prf_hz,
+                                Lt=int(Lt),
+                                diag_load=diag_load,
+                                kappa_shrink=kappa_shrink,
+                                kappa_msd=kappa_msd,
+                                cov_estimator=estimator,
+                                huber_c=huber_c,
+                                grid_step_rel=grid_step_rel,
+                                fd_span_rel=fd_span_rel,
+                                min_pts=min_pts,
+                                max_pts=max_pts,
+                                fd_min_abs_hz=fd_min_abs_hz,
+                                motion_half_span_rel=motion_half_span_rel,
+                                msd_ridge=msd_ridge,
+                                msd_agg_mode=msd_agg_mode,
+                                msd_ratio_rho=msd_ratio_rho,
+                                msd_contrast_alpha=(
+                                    msd_contrast_alpha if msd_contrast_alpha is not None else 0.0
+                                ),
+                                msd_lambda=msd_lambda,
+                                device=dev,
+                                use_ref_cov=use_ref_cov,
+                                fd_span_mode=fd_span_mode,
+                                flow_band_hz=flow_band_hz_tuple,
+                                return_torch=True,
+                            )
+                        else:
+                            band_act, score_act, info_act = stap_temporal_core_batched(
+                                cube_active,
+                                prf_hz=prf_hz,
+                                Lt=int(Lt),
+                                diag_load=diag_load,
+                                kappa_shrink=kappa_shrink,
+                                kappa_msd=kappa_msd,
+                                cov_estimator=estimator,
+                                huber_c=huber_c,
+                                grid_step_rel=grid_step_rel,
+                                fd_span_rel=fd_span_rel,
+                                min_pts=min_pts,
+                                max_pts=max_pts,
+                                fd_min_abs_hz=fd_min_abs_hz,
+                                motion_half_span_rel=motion_half_span_rel,
+                                msd_ridge=msd_ridge,
+                                msd_agg_mode=msd_agg_mode,
+                                msd_ratio_rho=msd_ratio_rho,
+                                msd_contrast_alpha=(
+                                    msd_contrast_alpha if msd_contrast_alpha is not None else 0.0
+                                ),
+                                msd_lambda=msd_lambda,
+                                device=dev,
+                                use_ref_cov=use_ref_cov,
+                                fd_span_mode=fd_span_mode,
+                                flow_band_hz=flow_band_hz_tuple,
+                                return_torch=True,
+                            )
+                    t_core_total += time.perf_counter() - t0_core
+
+                    band_used = band_act.to(dtype=torch.float32)
+                    score_used = score_act.to(dtype=torch.float32)
+
+                    # Flow-support indicator used for telemetry only.
+                    has_flow_proc_t = (
+                        tile_has_flow_flat[idx] if tile_has_flow_flat is not None else None
+                    )
+
+                    band_frac_flat[idx] = band_used
+                    score_flat[idx] = score_used
+
+                    # ---- Per-tile info augmentation (vectorized stats; written into dicts) ----
+                    t0_post = time.perf_counter()
+                    if info_act is None:
+                        t_post_total += time.perf_counter() - t0_post
+                        continue
+
+                    base_flat = base_tiles_f64[idx]
+                    pd_flat = base_flat * band_used
+                    bg_flat = bg_tiles_flat[idx] if bg_tiles_flat is not None else None
+                    if bg_flat is not None:
+                        pd_flat = torch.where(bg_flat, base_flat, pd_flat)
+
+                    if flow_tiles_flat is not None:
+                        flow_flat = flow_tiles_flat[idx]
+                        flow_count = flow_flat.sum(dim=(1, 2)).to(dtype=torch.float64)
+                        flow_cov = (flow_count / float(th * tw)).detach().cpu().numpy()
+                        flow_mask_f64 = flow_flat.to(dtype=torch.float64)
+                        base_flow_sum = (base_flat * flow_mask_f64).sum(dim=(1, 2))
+                        pd_flow_sum = (pd_flat * flow_mask_f64).sum(dim=(1, 2))
+                        mu_base = (
+                            base_flow_sum / torch.clamp(flow_count, min=1.0)
+                        ).detach().cpu().numpy()
+                        mu_stap = (pd_flow_sum / torch.clamp(flow_count, min=1.0)).detach().cpu().numpy()
+                        flow_any = (flow_count > 0.0).detach().cpu().numpy()
+                    else:
+                        flow_cov = None
+                        mu_base = None
+                        mu_stap = None
+                        flow_any = None
+
+                    if bg_flat is not None:
+                        bg_count = bg_flat.sum(dim=(1, 2)).to(dtype=torch.float64)
+                        bg_any = (bg_count > 0.0).detach().cpu().numpy()
+                        bg_mask_f = bg_flat.to(dtype=torch.float64)
+                        base_bg_sum = (base_flat * bg_mask_f).sum(dim=(1, 2))
+                        base_bg_sum2 = ((base_flat**2) * bg_mask_f).sum(dim=(1, 2))
+                        pd_bg_sum = (pd_flat * bg_mask_f).sum(dim=(1, 2))
+                        pd_bg_sum2 = ((pd_flat**2) * bg_mask_f).sum(dim=(1, 2))
+                        mean_base_bg = base_bg_sum / torch.clamp(bg_count, min=1.0)
+                        mean_pd_bg = pd_bg_sum / torch.clamp(bg_count, min=1.0)
+                        var_base_bg = (base_bg_sum2 / torch.clamp(bg_count, min=1.0)) - mean_base_bg**2
+                        var_pd_bg = (pd_bg_sum2 / torch.clamp(bg_count, min=1.0)) - mean_pd_bg**2
+                        var_base_cpu = var_base_bg.detach().cpu().numpy()
+                        var_pd_cpu = var_pd_bg.detach().cpu().numpy()
+                    else:
+                        bg_any = None
+                        var_base_cpu = None
+                        var_pd_cpu = None
+
+                    depth_full = None
+                    if H > 0:
+                        depth_full = (
+                            (y_inds.to(dtype=torch.float64) * float(stride) + 0.5 * float(th))
+                            / float(H)
+                        ).detach().cpu().numpy()
+
+                    if tile_is_bg_flat is not None:
+                        is_bg_proc = tile_is_bg_flat[idx].detach().cpu().numpy()
+                    else:
+                        is_bg_proc = None
+                    if tile_has_flow_flat is not None:
+                        has_flow_proc = has_flow_proc_t.detach().cpu().numpy() if has_flow_proc_t is not None else None
+                    else:
+                        has_flow_proc = None
+
+                    cap_scales = None
+                    cap_applied = None
+                    if (
+                        coverage_cap_enable
+                        and flow_cov is not None
+                        and guard_tile_coverage_min > 0.0
+                        and idx.numel() > 0
+                    ):
+                        flow_cov_arr = np.asarray(flow_cov, dtype=float)
+                        cap_scales = np.clip(
+                            flow_cov_arr / max(guard_tile_coverage_min, 1e-6), 0.0, 1.0
+                        )
+                        cap_applied = (
+                            (flow_cov_arr > 0.0)
+                            & (flow_cov_arr < guard_tile_coverage_min)
+                            & (cap_scales < 0.999)
+                        )
+
+                    for j, info_tile in enumerate(info_act):
+                        info_tile = dict(info_tile or {})
+                        info_tile.setdefault("stap_fast_path_used", True)
+                        info_tile["tile_has_flow"] = (
+                            bool(has_flow_proc[j]) if has_flow_proc is not None else False
+                        )
+                        info_tile["tile_is_bg"] = bool(is_bg_proc[j]) if is_bg_proc is not None else False
+                        info_tile["depth_center_frac"] = float(depth_full[j]) if depth_full is not None else None
+
+                        flow_mask_empty = False
+                        if flow_any is not None:
+                            flow_mask_empty = not bool(flow_any[j])
+                        info_tile["flow_mask_empty"] = bool(flow_mask_empty)
+                        info_tile["background_uniformized"] = bool(conditional_enable and flow_mask_empty)
+                        info_tile["subtile_background_uniformized"] = bool(
+                            (bg_tiles is not None) and (not flow_mask_empty)
+                        )
+
+                        if flow_cov is not None:
+                            info_tile["flow_coverage"] = float(flow_cov[j])
+                        if (
+                            mu_base is not None
+                            and mu_stap is not None
+                            and flow_any is not None
+                            and bool(flow_any[j])
+                        ):
+                            mu_b = float(mu_base[j])
+                            mu_s = float(mu_stap[j])
+                            info_tile["flow_mu_base"] = mu_b
+                            info_tile["flow_mu_stap"] = mu_s
+                            info_tile["flow_mu_ratio"] = mu_s / max(mu_b, 1e-12)
+                        else:
+                            info_tile.setdefault("flow_mu_ratio", None)
+
+                        if (
+                            var_base_cpu is not None
+                            and var_pd_cpu is not None
+                            and bg_any is not None
+                            and bool(bg_any[j])
+                        ):
+                            vb = float(var_base_cpu[j])
+                            vs = float(var_pd_cpu[j])
+                            info_tile["bg_var_base"] = vb
+                            info_tile["bg_var_stap"] = vs
+                            info_tile["bg_var_inflation"] = vs / max(vb, 1e-12)
+                        else:
+                            info_tile.setdefault("bg_var_inflation", None)
+
+                        if cap_scales is not None and cap_applied is not None:
+                            info_tile["band_fraction_capped"] = bool(cap_applied[j])
+                            if bool(cap_applied[j]):
+                                info_tile["band_fraction_cap_scale"] = float(cap_scales[j])
+                        tile_infos.append(info_tile)
+
+                    t_post_total += time.perf_counter() - t0_post
+
+                stap_fast_any = bool(tile_infos)
+
+                # Fold patches back to full-resolution overlap-add maps.
+                B_total = int(nY * nX)
+
+                def _fold(patches: torch.Tensor) -> torch.Tensor:
+                    cols = patches.view(B_total, th * tw).transpose(0, 1).unsqueeze(0)
+                    out = F.fold(cols, output_size=(H, W), kernel_size=(th, tw), stride=stride)
+                    return out[0, 0]
+
+                with (
+                    stap_stage_ctx("stap:tiling:fold")
+                    if stap_stage_ctx is not None
+                    else nullcontext()
+                ):
+                    base_flat_all = base_tiles.view(B_total, th, tw)
+                    band_flat_all = band_frac_tiles.view(B_total, th, tw)
+                    score_flat_all = score_tiles.view(B_total, th, tw)
+
+                    pd_patches = base_flat_all * band_flat_all
+                    if bg_tiles is not None:
+                        bg_flat_all = bg_tiles.view(B_total, th, tw)
+                        pd_patches = torch.where(bg_flat_all, base_flat_all, pd_patches)
+
+                    # Counts are independent of conditional gating (baseline fallback still adds).
+                    ones = torch.ones((B_total, th, tw), dtype=torch.float32, device=dev)
+                    counts_t = _fold(ones)
+
+                    # Score counts follow conditional gating (skipped tiles do not contribute).
+                    if conditional_enable and tile_has_flow is not None:
+                        score_active = (
+                            tile_has_flow.to(dtype=torch.float32)
+                            .view(B_total, 1, 1)
+                            .expand(B_total, th, tw)
+                        )
+                    else:
+                        score_active = ones
+                    score_counts_t = _fold(score_active)
+
+                    pd_t = _fold(pd_patches)
+                    score_t = _fold(score_flat_all)
+
+                # Bring sums and counts back to NumPy for the remainder of `_stap_pd`.
+                with (
+                    stap_stage_ctx("stap:tiling:to_cpu")
+                    if stap_stage_ctx is not None
+                    else nullcontext()
+                ):
+                    pd = pd_t.detach().cpu().numpy().astype(np.float64, copy=False)
+                    score = score_t.detach().cpu().numpy().astype(np.float64, copy=False)
+                    counts = counts_t.detach().cpu().numpy().astype(np.float64, copy=False)
+                    score_counts = score_counts_t.detach().cpu().numpy().astype(np.float64, copy=False)
+
+                t_batch_proc = t_core_total
+                t_post = t_post_total
+                t_extract = 0.0
+                used_unfold_tiling = True
+        except Exception as exc:
+            unfold_error = repr(exc)
+            used_unfold_tiling = False
+
+    if not used_unfold_tiling:
+        if torch is not None and isinstance(Icube, torch.Tensor):
+            Icube = Icube.detach().cpu().numpy()
+        for _cov_flow, y0, x0 in coords_ordered:
+            coord = (y0, x0)
+            capture_by_index = tile_counter in capture_indices
+            capture_by_coord = coord in remaining_coord_requests
+            capture_requested = capture_by_index or capture_by_coord
+
+            # Optional conditional STAP: if the tile has no flow coverage at all,
+            # we can safely fall back to the baseline PD map for this tile and
+            # skip STAP entirely. When debug capture is requested for a tile,
+            # do not skip: run the normal STAP path so debug_samples are populated.
+            if conditional_enable and mask_flow is not None:
+                flow_mask_tile = mask_flow[y0 : y0 + th, x0 : x0 + tw]
+                if not bool(flow_mask_tile.any()) and not capture_requested:
+                    base_tile = None
+                    if pd_base_full is not None:
+                        base_tile = pd_base_full[y0 : y0 + th, x0 : x0 + tw]
+                    else:
+                        t0_ext = time.perf_counter()
+                        cube_tmp = Icube[:, y0 : y0 + th, x0 : x0 + tw]
+                        t_extract += time.perf_counter() - t0_ext
+                        base_tile = np.mean(np.abs(cube_tmp) ** 2, axis=0)
+                    pd[y0 : y0 + th, x0 : x0 + tw] += base_tile
+                    counts[y0 : y0 + th, x0 : x0 + tw] += 1.0
+                    stap_tiles_skipped_flow0 += 1
+                    tile_counter += 1
+                    if tile_debug_limit is not None and tile_counter >= int(tile_debug_limit):
+                        break
+                    continue
+
+            t0_ext = time.perf_counter()
+            cube_np = np.ascontiguousarray(Icube[:, y0 : y0 + th, x0 : x0 + tw], dtype=np.complex64)
+            t_extract += time.perf_counter() - t0_ext
+            if capture_by_coord:
+                remaining_coord_requests.discard(coord)
+            tile_batch_items.append(cube_np)
+            tile_positions.append((y0, x0))
+            tile_capture_flags.append(capture_requested)
+            tile_capture_coord_flags.append(capture_by_coord)
+            tile_batch_indices.append(tile_counter)
+            tile_counter += 1
+            if tile_debug_limit is not None and tile_counter >= int(tile_debug_limit):
+                flush_batch()
+                break
+            if len(tile_batch_items) >= tile_batch_size:
+                flush_batch()
+
+        flush_batch()
 
     # Pixels with zero tile support are outside the tiling grid (typically a
     # small border when (H - th) or (W - tw) is not divisible by stride). For
@@ -7536,6 +8271,10 @@ def _stap_pd(
     info_out = {
         "fallback_count": int(sum(1 for info in tile_infos if info.get("fallback"))),
         "total_tiles": len(tile_infos),
+        "stap_unfold_tiling_enabled": bool(use_unfold_env),
+        "stap_unfold_tiling_eligible": bool(unfold_eligible),
+        "stap_unfold_tiling_used": bool(used_unfold_tiling),
+        "stap_unfold_tiling_error": unfold_error,
         "feasibility_mode": feas_mode,
         "alias_psd_select_enable": bool(alias_psd_select_enable_flag),
         "psd_alias_select_enable": bool(alias_psd_select_enable_flag),
@@ -8800,6 +9539,9 @@ def _stap_pd(
     info_out["stap_fast_forced"] = bool(
         any(info.get("stap_fast_forced", False) for info in tile_infos)
     )
+    info_out["stap_tile_statistic_used"] = bool(
+        any(info.get("stap_tile_statistic_used", False) for info in tile_infos)
+    )
     first_err = None
     for info in tile_infos:
         err = info.get("stap_fast_error")
@@ -10023,17 +10765,30 @@ def write_acceptance_bundle(
             baseline_telemetry["baseline_window_offset"] = int(window_offset)
             baseline_telemetry["baseline_window_length"] = int(window_length)
         if baseline_support_norm == "full" and slow_time_length is not None:
-            baseline_filtered_cube = np.ascontiguousarray(
-                baseline_filtered_cube_full[window_offset:window_end],
-                dtype=baseline_filtered_cube_full.dtype,
-            )
+            baseline_slice = baseline_filtered_cube_full[window_offset:window_end]
+            if torch is not None and isinstance(baseline_slice, torch.Tensor):
+                baseline_filtered_cube = baseline_slice.contiguous()
+            else:
+                baseline_filtered_cube = np.ascontiguousarray(
+                    baseline_slice, dtype=baseline_filtered_cube_full.dtype
+                )
             # Preserve the full baseline-filtered cube for telemetry (e.g.
             # whitened band-ratio) so stats reflect the full slow-time stack
             # even when output maps are windowed.
             baseline_filtered_cube_for_br = baseline_filtered_cube_full
-            pd_base = np.mean((np.abs(baseline_filtered_cube) ** 2).astype(np.float32), axis=0).astype(
-                np.float32, copy=False
-            )
+            if torch is not None and isinstance(baseline_filtered_cube, torch.Tensor):
+                pd_base = (
+                    (baseline_filtered_cube.abs() ** 2)
+                    .mean(dim=0)
+                    .detach()
+                    .cpu()
+                    .numpy()
+                    .astype(np.float32, copy=False)
+                )
+            else:
+                pd_base = np.mean((np.abs(baseline_filtered_cube) ** 2).astype(np.float32), axis=0).astype(
+                    np.float32, copy=False
+                )
             baseline_telemetry["baseline_pd_support"] = "window"
         else:
             baseline_filtered_cube = baseline_filtered_cube_full
@@ -10337,7 +11092,7 @@ def write_acceptance_bundle(
         }
         baseline_filtered_cube = None
     else:
-        t_stap_start = time.time()
+        t_stap_start = time.perf_counter()
         # STAP operates on the baseline-filtered residual cube when available
         # (MC-SVD baseline). This is the intended pipeline: baseline clutter
         # suppression -> STAP on residual. For other baselines where we do not
@@ -10393,7 +11148,7 @@ def write_acceptance_bundle(
             tile_debug_limit=tile_debug_limit,
         )
         stap_info["stap_input_source"] = stap_input_source
-        stap_info["stap_ms"] = float(1000.0 * (time.time() - t_stap_start))
+        stap_info["stap_ms"] = float(1000.0 * (time.perf_counter() - t_stap_start))
         baseline_filtered_cube = None
         gate_mask_flow = stap_info.pop("_gate_mask_flow", None)
         gate_mask_bg = stap_info.pop("_gate_mask_bg", None)
@@ -11882,6 +12637,8 @@ def _collect_band_ratio_from_cube(
       - "mean": coherent tile-mean series, then PSD.
       - "incoherent": average per-pixel PSD power over the tile (vectorized).
     """
+    if torch is not None and isinstance(cube_T_hw, torch.Tensor):
+        cube_T_hw = cube_T_hw.detach().cpu().numpy()
     tile_mode_norm = (tile_mode or "mean").strip().lower()
     T = cube_T_hw.shape[0]
     th, tw = tile_hw
