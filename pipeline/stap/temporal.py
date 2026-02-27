@@ -4006,13 +4006,18 @@ def _tyler_covariance_batched(
         # Keep the init strictly PD to avoid hard failures on the first Cholesky.
         mu = torch.real(torch.diagonal(R, dim1=1, dim2=2)).mean(dim=1).clamp_min(eps)
         R = R + (eps * mu).view(B, 1, 1) * eye_B
+    # Reusable buffers to reduce per-iteration allocations.
+    R_new = torch.empty_like(R)
+    diff = torch.empty_like(R)
     with _prof_ctx("stap:covariance:tyler"):
         for _ in range(max_iter):
             # Numerical hygiene: enforce Hermitian symmetry before factorization.
             # On CUDA, small non-Hermitian drift can lead to `cholesky_ex` failures
             # and NaNs downstream (especially for short ensembles like T=17, Lt=16).
             with _prof_ctx("stap:covariance:tyler:herm"):
-                R = 0.5 * (R + R.conj().transpose(-2, -1))
+                torch.add(R, R.conj().transpose(-2, -1), out=R_new)
+                R_new.mul_(0.5)
+                R, R_new = R_new, R
             with _prof_ctx("stap:covariance:tyler:chol"):
                 try:
                     # Fast path: avoid per-iteration host synchronization on the
@@ -4052,9 +4057,8 @@ def _tyler_covariance_batched(
                 # extra full-tensor copy each iteration).
                 torch.mul(S_flat, w.unsqueeze(1), out=Xw)
             with _prof_ctx("stap:covariance:tyler:update"):
-                R_new = torch.matmul(Xw, Xw.conj().transpose(-2, -1)) / float(P)
-            with _prof_ctx("stap:covariance:tyler:herm"):
-                R_new = 0.5 * (R_new + R_new.conj().transpose(-2, -1))
+                torch.bmm(Xw, Xw.conj().transpose(-2, -1), out=R_new)
+                R_new.mul_(1.0 / float(P))
             # Trace normalization (Tyler is scale-invariant): enforce Tr(R)=Lt.
             #
             # IMPORTANT: compute the trace in float64 and avoid an overly-large
@@ -4067,12 +4071,12 @@ def _tyler_covariance_batched(
                 tr64 = torch.where(torch.isfinite(tr64), tr64, torch.zeros_like(tr64))
                 tr64 = torch.clamp(tr64, min=1e-30)
                 scale = (float(Lt) / tr64).to(dtype=torch.float32).view(B, 1, 1)
-                R_new = R_new * scale.to(dtype=R_new.dtype)
+                R_new.mul_(scale.to(dtype=R_new.dtype))
             if early_stop:
                 # Convergence check (relative Frobenius change), matching the
                 # scalar criterion used by the reference per-tile Tyler solver.
                 with _prof_ctx("stap:covariance:tyler:conv"):
-                    diff = R_new - R
+                    torch.sub(R_new, R, out=diff)
                     diff_ri = torch.view_as_real(diff)  # (B,Lt,Lt,2)
                     num = torch.sum(diff_ri * diff_ri, dim=(1, 2, 3)).sqrt()
                     R_ri = torch.view_as_real(R)
@@ -4081,7 +4085,7 @@ def _tyler_covariance_batched(
                     if float(rel.max()) < tol:
                         R = R_new
                         break
-            R = R_new
+            R, R_new = R_new, R
     return R
 
 
