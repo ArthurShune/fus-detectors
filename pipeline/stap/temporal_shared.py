@@ -78,7 +78,10 @@ def build_temporal_hankels_batch(
         stride = 1
     if stride < 1:
         stride = 1
-    if stride > 1 and S.shape[2] > 1:
+    # Only apply striding when it still leaves at least two Hankel columns.
+    # This avoids accidentally collapsing very short ensembles (e.g., T=17, Lt=16 -> N=2)
+    # down to N=1, which can destabilize covariance estimation and regress ROC.
+    if stride > 1 and int(S.shape[2]) > int(stride):
         S = S[:, :, ::stride, :, :].contiguous()
     try:
         max_snaps = int(max_env) if max_env else None

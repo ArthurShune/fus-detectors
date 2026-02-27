@@ -266,6 +266,24 @@ def main() -> None:
         help="STAP_MAX_SNAPSHOTS (training support cap after striding) (default: %(default)s).",
     )
     ap.add_argument(
+        "--tyler-tol",
+        type=float,
+        default=None,
+        help="Optional STAP_TYLER_TOL override for latency sweeps (default: unset; uses implementation default).",
+    )
+    ap.add_argument(
+        "--tyler-max-iter",
+        type=int,
+        default=None,
+        help="Optional STAP_TYLER_MAX_ITER override for latency sweeps (default: unset; uses implementation default).",
+    )
+    ap.add_argument(
+        "--tyler-early-stop",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Control STAP_TYLER_EARLY_STOP (default: %(default)s).",
+    )
+    ap.add_argument(
         "--stap-device",
         type=str,
         default=None,
@@ -292,12 +310,24 @@ def main() -> None:
         help="MC-SVD baseline energy fraction removed (default: %(default)s).",
     )
     ap.add_argument("--rpca-max-iters", type=int, default=250)
+    ap.add_argument(
+        "--run-rpca",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Whether to run RPCA baseline bundles (default: %(default)s).",
+    )
     ap.add_argument("--hosvd-spatial-downsample", type=int, default=2)
     ap.add_argument(
         "--hosvd-energy-fracs",
         type=str,
         default="0.99,0.99,0.99",
         help="HOSVD energy fracs as 'fT,fH,fW' (default: %(default)s).",
+    )
+    ap.add_argument(
+        "--run-hosvd",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Whether to run HOSVD baseline bundles (default: %(default)s).",
     )
     ap.add_argument(
         "--alphas",
@@ -336,6 +366,12 @@ def main() -> None:
         default=False,
         help="Union the pd_auto flow mask with the generic default mask (default: %(default)s).",
     )
+    ap.add_argument(
+        "--run-stap-raw",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Whether to run the STAP-only (raw IQ) bundle (default: %(default)s).",
+    )
     args = ap.parse_args()
 
     # Performance knobs (used heavily in the repo's replay harnesses).
@@ -351,6 +387,18 @@ def main() -> None:
     os.environ["STAP_MAX_SNAPSHOTS"] = str(max(1, int(args.max_snapshots)))
     os.environ["STAP_KAPPA_SHRINK"] = str(float(args.kappa_shrink))
     os.environ["STAP_KAPPA_MSD"] = str(float(args.kappa_msd))
+    if args.tyler_tol is not None:
+        os.environ["STAP_TYLER_TOL"] = str(float(args.tyler_tol))
+    else:
+        os.environ.pop("STAP_TYLER_TOL", None)
+    if args.tyler_max_iter is not None:
+        os.environ["STAP_TYLER_MAX_ITER"] = str(int(args.tyler_max_iter))
+    else:
+        os.environ.pop("STAP_TYLER_MAX_ITER", None)
+    if bool(args.tyler_early_stop):
+        os.environ.pop("STAP_TYLER_EARLY_STOP", None)
+    else:
+        os.environ["STAP_TYLER_EARLY_STOP"] = "0"
 
     info = load_shin_metadata(args.data_root)
     flow_low_hz, flow_high_hz, alias_center_hz, alias_hw_hz = _profile_to_bands(str(args.profile))
@@ -473,7 +521,7 @@ def main() -> None:
             )
             stap_raw_dir = out_root / dataset_name_stap_raw
             stap_raw_meta_path = stap_raw_dir / "meta.json"
-            if not (bool(args.resume) and stap_raw_meta_path.is_file()):
+            if bool(args.run_stap_raw) and not (bool(args.resume) and stap_raw_meta_path.is_file()):
                 write_acceptance_bundle_from_icube(
                     out_root=out_root,
                     dataset_name=dataset_name_stap_raw,
@@ -503,89 +551,99 @@ def main() -> None:
                     meta_extra=dict(common_meta_extra),
                 )
 
-            # 2) RPCA baseline bundle (baseline only; masks overridden to match MC-SVD proxy)
-            dataset_name_rpca = (
-                f"shin_{iq_path.stem}_{frame_tag}_p{str(args.profile)}_Lt{int(args.lt)}_rpca_stapoff"
-            )
-            rpca_dir = out_root / dataset_name_rpca
-            rpca_meta_path = rpca_dir / "meta.json"
-            if not (bool(args.resume) and rpca_meta_path.is_file()):
-                write_acceptance_bundle_from_icube(
-                    out_root=out_root,
-                    dataset_name=dataset_name_rpca,
-                    Icube=Icube,
-                    prf_hz=float(args.prf_hz),
-                    tile_hw=(th, tw),
-                    tile_stride=int(args.tile_stride),
-                    Lt=int(args.lt),
-                    diag_load=float(args.diag_load),
-                    cov_estimator=str(args.cov_estimator),
-                    baseline_type="rpca",
-                    rpca_max_iters=int(args.rpca_max_iters),
-                    reg_enable=bool(args.reg_enable),
-                    reg_subpixel=int(args.reg_subpixel),
-                    reg_reference=str(args.reg_reference),
-                    run_stap=False,
-                    stap_device=args.stap_device,
-                    stap_conditional_enable=bool(args.stap_conditional_enable),
-                    score_mode="pd",
-                    score_ka_v2_enable=False,
-	                    band_ratio_flow_low_hz=float(flow_low_hz),
-	                    band_ratio_flow_high_hz=float(flow_high_hz),
-	                    band_ratio_alias_center_hz=float(alias_center_hz),
-	                    band_ratio_alias_width_hz=float(alias_hw_hz),
-	                    mask_flow_override=mask_flow,
-	                    mask_bg_override=mask_bg,
-	                    flow_mask_union_default=bool(args.flow_mask_union_default),
-	                    meta_extra=dict(common_meta_extra),
-	                )
+            # 2) Optional RPCA baseline bundle (baseline only; masks overridden to match MC-SVD proxy)
+            rpca_dir: Path | None = None
+            if bool(args.run_rpca):
+                dataset_name_rpca = (
+                    f"shin_{iq_path.stem}_{frame_tag}_p{str(args.profile)}_Lt{int(args.lt)}_rpca_stapoff"
+                )
+                rpca_dir = out_root / dataset_name_rpca
+                rpca_meta_path = rpca_dir / "meta.json"
+                if not (bool(args.resume) and rpca_meta_path.is_file()):
+                    write_acceptance_bundle_from_icube(
+                        out_root=out_root,
+                        dataset_name=dataset_name_rpca,
+                        Icube=Icube,
+                        prf_hz=float(args.prf_hz),
+                        tile_hw=(th, tw),
+                        tile_stride=int(args.tile_stride),
+                        Lt=int(args.lt),
+                        diag_load=float(args.diag_load),
+                        cov_estimator=str(args.cov_estimator),
+                        baseline_type="rpca",
+                        rpca_max_iters=int(args.rpca_max_iters),
+                        reg_enable=bool(args.reg_enable),
+                        reg_subpixel=int(args.reg_subpixel),
+                        reg_reference=str(args.reg_reference),
+                        run_stap=False,
+                        stap_device=args.stap_device,
+                        stap_conditional_enable=bool(args.stap_conditional_enable),
+                        score_mode="pd",
+                        score_ka_v2_enable=False,
+                        band_ratio_flow_low_hz=float(flow_low_hz),
+                        band_ratio_flow_high_hz=float(flow_high_hz),
+                        band_ratio_alias_center_hz=float(alias_center_hz),
+                        band_ratio_alias_width_hz=float(alias_hw_hz),
+                        mask_flow_override=mask_flow,
+                        mask_bg_override=mask_bg,
+                        flow_mask_union_default=bool(args.flow_mask_union_default),
+                        meta_extra=dict(common_meta_extra),
+                    )
 
-            # 3) HOSVD baseline bundle (baseline only; masks overridden)
-            dataset_name_hosvd = (
-                f"shin_{iq_path.stem}_{frame_tag}_p{str(args.profile)}_Lt{int(args.lt)}_hosvd_stapoff"
-            )
-            hosvd_dir = out_root / dataset_name_hosvd
-            hosvd_meta_path = hosvd_dir / "meta.json"
-            if not (bool(args.resume) and hosvd_meta_path.is_file()):
-                write_acceptance_bundle_from_icube(
-                    out_root=out_root,
-                    dataset_name=dataset_name_hosvd,
-                    Icube=Icube,
-                    prf_hz=float(args.prf_hz),
-                    tile_hw=(th, tw),
-                    tile_stride=int(args.tile_stride),
-                    Lt=int(args.lt),
-                    diag_load=float(args.diag_load),
-                    cov_estimator=str(args.cov_estimator),
-                    baseline_type="hosvd",
-                    hosvd_energy_fracs=hosvd_energy_fracs,
-                    hosvd_spatial_downsample=int(args.hosvd_spatial_downsample),
-                    reg_enable=bool(args.reg_enable),
-                    reg_subpixel=int(args.reg_subpixel),
-                    reg_reference=str(args.reg_reference),
-                    run_stap=False,
-                    stap_device=args.stap_device,
-                    stap_conditional_enable=bool(args.stap_conditional_enable),
-                    score_mode="pd",
-                    score_ka_v2_enable=False,
-	                    band_ratio_flow_low_hz=float(flow_low_hz),
-	                    band_ratio_flow_high_hz=float(flow_high_hz),
-	                    band_ratio_alias_center_hz=float(alias_center_hz),
-	                    band_ratio_alias_width_hz=float(alias_hw_hz),
-	                    mask_flow_override=mask_flow,
-	                    mask_bg_override=mask_bg,
-	                    flow_mask_union_default=bool(args.flow_mask_union_default),
-	                    meta_extra=dict(common_meta_extra),
-	                )
+            # 3) Optional HOSVD baseline bundle (baseline only; masks overridden)
+            hosvd_dir: Path | None = None
+            if bool(args.run_hosvd):
+                dataset_name_hosvd = (
+                    f"shin_{iq_path.stem}_{frame_tag}_p{str(args.profile)}_Lt{int(args.lt)}_hosvd_stapoff"
+                )
+                hosvd_dir = out_root / dataset_name_hosvd
+                hosvd_meta_path = hosvd_dir / "meta.json"
+                if not (bool(args.resume) and hosvd_meta_path.is_file()):
+                    write_acceptance_bundle_from_icube(
+                        out_root=out_root,
+                        dataset_name=dataset_name_hosvd,
+                        Icube=Icube,
+                        prf_hz=float(args.prf_hz),
+                        tile_hw=(th, tw),
+                        tile_stride=int(args.tile_stride),
+                        Lt=int(args.lt),
+                        diag_load=float(args.diag_load),
+                        cov_estimator=str(args.cov_estimator),
+                        baseline_type="hosvd",
+                        hosvd_energy_fracs=hosvd_energy_fracs,
+                        hosvd_spatial_downsample=int(args.hosvd_spatial_downsample),
+                        reg_enable=bool(args.reg_enable),
+                        reg_subpixel=int(args.reg_subpixel),
+                        reg_reference=str(args.reg_reference),
+                        run_stap=False,
+                        stap_device=args.stap_device,
+                        stap_conditional_enable=bool(args.stap_conditional_enable),
+                        score_mode="pd",
+                        score_ka_v2_enable=False,
+                        band_ratio_flow_low_hz=float(flow_low_hz),
+                        band_ratio_flow_high_hz=float(flow_high_hz),
+                        band_ratio_alias_center_hz=float(alias_center_hz),
+                        band_ratio_alias_width_hz=float(alias_hw_hz),
+                        mask_flow_override=mask_flow,
+                        mask_bg_override=mask_bg,
+                        flow_mask_union_default=bool(args.flow_mask_union_default),
+                        meta_extra=dict(common_meta_extra),
+                    )
 
             # ---- Metrics ----
             # Common proxy masks come from MC-SVD baseline (flow mask derived from baseline PD).
             # Baselines use score_base = baseline PD score (right-tail). STAP uses score_stap_preka.
             score_mcsvd = _load_npy(stap_dir / "score_base.npy")
             score_stap = _load_npy(stap_dir / "score_stap_preka.npy")
-            score_stap_raw = _load_npy(stap_raw_dir / "score_stap_preka.npy")
-            score_rpca = _load_npy(rpca_dir / "score_base.npy")
-            score_hosvd = _load_npy(hosvd_dir / "score_base.npy")
+            score_stap_raw = None
+            if bool(args.run_stap_raw):
+                score_stap_raw = _load_npy(stap_raw_dir / "score_stap_preka.npy")
+            score_rpca = None
+            if rpca_dir is not None:
+                score_rpca = _load_npy(rpca_dir / "score_base.npy")
+            score_hosvd = None
+            if hosvd_dir is not None:
+                score_hosvd = _load_npy(hosvd_dir / "score_base.npy")
 
             # Meta runtimes (best effort).
             def _load_ms(bundle_dir: Path) -> tuple[float | None, float | None]:
@@ -607,9 +665,16 @@ def main() -> None:
                 return baseline_ms, stap_total_ms
 
             ms_mcsvd, ms_stap_total = _load_ms(stap_dir)
-            ms_raw, ms_stap_raw_total = _load_ms(stap_raw_dir)
-            ms_rpca, _ = _load_ms(rpca_dir)
-            ms_hosvd, _ = _load_ms(hosvd_dir)
+            ms_raw = None
+            ms_stap_raw_total = None
+            if bool(args.run_stap_raw):
+                ms_raw, ms_stap_raw_total = _load_ms(stap_raw_dir)
+            ms_rpca = None
+            if rpca_dir is not None:
+                ms_rpca, _ = _load_ms(rpca_dir)
+            ms_hosvd = None
+            if hosvd_dir is not None:
+                ms_hosvd, _ = _load_ms(hosvd_dir)
 
             common_fields = {
                 "iq_file": iq_file,
@@ -627,18 +692,29 @@ def main() -> None:
                 "hosvd_spatial_downsample": int(args.hosvd_spatial_downsample),
                 "hosvd_energy_fracs": ef_spec,
                 "bundle_dir_stap": str(stap_dir),
-                "bundle_dir_stap_raw": str(stap_raw_dir),
-                "bundle_dir_rpca": str(rpca_dir),
-                "bundle_dir_hosvd": str(hosvd_dir),
+                "bundle_dir_stap_raw": str(stap_raw_dir) if bool(args.run_stap_raw) else None,
+                "bundle_dir_rpca": str(rpca_dir) if rpca_dir is not None else None,
+                "bundle_dir_hosvd": str(hosvd_dir) if hosvd_dir is not None else None,
+                "tyler_tol": float(args.tyler_tol) if args.tyler_tol is not None else None,
+                "tyler_max_iter": int(args.tyler_max_iter) if args.tyler_max_iter is not None else None,
+                "tyler_early_stop": bool(args.tyler_early_stop),
+                "snapshot_stride": int(args.snapshot_stride),
+                "max_snapshots": int(args.max_snapshots),
             }
 
-            methods = [
+            methods: list[tuple[str, str, np.ndarray, float | None, float | None]] = [
                 ("mc_svd", "MC-SVD (baseline PD)", score_mcsvd, ms_mcsvd, None),
-                ("rpca", "RPCA (baseline PD)", score_rpca, ms_rpca, None),
-                ("hosvd", "HOSVD (baseline PD)", score_hosvd, ms_hosvd, None),
                 ("stap", "STAP (matched-subspace)", score_stap, ms_mcsvd, ms_stap_total),
-                ("stap_raw", "STAP-only (matched-subspace; raw IQ)", score_stap_raw, ms_raw, ms_stap_raw_total),
             ]
+            if score_rpca is not None:
+                methods.insert(1, ("rpca", "RPCA (baseline PD)", score_rpca, ms_rpca, None))
+            if score_hosvd is not None:
+                insert_idx = 2 if score_rpca is not None else 1
+                methods.insert(insert_idx, ("hosvd", "HOSVD (baseline PD)", score_hosvd, ms_hosvd, None))
+            if score_stap_raw is not None:
+                methods.append(
+                    ("stap_raw", "STAP-only (matched-subspace; raw IQ)", score_stap_raw, ms_raw, ms_stap_raw_total)
+                )
 
             for key, label, score_map, baseline_ms, stap_total_ms in methods:
                 auc = _auc_pos_vs_neg(score_map[mask_flow], score_map[mask_bg])
