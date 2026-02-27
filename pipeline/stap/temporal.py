@@ -4011,7 +4011,8 @@ def _tyler_covariance_batched(
             # Numerical hygiene: enforce Hermitian symmetry before factorization.
             # On CUDA, small non-Hermitian drift can lead to `cholesky_ex` failures
             # and NaNs downstream (especially for short ensembles like T=17, Lt=16).
-            R = 0.5 * (R + R.conj().transpose(-2, -1))
+            with _prof_ctx("stap:covariance:tyler:herm"):
+                R = 0.5 * (R + R.conj().transpose(-2, -1))
             with _prof_ctx("stap:covariance:tyler:chol"):
                 try:
                     # Fast path: avoid per-iteration host synchronization on the
@@ -4036,18 +4037,24 @@ def _tyler_covariance_batched(
                 if solve_mode == "inv_gemm":
                     # L^{-1} X via explicit triangular inverse + GEMM.
                     Linv = torch.linalg.solve_triangular(L, eye_expand, upper=False)
-                    Y = torch.bmm(Linv, S_flat)
+                    torch.bmm(Linv, S_flat, out=Xw)
+                    Y = Xw
                 else:
                     # L^{-1} X via batched TRSM.
                     Y = torch.linalg.solve_triangular(L, S_flat, upper=False)
-            q = torch.sum(torch.conj(Y) * Y, dim=1).real.clamp_min(eps)  # (B, P)
-            w = (float(Lt) / q).clamp_max(1e6)
-            # Single-pass weighting into the preallocated buffer (avoids an
-            # extra full-tensor copy each iteration).
-            torch.mul(S_flat, w.unsqueeze(1), out=Xw)
+            with _prof_ctx("stap:covariance:tyler:weights"):
+                # q_p = ||L^{-1} x_p||^2 (per snapshot), but compute it without
+                # complex multiply to reduce kernel time.
+                Y_ri = torch.view_as_real(Y)  # (B,Lt,P,2)
+                q = torch.sum(Y_ri * Y_ri, dim=(1, 3)).clamp_min(eps)  # (B,P)
+                w = (float(Lt) / q).clamp_max(1e6)
+                # Single-pass weighting into the preallocated buffer (avoids an
+                # extra full-tensor copy each iteration).
+                torch.mul(S_flat, w.unsqueeze(1), out=Xw)
             with _prof_ctx("stap:covariance:tyler:update"):
                 R_new = torch.matmul(Xw, Xw.conj().transpose(-2, -1)) / float(P)
-            R_new = 0.5 * (R_new + R_new.conj().transpose(-2, -1))
+            with _prof_ctx("stap:covariance:tyler:herm"):
+                R_new = 0.5 * (R_new + R_new.conj().transpose(-2, -1))
             # Trace normalization (Tyler is scale-invariant): enforce Tr(R)=Lt.
             #
             # IMPORTANT: compute the trace in float64 and avoid an overly-large
@@ -4055,21 +4062,25 @@ def _tyler_covariance_batched(
             # baseline filtering) can produce extremely small intermediate traces
             # in float32, and clamping to `eps=1e-8` prevents proper normalization
             # (leading to near-zero covariances and downstream score regressions).
-            tr64 = torch.real(torch.diagonal(R_new, dim1=1, dim2=2).sum(dim=1)).to(torch.float64)
-            tr64 = torch.where(torch.isfinite(tr64), tr64, torch.zeros_like(tr64))
-            tr64 = torch.clamp(tr64, min=1e-30)
-            scale = (float(Lt) / tr64).to(dtype=torch.float32).view(B, 1, 1)
-            R_new = R_new * scale.to(dtype=R_new.dtype)
+            with _prof_ctx("stap:covariance:tyler:trace"):
+                tr64 = torch.real(torch.diagonal(R_new, dim1=1, dim2=2).sum(dim=1)).to(torch.float64)
+                tr64 = torch.where(torch.isfinite(tr64), tr64, torch.zeros_like(tr64))
+                tr64 = torch.clamp(tr64, min=1e-30)
+                scale = (float(Lt) / tr64).to(dtype=torch.float32).view(B, 1, 1)
+                R_new = R_new * scale.to(dtype=R_new.dtype)
             if early_stop:
                 # Convergence check (relative Frobenius change), matching the
                 # scalar criterion used by the reference per-tile Tyler solver.
-                diff = R_new - R
-                num = torch.sum((diff.conj() * diff).real, dim=(1, 2)).sqrt()
-                den = torch.sum((R.conj() * R).real, dim=(1, 2)).sqrt().clamp_min(1e-12)
-                rel = num / den
-                if float(rel.max()) < tol:
-                    R = R_new
-                    break
+                with _prof_ctx("stap:covariance:tyler:conv"):
+                    diff = R_new - R
+                    diff_ri = torch.view_as_real(diff)  # (B,Lt,Lt,2)
+                    num = torch.sum(diff_ri * diff_ri, dim=(1, 2, 3)).sqrt()
+                    R_ri = torch.view_as_real(R)
+                    den = torch.sum(R_ri * R_ri, dim=(1, 2, 3)).sqrt().clamp_min(1e-12)
+                    rel = num / den
+                    if float(rel.max()) < tol:
+                        R = R_new
+                        break
             R = R_new
     return R
 
