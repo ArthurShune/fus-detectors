@@ -3279,7 +3279,31 @@ def _band_energy_whitened_batched(
     # so downstream score maps remain bitwise-comparable across latency work.
     S_flat = S.permute(0, 1, 3, 4, 2).contiguous().view(Bsz, Lt_dim, -1)
     with _prof_ctx("stap:band_energy:whiten_snapshots"):
-        Sw = torch.linalg.solve_triangular(L, S_flat, upper=False)
+        # Whiten strategy for L^{-1} X (X is very wide when P=N*h*w is large).
+        #
+        # - direct: batched TRSM on the full RHS (L^{-1} X).
+        # - inv_gemm: compute L^{-1} once using TRSM on I (small RHS), then GEMM.
+        #
+        # For large Lt and wide RHS on CUDA, inv+GEMM is often faster.
+        solve_mode_env = os.getenv("STAP_BAND_SOLVE_MODE", "").strip().lower()
+        if not solve_mode_env or solve_mode_env == "auto":
+            use_inv_gemm = bool(S_flat.is_cuda) and int(Lt_dim) >= 32 and int(S_flat.shape[-1]) >= 2 * int(Lt_dim)
+            solve_mode = "inv_gemm" if use_inv_gemm else "direct"
+        elif solve_mode_env in {"direct", "trsm", "solve", "triangular"}:
+            solve_mode = "direct"
+        elif solve_mode_env in {"inv", "invgemm", "inv_gemm", "gemm", "matmul"}:
+            solve_mode = "inv_gemm"
+        else:
+            raise ValueError(
+                f"Unknown STAP_BAND_SOLVE_MODE='{solve_mode_env}'. Expected auto|direct|inv_gemm."
+            )
+        if solve_mode == "inv_gemm":
+            eye_lt = torch.eye(Lt_dim, dtype=work_dtype, device=device)
+            eye_expand = eye_lt.expand(Bsz, Lt_dim, Lt_dim)
+            Linv = torch.linalg.solve_triangular(L, eye_expand, upper=False)
+            Sw = torch.bmm(Linv, S_flat)
+        else:
+            Sw = torch.linalg.solve_triangular(L, S_flat, upper=False)
 
     # Whiten constraints: expand Ct across batch
     Ct_exp = Ct.unsqueeze(0).expand(Bsz, -1, -1)  # (B,Lt,K)
