@@ -4022,6 +4022,39 @@ def _tyler_covariance_batched(
     # Reusable buffers to reduce per-iteration allocations.
     R_new = torch.empty_like(R)
     diff = torch.empty_like(R)
+    # Optional Triton fusion for the Tyler weights + snapshot scaling stage.
+    # Enabled by default on CUDA when Triton is available; can be disabled via:
+    #   STAP_TYLER_TRITON_WEIGHTS=0
+    triton_weights_env = os.getenv("STAP_TYLER_TRITON_WEIGHTS", "").strip().lower()
+    if triton_weights_env in {"0", "false", "no", "off"}:
+        use_triton_weights = False
+    elif triton_weights_env in {"1", "true", "yes", "on"}:
+        # Force-enable (for experiments).
+        use_triton_weights = True
+    else:
+        # Auto: only enable for larger Lt regimes where weights is a clear hotspot.
+        # For small Lt (e.g., Brain-* Lt=8), the Triton path can regress end-to-end
+        # wall time due to launch/dispatch overhead dominating the relatively small
+        # weights workload.
+        use_triton_weights = int(Lt) >= 32
+    use_triton_weights = bool(S_flat.is_cuda) and S_flat.dtype == torch.complex64 and use_triton_weights
+    tyler_weights_triton = None
+    tyler_weights_triton_cfg = None
+    if use_triton_weights:
+        try:
+            from pipeline.stap.triton_ops import (
+                TylerWeightsConfig,
+                triton_available as _triton_available,
+                tyler_weights_scale_triton,
+            )
+
+            if _triton_available():
+                tyler_weights_triton = tyler_weights_scale_triton
+                tyler_weights_triton_cfg = TylerWeightsConfig()
+            else:
+                use_triton_weights = False
+        except Exception:
+            use_triton_weights = False
     with _prof_ctx("stap:covariance:tyler"):
         tol2 = float(tol) * float(tol)
         for it in range(max_iter):
@@ -4064,12 +4097,27 @@ def _tyler_covariance_batched(
             with _prof_ctx("stap:covariance:tyler:weights"):
                 # q_p = ||L^{-1} x_p||^2 (per snapshot), but compute it without
                 # complex multiply to reduce kernel time.
-                Y_ri = torch.view_as_real(Y)  # (B,Lt,P,2)
-                q = torch.sum(Y_ri * Y_ri, dim=(1, 3)).clamp_min(eps)  # (B,P)
-                w = (float(Lt) / q).clamp_max(1e6)
-                # Single-pass weighting into the preallocated buffer (avoids an
-                # extra full-tensor copy each iteration).
-                torch.mul(S_flat, w.unsqueeze(1), out=Xw)
+                if use_triton_weights and tyler_weights_triton is not None and tyler_weights_triton_cfg is not None:
+                    try:
+                        tyler_weights_triton(
+                            Y,
+                            S_flat,
+                            Xw,
+                            Lt=int(Lt),
+                            eps=float(eps),
+                            cfg=tyler_weights_triton_cfg,
+                        )
+                    except Exception:
+                        # Safety: fall back to the torch implementation if the
+                        # Triton kernel fails for any reason.
+                        use_triton_weights = False
+                if not use_triton_weights:
+                    Y_ri = torch.view_as_real(Y)  # (B,Lt,P,2)
+                    q = torch.sum(Y_ri * Y_ri, dim=(1, 3)).clamp_min(eps)  # (B,P)
+                    w = (float(Lt) / q).clamp_max(1e6)
+                    # Single-pass weighting into the preallocated buffer (avoids an
+                    # extra full-tensor copy each iteration).
+                    torch.mul(S_flat, w.unsqueeze(1), out=Xw)
             with _prof_ctx("stap:covariance:tyler:update"):
                 torch.bmm(Xw, Xw.conj().transpose(-2, -1), out=R_new)
                 R_new.mul_(1.0 / float(P))
