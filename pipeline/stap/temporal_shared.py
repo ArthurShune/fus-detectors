@@ -158,43 +158,119 @@ def shrinkage_alpha_for_kappa_batch(
     if kappa_target <= 1.0:
         return torch.zeros((R_B_Lt_Lt.shape[0],), device=R_B_Lt_Lt.device, dtype=torch.float32)
 
-    # Eigenvalues per tile: (B,Lt). In practice, numerical non-Hermitian drift
+    def _eig_extrema_lanczos(
+        A_B_N_N: "torch.Tensor",
+        *,
+        iters: int,
+        eps: float,
+    ) -> Tuple["torch.Tensor", "torch.Tensor"]:
+        """
+        Approximate (ev_min, ev_max) for a batch of Hermitian matrices via Lanczos.
+
+        Deterministic: uses an all-ones initial vector (no RNG / seed dependence).
+        """
+        B, N = int(A_B_N_N.shape[0]), int(A_B_N_N.shape[1])
+        m = max(1, min(int(iters), N))
+        q = torch.ones((B, N), device=A_B_N_N.device, dtype=A_B_N_N.dtype)
+        q = q / torch.linalg.norm(q, dim=1, keepdim=True).clamp_min(eps)
+        q_prev = torch.zeros_like(q)
+        beta_prev = torch.zeros((B,), device=A_B_N_N.device, dtype=torch.float32)
+
+        alphas = torch.empty((B, m), device=A_B_N_N.device, dtype=torch.float32)
+        betas = torch.empty((B, max(0, m - 1)), device=A_B_N_N.device, dtype=torch.float32)
+        for j in range(m):
+            w = torch.bmm(A_B_N_N, q.unsqueeze(-1)).squeeze(-1)
+            if j > 0:
+                w = w - beta_prev.view(B, 1).to(dtype=w.dtype) * q_prev
+            alpha_j = torch.real(torch.sum(q.conj() * w, dim=1))
+            alphas[:, j] = alpha_j.to(dtype=torch.float32)
+            w = w - alpha_j.view(B, 1).to(dtype=w.dtype) * q
+            if j < m - 1:
+                beta_j = torch.linalg.norm(w, dim=1)
+                betas[:, j] = beta_j.to(dtype=torch.float32)
+                beta_safe = beta_j.clamp_min(eps)
+                q_next = w / beta_safe.view(B, 1).to(dtype=w.dtype)
+                q_prev = q
+                q = q_next
+                beta_prev = beta_j.to(dtype=torch.float32)
+
+        T = torch.diag_embed(alphas)  # (B,m,m)
+        if m > 1:
+            idx = torch.arange(m - 1, device=T.device)
+            T[:, idx, idx + 1] = betas
+            T[:, idx + 1, idx] = betas
+        evals = torch.linalg.eigvalsh(T)
+        ev_min = evals[:, 0].to(dtype=torch.float32)
+        ev_max = evals[:, -1].to(dtype=torch.float32)
+        return ev_min, ev_max
+
+    # Eigen-extrema per tile: (B,). In practice, numerical non-Hermitian drift
     # (or near-repeated eigenvalues) can trigger non-convergence in batched
-    # eigensolvers. Hermitize and fall back to per-tile jittered solves when
-    # needed so the fast path never hard-fails.
+    # eigensolvers. Hermitize and provide a fast Lanczos mode for large Lt on CUDA.
     herm = 0.5 * (R_B_Lt_Lt + R_B_Lt_Lt.conj().transpose(-2, -1))
-    try:
-        evals = torch.linalg.eigvalsh(herm).real
-    except Exception:
-        B, Lt = herm.shape[0], herm.shape[1]
-        eye = torch.eye(Lt, device=herm.device, dtype=herm.dtype)
-        evals_list = []
-        # Jitter ladder is scaled by mu so it is roughly unitless across tiles.
-        jitter_mults = (0.0, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2)
-        for b in range(B):
-            Rb = herm[b]
-            mu_b = torch.real(torch.diagonal(Rb, dim1=-2, dim2=-1)).mean()
-            mu_b_safe = torch.clamp(mu_b, min=0.0) + 1e-12
-            evals_b = None
-            for mult in jitter_mults:
-                try:
-                    evals_b = torch.linalg.eigvalsh(Rb + (float(mult) * mu_b_safe) * eye).real
-                    break
-                except Exception:
-                    evals_b = None
-            if evals_b is None:
-                # Last resort: diagonal approximation (keeps the method defined).
-                evals_b = torch.real(torch.diagonal(Rb, dim1=-2, dim2=-1)).to(dtype=torch.float32)
-            evals_list.append(evals_b)
-        evals = torch.stack(evals_list, dim=0)
+    mode_env = os.getenv("STAP_SHRINK_EIG_MODE", "").strip().lower()
+    if not mode_env or mode_env == "auto":
+        mode = "lanczos" if herm.is_cuda and int(herm.shape[1]) >= 32 else "eigvalsh"
+    elif mode_env in {"eigvalsh", "exact"}:
+        mode = "eigvalsh"
+    elif mode_env in {"lanczos", "lanczos_minmax"}:
+        mode = "lanczos"
+    else:
+        raise ValueError(
+            f"Unknown STAP_SHRINK_EIG_MODE='{mode_env}'. Expected auto|eigvalsh|lanczos."
+        )
 
-    ev_min = evals.min(dim=1).values
-    ev_max = evals.max(dim=1).values
+    ev_min: torch.Tensor
+    ev_max: torch.Tensor
+    if mode == "lanczos":
+        iters_env = os.getenv("STAP_SHRINK_LANCZOS_ITERS", "").strip()
+        try:
+            iters = int(iters_env) if iters_env else 16
+        except Exception:
+            iters = 16
+        iters = max(2, int(iters))
+        eps = float(os.getenv("STAP_SHRINK_LANCZOS_EPS", "").strip() or 1e-12)
+        ev_min, ev_max = _eig_extrema_lanczos(herm, iters=iters, eps=eps)
+        # Trace/Lt is equal to mean(eigs) for Hermitian matrices; clamp to keep
+        # the shrinkage defined even if tiny numerical negatives are present.
+        mu = torch.real(torch.diagonal(herm, dim1=-2, dim2=-1)).mean(dim=1).to(dtype=torch.float32)
+        mu = torch.clamp(mu, min=0.0)
+        e_min = torch.clamp(ev_min, min=0.0)
+        e_max = torch.clamp(ev_max, min=0.0)
+    else:
+        try:
+            evals = torch.linalg.eigvalsh(herm).real
+        except Exception:
+            B, Lt = herm.shape[0], herm.shape[1]
+            eye = torch.eye(Lt, device=herm.device, dtype=herm.dtype)
+            evals_list = []
+            # Jitter ladder is scaled by mu so it is roughly unitless across tiles.
+            jitter_mults = (0.0, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2)
+            for b in range(B):
+                Rb = herm[b]
+                mu_b = torch.real(torch.diagonal(Rb, dim1=-2, dim2=-1)).mean()
+                mu_b_safe = torch.clamp(mu_b, min=0.0) + 1e-12
+                evals_b = None
+                for mult in jitter_mults:
+                    try:
+                        evals_b = torch.linalg.eigvalsh(Rb + (float(mult) * mu_b_safe) * eye).real
+                        break
+                    except Exception:
+                        evals_b = None
+                if evals_b is None:
+                    # Last resort: diagonal approximation (keeps the method defined).
+                    evals_b = torch.real(torch.diagonal(Rb, dim1=-2, dim2=-1)).to(dtype=torch.float32)
+                evals_list.append(evals_b)
+            evals = torch.stack(evals_list, dim=0)
 
-    evals_clamped = torch.clamp(evals, min=0.0)
-    mu = evals_clamped.mean(dim=1)
-    e_min = evals_clamped.min(dim=1).values
-    e_max = evals_clamped.max(dim=1).values
+        ev_min = evals.min(dim=1).values.to(dtype=torch.float32)
+        ev_max = evals.max(dim=1).values.to(dtype=torch.float32)
+
+        evals_clamped = torch.clamp(evals, min=0.0)
+        mu = evals_clamped.mean(dim=1).to(dtype=torch.float32)
+        e_min = evals_clamped.min(dim=1).values.to(dtype=torch.float32)
+        e_max = evals_clamped.max(dim=1).values.to(dtype=torch.float32)
+
     num = e_max - float(kappa_target) * e_min
     den = (float(kappa_target) - 1.0) * mu + (e_max - float(kappa_target) * e_min)
     alpha = torch.where(den > 0.0, num / den, torch.zeros_like(den))

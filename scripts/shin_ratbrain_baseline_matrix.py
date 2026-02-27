@@ -275,7 +275,10 @@ def main() -> None:
         "--tyler-max-iter",
         type=int,
         default=None,
-        help="Optional STAP_TYLER_MAX_ITER override for latency sweeps (default: unset; uses implementation default).",
+        help=(
+            "Optional STAP_TYLER_MAX_ITER override for latency sweeps (default: unset; uses implementation default). "
+            "WARNING: hard-capping Tyler iterations is known to regress strict-tail metrics (Shin/Gammex)."
+        ),
     )
     ap.add_argument(
         "--tyler-early-stop",
