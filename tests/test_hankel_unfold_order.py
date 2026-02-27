@@ -7,8 +7,11 @@ except Exception:  # pragma: no cover - torch optional
 
 
 @pytest.mark.skipif(torch is None, reason="torch not available")
-def test_build_temporal_hankels_batch_matches_explicit_stack_cpu() -> None:
+def test_build_temporal_hankels_batch_matches_explicit_stack_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
     from pipeline.stap.temporal_shared import build_temporal_hankels_batch
+
+    monkeypatch.delenv("STAP_SNAPSHOT_STRIDE", raising=False)
+    monkeypatch.delenv("STAP_MAX_SNAPSHOTS", raising=False)
 
     torch.manual_seed(0)
     B, T, h, w = 2, 7, 3, 4
@@ -26,3 +29,20 @@ def test_build_temporal_hankels_batch_matches_explicit_stack_cpu() -> None:
     S_ref = torch.stack(rows, dim=1).contiguous()
     torch.testing.assert_close(S, S_ref, rtol=0, atol=0)
 
+
+@pytest.mark.skipif(torch is None, reason="torch not available")
+def test_build_temporal_hankels_batch_snapshot_stride_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Snapshot subsampling should never collapse very short Hankel supports down to N=1.
+
+    Example: T=17, Lt=16 -> N=2 (Twinkling/Gammex regime). Even if a large
+    STAP_SNAPSHOT_STRIDE is set, we keep N=2 to avoid destabilizing cov estimates.
+    """
+    from pipeline.stap.temporal_shared import build_temporal_hankels_batch
+
+    monkeypatch.setenv("STAP_SNAPSHOT_STRIDE", "6")
+    monkeypatch.delenv("STAP_MAX_SNAPSHOTS", raising=False)
+
+    cube = torch.randn(1, 17, 2, 2, dtype=torch.complex64)
+    S, _ = build_temporal_hankels_batch(cube, 16, center=False, device="cpu", dtype=torch.complex64)
+    assert int(S.shape[2]) == 2
