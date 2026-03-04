@@ -370,38 +370,42 @@ def main() -> None:
             baseline_key="baseline_ms",
             stap_key="stap_ms",
         ),
+        RunSpec(
+            key="gammex_along_linear17_full",
+            dataset="twinkling_gammex",
+            scenario="Gammex along (linear17 @ PRF 2500; per cine frame)",
+            decision_rule="full",
+            run_root=Path("runs/latency_4080super_gammex_linear17_f0_6_tb512"),
+            sort_kind="alpha",
+            bundle_rel=Path("gammex/along_linear17__RawBCFCine/stap_full/along_linear17__RawBCFCine"),
+            tile_batch=512,
+            window_length=1,
+            windows=[0, 1, 2, 3, 4, 5],
+            baseline_key="baseline_ms",
+            stap_key="stap_ms",
+        ),
+        RunSpec(
+            key="gammex_across_linear17_full",
+            dataset="twinkling_gammex",
+            scenario="Gammex across (linear17 @ PRF 2500; per cine frame)",
+            decision_rule="full",
+            run_root=Path("runs/latency_4080super_gammex_linear17_f0_6_tb512"),
+            sort_kind="alpha",
+            bundle_rel=Path(
+                "gammex/across_linear17__RawBCFCine_08062017_145434_17/stap_full/"
+                "across_linear17__RawBCFCine_08062017_145434_17"
+            ),
+            tile_batch=512,
+            window_length=1,
+            windows=[0, 1, 2, 3, 4, 5],
+            baseline_key="baseline_ms",
+            stap_key="stap_ms",
+        ),
     ]
 
     records: List[Dict[str, Any]] = []
     for spec in runs:
         records.append(_collect_one(spec, compare_files=compare_files, qs=qs))
-
-    records.append(
-        {
-            "key": "gammex_along_linear17_full",
-            "dataset": "twinkling_gammex",
-            "scenario": "Gammex along (linear17 @ PRF 2500; per cine frame)",
-            "decision_rule": "full",
-            "status": "skipped",
-            "notes": (
-                "missing data: expected RawBCF cine under data/twinkling_artifact/Flow in Gammex phantom/. "
-                "Dataset download requires a web form + captcha (see DOI 10.17816/DD76511)."
-            ),
-        }
-    )
-    records.append(
-        {
-            "key": "gammex_across_linear17_full",
-            "dataset": "twinkling_gammex",
-            "scenario": "Gammex across (linear17 @ PRF 2500; per cine frame)",
-            "decision_rule": "full",
-            "status": "skipped",
-            "notes": (
-                "missing data: expected RawBCF cine under data/twinkling_artifact/Flow in Gammex phantom/. "
-                "Dataset download requires a web form + captcha (see DOI 10.17816/DD76511)."
-            ),
-        }
-    )
 
     out_json = {
         "generated_at_utc": _utc_now_iso(),
