@@ -148,9 +148,38 @@ _STAP_FAST_CUDA_GRAPH_CACHE: Dict[tuple, _StapFastCudaGraphEntry] = {}
 _STAP_FAST_CUDA_GRAPH_FAILED: set[tuple] = set()
 
 
-def _stap_fast_cuda_graph_enabled() -> bool:
+def _stap_fast_cuda_graph_mode() -> str:
     val = os.getenv("STAP_FAST_CUDA_GRAPH", "").strip().lower()
-    return val in {"1", "true", "yes", "on"}
+    if val in {"1", "true", "yes", "on"}:
+        return "on"
+    if val in {"auto"}:
+        return "auto"
+    return "off"
+
+
+def _stap_fast_cuda_graph_min_batch(*, mode: str | None = None) -> int:
+    m = str(mode or _stap_fast_cuda_graph_mode()).strip().lower()
+    default = 192 if m == "auto" else 1
+    raw = os.getenv("STAP_FAST_CUDA_GRAPH_MIN_BATCH", "").strip()
+    if not raw:
+        return int(default)
+    try:
+        return max(1, int(raw))
+    except Exception:
+        return int(default)
+
+
+def _stap_fast_cuda_graph_enabled(*, batch_size: int | None = None) -> bool:
+    mode = _stap_fast_cuda_graph_mode()
+    if mode == "off":
+        return False
+    if batch_size is None:
+        return True
+    try:
+        b = int(batch_size)
+    except Exception:
+        return True
+    return b >= _stap_fast_cuda_graph_min_batch(mode=mode)
 
 
 def _stap_fast_cuda_graph_run(
@@ -6190,7 +6219,7 @@ def _stap_pd_tile_lcmv_batch(
         }
         core_fn = pd_temporal_core_batched if pd_only else stap_temporal_core_batched
         use_graph = (
-            _stap_fast_cuda_graph_enabled()
+            _stap_fast_cuda_graph_enabled(batch_size=int(cube_tensor.shape[0]))
             and torch is not None
             and bool(getattr(cube_tensor, "is_cuda", False))
             and bool(torch.cuda.is_available())
@@ -7533,7 +7562,12 @@ def _stap_pd(
                         if stap_stage_ctx is not None
                         else nullcontext()
                     ):
-                        if use_graph_unfold and core_fn_unfold is not None and bool(getattr(cube_active, "is_cuda", False)):
+                        if (
+                            use_graph_unfold
+                            and _stap_fast_cuda_graph_enabled(batch_size=int(cube_active.shape[0]))
+                            and core_fn_unfold is not None
+                            and bool(getattr(cube_active, "is_cuda", False))
+                        ):
                             graph_key = (
                                 "unfold",
                                 "pd" if pd_only else "full",
