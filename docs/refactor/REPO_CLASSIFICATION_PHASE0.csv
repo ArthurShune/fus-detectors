@@ -1,5 +1,6 @@
 path,track,reason
 .gitattributes,core,repo runtime/build interface
+.github/workflows/refactor_quick_gate.yml,experiments,paper/supporting artifact
 .gitignore,core,repo runtime/build interface
 .pre-commit-config.yaml,core,repo runtime/build interface
 Dockerfile,core,repo runtime/build interface
@@ -17,8 +18,16 @@ configs/confirm2.yaml,core,core source/test/config directory
 configs/default.yaml,core,core source/test/config directory
 configs/ka_score_model_brain_clinical_pd.json,core,core source/test/config directory
 configs/ka_score_model_habv3_clinical_pd.json,core,core source/test/config directory
+configs/refactor_verify_thresholds.json,core,core source/test/config directory
 configs/sims_r1.yaml,core,core source/test/config directory
 configs/sims_r2.yaml,core,core source/test/config directory
+docs/refactor/PHASE0_BASELINE_FREEZE.md,core,refactor governance doc
+docs/refactor/PHASE1_VERIFICATION_CONTRACT.md,core,refactor governance doc
+docs/refactor/PHASED_REFACTOR_PLAN.md,core,refactor governance doc
+docs/refactor/PHASE_CLOSE_TEMPLATE.md,core,refactor governance doc
+docs/refactor/REPO_CLASSIFICATION_PHASE0.csv,core,refactor governance doc
+docs/refactor/REPO_CLASSIFICATION_PHASE0.md,core,refactor governance doc
+docs/refactor/phase_reports/phase1_close.md,core,refactor governance doc
 environment.yml,core,repo runtime/build interface
 eval/acceptance.py,core,core source/test/config directory
 eval/acceptance_cli.py,core,core source/test/config directory
@@ -176,6 +185,7 @@ scripts/macebridge_open_sim.py,experiments,analysis/experiment script
 scripts/macebridge_roi_doppler_telemetry.py,experiments,analysis/experiment script
 scripts/macebridge_vessel_opt.py,experiments,analysis/experiment script
 scripts/pd_mode_sanity.py,experiments,analysis/experiment script
+scripts/phase_close_report.py,experiments,analysis/experiment script
 scripts/picmus_carotid_beamform.py,experiments,analysis/experiment script
 scripts/picmus_carotid_beamform_das.py,experiments,analysis/experiment script
 scripts/picmus_carotid_masks.py,experiments,analysis/experiment script
@@ -189,6 +199,7 @@ scripts/r4c_guards.py,experiments,analysis/experiment script
 scripts/r4c_phase2_sweep.py,experiments,analysis/experiment script
 scripts/r4c_psd_metrics.py,experiments,analysis/experiment script
 scripts/redteam_directional_shrink.py,experiments,analysis/experiment script
+scripts/refactor_inventory.py,core,repro/runtime orchestration script
 scripts/replay_stap_from_run.py,core,repro/runtime orchestration script
 scripts/reproduce_table5_brain_kwave.sh,core,repro/runtime orchestration script
 scripts/run_brain_replay_sweep.py,experiments,analysis/experiment script
@@ -228,6 +239,7 @@ scripts/ulm_zenodo_7883227_motion_sweep.py,experiments,analysis/experiment scrip
 scripts/ulm_zenodo_7883227_motion_sweep_plot.py,experiments,analysis/experiment script
 scripts/upscale_png_nearest.py,experiments,analysis/experiment script
 scripts/verify_gpu.py,core,repro/runtime orchestration script
+scripts/verify_refactor.py,core,repro/runtime orchestration script
 scripts/wang_doppler_telemetry.py,experiments,analysis/experiment script
 scripts/wang_iq_sanity.py,experiments,analysis/experiment script
 scripts/wang_scan_telemetry.py,experiments,analysis/experiment script

@@ -1,32 +1,33 @@
 # Repo Classification (Phase 0)
 
-Generated: 2026-03-04 05:39:42Z (UTC)
+Generated: 2026-03-04 05:51:30Z (UTC)
 
 ## Summary
 
-- core: 228 files
-- experiments: 140 files
+- core: 238 files
+- experiments: 142 files
 - legacy_candidate: 4 files
 
 ## Core Candidates (keep + refactor first)
 
 - tests: 117
 - pipeline: 56
-- scripts: 16
+- scripts: 18
 - eval: 13
+- configs: 8
 - sim: 8
-- configs: 7
+- docs: 7
 - .gitattributes: 1
 - .gitignore: 1
 - .pre-commit-config.yaml: 1
 - Dockerfile: 1
 - LATENCY_OPTIMIZATION_SPEC.md: 1
-- LICENSE: 1
 
 ## Experiments Candidates (modularize / move under experiments)
 
-- scripts: 113
+- scripts: 114
 - figs: 10
+- .github: 1
 - appendix_bundle_schema.tex: 1
 - appendix_ka_contract_theory.tex: 1
 - appendix_repro_manifest.tex: 1
@@ -36,7 +37,6 @@ Generated: 2026-03-04 05:39:42Z (UTC)
 - site: 1
 - stap_fus_methodology.pdf: 1
 - stap_fus_methodology.tex: 1
-- stap_fus_paper.pdf: 1
 
 ## Legacy Candidates (review remove/archive)
 
