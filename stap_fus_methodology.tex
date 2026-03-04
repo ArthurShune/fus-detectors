@@ -632,12 +632,12 @@ Brain-OpenSkull (k-Wave; 64-frame window) & $0.217$ & $0.574$ & $0.791$ & $0.334
 Brain-AliasContract (k-Wave; 64-frame window) & $0.228$ & $0.601$ & $0.829$ & $0.372$ & $0.600$ \\
 Brain-SkullOR (k-Wave; 64-frame window) & $0.228$ & $0.533$ & $0.761$ & $0.374$ & $0.602$ \\
 Shin RatBrain Fig3 (PRF 1000; 128-frame window; $L_t=64$) & $0.021$ & $0.154$ & $0.175$ & $0.113$ & $0.134$ \\
-Gammex along (linear17 @ PRF 2500; per cine frame) & \textemdash & \textemdash & \textemdash & \textemdash & \textemdash \\
-Gammex across (linear17 @ PRF 2500; per cine frame) & \textemdash & \textemdash & \textemdash & \textemdash & \textemdash \\
+Gammex along (linear17 @ PRF 2500; per cine frame) & $0.008$ & $0.062$ & $0.069$ & \textemdash & \textemdash \\
+Gammex across (linear17 @ PRF 2500; per cine frame) & $0.001$ & $0.019$ & $0.020$ & \textemdash & \textemdash \\
 \hline
 \end{tabular}
 }
-\caption{Same latency protocol as Table~\ref{tab:latency_summary}, rerun on a workstation-class GPU. Entries report optimized-path steady-state means (windows/frames 2..N; excludes disk I/O and excludes the first replay window/frame). Values are derived from \path{reports/latency/4080super_latency_summary.csv}. Hardware: NVIDIA GeForce RTX 4080 SUPER 16GB (see \path{reports/hw/4080super_nvidia_smi.txt}; \texttt{stap\_device=cuda}). Gammex latency reruns were skipped in this environment due to gated dataset access (see \path{docs/data_download.md}).}
+\caption{Same latency protocol as Table~\ref{tab:latency_summary}, rerun on a workstation-class GPU. Entries report optimized-path steady-state means (windows/frames 2..N; excludes disk I/O and excludes the first replay window/frame). Values are derived from \path{reports/latency/4080super_latency_summary.csv}. Hardware: NVIDIA GeForce RTX 4080 SUPER 16GB (see \path{reports/hw/4080super_nvidia_smi.txt}; \texttt{stap\_device=cuda}). Conditional execution is not reported for structurally labeled Gammex bundles.}
 \label{tab:latency_summary_4080super}
 \end{table}
 
