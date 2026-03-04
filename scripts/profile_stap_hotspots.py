@@ -55,6 +55,8 @@ class StapProfileConfig:
     event_timing: bool
     tile_statistic: bool
     tile_batch: int | None
+    cuda_graph: str
+    cuda_graph_min_batch: int | None
 
 
 def _parse_pair_floats(text: str) -> Tuple[float, float]:
@@ -258,6 +260,15 @@ def _run_stap_pd_profile(cfg: StapProfileConfig) -> None:
     os.environ.setdefault("STAP_TILING_UNFOLD", "1")
     os.environ.setdefault("STAP_SNAPSHOT_STRIDE", "4")
     os.environ.setdefault("STAP_MAX_SNAPSHOTS", "64")
+    graph_mode = str(cfg.cuda_graph or "off").strip().lower()
+    if graph_mode == "on":
+        os.environ["STAP_FAST_CUDA_GRAPH"] = "1"
+    elif graph_mode == "auto":
+        os.environ["STAP_FAST_CUDA_GRAPH"] = "auto"
+    else:
+        os.environ["STAP_FAST_CUDA_GRAPH"] = "0"
+    if cfg.cuda_graph_min_batch is not None and int(cfg.cuda_graph_min_batch) > 0:
+        os.environ["STAP_FAST_CUDA_GRAPH_MIN_BATCH"] = str(int(cfg.cuda_graph_min_batch))
     if cfg.tile_statistic:
         os.environ["STAP_FAST_TILE_STATISTIC"] = "1"
 
@@ -315,10 +326,13 @@ def _run_stap_pd_profile(cfg: StapProfileConfig) -> None:
 
     print(
         f"[profile] mode=stap_pd dev={dev} dtype={dt} T={T} H={H} W={W} tile={cfg.tile_h}x{cfg.tile_w} "
-        f"stride={cfg.stride} Lt={cfg.Lt} mask_flow_frac={cfg.mask_flow_frac}"
+        f"stride={cfg.stride} Lt={cfg.Lt} mask_flow_frac={cfg.mask_flow_frac} "
+        f"cuda_graph={graph_mode}"
     )
     if cfg.tile_batch is not None:
         print(f"[profile] tile_batch={int(cfg.tile_batch)}")
+    if cfg.cuda_graph_min_batch is not None and int(cfg.cuda_graph_min_batch) > 0:
+        print(f"[profile] cuda_graph_min_batch={int(cfg.cuda_graph_min_batch)}")
     if cfg.tile_statistic:
         print("[profile] STAP_FAST_TILE_STATISTIC=1")
 
@@ -432,6 +446,25 @@ def parse_args() -> StapProfileConfig:
             "For latency experiments, values like 384/512 often improve throughput."
         ),
     )
+    ap.add_argument(
+        "--cuda-graph",
+        type=str,
+        default="off",
+        choices=["off", "on", "auto"],
+        help=(
+            "CUDA-graph mode for stap_pd profiling: off/on/auto. "
+            "'auto' uses STAP_FAST_CUDA_GRAPH auto policy."
+        ),
+    )
+    ap.add_argument(
+        "--cuda-graph-min-batch",
+        type=int,
+        default=0,
+        help=(
+            "Minimum batch size for CUDA-graph use in stap_pd mode. "
+            "0 keeps environment/default policy."
+        ),
+    )
 
     args = ap.parse_args()
     return StapProfileConfig(
@@ -470,6 +503,10 @@ def parse_args() -> StapProfileConfig:
         event_timing=bool(args.event_timing),
         tile_statistic=bool(args.tile_statistic),
         tile_batch=int(args.tile_batch) if int(args.tile_batch) > 0 else None,
+        cuda_graph=str(args.cuda_graph),
+        cuda_graph_min_batch=(
+            int(args.cuda_graph_min_batch) if int(args.cuda_graph_min_batch) > 0 else None
+        ),
     )
 
 
