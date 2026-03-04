@@ -4,7 +4,7 @@
 In this part we describe regime conditions and operator-level sufficient structure for a knowledge-aided (KA) temporal covariance transform layered on top of a baseline slow-time detector. The analysis is formulated in terms of abstract band projectors $(\Po,\Pf,\Pg,\Pa)$, alias features, and score distributions, and does not depend on any particular imaging modality. Only in later sections do we instantiate these conditions for functional ultrasound (fUS) brain imaging with concrete band choices, acquisition parameters, and baselines.
 
 \subsection*{How to read this appendix (plain-English map)}
-This appendix is a \emph{contract}, not a hyperparameter sweep: each condition is a deterministic integrity check that either (i) permits the KA layer to act conservatively or (ii) forces the safe default $w\equiv 1$ (KA off). The labels below are grouped by purpose.
+This appendix lists explicit preconditions under which the KA prior is allowed to modify scores; if any precondition fails, the prior is disabled ($w\equiv 1$; KA off). The labels below are grouped by purpose.
 
 \begin{table}[t]
 \centering
@@ -16,12 +16,29 @@ Label group & Plain-English meaning (what it checks) \\
 R--* & Regime preconditions: do the bands exist, do risk features vary, and is there tail headroom worth regularizing? \\
 BG--* & Band geometry: after discretization, are Pf/guard/Pa non-empty and non-overlapping for the chosen (PRF, $T$)? \\
 OC--* & Operator/covariance constraints: KA can only apply bounded, bandwise structure without uncontrolled mixing or conditioning pathologies. \\
-G--* & Gating/localization: KA is allowed to act only where artifacts are likely and positives are unlikely (protected-set invariance). \\
+G--* & Gating/localization: KA is allowed to act only where artifacts are likely and positives are unlikely (protected/do-not-penalize set preserved; scores unchanged). \\
 Safety--* & Safety guards: if any check indicates score inflation or loss of invariance, KA is forced off. \\
 \hline
 \end{tabular}
 \caption{Appendix label groups in plain English. Failing any condition triggers a conservative fallback ($w=1$), which is an intended success mode out of regime.}
 \end{table}
+
+\begin{figure}[t]
+\centering
+\IfFileExists{figs/paper/stap_pipeline_bayes_block.pdf}{%
+  \includegraphics[width=\linewidth]{figs/paper/stap_pipeline_bayes_block.pdf}%
+}{%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    \centering
+    \vspace{0.5em}
+    Missing figure \path{figs/paper/stap_pipeline_bayes_block.pdf}.\\
+    Reproduce it with \path{PYTHONPATH=. python scripts/fig_stap_pipeline_bayes_block.py}.
+    \vspace{0.5em}
+  \end{minipage}}%
+}
+\caption{System block diagram for the Knowledge-Aided Space-Time Adaptive Processing (KA--STAP) architecture. Beamformed kilohertz data initially undergoes baseline motion-compensated clutter filtering (MC--SVD), yielding a residual cube $X_{\mathrm{base}}$. The residual is processed via two parallel branches: (top) the uninformed STAP core computes the matched-subspace statistic $S_{\mathrm{stap,pre}}(y,x)$; (bottom) a spatial-spectral feature extractor evaluates localized band-energy statistics to compute a bounded shrink-only weight $w(i)\in(0,1]$ (equivalently $\gamma(i)=1/w(i)\geq 1$). The branches recombine to form the strictly bounded post-regularization score $S_{\mathrm{stap,post}}(y,x)=w\,S_{\mathrm{stap,pre}}(y,x)$ (shrink-only).}
+\label{fig:stap_pipeline}
+\end{figure}
 
 \subsection{Regime Preconditions (Data--Level, Non--Negotiable)}
 \label{sec:regime}
@@ -239,7 +256,7 @@ ignoring higher--order mixing terms and assuming $\mu<1$ is the multiplicative s
 t'_\alpha \approx t_\alpha - \frac{p_-(1-\mu)}{f_-(t_\alpha)},
 \]
 so that $t'_\alpha < t_\alpha$ whenever $p_->0$ and $\mu<1$.
-In the PD-mode experiments in this paper we report operating points using the exported right-tail PD score map $S_{\mathrm{PD}}$ (stored as \texttt{score\_pd\_*.npy}): choose $\tau$ so that $\mathbb{P}\{S_{\mathrm{PD}}\ge\tau\mid \mathrm{bg}\}=\alpha$ and evaluate $\mathbb{P}\{S_{\mathrm{PD}}\ge\tau\mid \mathrm{flow}\}$. For compatibility, acceptance bundles may also include \texttt{pd\_*.npy}, which we denote $\mathrm{PD}^{\downarrow}$ and relate deterministically by $S_{\mathrm{PD}}=-\mathrm{PD}^{\downarrow}$.
+In the PD-mode experiments in this paper we report operating points using the exported PD flow-evidence score map $S_{\mathrm{PD}}$ (stored as \texttt{score\_pd\_*.npy}; higher = more flow-like): choose $\tau$ so that $\mathbb{P}\{S_{\mathrm{PD}}\ge\tau\mid \mathrm{bg}\}=\alpha$ and evaluate $\mathbb{P}\{S_{\mathrm{PD}}\ge\tau\mid \mathrm{flow}\}$. For compatibility, acceptance bundles may also include \texttt{pd\_*.npy}, which we denote $\mathrm{PD}^{\downarrow}$ and relate deterministically by $S_{\mathrm{PD}}=-\mathrm{PD}^{\downarrow}$.
 
 \paragraph{Interpretation (plain language).}
 KA is designed to shrink scores only on a subset of artifact-dominated background tiles. This selectively compresses the extreme right tail of $H_0$ scores, which lowers the background threshold needed to hit a target FPR. Lowering that threshold can reveal additional true flow pixels without increasing the false-positive rate, because scores never increase on penalized pixels. Equivalently, scaling down a fraction $p_-$ of top--tail negatives removes mass from the negative tail and shifts $t_\alpha$ left; uplift is only plausible when $p_+$ (positive gating rate) is small.
@@ -289,7 +306,7 @@ We partition the feature space into three regimes per volume (or per slice/plane
 \begin{itemize}[nosep]
   \item \textbf{$\mathcal{R}_0$ (uninformative).} The prior is uninformative and $w\equiv 1$; output equals the baseline detector (STAP on IQ; PD-only detector on PD-only). Feature statistics are still recorded.
   \item \textbf{$\mathcal{R}_1$ (guarded shrink).} A bounded, shrink-only penalty may be applied on a localized set of high-risk tiles while strictly protecting a high-confidence set. No uplift claim is implied.
-  \item \textbf{$\mathcal{R}_2$ (actionable; research-only).} The same shrink-only mechanism may be applied more strongly, but only when additional \emph{actionability} evidence suggests that shrink preferentially targets false activations. This regime is used to gate reporting of KA deltas; it is not a default deployment mode.
+  \item \textbf{$\mathcal{R}_2$ (alias-dominant; experimental).} Features strongly indicate alias contamination and additional label-free actionability evidence suggests that shrink preferentially targets false activations. This regime is used only as a conservative tail-hygiene mode to gate reporting of KA deltas; it is not a default deployment mode or the basis for primary performance claims.
 \end{itemize}
 For auditability, the implementation also logs a reason label (why $w\equiv 1$) and a \emph{risk mode} (alias vs guard) so that $\mathcal{R}_0$ behavior is interpretable. (For backward compatibility, exported metadata may also include legacy string labels such as \texttt{C0\_OFF}/\texttt{C1\_SAFETY}/\texttt{C2\_UPLIFT} mapped to $\mathcal{R}_0/\mathcal{R}_1/\mathcal{R}_2$.)
 
@@ -308,7 +325,7 @@ m_{\mathrm{alias}}(i)=\log\frac{E_a(i)+\epsilon}{E_f(i)+\epsilon},\quad
 r_g(i)=\frac{E_g(i)}{E_{\mathrm{tot}}(i)},\quad
 r_f(i)=\frac{E_f(i)}{E_{\mathrm{tot}}(i)}.
 \]
-We also use a flow-coverage proxy $c_f(i)\in[0,1]$ (fraction of tile pixels in the flow mask), a depth proxy $d(i)\in[0,1]$ when available, and a baseline detector score $S_{\mathrm{base}}(i)$ on which KA operates (defined as a right-tail score so that higher means ``more flow-like''; in PD-mode this is $S_{\mathrm{base}}=S_{\mathrm{PD}}=\texttt{score\_pd}$).
+We also use a flow-coverage proxy $c_f(i)\in[0,1]$ (fraction of tile pixels in the flow mask), a depth proxy $d(i)\in[0,1]$ when available, and a baseline detector score $S_{\mathrm{base}}(i)$ on which KA operates (defined in a flow-evidence convention so that higher means ``more flow-like''; in PD-mode this is $S_{\mathrm{base}}=S_{\mathrm{PD}}=\texttt{score\_pd}$).
 
 \subsubsection{Proxy sets and actionability tests}
 Because class labels are unavailable at runtime, the regime selector uses two proxy sets:
