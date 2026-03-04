@@ -1,0 +1,373 @@
+path,track,reason
+.gitattributes,core,repo runtime/build interface
+.gitignore,core,repo runtime/build interface
+.pre-commit-config.yaml,core,repo runtime/build interface
+Dockerfile,core,repo runtime/build interface
+LATENCY_OPTIMIZATION_SPEC.md,core,repo runtime/build interface
+LICENSE,core,repo runtime/build interface
+Makefile,core,repo runtime/build interface
+README.md,core,repo runtime/build interface
+appendix_bundle_schema.tex,experiments,paper/supporting artifact
+appendix_ka_contract_theory.tex,experiments,paper/supporting artifact
+appendix_repro_manifest.tex,experiments,paper/supporting artifact
+appendix_supp_results.tex,experiments,paper/supporting artifact
+build_context.sh,core,repo runtime/build interface
+configs/calib_evt.yaml,core,core source/test/config directory
+configs/confirm2.yaml,core,core source/test/config directory
+configs/default.yaml,core,core source/test/config directory
+configs/ka_score_model_brain_clinical_pd.json,core,core source/test/config directory
+configs/ka_score_model_habv3_clinical_pd.json,core,core source/test/config directory
+configs/sims_r1.yaml,core,core source/test/config directory
+configs/sims_r2.yaml,core,core source/test/config directory
+environment.yml,core,repo runtime/build interface
+eval/acceptance.py,core,core source/test/config directory
+eval/acceptance_cli.py,core,core source/test/config directory
+eval/aggregate.py,core,core source/test/config directory
+eval/evd.py,core,core source/test/config directory
+eval/metrics.py,core,core source/test/config directory
+eval/stress/angle_sweep.py,core,core source/test/config directory
+eval/stress/confirm2_rho_sweep.py,core,core source/test/config directory
+eval/stress/hetero_sweep.py,core,core source/test/config directory
+eval/stress/motion_sweep.py,core,core source/test/config directory
+eval/stress/prf_jitter.py,core,core source/test/config directory
+eval/stress_suite.py,core,core source/test/config directory
+eval/summary_pdf.py,core,core source/test/config directory
+eval/sweep_mc.py,core,core source/test/config directory
+figs/fig1_before_after.py,experiments,figure artifact/source
+figs/fig2_roc_calibrated.py,experiments,figure artifact/source
+figs/fig3_confirm2_curve.py,experiments,figure artifact/source
+figs/fig4_latency_angle_trade.py,experiments,figure artifact/source
+figs/fig5_ablation_bars.py,experiments,figure artifact/source
+figs/fig6_telemetry_rank.py,experiments,figure artifact/source
+figs/latency/latency_bar.pdf,experiments,figure artifact/source
+figs/latency/latency_bar.png,experiments,figure artifact/source
+figs/latency/roc_points.pdf,experiments,figure artifact/source
+figs/latency/roc_points.png,experiments,figure artifact/source
+foo.txt,legacy_candidate,temporary/ad-hoc file
+foo_conda.txt,legacy_candidate,temporary/ad-hoc file
+notebooks/colab_play.ipynb,experiments,exploratory notebook
+pipeline/__init__.py,core,core source/test/config directory
+pipeline/baseline/__init__.py,core,core source/test/config directory
+pipeline/baseline/svd_filter.py,core,core source/test/config directory
+pipeline/baseline/thresholds.py,core,core source/test/config directory
+pipeline/beamforming/__init__.py,core,core source/test/config directory
+pipeline/beamforming/compound.py,core,core source/test/config directory
+pipeline/beamforming/plane_wave.py,core,core source/test/config directory
+pipeline/calib/__init__.py,core,core source/test/config directory
+pipeline/calib/conformal.py,core,core source/test/config directory
+pipeline/calib/evt_pot.py,core,core source/test/config directory
+pipeline/calib/thresholds.py,core,core source/test/config directory
+pipeline/confirm2/__init__.py,core,core source/test/config directory
+pipeline/confirm2/bvn_tail.py,core,core source/test/config directory
+pipeline/confirm2/copula.py,core,core source/test/config directory
+pipeline/confirm2/grouping.py,core,core source/test/config directory
+pipeline/confirm2/policy.py,core,core source/test/config directory
+pipeline/confirm2/rho_fit.py,core,core source/test/config directory
+pipeline/confirm2/validator.py,core,core source/test/config directory
+pipeline/detect/__init__.py,core,core source/test/config directory
+pipeline/detect/cfar.py,core,core source/test/config directory
+pipeline/detect/tbd.py,core,core source/test/config directory
+pipeline/detect/tiny_net.py,core,core source/test/config directory
+pipeline/gpu/__init__.py,core,core source/test/config directory
+pipeline/gpu/linalg.py,core,core source/test/config directory
+pipeline/gpu/utils.py,core,core source/test/config directory
+pipeline/realdata/__init__.py,core,core source/test/config directory
+pipeline/realdata/mace_wholebrain.py,core,core source/test/config directory
+pipeline/realdata/picmus_carotid.py,core,core source/test/config directory
+pipeline/realdata/shin_ratbrain.py,core,core source/test/config directory
+pipeline/realdata/twinkling_artifact.py,core,core source/test/config directory
+pipeline/realdata/twinkling_bmode_mask.py,core,core source/test/config directory
+pipeline/realdata/ulm_zenodo_7883227.py,core,core source/test/config directory
+pipeline/realdata/wang_ulm.py,core,core source/test/config directory
+pipeline/realdata/wang_ulm_flow.py,core,core source/test/config directory
+pipeline/sim/__init__.py,core,core source/test/config directory
+pipeline/sim/synthetic.py,core,core source/test/config directory
+pipeline/stap/__init__.py,core,core source/test/config directory
+pipeline/stap/angle_opt.py,core,core source/test/config directory
+pipeline/stap/covariance.py,core,core source/test/config directory
+pipeline/stap/fuse.py,core,core source/test/config directory
+pipeline/stap/geometry.py,core,core source/test/config directory
+pipeline/stap/hemo.py,core,core source/test/config directory
+pipeline/stap/ka_contract_v2.py,core,core source/test/config directory
+pipeline/stap/lcmv.py,core,core source/test/config directory
+pipeline/stap/lt_auto.py,core,core source/test/config directory
+pipeline/stap/motion_comp.py,core,core source/test/config directory
+pipeline/stap/mvdr.py,core,core source/test/config directory
+pipeline/stap/mvdr_bank.py,core,core source/test/config directory
+pipeline/stap/robust_cov.py,core,core source/test/config directory
+pipeline/stap/temporal.py,core,core source/test/config directory
+pipeline/stap/temporal_shared.py,core,core source/test/config directory
+pipeline/stap/tiles.py,core,core source/test/config directory
+pipeline/stap/triton_ops.py,core,core source/test/config directory
+pipeline/utils/__init__.py,core,core source/test/config directory
+pipeline/utils/rng.py,core,core source/test/config directory
+pipeline/utils/telemetry.py,core,core source/test/config directory
+pyproject.toml,core,repo runtime/build interface
+repro_manifest.json,experiments,paper/supporting artifact
+scripts/__init__.py,experiments,analysis/experiment script
+scripts/aggregate_brain_sweep.py,experiments,analysis/experiment script
+scripts/alias_math.py,experiments,analysis/experiment script
+scripts/analyze_coverage_roc.py,experiments,analysis/experiment script
+scripts/analyze_pial_tail_gate.py,experiments,analysis/experiment script
+scripts/analyze_r1_psd.py,experiments,analysis/experiment script
+scripts/analyze_stap_debug.py,experiments,analysis/experiment script
+scripts/baseline_sanity_report.py,experiments,analysis/experiment script
+scripts/brain_baseline_sanity_table.py,core,repro/runtime orchestration script
+scripts/brain_cov_train_ablation_table.py,core,repro/runtime orchestration script
+scripts/brain_crosswindow_calibration.py,core,repro/runtime orchestration script
+scripts/brain_detector_ablation_table.py,core,repro/runtime orchestration script
+scripts/brain_detector_swap_table.py,core,repro/runtime orchestration script
+scripts/brain_kwave_vnext_baselines_table.py,core,repro/runtime orchestration script
+scripts/brain_mcsvd_energy_sweep.py,experiments,analysis/experiment script
+scripts/brain_openskull_profile_sensitivity.py,experiments,analysis/experiment script
+scripts/brain_tile_statistic_check.py,experiments,analysis/experiment script
+scripts/build_pial_prior.py,experiments,analysis/experiment script
+scripts/conditional_stap_leakage_ablation.py,experiments,analysis/experiment script
+scripts/confirm2_eval.py,experiments,analysis/experiment script
+scripts/debug_ka.py,experiments,analysis/experiment script
+scripts/diagram_stap_pipeline.py,experiments,analysis/experiment script
+scripts/dump_stap_pixel_features.py,experiments,analysis/experiment script
+scripts/fair_filter_comparison.py,core,repro/runtime orchestration script
+scripts/feasibility_check.py,experiments,analysis/experiment script
+scripts/fig_brain_kwave_roc_curves.py,experiments,analysis/experiment script
+scripts/fig_brain_tail_collapse_visual.py,experiments,analysis/experiment script
+scripts/fig_doppler_band_geometry_psd.py,experiments,analysis/experiment script
+scripts/fig_hankelization_local_stap.py,experiments,analysis/experiment script
+scripts/fig_leading_structural_fidelity.py,experiments,analysis/experiment script
+scripts/fig_shin_baseline_matrix_example.py,experiments,analysis/experiment script
+scripts/fig_shin_baseline_matrix_proxy_metrics.py,experiments,analysis/experiment script
+scripts/fig_shin_motion_telemetry.py,experiments,analysis/experiment script
+scripts/fig_shrink_only_tail_suppression.py,experiments,analysis/experiment script
+scripts/fig_stap_pipeline_bayes_block.py,experiments,analysis/experiment script
+scripts/fig_twinkling_gammex_ablation_prf_sensitivity.py,experiments,analysis/experiment script
+scripts/fig_twinkling_gammex_baseline_tail.py,experiments,analysis/experiment script
+scripts/fig_twinkling_gammex_structural_roc_curves.py,experiments,analysis/experiment script
+scripts/fig_twinkling_mask_overlay.py,experiments,analysis/experiment script
+scripts/figure_qc.py,experiments,analysis/experiment script
+scripts/gen_ka_prior.py,experiments,analysis/experiment script
+scripts/generate_repro_manifest.py,core,repro/runtime orchestration script
+scripts/hab_contract_check.py,experiments,analysis/experiment script
+scripts/hemo_metrics.py,experiments,analysis/experiment script
+scripts/ka_contract_v2_ablation.py,experiments,analysis/experiment script
+scripts/ka_contract_v2_dashboard.py,experiments,analysis/experiment script
+scripts/ka_contract_v2_dashboard_fig.py,experiments,analysis/experiment script
+scripts/ka_temporal_emulation.py,experiments,analysis/experiment script
+scripts/latency_figs.py,experiments,analysis/experiment script
+scripts/latency_realdata_rerun_check.py,core,repro/runtime orchestration script
+scripts/latency_rerun_check.py,core,repro/runtime orchestration script
+scripts/mace_alias_gate.py,experiments,analysis/experiment script
+scripts/mace_alias_gate_holdout.py,experiments,analysis/experiment script
+scripts/mace_atlas_overlay_fig.py,experiments,analysis/experiment script
+scripts/mace_atlas_regions.py,experiments,analysis/experiment script
+scripts/mace_hemo_telemetry.py,experiments,analysis/experiment script
+scripts/mace_pd_atlas_roc.py,experiments,analysis/experiment script
+scripts/mace_pd_baseline.py,experiments,analysis/experiment script
+scripts/mace_pd_tiles_roc.py,experiments,analysis/experiment script
+scripts/mace_pdonly_contract_v2_dashboard_fig.py,experiments,analysis/experiment script
+scripts/mace_pdonly_contract_v2_sweep.py,experiments,analysis/experiment script
+scripts/mace_phase2_summary_fig.py,experiments,analysis/experiment script
+scripts/mace_phase2_sweep.py,experiments,analysis/experiment script
+scripts/mace_tiles_atlas_roc.py,experiments,analysis/experiment script
+scripts/mace_tiles_sweep.py,experiments,analysis/experiment script
+scripts/mace_vascular_pixel_eval.py,experiments,analysis/experiment script
+scripts/macebridge_open_doppler_telemetry.py,experiments,analysis/experiment script
+scripts/macebridge_open_replay.py,experiments,analysis/experiment script
+scripts/macebridge_open_sim.py,experiments,analysis/experiment script
+scripts/macebridge_roi_doppler_telemetry.py,experiments,analysis/experiment script
+scripts/macebridge_vessel_opt.py,experiments,analysis/experiment script
+scripts/pd_mode_sanity.py,experiments,analysis/experiment script
+scripts/picmus_carotid_beamform.py,experiments,analysis/experiment script
+scripts/picmus_carotid_beamform_das.py,experiments,analysis/experiment script
+scripts/picmus_carotid_masks.py,experiments,analysis/experiment script
+scripts/picmus_carotid_pd.py,experiments,analysis/experiment script
+scripts/picmus_carotid_sanity.py,experiments,analysis/experiment script
+scripts/picmus_carotid_telemetry.py,experiments,analysis/experiment script
+scripts/pilot_visualize.py,experiments,analysis/experiment script
+scripts/profile_stap_hotspots.py,experiments,analysis/experiment script
+scripts/r4c_analytic_check.py,experiments,analysis/experiment script
+scripts/r4c_guards.py,experiments,analysis/experiment script
+scripts/r4c_phase2_sweep.py,experiments,analysis/experiment script
+scripts/r4c_psd_metrics.py,experiments,analysis/experiment script
+scripts/redteam_directional_shrink.py,experiments,analysis/experiment script
+scripts/replay_stap_from_run.py,core,repro/runtime orchestration script
+scripts/reproduce_table5_brain_kwave.sh,core,repro/runtime orchestration script
+scripts/run_brain_replay_sweep.py,experiments,analysis/experiment script
+scripts/run_brain_sweep.py,experiments,analysis/experiment script
+scripts/run_ka_ablation.py,experiments,analysis/experiment script
+scripts/run_pilots.py,experiments,analysis/experiment script
+scripts/shin_ratbrain_allclips_contract_hygiene.py,experiments,analysis/experiment script
+scripts/shin_ratbrain_band_scout.py,experiments,analysis/experiment script
+scripts/shin_ratbrain_baseline_matrix.py,experiments,analysis/experiment script
+scripts/shin_ratbrain_crossmask_audit.py,experiments,analysis/experiment script
+scripts/shin_ratbrain_hygiene_metrics.py,experiments,analysis/experiment script
+scripts/shin_ratbrain_make_bundle.py,core,repro/runtime orchestration script
+scripts/shin_ratbrain_motion_aggregate.py,experiments,analysis/experiment script
+scripts/shin_ratbrain_motion_compare.py,experiments,analysis/experiment script
+scripts/shin_ratbrain_motion_sensitivity_posthoc.py,experiments,analysis/experiment script
+scripts/shin_ratbrain_motion_sweep.py,experiments,analysis/experiment script
+scripts/shin_ratbrain_plot_bundle.py,experiments,analysis/experiment script
+scripts/shin_ratbrain_profile_sweep.py,experiments,analysis/experiment script
+scripts/sweep_motion_params.py,experiments,analysis/experiment script
+scripts/sweep_r1_ka.py,experiments,analysis/experiment script
+scripts/telemetry_regime_compare_fig.py,experiments,analysis/experiment script
+scripts/track_a_pipeline.py,experiments,analysis/experiment script
+scripts/train_ka_score_model.py,experiments,analysis/experiment script
+scripts/train_score_risk_model.py,experiments,analysis/experiment script
+scripts/twinkling_backfill_baseline_scores.py,experiments,analysis/experiment script
+scripts/twinkling_contract_figpack.py,experiments,analysis/experiment script
+scripts/twinkling_decode_sanity.py,experiments,analysis/experiment script
+scripts/twinkling_decode_sanity_summary.py,experiments,analysis/experiment script
+scripts/twinkling_eval_motion_ladder.py,experiments,analysis/experiment script
+scripts/twinkling_eval_structural.py,experiments,analysis/experiment script
+scripts/twinkling_gammex_within_ensemble_motion_sweep.py,experiments,analysis/experiment script
+scripts/twinkling_make_bundles.py,core,repro/runtime orchestration script
+scripts/twinkling_prf_override_table.py,experiments,analysis/experiment script
+scripts/ulm_zenodo_7883227_baseline_sweep.py,experiments,analysis/experiment script
+scripts/ulm_zenodo_7883227_make_bundle.py,core,repro/runtime orchestration script
+scripts/ulm_zenodo_7883227_motion_sweep.py,experiments,analysis/experiment script
+scripts/ulm_zenodo_7883227_motion_sweep_plot.py,experiments,analysis/experiment script
+scripts/upscale_png_nearest.py,experiments,analysis/experiment script
+scripts/verify_gpu.py,core,repro/runtime orchestration script
+scripts/wang_doppler_telemetry.py,experiments,analysis/experiment script
+scripts/wang_iq_sanity.py,experiments,analysis/experiment script
+scripts/wang_scan_telemetry.py,experiments,analysis/experiment script
+scripts/wang_tiles_doppler.py,experiments,analysis/experiment script
+scripts/wang_ulm_flow_map.py,experiments,analysis/experiment script
+sim/__init__.py,core,core source/test/config directory
+sim/kwave/README.md,core,core source/test/config directory
+sim/kwave/common.py,core,core source/test/config directory
+sim/kwave/icube_bundle.py,core,core source/test/config directory
+sim/kwave/pilot_motion.py,core,core source/test/config directory
+sim/kwave/pilot_r1.py,core,core source/test/config directory
+sim/kwave/pw_run.py,core,core source/test/config directory
+sim/kwave/pw_scene.py,core,core source/test/config directory
+site/index.html,experiments,paper/supporting artifact
+stap_fus_methodology.pdf,experiments,compiled manuscript artifact
+stap_fus_methodology.tex,experiments,paper/supporting artifact
+stap_fus_paper.pdf,experiments,compiled manuscript artifact
+stap_fus_paper.tex,experiments,paper/supporting artifact
+stap_fus_supplement.pdf,experiments,compiled manuscript artifact
+stap_fus_supplement.tex,experiments,paper/supporting artifact
+stap_pipeline,experiments,paper/supporting artifact
+stap_pipeline.pdf,experiments,paper/supporting artifact
+stap_pipeline.png,experiments,paper/supporting artifact
+tests/conftest.py,core,core source/test/config directory
+tests/test_acceptance.py,core,core source/test/config directory
+tests/test_acceptance_cli_bundle.py,core,core source/test/config directory
+tests/test_acceptance_cli_integration.py,core,core source/test/config directory
+tests/test_acceptance_confirm2.py,core,core source/test/config directory
+tests/test_alias_band_spec.py,core,core source/test/config directory
+tests/test_alias_cap.py,core,core source/test/config directory
+tests/test_alias_psd_select.py,core,core source/test/config directory
+tests/test_angle_opt.py,core,core source/test/config directory
+tests/test_band_energy_covonly.py,core,core source/test/config directory
+tests/test_band_energy_mapping.py,core,core source/test/config directory
+tests/test_band_energy_project_dual.py,core,core source/test/config directory
+tests/test_band_energy_project_pf.py,core,core source/test/config directory
+tests/test_band_ratio_recorder.py,core,core source/test/config directory
+tests/test_band_ratio_spec.py,core,core source/test/config directory
+tests/test_bg_guard.py,core,core source/test/config directory
+tests/test_choose_beta_directional.py,core,core source/test/config directory
+tests/test_confirm2.py,core,core source/test/config directory
+tests/test_confirm2_blocks.py,core,core source/test/config directory
+tests/test_confirm2_grouping.py,core,core source/test/config directory
+tests/test_confirm2_monotone.py,core,core source/test/config directory
+tests/test_confirm2_validate.py,core,core source/test/config directory
+tests/test_covariance.py,core,core source/test/config directory
+tests/test_coverage_analysis.py,core,core source/test/config directory
+tests/test_detector.py,core,core source/test/config directory
+tests/test_equalize_pf_trace_helper.py,core,core source/test/config directory
+tests/test_eval_harnesses.py,core,core source/test/config directory
+tests/test_evt_conformal.py,core,core source/test/config directory
+tests/test_fd_grid_auto.py,core,core source/test/config directory
+tests/test_feasibility_check.py,core,core source/test/config directory
+tests/test_figs_smoke.py,core,core source/test/config directory
+tests/test_flow_mask.py,core,core source/test/config directory
+tests/test_flow_motion_angle.py,core,core source/test/config directory
+tests/test_geometry.py,core,core source/test/config directory
+tests/test_hankel_unfold_order.py,core,core source/test/config directory
+tests/test_integration_stap_acceptance.py,core,core source/test/config directory
+tests/test_ka_alias_telemetry.py,core,core source/test/config directory
+tests/test_ka_beta_mismatch_slope.py,core,core source/test/config directory
+tests/test_ka_blend_basic.py,core,core source/test/config directory
+tests/test_ka_contract_v2.py,core,core source/test/config directory
+tests/test_ka_crossover_amplitude.py,core,core source/test/config directory
+tests/test_ka_directional_blend_properties.py,core,core source/test/config directory
+tests/test_ka_effect_on_scores.py,core,core source/test/config directory
+tests/test_ka_effective.py,core,core source/test/config directory
+tests/test_ka_feasibility_tail.py,core,core source/test/config directory
+tests/test_ka_gpu_parity.py,core,core source/test/config directory
+tests/test_ka_lambda_override.py,core,core source/test/config directory
+tests/test_ka_library_prior_effect.py,core,core source/test/config directory
+tests/test_ka_operator_oc2.py,core,core source/test/config directory
+tests/test_ka_operator_repair.py,core,core source/test/config directory
+tests/test_ka_pd_snr_band_surrogate.py,core,core source/test/config directory
+tests/test_ka_pf_equalization.py,core,core source/test/config directory
+tests/test_ka_prior_from_psd.py,core,core source/test/config directory
+tests/test_ka_projection_no_target_leak.py,core,core source/test/config directory
+tests/test_ka_score_shrink_v2.py,core,core source/test/config directory
+tests/test_ka_telemetry.py,core,core source/test/config directory
+tests/test_ka_telemetry_aggregation.py,core,core source/test/config directory
+tests/test_ka_whiten_parity.py,core,core source/test/config directory
+tests/test_kwave_gpu_smoke.py,core,core source/test/config directory
+tests/test_kwave_physics.py,core,core source/test/config directory
+tests/test_kwave_pilot_smoke.py,core,core source/test/config directory
+tests/test_kwave_psd.py,core,core source/test/config directory
+tests/test_lcmv.py,core,core source/test/config directory
+tests/test_lcmv_load.py,core,core source/test/config directory
+tests/test_lt_auto.py,core,core source/test/config directory
+tests/test_masks_and_spans.py,core,core source/test/config directory
+tests/test_mcsvd_smoke.py,core,core source/test/config directory
+tests/test_mcsvd_torch_cuda.py,core,core source/test/config directory
+tests/test_metrics.py,core,core source/test/config directory
+tests/test_metrics_tail_resolution.py,core,core source/test/config directory
+tests/test_motion_comp.py,core,core source/test/config directory
+tests/test_motion_energy_telemetry.py,core,core source/test/config directory
+tests/test_motion_projector_lcmv.py,core,core source/test/config directory
+tests/test_motion_split_counts.py,core,core source/test/config directory
+tests/test_msd_ratio_ridge.py,core,core source/test/config directory
+tests/test_mvdr.py,core,core source/test/config directory
+tests/test_mvdr_bank.py,core,core source/test/config directory
+tests/test_operator_metrics_telemetry.py,core,core source/test/config directory
+tests/test_pd_overlap_monotone.py,core,core source/test/config directory
+tests/test_pd_rescale.py,core,core source/test/config directory
+tests/test_pd_stats_guard.py,core,core source/test/config directory
+tests/test_pd_subtile_uniformization.py,core,core source/test/config directory
+tests/test_phasecorr_and_svd_properties.py,core,core source/test/config directory
+tests/test_pilot_meta.py,core,core source/test/config directory
+tests/test_policy_rho_inflate.py,core,core source/test/config directory
+tests/test_psd_grid.py,core,core source/test/config directory
+tests/test_psd_helper.py,core,core source/test/config directory
+tests/test_r4c_injection.py,core,core source/test/config directory
+tests/test_rank_cap.py,core,core source/test/config directory
+tests/test_rank_consistency.py,core,core source/test/config directory
+tests/test_report_smoke.py,core,core source/test/config directory
+tests/test_rho_fit.py,core,core source/test/config directory
+tests/test_rho_inflation.py,core,core source/test/config directory
+tests/test_ridge_split_directional.py,core,core source/test/config directory
+tests/test_robust_cov.py,core,core source/test/config directory
+tests/test_robust_cov_hybrid.py,core,core source/test/config directory
+tests/test_smoke.py,core,core source/test/config directory
+tests/test_snapshot_aggregation_batched.py,core,core source/test/config directory
+tests/test_stap_fastpath_batch_wrapper.py,core,core source/test/config directory
+tests/test_stap_unfold_tiling.py,core,core source/test/config directory
+tests/test_tbd.py,core,core source/test/config directory
+tests/test_temporal_constraints.py,core,core source/test/config directory
+tests/test_temporal_constraints_edge.py,core,core source/test/config directory
+tests/test_temporal_contrast.py,core,core source/test/config directory
+tests/test_temporal_cov_props.py,core,core source/test/config directory
+tests/test_temporal_feasibility_guards.py,core,core source/test/config directory
+tests/test_temporal_flow_cap.py,core,core source/test/config directory
+tests/test_temporal_lcmv_properties.py,core,core source/test/config directory
+tests/test_temporal_motion_null.py,core,core source/test/config directory
+tests/test_temporal_msd.py,core,core source/test/config directory
+tests/test_temporal_operator_metrics.py,core,core source/test/config directory
+tests/test_temporal_snapshot_shapes.py,core,core source/test/config directory
+tests/test_temporal_synthetic_guardrails.py,core,core source/test/config directory
+tests/test_tile_temporal.py,core,core source/test/config directory
+tests/test_tiles.py,core,core source/test/config directory
+tests/test_tyler_covariance_batched.py,core,core source/test/config directory
+tests/test_weibull_pot.py,core,core source/test/config directory
+tmp_ratio_current.py,legacy_candidate,temporary/ad-hoc file
+tmp_ratio_mix.py,legacy_candidate,temporary/ad-hoc file
+zenodo_10711806.json,experiments,paper/supporting artifact
