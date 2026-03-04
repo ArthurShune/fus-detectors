@@ -29,7 +29,13 @@ jobs:
 
       - name: Lint phase tooling
         run: |
-          ruff check scripts/verify_refactor.py scripts/refactor_inventory.py scripts/phase_close_report.py
+          ruff check \
+            scripts/verify_refactor.py \
+            scripts/refactor_inventory.py \
+            scripts/phase_close_report.py \
+            scripts/refactor/verify_gate.py \
+            scripts/refactor/inventory.py \
+            scripts/refactor/phase_close.py
 
       - name: Run quick refactor gate (CI-safe)
         env:
