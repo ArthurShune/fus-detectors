@@ -9,7 +9,7 @@ Run \path{PYTHONPATH=. conda run -n stap-fus python scripts/generate_repro_manif
 \paragraph{Repository state.}
 Public repository: \path{https://github.com/ArthurShune/stap-for-fus.git}.
 Release tag: (not recorded; set \texttt{STAP\_FUS\_RELEASE\_TAG} or create a git tag).
-Commit: \texttt{3bd3deb} (full: \texttt{3bd3deba86}\allowbreak\texttt{e892d2894a}\allowbreak\texttt{45a9747075}\allowbreak\texttt{8ea219450d}); branch: \texttt{main}; dirty: \texttt{false}.
+Commit: \texttt{2a3c36d} (full: \texttt{2a3c36d249}\allowbreak\texttt{9fd7d6af17}\allowbreak\texttt{24d6d23435}\allowbreak\texttt{0370a3ec43}); branch: \texttt{main}; dirty: \texttt{false}.
 Dirty details: non-ignored paths=0, ignored build products=0.
 Note: dirty status ignores common LaTeX build products (e.g., \texttt{*.aux, *.log, *.out, *.fls, *.fdb\_latexmk, *.synctex.gz, *.pdf}).
 For archival reproducibility, generate this manifest from a clean, tagged release commit (\texttt{dirty=false}) and record the public repository URL and tag.
@@ -64,6 +64,43 @@ Paths below are the expected on-disk locations used by the scripts in this repos
 \paragraph{Artifact commands.}
 Each entry below lists the command(s) used to regenerate the referenced paper artifact(s). Most scripts write a JSON summary containing the full parameterization and are safe to rerun.
 \begin{enumerate}[label=(R\arabic*),nosep]
+  \item \textbf{RTX 4080 SUPER audit logs (nvidia-smi + stap-fus conda env versions)}
+    (paper refs: Table: latency\_summary\_4080super).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{hw/4080super_nvidia_smi.txt}
+      \item \path{reports/}\allowbreak\path{hw/4080super_env.txt}
+    \end{itemize}
+    \endgroup
+    Notes: These logs are hardware-dependent and are captured once per machine/driver stack.
+{\footnotesize
+\begin{verbatim}
+nvidia-smi > reports/hw/4080super_nvidia_smi.txt
+
+conda run -n stap-fus python -c "import platform,sys; import torch; print('platform:', platform.platform()); print('python:', sys.version.splitlines()[0]); print('torch:', torch.__version__); print('torch.version.cuda:', torch.version.cuda); print('cuda_is_available:', torch.cuda.is_available()); print('device0_name:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None);" > reports/hw/4080super_env.txt
+\end{verbatim}
+}
+
+  \item \textbf{RTX 4080 SUPER refactor gates (quick/phase/full)}
+    (paper refs: Reproducibility gates (Phase 7)).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{refactor/4080super_refactor_quick.log}
+      \item \path{reports/}\allowbreak\path{refactor/4080super_refactor_phase.log}
+      \item \path{reports/}\allowbreak\path{refactor/4080super_refactor_full.log}
+    \end{itemize}
+    \endgroup
+    Notes: The 'full' gate is optional on constrained machines; see Makefile targets.
+{\footnotesize
+\begin{verbatim}
+conda run -n stap-fus make refactor-quick 2>&1 | tee reports/refactor/4080super_refactor_quick.log
+conda run -n stap-fus make refactor-phase 2>&1 | tee reports/refactor/4080super_refactor_phase.log
+conda run -n stap-fus make refactor-full  2>&1 | tee reports/refactor/4080super_refactor_full.log
+\end{verbatim}
+}
+
   \item \textbf{PD-mode sanity checks (PD-mode map and score S=PD)}
     (paper refs: Notation (PD convention)).
     Outputs:
@@ -315,6 +352,130 @@ conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
   --prf-hz 1000 --Lt 64 --svd-energy-frac 0.97
 
 # Collect consolidated CSV/JSON (steady windows/frames 2..N; includes parity checks):
+PYTHONPATH=. conda run -n stap-fus python scripts/collect_latency_summary.py
+\end{verbatim}
+}
+
+  \item \textbf{RTX 4080 SUPER CUDA latency replay (Brain-* k-Wave; legacy vs optimized; steady-state windows 2..5)}
+    (paper refs: Table: latency\_summary\_4080super).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{runs/latency_4080super_brain_openskull_w64_}\allowbreak\path{tb192_off0_64_128_192_256/}
+      \item \path{runs/latency_4080super_brain_openskull_w64_}\allowbreak\path{tb192_off0_64_128_192_256_cond/}
+      \item \path{runs/latency_4080super_brain_aliascontract_}\allowbreak\path{w64_tb192_off0_64_128_192_256/}
+      \item \path{runs/latency_4080super_brain_aliascontract_}\allowbreak\path{w64_tb192_off0_64_128_192_256_cond/}
+      \item \path{runs/latency_4080super_brain_skullor_w64_}\allowbreak\path{tb192_off0_64_128_192_256/}
+      \item \path{runs/latency_4080super_brain_skullor_w64_}\allowbreak\path{tb192_off0_64_128_192_256_cond/}
+    \end{itemize}
+    \endgroup
+    Notes: The script writes both legacy/ and optimized/ subtrees per out-root and reports cold(win1) and steady(avg win2..N). Publishable latency uses windows 2..N.
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_seed1 \
+  --out-root runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256 \
+  --profile Brain-OpenSkull \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --stap-debug-samples 0 \
+  --tile-batch 192 --cuda-warmup-heavy \
+  --stap-conditional off
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_seed1 \
+  --out-root runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256_cond \
+  --profile Brain-OpenSkull \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --stap-debug-samples 0 \
+  --tile-batch 192 --cuda-warmup-heavy \
+  --stap-conditional on
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_hab_seed2 \
+  --out-root runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256 \
+  --profile Brain-AliasContract \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --stap-debug-samples 0 \
+  --tile-batch 192 --cuda-warmup-heavy \
+  --stap-conditional off
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_hab_seed2 \
+  --out-root runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256_cond \
+  --profile Brain-AliasContract \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --stap-debug-samples 0 \
+  --tile-batch 192 --cuda-warmup-heavy \
+  --stap-conditional on
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_hab_v3_skull_seed2 \
+  --out-root runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256 \
+  --profile Brain-SkullOR \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --stap-debug-samples 0 \
+  --tile-batch 192 --cuda-warmup-heavy \
+  --stap-conditional off
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_hab_v3_skull_seed2 \
+  --out-root runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256_cond \
+  --profile Brain-SkullOR \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --stap-debug-samples 0 \
+  --tile-batch 192 --cuda-warmup-heavy \
+  --stap-conditional on
+\end{verbatim}
+}
+
+  \item \textbf{RTX 4080 SUPER CUDA latency replay (real data: Shin; legacy vs optimized; steady-state frames 2..N)}
+    (paper refs: Table: latency\_summary\_4080super).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{runs/latency_4080super_shin_fig3_w128_}\allowbreak\path{tb192/legacy/}
+      \item \path{runs/latency_4080super_shin_fig3_w128_}\allowbreak\path{tb192/optimized/}
+    \end{itemize}
+    \endgroup
+    Notes: These are 'latency-only' replay settings (e.g., STAP\_TYLER\_MAX\_ITER=1, STAP\_SNAPSHOT\_STRIDE=4) to isolate compute throughput; see per-bundle meta.json for exact telemetry.
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. \
+STAP_TILING_UNFOLD=0 STAP_FAST_CUDA_GRAPH=0 \
+STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \
+STAP_TYLER_TRITON_CAPTURE=1 \
+conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
+  --stap-device cuda --tile-batch 192 --clean \
+  --out-root runs/latency_4080super_shin_fig3_w128_tb192/legacy \
+  shin --iq-file IQData001.dat \
+  --windows 0:128,64:192,122:250 \
+  --Lt 64 --svd-energy-frac 0.97
+
+PYTHONPATH=. \
+STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \
+STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \
+STAP_TYLER_TRITON_CAPTURE=1 \
+conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
+  --stap-device cuda --tile-batch 192 --clean \
+  --out-root runs/latency_4080super_shin_fig3_w128_tb192/optimized \
+  shin --iq-file IQData001.dat \
+  --windows 0:128,64:192,122:250 \
+  --Lt 64 --svd-energy-frac 0.97
+\end{verbatim}
+}
+
+  \item \textbf{RTX 4080 SUPER latency summary aggregation (CSV/JSON)}
+    (paper refs: Table: latency\_summary\_4080super).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{latency/4080super_latency_summary.csv}
+      \item \path{reports/}\allowbreak\path{latency/4080super_latency_summary.json}
+    \end{itemize}
+    \endgroup
+    Notes: Reads existing runs/latency\_4080super\_* folders and writes steady-state windows 2..N summaries.
+{\footnotesize
+\begin{verbatim}
 PYTHONPATH=. conda run -n stap-fus python scripts/collect_latency_summary.py
 \end{verbatim}
 }
