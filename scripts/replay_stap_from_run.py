@@ -19,53 +19,17 @@ from typing import List, Sequence, Tuple
 import numpy as np
 
 from scripts.refactor.replay_bundle_io import build_window_specs, load_replay_source
+from scripts.refactor.replay_inputs import (
+    load_default_masks_and_vessels,
+    parse_hosvd_options,
+)
 from scripts.refactor.replay_telemetry import (
     build_base_meta_extra,
     build_guard_opts,
     build_ka_opts_extra,
     compose_window_meta_extra,
 )
-from sim.kwave.common import SimGeom, write_acceptance_bundle
-
-
-def _maybe_resize_roi_mask(mask: np.ndarray, geom: SimGeom) -> np.ndarray:
-    """
-    Resize a 2D ROI mask to match the simulation geometry (Ny, Nx).
-
-    For now we support only the common MaceBridge case where the mask
-    height differs from Ny by at most one pixel (due to a small upward
-    adjustment of Ny for k-Wave prime-factor friendliness). In that case
-    we pad or crop along the depth dimension and leave the lateral size
-    unchanged. Any other mismatch is treated as an error.
-    """
-    mask = np.asarray(mask, dtype=bool)
-    H_roi, W_roi = mask.shape
-    H_geom, W_geom = int(geom.Ny), int(geom.Nx)
-
-    if H_roi == H_geom and W_roi == W_geom:
-        return mask
-
-    if W_roi != W_geom:
-        raise ValueError(
-            f"ROI mask width mismatch: {W_roi} vs geom.Nx={W_geom}; "
-            "cannot safely align to simulation grid."
-        )
-
-    # Allow a single-pixel height adjustment (typical for MaceBridge where
-    # Ny may be incremented to avoid large prime factors); treat the extra
-    # row as background and pad at the far depth edge.
-    if H_roi == H_geom - 1:
-        resized = np.zeros((H_geom, W_geom), dtype=bool)
-        resized[:H_roi, :] = mask
-        return resized
-    if H_roi == H_geom + 1:
-        # Rare case: ROI one row taller than the PD grid; drop the last row.
-        return mask[:H_geom, :]
-
-    raise ValueError(
-        f"ROI mask height mismatch: {H_roi} vs geom.Ny={H_geom}; "
-        "only ±1 pixel differences are supported."
-    )
+from sim.kwave.common import write_acceptance_bundle
 
 
 def parse_args() -> argparse.Namespace:
@@ -1395,105 +1359,13 @@ def main() -> None:
             except Exception as exc:  # pragma: no cover - optional warmup
                 print(f"[replay_stap_from_run] Heavy CUDA warmup skipped: {exc}", flush=True)
 
-    # Optional Macé/MaceBridge ROI defaults: when a replay run directory
-    # contains roi_H1.npy / roi_H0.npy, treat roi_H1 as the default flow
-    # mask and everything else as background. These defaults are passed
-    # into write_acceptance_bundle so that synthetic flow/alias/clutter
-    # injections and PD-based flow mask refinement respect Macé-derived
-    # anatomy. For non-MaceBridge runs these files are absent and the
-    # internal circular defaults are used instead.
-    flow_mask_default: np.ndarray | None = None
-    bg_mask_default: np.ndarray | None = None
-    micro_vessels_arr: np.ndarray | None = None
-    alias_vessels_arr: np.ndarray | None = None
-    roi_h1_path = src_root / "roi_H1.npy"
-    roi_h0_path = src_root / "roi_H0.npy"
-    if roi_h1_path.exists():
-        roi_H1 = np.load(roi_h1_path)
-        roi_H1 = _maybe_resize_roi_mask(roi_H1, geom)
-        # Background is simply the complement of H1; any explicit H0 ROI is
-        # a subset of this and does not need to be treated separately for
-        # purposes of flow/background masking.
-        flow_mask_default = roi_H1
-        bg_mask_default = ~roi_H1
-        # If an explicit H0 mask is present and shape-compatible, we keep it
-        # only to sanity-check alignment; otherwise it is ignored.
-        if roi_h0_path.exists():
-            try:
-                roi_H0 = np.load(roi_h0_path)
-                _ = _maybe_resize_roi_mask(roi_H0, geom)
-            except Exception:
-                # Do not fail replay if the auxiliary H0 mask is misaligned;
-                # flow_mask_default/bg_mask_default already carry a safe prior.
-                pass
-        # Optional Macé vessel fields for MaceBridge: when present, these
-        # arrays encode per-slice microvascular and alias vessel centerlines
-        # on the Macé grid. We treat them as defined on the PD grid up to
-        # clamping and pass them into write_acceptance_bundle so that Pf/Pa
-        # modulations can be injected at replay time.
-        micro_path = src_root / "micro_vessels.npy"
-        alias_path = src_root / "alias_vessels.npy"
-        if micro_path.exists():
-            micro_vessels_arr = np.load(micro_path)
-        if alias_path.exists():
-            alias_vessels_arr = np.load(alias_path)
-
-    # For k-Wave Brain-* pilots, prefer simulator-truth masks from an existing
-    # acceptance bundle under the source directory when present. This ensures
-    # synthetic injections (flow/alias/clutter) and evaluation masks share the
-    # same geometry, avoiding accidental injection on a fallback circular mask.
-    if flow_mask_default is None or bg_mask_default is None:
-        try:
-            pw_dirs = sorted(p for p in src_root.iterdir() if p.is_dir() and p.name.startswith("pw_"))
-        except Exception:
-            pw_dirs = []
-        for pw_dir in pw_dirs:
-            mask_flow_path = pw_dir / "mask_flow.npy"
-            mask_bg_path = pw_dir / "mask_bg.npy"
-            if not (mask_flow_path.exists() and mask_bg_path.exists()):
-                continue
-            try:
-                flow_mask_candidate = np.load(mask_flow_path)
-                bg_mask_candidate = np.load(mask_bg_path)
-                flow_mask_candidate = _maybe_resize_roi_mask(flow_mask_candidate, geom)
-                bg_mask_candidate = _maybe_resize_roi_mask(bg_mask_candidate, geom)
-            except Exception:
-                continue
-            flow_mask_default = flow_mask_candidate.astype(bool, copy=False)
-            bg_mask_default = bg_mask_candidate.astype(bool, copy=False)
-            break
-
-    hosvd_ranks: tuple[int, int, int] | None = None
-    if args.hosvd_ranks:
-        parts = [p.strip() for p in str(args.hosvd_ranks).split(",") if p.strip()]
-        if len(parts) != 3:
-            raise SystemExit(
-                "Invalid --hosvd-ranks "
-                f"'{args.hosvd_ranks}'; expected 'rT,rH,rW' with three integers."
-            )
-        try:
-            hosvd_ranks = (int(parts[0]), int(parts[1]), int(parts[2]))
-        except ValueError as exc:
-            raise SystemExit(
-                "Invalid --hosvd-ranks "
-                f"'{args.hosvd_ranks}'; expected 'rT,rH,rW' with three integers."
-            ) from exc
-
-    hosvd_energy_fracs: tuple[float, float, float] | None = None
-    if args.hosvd_energy_fracs and hosvd_ranks is None:
-        parts_f = [p.strip() for p in str(args.hosvd_energy_fracs).split(",") if p.strip()]
-        if len(parts_f) != 3:
-            raise SystemExit(
-                "Invalid --hosvd-energy-fracs "
-                f"'{args.hosvd_energy_fracs}'; expected 'fT,fH,fW' with three floats."
-            )
-        try:
-            hosvd_energy_fracs = (float(parts_f[0]), float(parts_f[1]), float(parts_f[2]))
-        except ValueError as exc:
-            raise SystemExit(
-                "Invalid --hosvd-energy-fracs "
-                f"'{args.hosvd_energy_fracs}'; expected 'fT,fH,fW' with three floats."
-            ) from exc
+    flow_mask_default, bg_mask_default, micro_vessels_arr, alias_vessels_arr = (
+        load_default_masks_and_vessels(src_root=src_root, geom=geom)
+    )
+    hosvd_ranks, hosvd_energy_fracs = parse_hosvd_options(
+        hosvd_ranks_arg=args.hosvd_ranks,
+        hosvd_energy_fracs_arg=args.hosvd_energy_fracs,
+    )
     pulses_per_set = int(
         meta.get(
             "pulses_per_set",
