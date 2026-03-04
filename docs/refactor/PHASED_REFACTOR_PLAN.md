@@ -22,6 +22,7 @@ Deliverables:
 - Stable `quick/phase/full` verification harness.
 - Threshold contract and failure policy.
 - CI-ready command surface for refactor validation.
+- Phase-close report generation template/tooling.
 
 Exit gate:
 - `scripts/verify_refactor.py --mode phase --execute`
