@@ -4,22 +4,19 @@
     "release_tag": null
   },
   "git": {
-    "commit": "d13aa12f137417b25552c445542ebf7bde347142",
-    "commit_short": "d13aa12",
+    "commit": "3bd3deba86e892d2894a45a97470758ea219450d",
+    "commit_short": "3bd3deb",
     "branch": "main",
-    "dirty": true,
-    "dirty_paths_count": 2,
+    "dirty": false,
+    "dirty_paths_count": 0,
     "dirty_ignored_paths_count": 0,
-    "dirty_paths": [
-      "M CITATION.cff",
-      "M stap_fus_methodology.tex"
-    ],
+    "dirty_paths": [],
     "dirty_ignored_paths": []
   },
   "env": {
     "preferred_conda_env": "stap-fus",
     "conda": {
-      "python": "3.11.14 | packaged by conda-forge | (main, Oct 22 2025, 22:46:25) [GCC 14.3.0]",
+      "python": "3.11.14 | packaged by conda-forge | (main, Jan 26 2026, 23:48:32) [GCC 14.3.0]",
       "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
       "machine": "x86_64",
       "processor": "x86_64",
@@ -28,17 +25,17 @@
         "scipy": "1.14.1",
         "torch": "2.4.1",
         "matplotlib": "3.10.0",
-        "cupy": "13.6.0"
+        "cupy": "14.0.1"
       },
       "torch_cuda": {
         "cuda_is_available": true,
         "cuda_version": "12.1",
         "device_count": 1,
-        "device0_name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU"
+        "device0_name": "NVIDIA GeForce RTX 4080 SUPER"
       }
     },
     "current": {
-      "python": "3.11.14 | packaged by conda-forge | (main, Oct 22 2025, 22:46:25) [GCC 14.3.0]",
+      "python": "3.11.14 | packaged by conda-forge | (main, Jan 26 2026, 23:48:32) [GCC 14.3.0]",
       "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
       "machine": "x86_64",
       "processor": "x86_64",
@@ -47,15 +44,15 @@
         "scipy": "1.14.1",
         "torch": "2.4.1",
         "matplotlib": "3.10.0",
-        "cupy": "13.6.0"
+        "cupy": "14.0.1"
       },
       "torch_cuda": {
         "cuda_is_available": true,
         "cuda_version": "12.1",
         "device_count": 1,
-        "device0_name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU"
+        "device0_name": "NVIDIA GeForce RTX 4080 SUPER"
       },
-      "cwd": "/home/ashune/stap-for-fus"
+      "cwd": "/home/arthu/stap-for-fus"
     },
     "environment_yml": {
       "path": "environment.yml",
@@ -255,6 +252,107 @@
         "  gammex --frames-along 0:6 --frames-across 0:6"
       ],
       "notes": "The script prints cold(win1) and steady(avg win2..N); the latency table uses the steady-state mean and excludes window/frame 1 (graph capture + Triton JIT)."
+    },
+    {
+      "name": "RTX 4080 SUPER latency reruns + consolidated summaries (legacy vs optimized; steady-state windows/frames 2..N)",
+      "paper_refs": [
+        "Table: latency_summary_4080super"
+      ],
+      "outputs": [
+        "reports/hw/4080super_nvidia_smi.txt",
+        "reports/hw/4080super_env.txt",
+        "runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256/",
+        "runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256_cond/",
+        "runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256/",
+        "runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256_cond/",
+        "runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256/",
+        "runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256_cond/",
+        "runs/latency_4080super_shin_fig3_w128_tb192/",
+        "reports/latency/4080super_latency_summary.csv",
+        "reports/latency/4080super_latency_summary.json"
+      ],
+      "commands": [
+        "# Hardware audit (record driver/GPU; record stap-fus env versions):",
+        "nvidia-smi > reports/hw/4080super_nvidia_smi.txt",
+        "conda run -n stap-fus python -c 'import platform, sys; import torch; print(\"python\", sys.version.splitlines()[0]); print(\"platform\", platform.platform()); print(\"torch\", torch.__version__); print(\"torch_cuda\", getattr(torch.version, \"cuda\", None)); print(\"cuda_is_available\", torch.cuda.is_available()); print(\"device0\", torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)' > reports/hw/4080super_env.txt",
+        "",
+        "# Brain k-Wave latency reruns (offsets 0/64/128/192/256; tile_batch=192):",
+        "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+        "  --src runs/pilot/r4c_kwave_seed1 \\",
+        "  --out-root runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256 \\",
+        "  --profile Brain-OpenSkull \\",
+        "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+        "  --stap-device cuda --tile-batch 192 \\",
+        "  --cuda-warmup-heavy --stap-debug-samples 0",
+        "",
+        "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+        "  --src runs/pilot/r4c_kwave_seed1 \\",
+        "  --out-root runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256_cond \\",
+        "  --profile Brain-OpenSkull \\",
+        "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+        "  --stap-device cuda --tile-batch 192 \\",
+        "  --cuda-warmup-heavy --stap-debug-samples 0 \\",
+        "  --stap-conditional on",
+        "",
+        "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+        "  --src runs/pilot/r4c_kwave_hab_seed2 \\",
+        "  --out-root runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256 \\",
+        "  --profile Brain-AliasContract \\",
+        "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+        "  --stap-device cuda --tile-batch 192 \\",
+        "  --cuda-warmup-heavy --stap-debug-samples 0",
+        "",
+        "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+        "  --src runs/pilot/r4c_kwave_hab_seed2 \\",
+        "  --out-root runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256_cond \\",
+        "  --profile Brain-AliasContract \\",
+        "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+        "  --stap-device cuda --tile-batch 192 \\",
+        "  --cuda-warmup-heavy --stap-debug-samples 0 \\",
+        "  --stap-conditional on",
+        "",
+        "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+        "  --src runs/pilot/r4c_kwave_hab_v3_skull_seed2 \\",
+        "  --out-root runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256 \\",
+        "  --profile Brain-SkullOR \\",
+        "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+        "  --stap-device cuda --tile-batch 192 \\",
+        "  --cuda-warmup-heavy --stap-debug-samples 0",
+        "",
+        "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+        "  --src runs/pilot/r4c_kwave_hab_v3_skull_seed2 \\",
+        "  --out-root runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256_cond \\",
+        "  --profile Brain-SkullOR \\",
+        "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+        "  --stap-device cuda --tile-batch 192 \\",
+        "  --cuda-warmup-heavy --stap-debug-samples 0 \\",
+        "  --stap-conditional on",
+        "",
+        "# Shin RatBrain Fig3 latency (requires dataset; see docs/data_download.md):",
+        "PYTHONPATH=. STAP_FAST_PATH=1 STAP_TILING_UNFOLD=0 STAP_FAST_CUDA_GRAPH=0 \\",
+        "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 STAP_TYLER_TRITON_CAPTURE=1 \\",
+        "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+        "  --stap-device cuda --tile-batch 192 --clean \\",
+        "  --out-root runs/latency_4080super_shin_fig3_w128_tb192/legacy \\",
+        "  shin --data-root data/shin_zenodo_10711806/ratbrain_fig3_raw \\",
+        "  --iq-file IQData001.dat \\",
+        "  --windows 0:128,64:192,122:250 \\",
+        "  --prf-hz 1000 --Lt 64 --svd-energy-frac 0.97",
+        "",
+        "PYTHONPATH=. STAP_FAST_PATH=1 STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \\",
+        "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 STAP_TYLER_TRITON_CAPTURE=1 \\",
+        "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+        "  --stap-device cuda --tile-batch 192 --clean \\",
+        "  --out-root runs/latency_4080super_shin_fig3_w128_tb192/optimized \\",
+        "  shin --data-root data/shin_zenodo_10711806/ratbrain_fig3_raw \\",
+        "  --iq-file IQData001.dat \\",
+        "  --windows 0:128,64:192,122:250 \\",
+        "  --prf-hz 1000 --Lt 64 --svd-energy-frac 0.97",
+        "",
+        "# Collect consolidated CSV/JSON (steady windows/frames 2..N; includes parity checks):",
+        "PYTHONPATH=. conda run -n stap-fus python scripts/collect_latency_summary.py"
+      ],
+      "notes": "The replay scripts print cold(win1) and steady(avg win2..N); the paper tables report steady-state means. For Brain k-Wave, scripts/latency_rerun_check.py forces legacy vs optimized CUDA-graph settings internally (legacy: STAP_FAST_CUDA_GRAPH=0; optimized: STAP_FAST_CUDA_GRAPH=1). Gammex latency reruns may be skipped if the dataset is unavailable; see docs/data_download.md."
     },
     {
       "name": "Brain-* baseline fairness: MC--SVD(e) tune-once sweep",
