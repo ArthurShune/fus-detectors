@@ -1,8 +1,8 @@
 {
-  "generated_at_utc": "2026-03-04T18:41:36+00:00",
+  "generated_at_utc": "2026-03-04T22:41:40+00:00",
   "git": {
-    "commit": "7f70591af0d7cf3611b9211b533c556c2e277264",
-    "commit_short": "7f70591",
+    "commit": "ae75c274329cbff3e3c191e1a3dd45cd539ff1f7",
+    "commit_short": "ae75c27",
     "dirty": true
   },
   "latency_policy": {
@@ -1430,16 +1430,396 @@
       "dataset": "twinkling_gammex",
       "scenario": "Gammex along (linear17 @ PRF 2500; per cine frame)",
       "decision_rule": "full",
-      "status": "skipped",
-      "notes": "missing data: expected RawBCF cine under data/twinkling_artifact/Flow in Gammex phantom/. Dataset download requires a web form + captcha (see DOI 10.17816/DD76511)."
+      "run_root": "runs/latency_4080super_gammex_linear17_f0_6_tb512",
+      "tile_batch": 512,
+      "window_length": 1,
+      "windows": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "legacy": {
+        "bundle_parent": "runs/latency_4080super_gammex_linear17_f0_6_tb512/legacy/gammex/along_linear17__RawBCFCine/stap_full/along_linear17__RawBCFCine",
+        "bundles": [
+          "frame000",
+          "frame001",
+          "frame002",
+          "frame003",
+          "frame004",
+          "frame005"
+        ],
+        "baseline_ms": {
+          "cold_ms": 296.6864909976721,
+          "steady_mean_ms": 8.181273052468896,
+          "steady_median_ms": 7.434112019836903,
+          "per_window_ms": [
+            296.6864909976721,
+            6.242935080081224,
+            11.806691996753216,
+            7.3718351777642965,
+            8.05079098790884,
+            7.434112019836903
+          ],
+          "steady_windows": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "stap_ms": {
+          "cold_ms": 284.43050384521484,
+          "steady_mean_ms": 104.78239059448242,
+          "steady_median_ms": 97.64528274536133,
+          "per_window_ms": [
+            284.43050384521484,
+            97.64528274536133,
+            92.55647659301758,
+            135.61201095581055,
+            96.8632698059082,
+            101.23491287231445
+          ],
+          "steady_windows": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "total_ms": {
+          "cold_ms": 581.1169948428869,
+          "steady_mean_ms": 112.96366364695132,
+          "steady_median_ms": 104.91406079381704,
+          "per_window_ms": [
+            581.1169948428869,
+            103.88821782544255,
+            104.3631685897708,
+            142.98384613357484,
+            104.91406079381704,
+            108.66902489215136
+          ],
+          "steady_windows": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        }
+      },
+      "optimized": {
+        "bundle_parent": "runs/latency_4080super_gammex_linear17_f0_6_tb512/optimized/gammex/along_linear17__RawBCFCine/stap_full/along_linear17__RawBCFCine",
+        "bundles": [
+          "frame000",
+          "frame001",
+          "frame002",
+          "frame003",
+          "frame004",
+          "frame005"
+        ],
+        "baseline_ms": {
+          "cold_ms": 220.91177105903625,
+          "steady_mean_ms": 7.520199520513415,
+          "steady_median_ms": 7.387704914435744,
+          "per_window_ms": [
+            220.91177105903625,
+            7.439346984028816,
+            10.774894850328565,
+            7.387704914435744,
+            4.859394859522581,
+            7.13965599425137
+          ],
+          "steady_windows": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "stap_ms": {
+          "cold_ms": 300.9960651397705,
+          "steady_mean_ms": 61.696577072143555,
+          "steady_median_ms": 58.53462219238281,
+          "per_window_ms": [
+            300.9960651397705,
+            58.89153480529785,
+            49.352169036865234,
+            91.63928031921387,
+            58.53462219238281,
+            50.06527900695801
+          ],
+          "steady_windows": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "total_ms": {
+          "cold_ms": 521.9078361988068,
+          "steady_mean_ms": 69.21677659265697,
+          "steady_median_ms": 63.394017051905394,
+          "per_window_ms": [
+            521.9078361988068,
+            66.33088178932667,
+            60.1270638871938,
+            99.02698523364961,
+            63.394017051905394,
+            57.20493500120938
+          ],
+          "steady_windows": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        }
+      },
+      "speedup": {
+        "stap_mean": 1.6983501446434768,
+        "total_mean": 1.6320272224138122
+      },
+      "parity": {
+        "status": "ok",
+        "files": {
+          "pd_base.npy": {
+            "p0500": 0.0,
+            "p0900": 0.0,
+            "p0990": 0.0,
+            "p0999": 0.0,
+            "max": 0.0
+          },
+          "pd_stap.npy": {
+            "p0500": 0.0,
+            "p0900": 0.0,
+            "p0990": 128.0,
+            "p0999": 4096.0,
+            "max": 131072.0
+          },
+          "score_stap.npy": {
+            "p0500": 0.0,
+            "p0900": 0.0,
+            "p0990": 9.313225746154785e-10,
+            "p0999": 3.725290298461914e-09,
+            "max": 2.9802322387695312e-08
+          },
+          "stap_score_map.npy": {
+            "p0500": 0.0,
+            "p0900": 0.0,
+            "p0990": 9.313225746154785e-10,
+            "p0999": 3.725290298461914e-09,
+            "max": 2.9802322387695312e-08
+          }
+        },
+        "overall_max_abs": 131072.0
+      },
+      "status": "ok"
     },
     {
       "key": "gammex_across_linear17_full",
       "dataset": "twinkling_gammex",
       "scenario": "Gammex across (linear17 @ PRF 2500; per cine frame)",
       "decision_rule": "full",
-      "status": "skipped",
-      "notes": "missing data: expected RawBCF cine under data/twinkling_artifact/Flow in Gammex phantom/. Dataset download requires a web form + captcha (see DOI 10.17816/DD76511)."
+      "run_root": "runs/latency_4080super_gammex_linear17_f0_6_tb512",
+      "tile_batch": 512,
+      "window_length": 1,
+      "windows": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "legacy": {
+        "bundle_parent": "runs/latency_4080super_gammex_linear17_f0_6_tb512/legacy/gammex/across_linear17__RawBCFCine_08062017_145434_17/stap_full/across_linear17__RawBCFCine_08062017_145434_17",
+        "bundles": [
+          "frame000",
+          "frame001",
+          "frame002",
+          "frame003",
+          "frame004",
+          "frame005"
+        ],
+        "baseline_ms": {
+          "cold_ms": 1.8829160835593939,
+          "steady_mean_ms": 1.72533905133605,
+          "steady_median_ms": 1.6528030391782522,
+          "per_window_ms": [
+            1.8829160835593939,
+            1.6232121270149946,
+            1.572933979332447,
+            1.922043040394783,
+            1.8557030707597733,
+            1.6528030391782522
+          ],
+          "steady_windows": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "stap_ms": {
+          "cold_ms": 44.52633857727051,
+          "steady_mean_ms": 40.14863967895508,
+          "steady_median_ms": 39.85953330993652,
+          "per_window_ms": [
+            44.52633857727051,
+            39.869070053100586,
+            39.82090950012207,
+            39.85953330993652,
+            39.82090950012207,
+            41.37277603149414
+          ],
+          "steady_windows": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "total_ms": {
+          "cold_ms": 46.4092546608299,
+          "steady_mean_ms": 41.87397873029113,
+          "steady_median_ms": 41.676612570881844,
+          "per_window_ms": [
+            46.4092546608299,
+            41.49228218011558,
+            41.39384347945452,
+            41.78157635033131,
+            41.676612570881844,
+            43.02557907067239
+          ],
+          "steady_windows": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        }
+      },
+      "optimized": {
+        "bundle_parent": "runs/latency_4080super_gammex_linear17_f0_6_tb512/optimized/gammex/across_linear17__RawBCFCine_08062017_145434_17/stap_full/across_linear17__RawBCFCine_08062017_145434_17",
+        "bundles": [
+          "frame000",
+          "frame001",
+          "frame002",
+          "frame003",
+          "frame004",
+          "frame005"
+        ],
+        "baseline_ms": {
+          "cold_ms": 1.940891146659851,
+          "steady_mean_ms": 1.3989420142024755,
+          "steady_median_ms": 1.354458974674344,
+          "per_window_ms": [
+            1.940891146659851,
+            1.57140102237463,
+            1.4252141118049622,
+            1.354458974674344,
+            1.3050520792603493,
+            1.3385838828980923
+          ],
+          "steady_windows": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "stap_ms": {
+          "cold_ms": 58.96568298339844,
+          "steady_mean_ms": 18.950605392456055,
+          "steady_median_ms": 18.88561248779297,
+          "per_window_ms": [
+            58.96568298339844,
+            18.036603927612305,
+            18.88561248779297,
+            20.36309242248535,
+            18.570661544799805,
+            18.897056579589844
+          ],
+          "steady_windows": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "total_ms": {
+          "cold_ms": 60.90657413005829,
+          "steady_mean_ms": 20.34954740665853,
+          "steady_median_ms": 20.235640462487936,
+          "per_window_ms": [
+            60.90657413005829,
+            19.608004949986935,
+            20.31082659959793,
+            21.717551397159696,
+            19.875713624060154,
+            20.235640462487936
+          ],
+          "steady_windows": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        }
+      },
+      "speedup": {
+        "stap_mean": 2.1185940421163343,
+        "total_mean": 2.057735137469919
+      },
+      "parity": {
+        "status": "ok",
+        "files": {
+          "pd_base.npy": {
+            "p0500": 0.0,
+            "p0900": 0.0,
+            "p0990": 0.0,
+            "p0999": 0.0,
+            "max": 0.0
+          },
+          "pd_stap.npy": {
+            "p0500": 0.0,
+            "p0900": 0.0,
+            "p0990": 32.0,
+            "p0999": 128.0,
+            "max": 1024.0
+          },
+          "score_stap.npy": {
+            "p0500": 0.0,
+            "p0900": 4.656612873077393e-10,
+            "p0990": 3.725290298461914e-09,
+            "p0999": 7.450580596923828e-09,
+            "max": 1.4901161193847656e-08
+          },
+          "stap_score_map.npy": {
+            "p0500": 0.0,
+            "p0900": 4.656612873077393e-10,
+            "p0990": 3.725290298461914e-09,
+            "p0999": 7.450580596923828e-09,
+            "max": 1.4901161193847656e-08
+          }
+        },
+        "overall_max_abs": 1024.0
+      },
+      "status": "ok"
     }
   ]
 }
