@@ -597,6 +597,8 @@ This tail-dominance failure mode motivates both the strict low-FPR operating dis
 \paragraph{Latency and conditional execution.}
 We also report representative runtimes for baseline clutter suppression and STAP under a conservative fixed operating profile (tile geometry, slow-time aperture $L_t$, and covariance-conditioning targets fixed \emph{a priori}). Conditional execution reduces runtime by skipping the STAP stage on tiles with negligible proxy flow support and reverting to the baseline score there. Because this changes the overall decision rule, it can change operating characteristics; we therefore treat conditional execution as a distinct variant and require explicit leakage controls when reporting it. Unless otherwise stated, conditional execution uses a \emph{disjoint-window} proxy mask for detection reporting (mask derived from one window and applied to a disjoint window) to avoid same-window proxy leakage.
 
+\noindent Latency is measured via deterministic replay scripts that run both a \emph{legacy} path (eager execution; CUDA graphs disabled) and an \emph{optimized} path (CUDA graphs enabled when supported; \texttt{STAP\_FAST\_CUDA\_GRAPH=1}). We report \emph{steady-state} means over windows/frames 2..N and exclude the first replay window/frame, which includes one-time GPU overheads (initialization, kernel compilation, and optional CUDA-graph capture). The baseline and STAP stages are timed separately (excluding disk I/O), and ``Total'' reports baseline+STAP wall time; full legacy-versus-optimized per-window statistics and parity checks for the RTX~4080~SUPER reruns are written to \path{reports/latency/4080super_latency_summary.csv} / \path{reports/latency/4080super_latency_summary.json}.
+
 \begin{table}[h]
 \centering
 \small
@@ -618,8 +620,29 @@ Gammex across (linear17 @ PRF 2500; per cine frame) & $0.005$ & $0.105$ & $0.110
 \label{tab:latency_summary}
 \end{table}
 
+\begin{table}[h]
+\centering
+\small
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{P{6.2cm} c c c c c}
+\hline
+Scenario & Baseline (s) & STAP full (s) & Total full (s) & STAP conditional (s) & Total conditional (s) \\
+\hline
+Brain-OpenSkull (k-Wave; 64-frame window) & $0.217$ & $0.574$ & $0.791$ & $0.334$ & $0.551$ \\
+Brain-AliasContract (k-Wave; 64-frame window) & $0.228$ & $0.601$ & $0.829$ & $0.372$ & $0.600$ \\
+Brain-SkullOR (k-Wave; 64-frame window) & $0.228$ & $0.533$ & $0.761$ & $0.374$ & $0.602$ \\
+Shin RatBrain Fig3 (PRF 1000; 128-frame window; $L_t=64$) & $0.021$ & $0.154$ & $0.175$ & $0.113$ & $0.134$ \\
+Gammex along (linear17 @ PRF 2500; per cine frame) & \textemdash & \textemdash & \textemdash & \textemdash & \textemdash \\
+Gammex across (linear17 @ PRF 2500; per cine frame) & \textemdash & \textemdash & \textemdash & \textemdash & \textemdash \\
+\hline
+\end{tabular}
+}
+\caption{Same latency protocol as Table~\ref{tab:latency_summary}, rerun on a workstation-class GPU. Entries report optimized-path steady-state means (windows/frames 2..N; excludes disk I/O and excludes the first replay window/frame). Values are derived from \path{reports/latency/4080super_latency_summary.csv}. Hardware: NVIDIA GeForce RTX 4080 SUPER 16GB (see \path{reports/hw/4080super_nvidia_smi.txt}; \texttt{stap\_device=cuda}). Gammex latency reruns were skipped in this environment due to gated dataset access (see \path{docs/data_download.md}).}
+\label{tab:latency_summary_4080super}
+\end{table}
+
 \paragraph{Portable-workstation feasibility (tempered).}
-A common critique of covariance-adaptive STAP is that local covariance conditioning and the associated matrix factorizations/inversions are prohibitively expensive when applied densely across an image grid. Table~\ref{tab:latency_summary} shows that, with a batched GPU implementation and steady-state reporting, the baseline stage and the STAP stage are each sub-second on the tested regimes, yielding total baseline+STAP wall time below $\approx 1.3$~s per 64-frame Brain-* window and below $\approx 1.0$~s per 128-frame Shin window on a laptop-class GPU.\footnote{Latency is reported from steady-state replay (windows/frames 2..N) and excludes one-time GPU overheads (initialization, compilation, optional CUDA-graph capture) as well as disk I/O. For context, a 64-frame Doppler window at PRF $1500$~Hz corresponds to $64/1500\approx 43$~ms of acquired slow-time data, and a 128-frame window at PRF $1000$~Hz corresponds to $128$~ms. The present Python prototype therefore does not yet achieve real-time throughput at the full acquisition PRF, but it establishes practical feasibility on laptop-class GPUs and motivates further optimization and tighter scanner integration.} These results suggest that tile-local covariance adaptation need not require server-class hardware and may plausibly fit within portable GPU workstations (e.g.\ clinical-cart-class systems), subject to end-to-end integration constraints and the decision-rule caveats of conditional execution.
+A common critique of covariance-adaptive STAP is that local covariance conditioning and the associated matrix factorizations/inversions are prohibitively expensive when applied densely across an image grid. Tables~\ref{tab:latency_summary} and~\ref{tab:latency_summary_4080super} show that, with a batched GPU implementation and steady-state reporting, the baseline stage and the STAP stage are each sub-second on the tested regimes, yielding total baseline+STAP wall time below $\approx 1.3$~s per 64-frame Brain-* window and below $\approx 1.0$~s per 128-frame Shin window on a laptop GPU, and below $\approx 0.83$~s per 64-frame Brain-* window and below $\approx 0.18$~s per 128-frame Shin window on an RTX~4080~SUPER.\footnote{Latency is reported from steady-state replay (windows/frames 2..N) and excludes one-time GPU overheads (initialization, compilation, optional CUDA-graph capture) as well as disk I/O. For context, a 64-frame Doppler window at PRF $1500$~Hz corresponds to $64/1500\approx 43$~ms of acquired slow-time data, and a 128-frame window at PRF $1000$~Hz corresponds to $128$~ms. The present Python prototype therefore does not yet achieve real-time throughput at the full acquisition PRF, but it establishes practical feasibility on commodity laptop/workstation GPUs and motivates further optimization and tighter scanner integration.} These results suggest that tile-local covariance adaptation need not require server-class hardware and may plausibly fit within portable GPU workstations (e.g.\ clinical-cart-class systems), subject to end-to-end integration constraints and the decision-rule caveats of conditional execution.
 
 \noindent A leakage ablation confirms that conditional execution can inflate apparent performance under same-window proxy gating, while leakage-controlled gating yields a small TPR decrease (order $10^{-3}$) at the target FPRs; we therefore treat conditional execution as a distinct decision rule rather than a cost-free speedup. Table~\ref{tab:cond_exec_leakage_ablation} summarizes the effect on Brain-OpenSkull pilots; full bootstrap CIs and details are provided in \SuppOrApp{app:supp-results}.
 
