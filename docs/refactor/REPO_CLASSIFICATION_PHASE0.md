@@ -1,10 +1,10 @@
 # Repo Classification (Phase 0)
 
-Generated: 2026-03-04 13:43:09Z (UTC)
+Generated: 2026-03-04 14:04:18Z (UTC)
 
 ## Summary
 
-- core: 244 files
+- core: 253 files
 - experiments: 142 files
 - legacy_candidate: 0 files
 
@@ -12,10 +12,10 @@ Generated: 2026-03-04 13:43:09Z (UTC)
 
 - tests: 117
 - pipeline: 56
-- scripts: 23
+- scripts: 30
 - eval: 13
+- docs: 10
 - configs: 8
-- docs: 8
 - sim: 8
 - .gitattributes: 1
 - .gitignore: 1
