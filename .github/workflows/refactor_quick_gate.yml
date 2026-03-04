@@ -39,6 +39,7 @@ jobs:
             scripts/refactor/replay_inputs.py \
             scripts/refactor/replay_telemetry.py \
             scripts/refactor/replay_write_args.py \
+            scripts/refactor/replay_warmup.py \
             scripts/refactor/inventory.py \
             scripts/refactor/phase_close.py \
             scripts/refactor/cli_compat.py
