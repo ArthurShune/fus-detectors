@@ -32,6 +32,7 @@ Deliverables:
 - Move/rename modules into a cleaner package layout.
 - De-duplicate orchestration scripts.
 - Archive/remove approved legacy candidates.
+- Execute per-chunk gate cadence from `docs/refactor/PHASE2_KICKOFF_CHECKLIST.md`.
 
 Exit gate:
 - `scripts/verify_refactor.py --mode phase --execute`
