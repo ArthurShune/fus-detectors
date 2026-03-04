@@ -30,3 +30,17 @@ tmp/
 
 # Large run outputs (tracked via LFS or archived)
 runs/motion/r4c/mcsvd_k8_reg4_stride2_seed*/
+
+# Curated, paper-critical reproducibility artifacts (keep the rest of reports/ ignored).
+!reports/
+reports/**
+!reports/hw/
+!reports/hw/4080super_env.txt
+!reports/hw/4080super_nvidia_smi.txt
+!reports/refactor/
+!reports/refactor/4080super_refactor_quick.log
+!reports/refactor/4080super_refactor_phase.log
+!reports/refactor/4080super_refactor_full.log
+!reports/latency/
+!reports/latency/4080super_latency_summary.csv
+!reports/latency/4080super_latency_summary.json

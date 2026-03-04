@@ -34,7 +34,11 @@ DEFAULT_SRC_TEMPLATE_OPEN = (
     "runs/pilot/r4c_kwave_seed{seed},runs/pilot/r4c_kwave_hab_seed{seed},runs/pilot/r4_kwave_seed{seed}"
 )
 DEFAULT_SRC_TEMPLATE_ALIAS = (
-    "runs/pilot/r4c_kwave_hab_contract_seed{seed}_v2,runs/pilot/r4c_kwave_hab_contract_seed{seed}"
+    # Historical naming: older repos used r4c_kwave_hab_contract_seed{seed}[_v2],
+    # while current Makefile targets emit r4c_kwave_hab_seed{seed}.
+    "runs/pilot/r4c_kwave_hab_contract_seed{seed}_v2,"
+    "runs/pilot/r4c_kwave_hab_contract_seed{seed},"
+    "runs/pilot/r4c_kwave_hab_seed{seed}"
 )
 DEFAULT_SRC_TEMPLATE_SKULL = (
     "runs/pilot/r4c_kwave_hab_v3_skull_seed{seed}_v2,runs/pilot/r4c_kwave_hab_v3_skull_seed{seed}"

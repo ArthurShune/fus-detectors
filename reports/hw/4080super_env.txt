@@ -1,0 +1,42 @@
+date: 2026-03-04T10:12:16-07:00
+hostname: nexus
+uname: Linux nexus 6.6.87.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun  5 18:30:46 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+
+conda: conda 25.9.1
+
+==== conda list -n stap-fus (filtered) ====
+cuda-cudart                  12.1.105         0                             nvidia
+cuda-cupti                   12.1.105         0                             nvidia
+cuda-libraries               12.1.0           0                             nvidia
+cuda-nvrtc                   12.1.105         0                             nvidia
+cuda-nvtx                    12.1.105         0                             nvidia
+cuda-opencl                  13.1.115         h4f1e1d6_0                    nvidia
+cuda-pathfinder              1.4.0            pypi_0                        pypi
+cuda-runtime                 12.1.0           0                             nvidia
+cuda-version                 13.1             hd92462c_3                    nvidia
+cupy-cuda12x                 14.0.1           pypi_0                        pypi
+numba                        0.64.0           py311h3c884d5_0               conda-forge
+numpy                        2.2.6            pypi_0                        pypi
+python                       3.11.14          hd63d673_3_cpython            conda-forge
+python-dateutil              2.9.0.post0      pyhe01879c_2                  conda-forge
+python-discovery             1.1.0            pypi_0                        pypi
+python-json-logger           4.0.0            pypi_0                        pypi
+python_abi                   3.11             8_cp311                       conda-forge
+pytorch                      2.4.1            py3.11_cuda12.1_cudnn9.1.0_0  pytorch
+pytorch-cuda                 12.1             ha16c6d3_6                    pytorch
+pytorch-mutex                1.0              cuda                          pytorch
+scipy                        1.14.1           pypi_0                        pypi
+torchaudio                   2.4.1            py311_cu121                   pytorch
+torchvision                  0.19.1           py311_cu121                   pytorch
+
+==== python/torch/cuda audit (stap-fus env) ====
+python: 3.11.14 | packaged by conda-forge | (main, Jan 26 2026, 23:48:32) [GCC 14.3.0]
+platform: Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39
+torch: 2.4.1
+torch.version.cuda: 12.1
+cuda available: True
+device_name: NVIDIA GeForce RTX 4080 SUPER
+capability: (8, 9)
+total_memory_GB: 15.992
+cudnn: 90100
+
