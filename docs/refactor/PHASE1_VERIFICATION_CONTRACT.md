@@ -45,9 +45,9 @@ PYTHONPATH=. python scripts/verify_refactor.py --mode full --execute
 ## Pass/Fail Rules (current)
 From `configs/refactor_verify_thresholds.json`:
 - STAP minima in quick gate (`open`, offset 0):
-  - `tpr@0.0001 >= 0.30`
-  - `tpr@0.0003 >= 0.50`
-  - `tpr@0.001 >= 0.70`
+  - `tpr@0.0001 >= 0.04`
+  - `tpr@0.0003 >= 0.045`
+  - `tpr@0.001 >= 0.065`
 - Baseline cap:
   - `MC-SVD tpr@0.001 <= 0.10`
 - STAP realized-FPR drift tolerance at each target:

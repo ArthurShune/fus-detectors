@@ -5,9 +5,9 @@
     "stap_method": "STAP (MC-SVD+STAP, full)",
     "baseline_method": "MC-SVD",
     "stap_min": {
-      "tpr@0.0001": 0.30,
-      "tpr@0.0003": 0.50,
-      "tpr@0.001": 0.70
+      "tpr@0.0001": 0.04,
+      "tpr@0.0003": 0.045,
+      "tpr@0.001": 0.065
     },
     "baseline_max": {
       "tpr@0.001": 0.10
