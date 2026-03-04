@@ -965,7 +965,11 @@ def main() -> None:
 
     base_angles: List[float] = [float(s) for s in args.angles.split(",") if s.strip()]
     rng = np.random.default_rng(args.seed)
-    jitter_rad_std = (args.jitter_um * 1e-6) / max(geom.dx, 1e-6)
+    # Convert a lateral micro-jitter scale (microns) into an angular steering jitter.
+    # Small-angle approx: dtheta ~= dx / depth. Use the canonical flow ROI depth
+    # (~60% of imaging depth) so the jitter magnitude is physically plausible.
+    depth_m = max(1e-6, 0.6 * float(geom.Ny) * float(geom.dy))
+    jitter_rad_std = (float(args.jitter_um) * 1e-6) / depth_m
 
     angle_sets = []
     tensor_list = []
