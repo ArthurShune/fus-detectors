@@ -10,6 +10,11 @@ It then:
   - prints a latency breakdown from meta.json telemetry, and
   - asserts that key output maps are numerically identical (within tolerance).
 
+For publishable CUDA timings, this script forces CUDA-graph capture off for
+the legacy replay and on for the optimized replay via STAP_FAST_CUDA_GRAPH={0,1}.
+Steady-state latency is reported as the mean over windows 2..N; window1 is cold
+and may include one-time overheads (CUDA init, Triton JIT, CUDA-graph capture).
+
 Typical usage:
 
   PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
@@ -198,6 +203,7 @@ def _print_latency(label: str, tele: Dict, *, t_data_ms: float | None = None) ->
         "stap_batch_proc_ms",
         "stap_post_ms",
         "stap_fast_path_used",
+        "stap_fast_cuda_graph",
         "stap_tile_statistic_used",
         "stap_unfold_tiling_used",
         "stap_unfold_tiling_error",
@@ -579,6 +585,10 @@ def main() -> None:
         # Ensure fast path is enabled for both variants (replay may already set defaults).
         "STAP_FAST_PATH": "1",
         "STAP_FAST_PD_ONLY": "1",
+        # Force CUDA-graph capture OFF for legacy timings, regardless of caller env.
+        # (Optimized timings should measure replay/steady-state and exclude capture
+        # cold effects via windows 2..N.)
+        "STAP_FAST_CUDA_GRAPH": "0",
     }
     opt_env = {
         "STAP_TILING_UNFOLD": "1",
@@ -587,6 +597,8 @@ def main() -> None:
         "MC_SVD_TORCH_RETURN_CUBE": "1",
         "STAP_FAST_PATH": "1",
         "STAP_FAST_PD_ONLY": "1",
+        # Force CUDA-graph capture ON for optimized timings, regardless of caller env.
+        "STAP_FAST_CUDA_GRAPH": "1",
     }
     if int(getattr(args, "tile_batch", 0) or 0) > 0:
         tb = str(int(args.tile_batch))
