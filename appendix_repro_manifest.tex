@@ -9,8 +9,8 @@ Run \path{PYTHONPATH=. conda run -n stap-fus python scripts/generate_repro_manif
 \paragraph{Repository state.}
 Public repository: \path{https://github.com/ArthurShune/stap-for-fus.git}.
 Release tag: (not recorded; set \texttt{STAP\_FUS\_RELEASE\_TAG} or create a git tag).
-Commit: \texttt{d13aa12} (full: \texttt{d13aa12f13}\allowbreak\texttt{7417b25552}\allowbreak\texttt{c445542ebf}\allowbreak\texttt{7bde347142}); branch: \texttt{main}; dirty: \texttt{true}.
-Dirty details: non-ignored paths=2, ignored build products=0.
+Commit: \texttt{3bd3deb} (full: \texttt{3bd3deba86}\allowbreak\texttt{e892d2894a}\allowbreak\texttt{45a9747075}\allowbreak\texttt{8ea219450d}); branch: \texttt{main}; dirty: \texttt{false}.
+Dirty details: non-ignored paths=0, ignored build products=0.
 Note: dirty status ignores common LaTeX build products (e.g., \texttt{*.aux, *.log, *.out, *.fls, *.fdb\_latexmk, *.synctex.gz, *.pdf}).
 For archival reproducibility, generate this manifest from a clean, tagged release commit (\texttt{dirty=false}) and record the public repository URL and tag.
 
@@ -20,10 +20,10 @@ Create env: \path{conda env create -f environment.yml}.
 Docker: \path{Dockerfile} (sha256: \texttt{1dbf3078785426b4}\allowbreak\texttt{5770b85f7b2f7794}\allowbreak\texttt{cd14435c20e1c587}\allowbreak\texttt{a3c38cf097128e16}).
 Build container: \path{docker build -t stap-fus -f Dockerfile .}.
 Runtime (conda env \texttt{stap-fus}):
-Python: \path{3.11.14 | packaged by conda-forge | (main, Oct 22 2025, 22:46:25) [GCC 14.3.0]}.
+Python: \path{3.11.14 | packaged by conda-forge | (main, Jan 26 2026, 23:48:32) [GCC 14.3.0]}.
 Platform: \path{Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39}.
-Packages: \texttt{numpy}={2.2.6}, \texttt{scipy}={1.14.1}, \texttt{torch}={2.4.1}, \texttt{matplotlib}={3.10.0}, \texttt{cupy}={13.6.0}.
-Torch CUDA: available=\texttt{true}, cuda=\texttt{12.1}, device0=\path{NVIDIA GeForce RTX 3050 6GB Laptop GPU}.
+Packages: \texttt{numpy}={2.2.6}, \texttt{scipy}={1.14.1}, \texttt{torch}={2.4.1}, \texttt{matplotlib}={3.10.0}, \texttt{cupy}={14.0.1}.
+Torch CUDA: available=\texttt{true}, cuda=\texttt{12.1}, device0=\path{NVIDIA GeForce RTX 4080 SUPER}.
 
 \paragraph{Datasets.}
 Paths below are the expected on-disk locations used by the scripts in this repository. Large outputs under \path{runs/} and \path{reports/} are not tracked.
@@ -213,6 +213,109 @@ conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
   --stap-device cuda --tile-batch 512 --clean \
   --out-root runs/latency_s17_realdata_cuda_unfold \
   gammex --frames-along 0:6 --frames-across 0:6
+\end{verbatim}
+}
+
+  \item \textbf{RTX 4080 SUPER latency reruns + consolidated summaries (legacy vs optimized; steady-state windows/frames 2..N)}
+    (paper refs: Table: latency\_summary\_4080super).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{hw/4080super_nvidia_smi.txt}
+      \item \path{reports/}\allowbreak\path{hw/4080super_env.txt}
+      \item \path{runs/latency_4080super_brain_openskull_w64_}\allowbreak\path{tb192_off0_64_128_192_256/}
+      \item \path{runs/latency_4080super_brain_openskull_w64_}\allowbreak\path{tb192_off0_64_128_192_256_cond/}
+      \item \path{runs/latency_4080super_brain_aliascontract_}\allowbreak\path{w64_tb192_off0_64_128_192_256/}
+      \item \path{runs/latency_4080super_brain_aliascontract_}\allowbreak\path{w64_tb192_off0_64_128_192_256_cond/}
+      \item \path{runs/latency_4080super_brain_skullor_w64_}\allowbreak\path{tb192_off0_64_128_192_256/}
+      \item \path{runs/latency_4080super_brain_skullor_w64_}\allowbreak\path{tb192_off0_64_128_192_256_cond/}
+      \item \path{runs/latency_4080super_shin_fig3_w128_tb192/}
+      \item \path{reports/}\allowbreak\path{latency/4080super_latency_summary.csv}
+      \item \path{reports/}\allowbreak\path{latency/4080super_latency_summary.json}
+    \end{itemize}
+    \endgroup
+    Notes: The replay scripts print cold(win1) and steady(avg win2..N); the paper tables report steady-state means. For Brain k-Wave, scripts/latency\_rerun\_check.py forces legacy vs optimized CUDA-graph settings internally (legacy: STAP\_FAST\_CUDA\_GRAPH=0; optimized: STAP\_FAST\_CUDA\_GRAPH=1). Gammex latency reruns may be skipped if the dataset is unavailable; see docs/data\_download.md.
+{\footnotesize
+\begin{verbatim}
+# Hardware audit (record driver/GPU; record stap-fus env versions):
+nvidia-smi > reports/hw/4080super_nvidia_smi.txt
+conda run -n stap-fus python -c 'import platform, sys; import torch; print("python", sys.version.splitlines()[0]); print("platform", platform.platform()); print("torch", torch.__version__); print("torch_cuda", getattr(torch.version, "cuda", None)); print("cuda_is_available", torch.cuda.is_available()); print("device0", torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)' > reports/hw/4080super_env.txt
+
+# Brain k-Wave latency reruns (offsets 0/64/128/192/256; tile_batch=192):
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_seed1 \
+  --out-root runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256 \
+  --profile Brain-OpenSkull \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --tile-batch 192 \
+  --cuda-warmup-heavy --stap-debug-samples 0
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_seed1 \
+  --out-root runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256_cond \
+  --profile Brain-OpenSkull \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --tile-batch 192 \
+  --cuda-warmup-heavy --stap-debug-samples 0 \
+  --stap-conditional on
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_hab_seed2 \
+  --out-root runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256 \
+  --profile Brain-AliasContract \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --tile-batch 192 \
+  --cuda-warmup-heavy --stap-debug-samples 0
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_hab_seed2 \
+  --out-root runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256_cond \
+  --profile Brain-AliasContract \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --tile-batch 192 \
+  --cuda-warmup-heavy --stap-debug-samples 0 \
+  --stap-conditional on
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_hab_v3_skull_seed2 \
+  --out-root runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256 \
+  --profile Brain-SkullOR \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --tile-batch 192 \
+  --cuda-warmup-heavy --stap-debug-samples 0
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_hab_v3_skull_seed2 \
+  --out-root runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256_cond \
+  --profile Brain-SkullOR \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --tile-batch 192 \
+  --cuda-warmup-heavy --stap-debug-samples 0 \
+  --stap-conditional on
+
+# Shin RatBrain Fig3 latency (requires dataset; see docs/data_download.md):
+PYTHONPATH=. STAP_FAST_PATH=1 STAP_TILING_UNFOLD=0 STAP_FAST_CUDA_GRAPH=0 \
+STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 STAP_TYLER_TRITON_CAPTURE=1 \
+conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
+  --stap-device cuda --tile-batch 192 --clean \
+  --out-root runs/latency_4080super_shin_fig3_w128_tb192/legacy \
+  shin --data-root data/shin_zenodo_10711806/ratbrain_fig3_raw \
+  --iq-file IQData001.dat \
+  --windows 0:128,64:192,122:250 \
+  --prf-hz 1000 --Lt 64 --svd-energy-frac 0.97
+
+PYTHONPATH=. STAP_FAST_PATH=1 STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \
+STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 STAP_TYLER_TRITON_CAPTURE=1 \
+conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
+  --stap-device cuda --tile-batch 192 --clean \
+  --out-root runs/latency_4080super_shin_fig3_w128_tb192/optimized \
+  shin --data-root data/shin_zenodo_10711806/ratbrain_fig3_raw \
+  --iq-file IQData001.dat \
+  --windows 0:128,64:192,122:250 \
+  --prf-hz 1000 --Lt 64 --svd-energy-frac 0.97
+
+# Collect consolidated CSV/JSON (steady windows/frames 2..N; includes parity checks):
+PYTHONPATH=. conda run -n stap-fus python scripts/collect_latency_summary.py
 \end{verbatim}
 }
 
