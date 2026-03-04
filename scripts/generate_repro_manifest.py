@@ -14,6 +14,10 @@ Outputs (tracked):
   - appendix_repro_manifest.tex
 
 Usage:
+  # Preferred (captures the same CUDA-enabled conda environment used in experiments)
+  PYTHONPATH=. conda run -n stap-fus python scripts/generate_repro_manifest.py
+
+  # Fallback (may record a different interpreter than the one used for CUDA runs)
   PYTHONPATH=. python scripts/generate_repro_manifest.py
 """
 
@@ -64,23 +68,55 @@ def _git_info() -> dict[str, Any]:
     except Exception as exc:
         return {"error": str(exc)}
 
-    dirty_lines = [ln for ln in status.splitlines() if ln.strip()]
+    # Ignore common build products so compiling the paper doesn't mark the repo as "dirty".
+    # (We still record ignored paths in JSON for transparency.)
+    ignore_suffixes = (
+        ".aux",
+        ".fdb_latexmk",
+        ".fls",
+        ".log",
+        ".out",
+        ".synctex.gz",
+        ".pdf",
+    )
+
+    def _status_paths(line: str) -> list[str]:
+        # Porcelain v1 is 2 status chars + space + path (or "old -> new" for renames).
+        path = line[3:].strip()
+        if " -> " in path:
+            a, b = path.split(" -> ", 1)
+            return [a.strip(), b.strip()]
+        return [path]
+
+    raw_lines = [ln for ln in status.splitlines() if ln.strip()]
+    ignored: list[str] = []
+    kept: list[str] = []
+    for ln in raw_lines:
+        paths = _status_paths(ln)
+        if all(p.endswith(ignore_suffixes) for p in paths):
+            ignored.append(ln.strip())
+        else:
+            kept.append(ln.strip())
     return {
         "commit": commit,
         "commit_short": short,
         "branch": branch,
-        "dirty": bool(dirty_lines),
-        "dirty_paths": [ln.strip() for ln in dirty_lines[:200]],
+        "dirty": bool(kept),
+        "dirty_paths_count": len(kept),
+        "dirty_ignored_paths_count": len(ignored),
+        "dirty_paths": kept[:200],
+        "dirty_ignored_paths": ignored[:200],
     }
 
 
-def _env_info() -> dict[str, Any]:
+def _env_info_current() -> dict[str, Any]:
     versions: dict[str, str | None] = {}
     for pkg, mod_name in (
         ("numpy", "numpy"),
         ("scipy", "scipy"),
         ("torch", "torch"),
         ("matplotlib", "matplotlib"),
+        ("cupy", "cupy"),
     ):
         try:
             mod = __import__(mod_name)
@@ -88,14 +124,140 @@ def _env_info() -> dict[str, Any]:
         except Exception:
             versions[pkg] = None
 
+    torch_cuda: dict[str, Any] = {}
+    try:
+        import torch
+
+        torch_cuda = {
+            "cuda_is_available": bool(torch.cuda.is_available()),
+            "cuda_version": getattr(torch.version, "cuda", None),
+            "device_count": int(torch.cuda.device_count()) if torch.cuda.is_available() else 0,
+            "device0_name": (
+                str(torch.cuda.get_device_name(0))
+                if torch.cuda.is_available() and torch.cuda.device_count() > 0
+                else None
+            ),
+        }
+    except Exception:
+        torch_cuda = {}
+
     return {
         "python": sys.version.splitlines()[0],
         "platform": platform.platform(),
         "machine": platform.machine(),
         "processor": platform.processor(),
         "versions": versions,
+        "torch_cuda": torch_cuda,
         "cwd": str(REPO),
     }
+
+
+def _env_info_conda(env_name: str) -> dict[str, Any]:
+    """
+    Query a named conda env via `conda run` so the manifest reflects the
+    CUDA-enabled runtime used for experiments even if this script is invoked
+    from a different interpreter.
+    """
+    code = r"""
+import json, platform, sys
+
+def ver(mod):
+    try:
+        m = __import__(mod)
+        return getattr(m, "__version__", None)
+    except Exception:
+        return None
+
+out = {
+    "python": sys.version.splitlines()[0],
+    "platform": platform.platform(),
+    "machine": platform.machine(),
+    "processor": platform.processor(),
+    "versions": {
+        "numpy": ver("numpy"),
+        "scipy": ver("scipy"),
+        "torch": ver("torch"),
+        "matplotlib": ver("matplotlib"),
+        "cupy": ver("cupy"),
+    },
+    "torch_cuda": {},
+}
+
+try:
+    import torch
+    out["torch_cuda"] = {
+        "cuda_is_available": bool(torch.cuda.is_available()),
+        "cuda_version": getattr(torch.version, "cuda", None),
+        "device_count": int(torch.cuda.device_count()) if torch.cuda.is_available() else 0,
+        "device0_name": (
+            str(torch.cuda.get_device_name(0))
+            if torch.cuda.is_available() and torch.cuda.device_count() > 0
+            else None
+        ),
+    }
+except Exception:
+    out["torch_cuda"] = {}
+
+print(json.dumps(out))
+"""
+    env = os.environ.copy()
+    env["CONDA_NO_PLUGINS"] = "true"
+    try:
+        p = subprocess.run(
+            ["conda", "run", "-n", env_name, "python", "-c", code],
+            cwd=str(REPO),
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env,
+        )
+        lines = [ln.strip() for ln in p.stdout.splitlines() if ln.strip()]
+        payload = lines[-1] if lines else ""
+        return json.loads(payload) if payload else {"error": "empty conda-run output"}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def _repo_meta() -> dict[str, Any]:
+    def _infer_git_remote_url() -> str | None:
+        try:
+            out = _run(["git", "remote", "-v"])
+        except Exception:
+            return None
+        out = str(out or "").strip()
+        if not out:
+            return None
+        first_fetch: str | None = None
+        for ln in out.splitlines():
+            ln = ln.strip()
+            if not ln:
+                continue
+            parts = ln.split()
+            if len(parts) < 3:
+                continue
+            name, url, kind = parts[0], parts[1], parts[2]
+            if kind != "(fetch)":
+                continue
+            if first_fetch is None:
+                first_fetch = url
+            if name == "origin":
+                return url
+        return first_fetch
+
+    def _infer_release_tag() -> str | None:
+        try:
+            tag = _run(["git", "describe", "--tags", "--exact-match"])
+        except Exception:
+            return None
+        tag = str(tag or "").strip()
+        return tag or None
+
+    url = (os.environ.get("STAP_FUS_PUBLIC_REPO_URL") or "").strip() or None
+    tag = (os.environ.get("STAP_FUS_RELEASE_TAG") or "").strip() or None
+    url = url or _infer_git_remote_url()
+    tag = tag or _infer_release_tag()
+    return {"public_url": url, "release_tag": tag}
 
 
 def _tex_escape(s: str) -> str:
@@ -157,7 +319,23 @@ def _render_breakable_path(p: str) -> str:
     return out
 
 
+def _render_breakable_digest(s: str, *, chunk: int = 16) -> str:
+    """
+    Render a long hex digest (e.g. git SHA / sha256) so it can line-break without
+    introducing spaces in the underlying text.
+    """
+    s = str(s or "").strip()
+    if not s:
+        return "\\texttt{}"
+    parts = [s[i : i + int(chunk)] for i in range(0, len(s), int(chunk))]
+    out = f"\\texttt{{{_tex_escape(parts[0])}}}"
+    for p in parts[1:]:
+        out += f"\\allowbreak\\texttt{{{_tex_escape(p)}}}"
+    return out
+
+
 def _render_appendix_tex(manifest: dict[str, Any], *, out_path: Path) -> None:
+    repo = manifest.get("repo") or {}
     git = manifest.get("git") or {}
     env = manifest.get("env") or {}
     datasets = manifest.get("datasets") or []
@@ -181,36 +359,111 @@ def _render_appendix_tex(manifest: dict[str, Any], *, out_path: Path) -> None:
     lines.append(
         "The manifest lists the minimal set of commands/outputs needed to reproduce the main claims; additional exploratory reports referenced in the text are not required unless explicitly listed here."
     )
-    lines.append("Run \\path{PYTHONPATH=. python scripts/generate_repro_manifest.py} to refresh this manifest.")
+    preferred_env = None
+    if isinstance(env, dict):
+        preferred_env = str(env.get("preferred_conda_env") or "").strip() or None
+    preferred_env = preferred_env or "stap-fus"
+    lines.append(
+        "Run "
+        f"\\path{{PYTHONPATH=. conda run -n {preferred_env} python scripts/generate_repro_manifest.py}} "
+        "to refresh this manifest."
+    )
     lines.append("")
 
     lines.append("\\paragraph{Repository state.}")
     if "error" in git:
         lines.append(f"Git metadata unavailable: {_tex_escape(str(git.get('error')))}.")
     else:
+        public_url = str(repo.get("public_url") or "").strip()
+        release_tag = str(repo.get("release_tag") or "").strip()
+        if public_url:
+            lines.append(f"Public repository: \\path{{{public_url}}}.")
+        else:
+            lines.append(
+                "Public repository: (not recorded; set \\texttt{STAP\\_FUS\\_PUBLIC\\_REPO\\_URL} or add a git remote such as \\texttt{origin})."
+            )
+        if release_tag:
+            lines.append(f"Release tag: \\texttt{{{_tex_escape(release_tag)}}}.")
+        else:
+            lines.append("Release tag: (not recorded; set \\texttt{STAP\\_FUS\\_RELEASE\\_TAG} or create a git tag).")
+        commit_short = str(git.get("commit_short") or "").strip()
+        commit_full = str(git.get("commit") or "").strip()
+        commit_full_tex = _render_breakable_digest(commit_full, chunk=10)
         lines.append(
             "Commit: "
-            f"\\texttt{{{_tex_escape(str(git.get('commit_short') or ''))}}} "
-            f"(full: \\texttt{{{_tex_escape(str(git.get('commit') or ''))}}}); "
+            f"\\texttt{{{_tex_escape(commit_short)}}} "
+            f"(full: {commit_full_tex}); "
             f"branch: \\texttt{{{_tex_escape(str(git.get('branch') or ''))}}}; "
             f"dirty: \\texttt{{{str(bool(git.get('dirty'))).lower()}}}."
+        )
+        dirty_paths_count = git.get("dirty_paths_count")
+        dirty_ignored_count = git.get("dirty_ignored_paths_count")
+        if dirty_paths_count is not None or dirty_ignored_count is not None:
+            lines.append(
+                "Dirty details: "
+                f"non-ignored paths={_tex_escape(str(dirty_paths_count))}, "
+                f"ignored build products={_tex_escape(str(dirty_ignored_count))}."
+            )
+        lines.append(
+            "Note: dirty status ignores common LaTeX build products (e.g., "
+            "\\texttt{*.aux, *.log, *.out, *.fls, *.fdb\\_latexmk, *.synctex.gz, *.pdf})."
+        )
+        lines.append(
+            "For archival reproducibility, generate this manifest from a clean, tagged release commit "
+            "(\\texttt{dirty=false}) and record the public repository URL and tag."
         )
     lines.append("")
 
     lines.append("\\paragraph{Environment.}")
-    versions = (env.get("versions") or {}) if isinstance(env, dict) else {}
+    env_current = env.get("current") if isinstance(env, dict) else {}
+    env_conda = env.get("conda") if isinstance(env, dict) else {}
+    env_primary = env_conda if isinstance(env_conda, dict) and "error" not in env_conda else env_current
+    env_primary_label = f"conda env \\texttt{{{_tex_escape(preferred_env)}}}" if env_primary is env_conda else "current interpreter"
+
+    env_yml = env.get("environment_yml") if isinstance(env, dict) else {}
+    docker_spec = env.get("dockerfile") if isinstance(env, dict) else {}
+    if isinstance(env_yml, dict) and env_yml.get("path"):
+        sha = env_yml.get("sha256")
+        if sha:
+            lines.append(
+                f"Conda spec: \\path{{{str(env_yml.get('path'))}}} (sha256: {_render_breakable_digest(str(sha), chunk=16)})."
+            )
+        else:
+            lines.append(f"Conda spec: \\path{{{str(env_yml.get('path'))}}}.")
+        lines.append("Create env: \\path{conda env create -f environment.yml}.")
+    if isinstance(docker_spec, dict) and docker_spec.get("path"):
+        sha = docker_spec.get("sha256")
+        if sha:
+            lines.append(
+                f"Docker: \\path{{{str(docker_spec.get('path'))}}} (sha256: {_render_breakable_digest(str(sha), chunk=16)})."
+            )
+        else:
+            lines.append(f"Docker: \\path{{{str(docker_spec.get('path'))}}}.")
+        lines.append("Build container: \\path{docker build -t stap-fus -f Dockerfile .}.")
+
+    if isinstance(env_conda, dict) and "error" in env_conda:
+        lines.append(f"Conda query failed for env \\texttt{{{_tex_escape(preferred_env)}}}: {_tex_escape(str(env_conda.get('error')))}.")
+
+    versions = (env_primary.get("versions") or {}) if isinstance(env_primary, dict) else {}
+    torch_cuda = (env_primary.get("torch_cuda") or {}) if isinstance(env_primary, dict) else {}
     # Use \path (nolinkurl) for long identifiers to permit line breaks.
-    lines.append(f"Python: \\path{{{str(env.get('python') or '')}}}.")
-    lines.append(f"Platform: \\path{{{str(env.get('platform') or '')}}}.")
-    lines.append(
-        "Packages: "
-        + ", ".join(
-            f"\\texttt{{{_tex_escape(k)}}}={{{_tex_escape(str(v))}}}"
-            for k, v in versions.items()
-            if v is not None
+    lines.append(f"Runtime ({env_primary_label}):")
+    lines.append(f"Python: \\path{{{str(env_primary.get('python') or '')}}}.")
+    lines.append(f"Platform: \\path{{{str(env_primary.get('platform') or '')}}}.")
+    pkg_items = [
+        f"\\texttt{{{_tex_escape(k)}}}={{{_tex_escape(str(v))}}}"
+        for k, v in versions.items()
+        if v is not None
+    ]
+    if pkg_items:
+        lines.append("Packages: " + ", ".join(pkg_items) + ".")
+    if isinstance(torch_cuda, dict) and torch_cuda:
+        lines.append(
+            "Torch CUDA: "
+            f"available=\\texttt{{{str(bool(torch_cuda.get('cuda_is_available'))).lower()}}}, "
+            f"cuda=\\texttt{{{_tex_escape(str(torch_cuda.get('cuda_version') or ''))}}}, "
+            f"device0=\\path{{{str(torch_cuda.get('device0_name') or '')}}}."
         )
-        + "."
-    )
     lines.append("")
 
     lines.append("\\paragraph{Datasets.}")
@@ -364,7 +617,10 @@ def _default_datasets() -> list[DatasetInfo]:
 
 def _default_selections() -> dict[str, str]:
     return {
-        "Brain seed sweep (AliasContract pilot)": "seed2-seed12 (n=11).",
+        "Brain low-FPR matrix (fixed-profile pilots)": (
+            "OpenSkull seed1; AliasContract seed2; SkullOR seed2; "
+            "64-frame windows at offsets {0,64,128,192,256}."
+        ),
         "Shin all-clips telemetry": "IQData001-IQData080 (n=80), window 0:128.",
         "Shin motion subset": "IQData001-005, IQData010, IQData020, IQData040, IQData060, IQData080 (n=10).",
         "Mace holdout split (deduplicated)": "train: scan1/2 + scan3/6; test: scan4 + scan5.",
@@ -396,7 +652,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
             outputs=["reports/condstap_leakage.csv", "reports/condstap_leakage.json"],
             commands=[
                 "PYTHONPATH=. python scripts/conditional_stap_leakage_ablation.py \\",
-                "  --pilots runs/pilot/r4_kwave_seed1 runs/pilot/r4_kwave_seed2 \\",
+                "  --pilots runs/pilot/r4c_kwave_seed1 \\",
                 "  --profile Brain-OpenSkull \\",
                 "  --out-root runs/ablation/condstap_leakage \\",
                 "  --window-length 64 --window-offset 0 --disjoint-offset 64 \\",
@@ -405,12 +661,127 @@ def _default_artifacts() -> list[ArtifactInfo]:
             ],
         ),
         ArtifactInfo(
+            name="CUDA latency replay (Brain-* k-Wave; steady-state windows 2..5)",
+            paper_refs=["Table: latency_summary"],
+            outputs=[
+                "runs/latency_s12_publish_offsets/ (Brain-OpenSkull; full)",
+                "runs/latency_s13_publish_offsets_cond/ (Brain-OpenSkull; conditional)",
+                "runs/latency_s14_aliascontract_full/ (Brain-AliasContract; full)",
+                "runs/latency_s14_aliascontract_cond/ (Brain-AliasContract; conditional)",
+                "runs/latency_s15_skullor_full/ (Brain-SkullOR; full)",
+                "runs/latency_s15_skullor_cond/ (Brain-SkullOR; conditional)",
+            ],
+            commands=[
+                # OpenSkull: full + conditional
+                "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \\",
+                "  python scripts/latency_rerun_check.py \\",
+                "  --src runs/latency_pilot_open \\",
+                "  --out-root runs/latency_s12_publish_offsets \\",
+                "  --profile Brain-OpenSkull \\",
+                "  --window-length 64 --window-offset 0 \\",
+                "  --window-offsets 0,64,128,192,256 \\",
+                "  --stap-device cuda --stap-debug-samples 0 \\",
+                "  --tile-batch 192 --cuda-warmup-heavy",
+                "",
+                "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \\",
+                "  python scripts/latency_rerun_check.py \\",
+                "  --src runs/latency_pilot_open \\",
+                "  --out-root runs/latency_s13_publish_offsets_cond \\",
+                "  --profile Brain-OpenSkull \\",
+                "  --window-length 64 --window-offset 0 \\",
+                "  --window-offsets 0,64,128,192,256 \\",
+                "  --stap-device cuda --stap-debug-samples 0 \\",
+                "  --tile-batch 192 --cuda-warmup-heavy \\",
+                "  --stap-conditional on",
+                "",
+                # AliasContract: full + conditional
+                "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \\",
+                "  python scripts/latency_rerun_check.py \\",
+                "  --src runs/latency_pilot_aliascontract \\",
+                "  --out-root runs/latency_s14_aliascontract_full \\",
+                "  --profile Brain-AliasContract \\",
+                "  --window-length 64 --window-offset 0 \\",
+                "  --window-offsets 0,64,128,192,256 \\",
+                "  --stap-device cuda --stap-debug-samples 0 \\",
+                "  --tile-batch 192 --cuda-warmup-heavy",
+                "",
+                "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \\",
+                "  python scripts/latency_rerun_check.py \\",
+                "  --src runs/latency_pilot_aliascontract \\",
+                "  --out-root runs/latency_s14_aliascontract_cond \\",
+                "  --profile Brain-AliasContract \\",
+                "  --window-length 64 --window-offset 0 \\",
+                "  --window-offsets 0,64,128,192,256 \\",
+                "  --stap-device cuda --stap-debug-samples 0 \\",
+                "  --tile-batch 192 --cuda-warmup-heavy \\",
+                "  --stap-conditional on",
+                "",
+                # SkullOR: full + conditional
+                "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \\",
+                "  python scripts/latency_rerun_check.py \\",
+                "  --src runs/latency_pilot_skullor \\",
+                "  --out-root runs/latency_s15_skullor_full \\",
+                "  --profile Brain-SkullOR \\",
+                "  --window-length 64 --window-offset 0 \\",
+                "  --window-offsets 0,64,128,192,256 \\",
+                "  --stap-device cuda --stap-debug-samples 0 \\",
+                "  --tile-batch 192 --cuda-warmup-heavy",
+                "",
+                "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \\",
+                "  python scripts/latency_rerun_check.py \\",
+                "  --src runs/latency_pilot_skullor \\",
+                "  --out-root runs/latency_s15_skullor_cond \\",
+                "  --profile Brain-SkullOR \\",
+                "  --window-length 64 --window-offset 0 \\",
+                "  --window-offsets 0,64,128,192,256 \\",
+                "  --stap-device cuda --stap-debug-samples 0 \\",
+                "  --tile-batch 192 --cuda-warmup-heavy \\",
+                "  --stap-conditional on",
+            ],
+            notes=(
+                "GPU latency is reported as the steady-state mean over windows 2..5 (window1 is cold: CUDA init, "
+                "Triton JIT, and CUDA-graph capture). Use the script's 'optimized steady(avg win2..5)' line."
+            ),
+        ),
+        ArtifactInfo(
+            name="CUDA latency replay (real data: Shin + Gammex; steady-state frames 2..N)",
+            paper_refs=["Table: latency_summary"],
+            outputs=["runs/latency_s17_realdata_cuda_unfold/ (Shin + Gammex CUDA latency runs)"],
+            commands=[
+                # Shin RatBrain Fig3
+                "PYTHONPATH=. \\",
+                "STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \\",
+                "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \\",
+                "STAP_TYLER_TRITON_CAPTURE=1 \\",
+                "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "  --stap-device cuda --tile-batch 192 --clean \\",
+                "  --out-root runs/latency_s17_realdata_cuda_unfold \\",
+                "  shin --iq-file IQData001.dat \\",
+                "  --windows 0:128,64:192,122:250 \\",
+                "  --Lt 64 --svd-energy-frac 0.97",
+                "",
+                # Gammex flow phantom
+                "PYTHONPATH=. \\",
+                "STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \\",
+                "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \\",
+                "STAP_TYLER_TRITON_CAPTURE=1 \\",
+                "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "  --stap-device cuda --tile-batch 512 --clean \\",
+                "  --out-root runs/latency_s17_realdata_cuda_unfold \\",
+                "  gammex --frames-along 0:6 --frames-across 0:6",
+            ],
+            notes=(
+                "The script prints cold(win1) and steady(avg win2..N); the latency table uses the steady-state mean "
+                "and excludes window/frame 1 (graph capture + Triton JIT)."
+            ),
+        ),
+        ArtifactInfo(
             name="Brain-* baseline fairness: MC--SVD(e) tune-once sweep",
             paper_refs=["Baseline fairness (Brain-*)"],
             outputs=["reports/brain_mcsvd_energy_sweep_seed1.csv", "reports/brain_mcsvd_energy_sweep_seed1.json"],
             commands=[
                 "PYTHONPATH=. python scripts/brain_mcsvd_energy_sweep.py \\",
-                "  --pilot runs/pilot/r4_kwave_seed1 \\",
+                "  --pilot runs/pilot/r4c_kwave_seed1 \\",
                 "  --profile Brain-OpenSkull \\",
                 "  --out-root runs/sweep/mcsvd_energy_brain_seed1 \\",
                 "  --window-length 64 --window-offset 0 \\",
@@ -421,15 +792,51 @@ def _default_artifacts() -> list[ArtifactInfo]:
             ],
         ),
         ArtifactInfo(
+            name="Brain-* low-FPR baseline matrix (vnext; includes adaptive/local SVD baselines)",
+            paper_refs=["Table: brain_kwave_vnext_baselines", "Figure: brain_kwave_roc_curves.pdf"],
+            outputs=[
+                "runs/pilot/fair_filter_matrix_pd_r3_localbaselines/ (generated bundles)",
+                "reports/fair_matrix_vnext_r3_localbaselines.csv",
+                "reports/fair_matrix_vnext_r3_localbaselines.json",
+                "reports/brain_kwave_vnext_baselines_table.tex",
+            ],
+            commands=[
+                "bash scripts/reproduce_table5_brain_kwave.sh",
+                "",
+                "# Manual breakdown (equivalent to the script above):",
+                "PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py \\",
+                "  --mode matrix --eval-score vnext \\",
+                "  --matrix-regimes open,aliascontract,skullor \\",
+                "  --matrix-seeds-open 1 --matrix-seeds-aliascontract 2 --matrix-seeds-skullor 2 \\",
+                "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+                "  --matrix-use-profile \\",
+                "  --matrix-mcsvd-energy-frac 0.90 --matrix-mcsvd-baseline-support window \\",
+                "  --methods mcsvd,svd_similarity,local_svd,rpca,hosvd,stap_full \\",
+                "  --generated-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \\",
+                "  --autogen-missing --stap-device cuda \\",
+                "  --out-csv reports/fair_matrix_vnext_r3_localbaselines.csv \\",
+                "  --out-json reports/fair_matrix_vnext_r3_localbaselines.json",
+                "",
+                "PYTHONPATH=. conda run -n stap-fus python scripts/brain_kwave_vnext_baselines_table.py \\",
+                "  --fair-matrix-json reports/fair_matrix_vnext_r3_localbaselines.json \\",
+                "  --out-tex reports/brain_kwave_vnext_baselines_table.tex",
+            ],
+            notes=(
+                "Generates per-window acceptance bundles and writes a vnext-style strict-tail report, then renders the "
+                "LaTeX table used in the main Brain-* baseline table; this run root is also consumed by the ROC and "
+                "cross-window calibration scripts."
+            ),
+        ),
+        ArtifactInfo(
             name="Brain-* ROC curve figure (median+IQR over disjoint windows)",
             paper_refs=["Figure: brain_kwave_roc_curves.pdf"],
             outputs=["figs/paper/brain_kwave_roc_curves.pdf"],
             commands=[
                 "PYTHONPATH=. python scripts/fig_brain_kwave_roc_curves.py \\",
-                "  --runs-root runs/pilot/fair_filter_matrix_full_clinical_cpu_v2 \\",
+                "  --runs-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \\",
                 "  --out-pdf figs/paper/brain_kwave_roc_curves.pdf",
             ],
-            notes="Reads precomputed per-window score/mask arrays under runs/pilot/fair_filter_matrix_full_clinical_cpu_v2.",
+            notes="Reads per-window score/mask arrays under the Brain-* pilot run root.",
         ),
         ArtifactInfo(
             name="Brain-* cross-window threshold-transfer audit (STAP)",
@@ -441,7 +848,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
             ],
             commands=[
                 "PYTHONPATH=. python scripts/brain_crosswindow_calibration.py \\",
-                "  --runs-root runs/pilot/fair_filter_matrix_full_clinical_cpu_v2 \\",
+                "  --runs-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \\",
                 "  --alphas 1e-4,3e-4,1e-3 \\",
                 "  --out-csv reports/brain_crosswindow_calibration.csv \\",
                 "  --out-json reports/brain_crosswindow_calibration_summary.json",
@@ -449,12 +856,174 @@ def _default_artifacts() -> list[ArtifactInfo]:
             notes="Calibrates thresholds on one 64-frame window's negatives and evaluates on disjoint windows (ordered pairs).",
         ),
         ArtifactInfo(
+            name="Brain-* baseline sanity table (strict vs relaxed operating points)",
+            paper_refs=["Appendix: baseline sanity checks at relaxed operating points (Brain-*)"],
+            outputs=[
+                "reports/brain_baseline_sanity_relaxed.csv",
+                "reports/brain_baseline_sanity_relaxed.json",
+                "reports/brain_baseline_sanity_relaxed_table.tex",
+            ],
+            commands=[
+                "PYTHONPATH=. python scripts/brain_baseline_sanity_table.py \\",
+                "  --fair-matrix-json reports/fair_matrix_vnext_r3_localbaselines.json \\",
+                "  --alphas 0.001,0.01,0.1 \\",
+                "  --out-csv reports/brain_baseline_sanity_relaxed.csv \\",
+                "  --out-json reports/brain_baseline_sanity_relaxed.json \\",
+                "  --out-tex reports/brain_baseline_sanity_relaxed_table.tex",
+            ],
+            notes="Reads per-window score/mask arrays under the Brain-* pilot run root.",
+        ),
+        ArtifactInfo(
+            name="Brain-* detector-component ablation (whitening vs band selectivity)",
+            paper_refs=["Table: brain_detector_ablation (detector-component ablation)"],
+            outputs=[
+                "runs/pilot/fair_filter_matrix_pd_r3_localbaselines/*_mcsvd_det_whitened_power/ (generated bundles)",
+                "runs/pilot/fair_filter_matrix_pd_r3_localbaselines/*_mcsvd_det_unwhitened_ratio/ (generated bundles)",
+                "reports/fair_matrix_detector_ablations.csv",
+                "reports/fair_matrix_detector_ablations.json",
+                "reports/brain_detector_ablation.csv",
+                "reports/brain_detector_ablation.json",
+                "reports/brain_detector_ablation_table.tex",
+            ],
+            commands=[
+                "PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py \\",
+                "  --mode matrix --eval-score vnext \\",
+                "  --matrix-regimes open,aliascontract,skullor \\",
+                "  --matrix-seeds-open 1 --matrix-seeds-aliascontract 2 --matrix-seeds-skullor 2 \\",
+                "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+                "  --matrix-use-profile \\",
+                "  --matrix-mcsvd-energy-frac 0.90 --matrix-mcsvd-baseline-support full \\",
+                "  --methods mcsvd,stap_det_whitened_power,stap_det_unwhitened_ratio,stap_full \\",
+                "  --generated-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \\",
+                "  --autogen-missing --stap-device cuda \\",
+                "  --out-csv reports/fair_matrix_detector_ablations.csv \\",
+                "  --out-json reports/fair_matrix_detector_ablations.json",
+                "PYTHONPATH=. python scripts/brain_detector_ablation_table.py \\",
+                "  --fair-matrix-json reports/fair_matrix_detector_ablations.json \\",
+                "  --out-csv reports/brain_detector_ablation.csv \\",
+                "  --out-json reports/brain_detector_ablation.json \\",
+                "  --out-tex reports/brain_detector_ablation_table.tex",
+            ],
+            notes=(
+                "Ablates detector components on the identical MC--SVD residual: "
+                "whitened total power (no band partition) and unwhitened matched-subspace ratio (R=I)."
+            ),
+        ),
+        ArtifactInfo(
+            name="Brain-* detector-swap fairness check (matched-subspace scoring on competing residuals)",
+            paper_refs=["Table: brain_detector_swap (paired residual detector swap)"],
+            outputs=[
+                "runs/pilot/fair_filter_matrix_pd_r3_localbaselines/*_hosvd_stap_full/ (generated bundles)",
+                "runs/pilot/fair_filter_matrix_pd_r3_localbaselines/*_rpca_stap_full/ (generated bundles)",
+                "reports/fair_matrix_detector_swap.csv",
+                "reports/fair_matrix_detector_swap.json",
+                "reports/brain_detector_swap.csv",
+                "reports/brain_detector_swap.json",
+                "reports/brain_detector_swap_table.tex",
+            ],
+            commands=[
+                "PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py \\",
+                "  --mode matrix --eval-score vnext \\",
+                "  --matrix-regimes open,aliascontract,skullor \\",
+                "  --matrix-seeds-open 1 --matrix-seeds-aliascontract 2 --matrix-seeds-skullor 2 \\",
+                "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+                "  --matrix-use-profile \\",
+                "  --methods rpca_pair,rpca_stap,hosvd_pair,hosvd_stap \\",
+                "  --generated-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \\",
+                "  --regen-runs --autogen-missing --stap-device cuda \\",
+                "  --out-csv reports/fair_matrix_detector_swap.csv \\",
+                "  --out-json reports/fair_matrix_detector_swap.json",
+                "PYTHONPATH=. python scripts/brain_detector_swap_table.py \\",
+                "  --fair-matrix-json reports/fair_matrix_detector_swap.json \\",
+                "  --out-csv reports/brain_detector_swap.csv \\",
+                "  --out-json reports/brain_detector_swap.json \\",
+                "  --out-tex reports/brain_detector_swap_table.tex",
+            ],
+            notes=(
+                "Paired-residual comparison: each run generates both PD (score_base.npy) and STAP "
+                "(score_stap_preka.npy) scores on the same RPCA/HOSVD residual for each window."
+            ),
+        ),
+        ArtifactInfo(
+            name="Brain-* covariance-training trim ablation (self-training sensitivity)",
+            paper_refs=["Results: covariance-training contamination ablation (Brain-*)"],
+            outputs=[
+                "runs/pilot/fair_filter_matrix_pd_r3_localbaselines/*_mcsvd_covtrim_q05/ (generated bundles)",
+                "reports/fair_matrix_covtrim.csv",
+                "reports/fair_matrix_covtrim.json",
+                "reports/brain_cov_train_ablation.csv",
+                "reports/brain_cov_train_ablation.json",
+                "reports/brain_cov_train_ablation_table.tex",
+            ],
+            commands=[
+                "PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py \\",
+                "  --mode matrix --eval-score vnext \\",
+                "  --matrix-regimes open,aliascontract,skullor \\",
+                "  --matrix-seeds-open 1 --matrix-seeds-aliascontract 2 --matrix-seeds-skullor 2 \\",
+                "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+                "  --matrix-use-profile \\",
+                "  --matrix-mcsvd-energy-frac 0.90 --matrix-mcsvd-baseline-support full \\",
+                "  --methods stap_full,stap_covtrim_q05 \\",
+                "  --generated-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \\",
+                "  --autogen-missing --stap-device cuda \\",
+                "  --out-csv reports/fair_matrix_covtrim.csv \\",
+                "  --out-json reports/fair_matrix_covtrim.json",
+                "PYTHONPATH=. python scripts/brain_cov_train_ablation_table.py \\",
+                "  --runs-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \\",
+                "  --alphas 1e-4,3e-4,1e-3 \\",
+                "  --out-csv reports/brain_cov_train_ablation.csv \\",
+                "  --out-json reports/brain_cov_train_ablation.json \\",
+                "  --out-tex reports/brain_cov_train_ablation_table.tex",
+            ],
+            notes=(
+                "Enables the ablation via replay_stap_from_run.py --stap-cov-trim-q (plumbed through fair_filter_comparison "
+                "method key stap_covtrim_q05). This excludes the top 5% highest-energy Hankel snapshots per tile when estimating "
+                "R_i (guard/trim style training contamination check)."
+            ),
+        ),
+        ArtifactInfo(
+            name="Brain-OpenSkull fixed-profile parameter sensitivity sweep (diag-load, tile size, Lt)",
+            paper_refs=[
+                "Appendix: fixed-profile parameter sensitivity (Brain-OpenSkull)",
+                "Results: covariance-training contamination ablation (Brain-*)",
+            ],
+            outputs=[
+                "runs/pilot/brain_openskull_profile_sensitivity_r1/ (generated bundles)",
+                "reports/brain_openskull_profile_sensitivity.csv",
+                "reports/brain_openskull_profile_sensitivity.json",
+                "figs/paper/brain_openskull_profile_sensitivity.pdf",
+            ],
+            commands=[
+                "PYTHONPATH=. conda run -n stap-fus python scripts/brain_openskull_profile_sensitivity.py \\",
+                "  --autogen-missing --stap-device cuda",
+            ],
+            notes=(
+                "Runs 1D sweeps (vary one parameter at a time) around the frozen Brain-OpenSkull operating profile, "
+                "reporting within-window strict-tail TPR medians/IQR over five disjoint windows. "
+                "Sweep ranges are configurable via --diag-loads/--tile-sizes/--lts."
+            ),
+        ),
+        ArtifactInfo(
+            name="Brain-* strict-tail collapse visual (representative window; baseline vs STAP)",
+            paper_refs=["Appendix: baseline sanity checks at relaxed operating points (Brain-*)"],
+            outputs=["figs/paper/brain_tail_collapse_visual.pdf"],
+            commands=[
+                "ROOT=\"runs/pilot/fair_filter_matrix_pd_r3_localbaselines/open_seed1_mcsvd_full\"",
+                "BUNDLE_DIR=\"$ROOT/pw_7.5MHz_5ang_5ens_64T_seed1_win0_off0\"",
+                "PYTHONPATH=. python scripts/fig_brain_tail_collapse_visual.py \\",
+                "  --bundle-dir \"$BUNDLE_DIR\" \\",
+                "  --alphas 0.1,0.01,1e-3 \\",
+                "  --out figs/paper/brain_tail_collapse_visual.pdf",
+            ],
+            notes="Uses one representative Brain-OpenSkull window to visualize background-tail dominance (baseline PD) and tail reshaping (STAP).",
+        ),
+        ArtifactInfo(
             name="Knowledge-aided prior falsifiability ablation (STAP-only vs contract vs forced)",
             paper_refs=["KA evaluation discipline"],
             outputs=["reports/ka_v2_ablation.csv", "reports/ka_v2_ablation.json"],
             commands=[
                 "PYTHONPATH=. python scripts/ka_contract_v2_ablation.py \\",
-                "  --pilot runs/pilot/r4c_kwave_hab_contract_seed2 \\",
+                "  --pilot runs/pilot/r4c_kwave_hab_contract_seed2_v2 \\",
                 "  --profile Brain-AliasContract \\",
                 "  --out-root runs/ablation/ka_v2_falsifiability \\",
                 "  --stap-device cpu \\",
@@ -473,7 +1042,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
             ],
             commands=[
                 "PYTHONPATH=. python scripts/ka_contract_v2_ablation.py \\",
-                "  --pilot runs/pilot/r4_kwave_seed1 \\",
+                "  --pilot runs/pilot/r4c_kwave_seed1 \\",
                 "  --profile Brain-OpenSkull \\",
                 "  --out-root runs/ablation/openskull_shallowalias_e50 \\",
                 "  --stap-device cpu \\",
@@ -542,7 +1111,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
             commands=[
                 "# Sample Brain-* replay bundles (write meta.json with ka_contract_v2 telemetry):",
                 "PYTHONPATH=. python scripts/replay_stap_from_run.py \\",
-                "  --src runs/pilot/r4_kwave_seed1 \\",
+                "  --src runs/pilot/r4c_kwave_seed1 \\",
                 "  --out runs/telemetry_regime_compare/brain_open_seed1 \\",
                 "  --profile Brain-OpenSkull \\",
                 "  --time-window-length 64 \\",
@@ -655,6 +1224,31 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --align-maps-list 0,1 \\",
                 "  --out-csv reports/shin_motion_brainlike_batch_U_crop_sensitivity.csv",
             ],
+        ),
+        ArtifactInfo(
+            name="Leading structural-fidelity figure (Gammex phantom; matched-FPR decision differences)",
+            paper_refs=["Figure 1: leading_structural_fidelity_gammex.pdf"],
+            outputs=["figs/paper/leading_structural_fidelity_gammex.pdf"],
+            commands=[
+                "SEQ_DIR=\"data/twinkling_artifact/Flow in Gammex phantom\"",
+                "SEQ_DIR=\"$SEQ_DIR/Flow in Gammex phantom (along - linear probe)\"",
+                "PYTHONPATH=. conda run -n stap-fus python scripts/fig_leading_structural_fidelity.py \\",
+                "  --seq-dir \"$SEQ_DIR\" \\",
+                "  --frame-idx 0 --mask-ref-frames 0:10 \\",
+                "  --prf-hz 2500 --Lt 16 \\",
+                "  --tile-hw 8 8 --tile-stride 6 \\",
+                "  --cov-estimator tyler_pca --diag-load 0.07 \\",
+                "  --fd-span-mode psd --feasibility-mode legacy \\",
+                "  --svd-keep-min 2 --svd-keep-max 17 \\",
+                "  --flow-band-hz 150 450 --alias-band-hz 700 1200 \\",
+                "  --fpr 1e-2 \\",
+                "  --stap-device auto \\",
+                "  --out figs/paper/leading_structural_fidelity_gammex.pdf",
+            ],
+            notes=(
+                "Generates a single-frame qualitative panel using the structurally labeled tube mask; "
+                "the script writes a temporary one-frame acceptance bundle under runs/_tmp_leading_structural_fidelity/."
+            ),
         ),
         ArtifactInfo(
             name="Twinkling decode sanity (RawBCF -> B-mode/CFM)",
@@ -978,10 +1572,45 @@ def _default_artifacts() -> list[ArtifactInfo]:
     ]
 
 
-def build_manifest() -> dict[str, Any]:
+def _sha256(path: Path) -> str:
+    import hashlib
+
+    h = hashlib.sha256()
+    h.update(path.read_bytes())
+    return h.hexdigest()
+
+
+def build_manifest(*, conda_env: str | None, public_repo_url: str | None, release_tag: str | None) -> dict[str, Any]:
+    env_current = _env_info_current()
+    env_conda = _env_info_conda(conda_env) if conda_env else {"error": "conda env not set"}
+
+    env_spec_path = REPO / "environment.yml"
+    dockerfile_path = REPO / "Dockerfile"
+    env_spec = {
+        "path": str(env_spec_path.relative_to(REPO)) if env_spec_path.exists() else "environment.yml",
+        "sha256": _sha256(env_spec_path) if env_spec_path.exists() else None,
+    }
+    docker_spec = {
+        "path": str(dockerfile_path.relative_to(REPO)) if dockerfile_path.exists() else "Dockerfile",
+        "sha256": _sha256(dockerfile_path) if dockerfile_path.exists() else None,
+    }
+
+    repo_meta = _repo_meta()
+    if public_repo_url:
+        repo_meta["public_url"] = public_repo_url
+    if release_tag:
+        repo_meta["release_tag"] = release_tag
+
     manifest: dict[str, Any] = {
+        "repo": repo_meta,
         "git": _git_info(),
-        "env": _env_info(),
+        "env": {
+            "preferred_conda_env": conda_env,
+            "conda": env_conda,
+            "current": env_current,
+            "environment_yml": env_spec,
+            "dockerfile": docker_spec,
+        },
         "datasets": [asdict(d) for d in _default_datasets()],
         "selections": _default_selections(),
         "artifacts": [asdict(a) for a in _default_artifacts()],
@@ -993,13 +1622,35 @@ def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Generate reproducibility manifest (JSON + LaTeX appendix).")
     ap.add_argument("--out-json", type=Path, default=Path("repro_manifest.json"))
     ap.add_argument("--out-tex", type=Path, default=Path("appendix_repro_manifest.tex"))
+    ap.add_argument(
+        "--conda-env",
+        type=str,
+        default=os.environ.get("STAP_FUS_CONDA_ENV", "stap-fus"),
+        help="Conda env name to query for package/CUDA versions (preferred).",
+    )
+    ap.add_argument(
+        "--public-repo-url",
+        type=str,
+        default=os.environ.get("STAP_FUS_PUBLIC_REPO_URL", ""),
+        help="Optional public repository URL to record in the manifest.",
+    )
+    ap.add_argument(
+        "--release-tag",
+        type=str,
+        default=os.environ.get("STAP_FUS_RELEASE_TAG", ""),
+        help="Optional release tag (e.g., v0.1.0) to record in the manifest.",
+    )
     return ap.parse_args()
 
 
 def main() -> None:
     args = parse_args()
 
-    manifest = build_manifest()
+    manifest = build_manifest(
+        conda_env=str(args.conda_env).strip() or None,
+        public_repo_url=str(args.public_repo_url).strip() or None,
+        release_tag=str(args.release_tag).strip() or None,
+    )
     args.out_json.write_text(json.dumps(manifest, indent=2))
     _render_appendix_tex(manifest, out_path=args.out_tex)
 

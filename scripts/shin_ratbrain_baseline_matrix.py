@@ -312,6 +312,36 @@ def main() -> None:
         default=0.97,
         help="MC-SVD baseline energy fraction removed (default: %(default)s).",
     )
+    ap.add_argument(
+        "--run-svd-similarity",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Whether to run the adaptive SVD similarity-cutoff baseline (default: %(default)s).",
+    )
+    ap.add_argument(
+        "--svd-sim-r-max",
+        type=int,
+        default=32,
+        help="Max clutter rank considered by the SVD similarity baseline (default: %(default)s).",
+    )
+    ap.add_argument(
+        "--run-local-svd",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Whether to run the block-wise local SVD baseline (default: %(default)s).",
+    )
+    ap.add_argument(
+        "--local-svd-energy-frac",
+        type=float,
+        default=0.90,
+        help="Local SVD baseline per-tile energy fraction removed (default: %(default)s).",
+    )
+    ap.add_argument(
+        "--local-svd-stride",
+        type=int,
+        default=None,
+        help="Optional stride override for the local SVD baseline (default: unset; uses --tile-stride).",
+    )
     ap.add_argument("--rpca-max-iters", type=int, default=250)
     ap.add_argument(
         "--run-rpca",
@@ -593,6 +623,88 @@ def main() -> None:
                         meta_extra=dict(common_meta_extra),
                     )
 
+            # 2b) Optional adaptive SVD similarity-cutoff baseline (baseline only; masks overridden)
+            svd_sim_dir: Path | None = None
+            if bool(args.run_svd_similarity):
+                rmax = max(1, int(args.svd_sim_r_max))
+                dataset_name_svd_sim = (
+                    f"shin_{iq_path.stem}_{frame_tag}_p{str(args.profile)}_Lt{int(args.lt)}_svd_similarity_r{rmax}_stapoff"
+                )
+                svd_sim_dir = out_root / dataset_name_svd_sim
+                svd_sim_meta_path = svd_sim_dir / "meta.json"
+                if not (bool(args.resume) and svd_sim_meta_path.is_file()):
+                    write_acceptance_bundle_from_icube(
+                        out_root=out_root,
+                        dataset_name=dataset_name_svd_sim,
+                        Icube=Icube,
+                        prf_hz=float(args.prf_hz),
+                        tile_hw=(th, tw),
+                        tile_stride=int(args.tile_stride),
+                        Lt=int(args.lt),
+                        diag_load=float(args.diag_load),
+                        cov_estimator=str(args.cov_estimator),
+                        baseline_type="svd_similarity",
+                        svd_rank=int(rmax),
+                        reg_enable=bool(args.reg_enable),
+                        reg_subpixel=int(args.reg_subpixel),
+                        reg_reference=str(args.reg_reference),
+                        run_stap=False,
+                        stap_device=args.stap_device,
+                        stap_conditional_enable=bool(args.stap_conditional_enable),
+                        score_mode="pd",
+                        score_ka_v2_enable=False,
+                        band_ratio_flow_low_hz=float(flow_low_hz),
+                        band_ratio_flow_high_hz=float(flow_high_hz),
+                        band_ratio_alias_center_hz=float(alias_center_hz),
+                        band_ratio_alias_width_hz=float(alias_hw_hz),
+                        mask_flow_override=mask_flow,
+                        mask_bg_override=mask_bg,
+                        flow_mask_union_default=bool(args.flow_mask_union_default),
+                        meta_extra=dict(common_meta_extra),
+                    )
+
+            # 2c) Optional block-wise local SVD baseline (baseline only; masks overridden)
+            local_svd_dir: Path | None = None
+            if bool(args.run_local_svd):
+                e_local = float(args.local_svd_energy_frac)
+                local_stride = int(args.local_svd_stride) if args.local_svd_stride is not None else int(args.tile_stride)
+                e_tag_local = f"e{e_local:.3f}".replace(".", "p")
+                dataset_name_local_svd = (
+                    f"shin_{iq_path.stem}_{frame_tag}_p{str(args.profile)}_Lt{int(args.lt)}_local_svd_{e_tag_local}_str{local_stride}_stapoff"
+                )
+                local_svd_dir = out_root / dataset_name_local_svd
+                local_svd_meta_path = local_svd_dir / "meta.json"
+                if not (bool(args.resume) and local_svd_meta_path.is_file()):
+                    write_acceptance_bundle_from_icube(
+                        out_root=out_root,
+                        dataset_name=dataset_name_local_svd,
+                        Icube=Icube,
+                        prf_hz=float(args.prf_hz),
+                        tile_hw=(th, tw),
+                        tile_stride=int(local_stride),
+                        Lt=int(args.lt),
+                        diag_load=float(args.diag_load),
+                        cov_estimator=str(args.cov_estimator),
+                        baseline_type="local_svd",
+                        svd_energy_frac=float(e_local),
+                        reg_enable=bool(args.reg_enable),
+                        reg_subpixel=int(args.reg_subpixel),
+                        reg_reference=str(args.reg_reference),
+                        run_stap=False,
+                        stap_device=args.stap_device,
+                        stap_conditional_enable=bool(args.stap_conditional_enable),
+                        score_mode="pd",
+                        score_ka_v2_enable=False,
+                        band_ratio_flow_low_hz=float(flow_low_hz),
+                        band_ratio_flow_high_hz=float(flow_high_hz),
+                        band_ratio_alias_center_hz=float(alias_center_hz),
+                        band_ratio_alias_width_hz=float(alias_hw_hz),
+                        mask_flow_override=mask_flow,
+                        mask_bg_override=mask_bg,
+                        flow_mask_union_default=bool(args.flow_mask_union_default),
+                        meta_extra=dict(common_meta_extra),
+                    )
+
             # 3) Optional HOSVD baseline bundle (baseline only; masks overridden)
             hosvd_dir: Path | None = None
             if bool(args.run_hosvd):
@@ -644,6 +756,12 @@ def main() -> None:
             score_rpca = None
             if rpca_dir is not None:
                 score_rpca = _load_npy(rpca_dir / "score_base.npy")
+            score_svd_sim = None
+            if svd_sim_dir is not None:
+                score_svd_sim = _load_npy(svd_sim_dir / "score_base.npy")
+            score_local_svd = None
+            if local_svd_dir is not None:
+                score_local_svd = _load_npy(local_svd_dir / "score_base.npy")
             score_hosvd = None
             if hosvd_dir is not None:
                 score_hosvd = _load_npy(hosvd_dir / "score_base.npy")
@@ -675,6 +793,12 @@ def main() -> None:
             ms_rpca = None
             if rpca_dir is not None:
                 ms_rpca, _ = _load_ms(rpca_dir)
+            ms_svd_sim = None
+            if svd_sim_dir is not None:
+                ms_svd_sim, _ = _load_ms(svd_sim_dir)
+            ms_local_svd = None
+            if local_svd_dir is not None:
+                ms_local_svd, _ = _load_ms(local_svd_dir)
             ms_hosvd = None
             if hosvd_dir is not None:
                 ms_hosvd, _ = _load_ms(hosvd_dir)
@@ -697,6 +821,8 @@ def main() -> None:
                 "bundle_dir_stap": str(stap_dir),
                 "bundle_dir_stap_raw": str(stap_raw_dir) if bool(args.run_stap_raw) else None,
                 "bundle_dir_rpca": str(rpca_dir) if rpca_dir is not None else None,
+                "bundle_dir_svd_similarity": str(svd_sim_dir) if svd_sim_dir is not None else None,
+                "bundle_dir_local_svd": str(local_svd_dir) if local_svd_dir is not None else None,
                 "bundle_dir_hosvd": str(hosvd_dir) if hosvd_dir is not None else None,
                 "tyler_tol": float(args.tyler_tol) if args.tyler_tol is not None else None,
                 "tyler_max_iter": int(args.tyler_max_iter) if args.tyler_max_iter is not None else None,
@@ -711,8 +837,26 @@ def main() -> None:
             ]
             if score_rpca is not None:
                 methods.insert(1, ("rpca", "RPCA (baseline PD)", score_rpca, ms_rpca, None))
+            if score_svd_sim is not None:
+                insert_idx = 2 if score_rpca is not None else 1
+                methods.insert(
+                    insert_idx,
+                    ("svd_similarity", "Adaptive SVD (similarity cutoff; baseline PD)", score_svd_sim, ms_svd_sim, None),
+                )
+            if score_local_svd is not None:
+                insert_idx = 3 if (score_rpca is not None and score_svd_sim is not None) else 2
+                if score_rpca is None and score_svd_sim is None:
+                    insert_idx = 1
+                methods.insert(
+                    insert_idx,
+                    ("local_svd", "Local SVD (block-wise; baseline PD)", score_local_svd, ms_local_svd, None),
+                )
             if score_hosvd is not None:
                 insert_idx = 2 if score_rpca is not None else 1
+                if score_svd_sim is not None:
+                    insert_idx += 1
+                if score_local_svd is not None:
+                    insert_idx += 1
                 methods.insert(insert_idx, ("hosvd", "HOSVD (baseline PD)", score_hosvd, ms_hosvd, None))
             if score_stap_raw is not None:
                 methods.append(
@@ -781,6 +925,9 @@ def main() -> None:
         "kappa_msd": float(args.kappa_msd),
         "flow_mask_union_default": bool(args.flow_mask_union_default),
         "svd_energy_frac": float(args.svd_energy_frac),
+        "svd_sim_r_max": int(args.svd_sim_r_max),
+        "local_svd_energy_frac": float(args.local_svd_energy_frac),
+        "local_svd_stride": int(args.local_svd_stride) if args.local_svd_stride is not None else None,
         "reg_enable": bool(args.reg_enable),
         "stap_conditional_enable": bool(args.stap_conditional_enable),
         "out_root": str(out_root),

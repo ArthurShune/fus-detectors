@@ -86,6 +86,39 @@ def _warn_tile_statistic_experimental() -> None:
     )
 
 
+def _normalize_detector_variant(detector_variant: str | None) -> str:
+    """
+    Normalize a detector-variant string used by the fast STAP cores.
+
+    This is used for detector ablations that isolate the roles of whitening
+    versus Doppler-band selectivity.
+    """
+    v = str(detector_variant or "msd_ratio").strip().lower()
+    aliases = {
+        "msd": "msd_ratio",
+        "ratio": "msd_ratio",
+        "default": "msd_ratio",
+        "stap": "msd_ratio",
+        "msd_ratio": "msd_ratio",
+        "whitened_pd": "whitened_power",
+        "whitened_power": "whitened_power",
+        "power": "whitened_power",
+        "unwhitened": "unwhitened_ratio",
+        "raw": "unwhitened_ratio",
+        "raw_ratio": "unwhitened_ratio",
+        "no_whiten": "unwhitened_ratio",
+        "msd_unwhitened": "unwhitened_ratio",
+        "unwhitened_ratio": "unwhitened_ratio",
+    }
+    v = aliases.get(v, v)
+    if v not in {"msd_ratio", "whitened_power", "unwhitened_ratio"}:
+        raise ValueError(
+            f"Unsupported detector_variant={detector_variant!r}. Expected one of "
+            "{'msd_ratio','whitened_power','unwhitened_ratio'}."
+        )
+    return v
+
+
 @contextmanager
 def stap_cuda_event_timing(*, enabled: bool | None = None):
     """
@@ -3242,32 +3275,50 @@ def _band_energy_whitened_batched(
     lam_mat = lam_vec.view(B, 1, 1) * eye  # (B,Lt,Lt)
     R_lam = 0.5 * (R + lam_mat + (R + lam_mat).conj().transpose(-2, -1))
 
-    try:
+    capturing = False
+    if bool(getattr(R_lam, "is_cuda", False)):
+        try:
+            capturing = bool(torch.cuda.is_current_stream_capturing())
+        except Exception:
+            capturing = False
+
+    if capturing:
+        # CUDA-graph safe Cholesky: avoid `torch.linalg.cholesky` (non-capturable in
+        # some torch/CUDA builds) and avoid host-side branching on the `info` tensor.
         with _prof_ctx("stap:band_energy:chol_R"):
-            L = torch.linalg.cholesky(R_lam)
-    except RuntimeError:
-        # Per-tile adaptive jitter (scaled by mu) fallback.
-        eye_b = torch.eye(Lt, dtype=work_dtype, device=device)
-        diag = torch.real(torch.diagonal(R_lam, dim1=-2, dim2=-1))
-        diag_scale = torch.mean(torch.abs(diag), dim=1) + 1e-12
-        jitter_mults = (0.0, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2, 1e-1, 1.0, 10.0)
-        L_list = []
-        for b in range(B):
-            Rb = R_lam[b]
-            Lb = None
-            for mult in jitter_mults:
-                try:
-                    with _prof_ctx("stap:band_energy:chol_R"):
-                        Lb = torch.linalg.cholesky(Rb + (float(mult) * diag_scale[b]) * eye_b)
-                    break
-                except RuntimeError:
-                    Lb = None
-            if Lb is None:
-                # Last resort: diagonal approximation.
-                d = torch.clamp(torch.real(torch.diagonal(Rb, dim1=-2, dim2=-1)), min=1e-8)
-                Lb = torch.diag(torch.sqrt(d.to(dtype=torch.float32))).to(dtype=work_dtype)
-            L_list.append(Lb)
-        L = torch.stack(L_list, dim=0)
+            L_ex, info = torch.linalg.cholesky_ex(R_lam)
+        diag = torch.real(torch.diagonal(R_lam, dim1=-2, dim2=-1)).to(dtype=torch.float32)
+        diag = torch.clamp(diag, min=1e-8)
+        L_diag = torch.diag_embed(torch.sqrt(diag)).to(dtype=work_dtype)
+        fail = (info != 0).view(B, 1, 1)
+        L = torch.where(fail, L_diag, L_ex)
+    else:
+        try:
+            with _prof_ctx("stap:band_energy:chol_R"):
+                L = torch.linalg.cholesky(R_lam)
+        except RuntimeError:
+            # Per-tile adaptive jitter (scaled by mu) fallback.
+            eye_b = torch.eye(Lt, dtype=work_dtype, device=device)
+            diag = torch.real(torch.diagonal(R_lam, dim1=-2, dim2=-1))
+            diag_scale = torch.mean(torch.abs(diag), dim=1) + 1e-12
+            jitter_mults = (0.0, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2, 1e-1, 1.0, 10.0)
+            L_list = []
+            for b in range(B):
+                Rb = R_lam[b]
+                Lb = None
+                for mult in jitter_mults:
+                    try:
+                        with _prof_ctx("stap:band_energy:chol_R"):
+                            Lb = torch.linalg.cholesky(Rb + (float(mult) * diag_scale[b]) * eye_b)
+                        break
+                    except RuntimeError:
+                        Lb = None
+                if Lb is None:
+                    # Last resort: diagonal approximation.
+                    d = torch.clamp(torch.real(torch.diagonal(Rb, dim1=-2, dim2=-1)), min=1e-8)
+                    Lb = torch.diag(torch.sqrt(d.to(dtype=torch.float32))).to(dtype=work_dtype)
+                L_list.append(Lb)
+            L = torch.stack(L_list, dim=0)
 
     # Whiten snapshots: reshape to (B, Lt, P) where P = N*h*w
     if S.ndim == 4:
@@ -3278,6 +3329,7 @@ def _band_energy_whitened_batched(
     # baselines. This intentionally matches the historical (permute+view) layout
     # so downstream score maps remain bitwise-comparable across latency work.
     S_flat = S.permute(0, 1, 3, 4, 2).contiguous().view(Bsz, Lt_dim, -1)
+    Linv: torch.Tensor | None = None
     with _prof_ctx("stap:band_energy:whiten_snapshots"):
         # Whiten strategy for L^{-1} X (X is very wide when P=N*h*w is large).
         #
@@ -3287,7 +3339,12 @@ def _band_energy_whitened_batched(
         # For large Lt and wide RHS on CUDA, inv+GEMM is often faster.
         solve_mode_env = os.getenv("STAP_BAND_SOLVE_MODE", "").strip().lower()
         if not solve_mode_env or solve_mode_env == "auto":
-            use_inv_gemm = bool(S_flat.is_cuda) and int(Lt_dim) >= 32 and int(S_flat.shape[-1]) >= 2 * int(Lt_dim)
+            # Match the Tyler fast-path heuristic: even for small Lt regimes,
+            # TRSM on a very wide RHS can be slower than (inv + GEMM) on CUDA.
+            Lt_i = int(Lt_dim)
+            P_i = int(S_flat.shape[-1])
+            rhs_wide = P_i >= 2 * Lt_i
+            use_inv_gemm = bool(S_flat.is_cuda) and rhs_wide and (Lt_i >= 32 or P_i >= 512)
             solve_mode = "inv_gemm" if use_inv_gemm else "direct"
         elif solve_mode_env in {"direct", "trsm", "solve", "triangular"}:
             solve_mode = "direct"
@@ -3298,17 +3355,22 @@ def _band_energy_whitened_batched(
                 f"Unknown STAP_BAND_SOLVE_MODE='{solve_mode_env}'. Expected auto|direct|inv_gemm."
             )
         if solve_mode == "inv_gemm":
-            eye_lt = torch.eye(Lt_dim, dtype=work_dtype, device=device)
-            eye_expand = eye_lt.expand(Bsz, Lt_dim, Lt_dim)
-            Linv = torch.linalg.solve_triangular(L, eye_expand, upper=False)
-            Sw = torch.bmm(Linv, S_flat)
+            # Reuse the already-allocated identity (avoids per-call torch.eye overhead).
+            eye_expand = eye.expand(Bsz, Lt_dim, Lt_dim)
+            Linv = torch.empty((Bsz, Lt_dim, Lt_dim), dtype=work_dtype, device=device)
+            torch.linalg.solve_triangular(L, eye_expand, upper=False, out=Linv)
+            Sw = torch.empty_like(S_flat)
+            torch.bmm(Linv, S_flat, out=Sw)
         else:
             Sw = torch.linalg.solve_triangular(L, S_flat, upper=False)
 
     # Whiten constraints: expand Ct across batch
     Ct_exp = Ct.unsqueeze(0).expand(Bsz, -1, -1)  # (B,Lt,K)
     with _prof_ctx("stap:band_energy:whiten_constraints"):
-        Cw = torch.linalg.solve_triangular(L, Ct_exp, upper=False)
+        if solve_mode == "inv_gemm" and Linv is not None:
+            Cw = torch.bmm(Linv, Ct_exp)
+        else:
+            Cw = torch.linalg.solve_triangular(L, Ct_exp, upper=False)
 
     # Total whitened power (used both for output and for the dual-form projector).
     sw_pow_flat = torch.sum(Sw.conj() * Sw, dim=1).real  # (B, P)
@@ -3321,6 +3383,32 @@ def _band_energy_whitened_batched(
     # resulting band-fraction score can become numerically degenerate.
     with _prof_ctx("stap:band_energy:project"):
         ridge_eff = float(ridge)
+        ridge_eig_mode_env = os.getenv("STAP_BAND_RIDGE_EIG_MODE", "").strip().lower()
+        ridge_pi_iters_env = os.getenv("STAP_BAND_RIDGE_POWER_ITERS", "").strip()
+        try:
+            ridge_pi_iters = int(ridge_pi_iters_env) if ridge_pi_iters_env else 4
+        except Exception:
+            ridge_pi_iters = 4
+        ridge_pi_iters = max(1, int(ridge_pi_iters))
+        try:
+            ridge_pi_eps = float(os.getenv("STAP_BAND_RIDGE_POWER_EPS", "").strip() or 1e-12)
+        except Exception:
+            ridge_pi_eps = 1e-12
+
+        def _eig_max_power(A: torch.Tensor) -> torch.Tensor:
+            # Deterministic batched power iteration for Hermitian A.
+            Bm, N = int(A.shape[0]), int(A.shape[1])
+            v = torch.ones((Bm, N, 1), device=A.device, dtype=A.dtype)
+            denom = torch.sum(v.conj() * v, dim=1, keepdim=True).real.clamp_min(ridge_pi_eps)
+            v = v / torch.sqrt(denom)
+            for _ in range(ridge_pi_iters):
+                w = torch.bmm(A, v)
+                denom = torch.sum(w.conj() * w, dim=1, keepdim=True).real.clamp_min(ridge_pi_eps)
+                v = w / torch.sqrt(denom)
+            Av = torch.bmm(A, v)
+            lam = torch.sum(v.conj() * Av, dim=1).real.squeeze(-1).to(dtype=torch.float32)
+            return torch.clamp(lam, min=0.0)
+
         try:
             project_mode = os.getenv("STAP_BAND_PROJECT_MODE", "").strip().lower()
             mode_pf = project_mode in {"pf", "proj", "projection"}
@@ -3349,20 +3437,77 @@ def _band_energy_whitened_batched(
                 M = 0.5 * (M + M.conj().transpose(-2, -1))
 
                 if ridge_eff > 0.0:
-                    evals = torch.linalg.eigvalsh(M).real
-                    evals = torch.clamp(evals, min=1e-12)
-                    evals_max = evals.max(dim=1).values  # (B,)
+                    ridge_mode = ridge_eig_mode_env or ("power" if capturing else "eigvalsh")
+                    if ridge_mode in {"power", "power_iter", "power_iteration", "graph"}:
+                        with _prof_ctx("stap:band_energy:project:eigmax"):
+                            evals_max = _eig_max_power(M)
+                    else:
+                        try:
+                            with _prof_ctx("stap:band_energy:project:eigmax"):
+                                evals = torch.linalg.eigvalsh(M).real
+                            evals = torch.clamp(evals, min=1e-12)
+                            evals_max = evals.max(dim=1).values  # (B,)
+                        except RuntimeError:
+                            # Rare numerical pathology: eigvalsh can fail to
+                            # converge on nearly singular / highly degenerate
+                            # Hermitian batches. Fall back to deterministic
+                            # power iteration for the max eigenvalue.
+                            with _prof_ctx("stap:band_energy:project:eigmax"):
+                                evals_max = _eig_max_power(M)
                     ridge_vec = ridge_eff * torch.where(
                         evals_max < 1.0, evals_max, torch.ones_like(evals_max)
                     )
-                    eye_lt = torch.eye(Lt_m, dtype=M.dtype, device=M.device).unsqueeze(0)
-                    M = M + ridge_vec.view(-1, 1, 1) * eye_lt
+                    M = M + ridge_vec.view(-1, 1, 1) * eye
                 else:
                     ridge_vec = torch.zeros((Bm,), dtype=torch.float32, device=Cw.device)
 
-                Lm = torch.linalg.cholesky(M)
-                v = torch.cholesky_solve(Sw, Lm)  # (B, Lt, P) = (C C^H + λI)^{-1} y
-                quad = torch.sum(Sw.conj() * v, dim=1).real  # (B, P)
+                with _prof_ctx("stap:band_energy:project:chol_M"):
+                    if capturing:
+                        Lm_ex, info_m = torch.linalg.cholesky_ex(M)
+                        diag_m = torch.real(torch.diagonal(M, dim1=-2, dim2=-1)).to(dtype=torch.float32)
+                        diag_m = torch.clamp(diag_m, min=1e-8)
+                        Lm_diag = torch.diag_embed(torch.sqrt(diag_m)).to(dtype=M.dtype)
+                        fail_m = (info_m != 0).view(Bm, 1, 1)
+                        Lm = torch.where(fail_m, Lm_diag, Lm_ex)
+                    else:
+                        Lm = torch.linalg.cholesky(M)
+                dual_quad_mode = os.getenv("STAP_BAND_DUAL_QUAD_MODE", "").strip().lower()
+                if dual_quad_mode in {"cholsolve", "cholesky_solve", "potrs"}:
+                    with _prof_ctx("stap:band_energy:project:dual_cholsolve"):
+                        # Avoid `torch.cholesky_solve` (non-capturable in some builds).
+                        tmp = torch.linalg.solve_triangular(Lm, Sw, upper=False)
+                        v = torch.linalg.solve_triangular(
+                            Lm.conj().transpose(-2, -1), tmp, upper=True
+                        )  # (B, Lt, P) = (C C^H + λI)^{-1} y
+                        quad = torch.sum(Sw.conj() * v, dim=1).real  # (B, P)
+                else:
+                    Lt_i = int(Lt_m)
+                    P_i = int(Sw.shape[-1])
+                    quad_use_invgemm = False
+                    if dual_quad_mode in {"inv_gemm", "invgemm", "gemm", "matmul"}:
+                        quad_use_invgemm = True
+                    elif dual_quad_mode in {"trsm", "solve", "triangular"}:
+                        quad_use_invgemm = False
+                    else:
+                        # Auto: TRSM on a very wide RHS can be slower than (inv + GEMM) on CUDA,
+                        # especially for small Lt regimes.
+                        rhs_wide = P_i >= 2 * Lt_i
+                        quad_use_invgemm = bool(Sw.is_cuda) and rhs_wide and (Lt_i <= 16) and (P_i >= 512)
+
+                    if quad_use_invgemm:
+                        with _prof_ctx("stap:band_energy:project:dual_invgemm"):
+                            eye_expand = eye.expand(Bm, Lt_m, Lt_m)
+                            Lminv = torch.empty((Bm, Lt_m, Lt_m), dtype=Lm.dtype, device=Lm.device)
+                            torch.linalg.solve_triangular(Lm, eye_expand, upper=False, out=Lminv)
+                            # Overwrite Sw in-place: we only need quad afterward.
+                            torch.bmm(Lminv, Sw, out=Sw)
+                            quad = torch.sum(Sw.conj() * Sw, dim=1).real  # (B, P)
+                    else:
+                        # quad[p] = Sw[:,p]^H (C C^H + λI)^{-1} Sw[:,p]
+                        #         = ||Lm^{-1} Sw[:,p]||^2 (one TRSM instead of full cholesky_solve).
+                        with _prof_ctx("stap:band_energy:project:dual_trsm"):
+                            Y = torch.linalg.solve_triangular(Lm, Sw, upper=False)  # (B, Lt, P)
+                            quad = torch.sum(Y.conj() * Y, dim=1).real  # (B, P)
                 T_band_flat = sw_pow_flat - ridge_vec.view(-1, 1) * quad
             else:
                 Gram = torch.bmm(CwH, Cw)  # (B, K, K)
@@ -3370,9 +3515,15 @@ def _band_energy_whitened_batched(
                     # Scale-aware ridge (mirrors head baseline behavior): when Gram is
                     # tiny in the whitened basis, an absolute ridge can dominate and
                     # collapse projected energy toward ~0.
-                    evals = torch.linalg.eigvalsh(Gram).real
-                    evals = torch.clamp(evals, min=1e-12)
-                    evals_max = evals.max(dim=1).values  # (B,)
+                    ridge_mode = ridge_eig_mode_env or ("power" if capturing else "eigvalsh")
+                    if ridge_mode in {"power", "power_iter", "power_iteration", "graph"}:
+                        with _prof_ctx("stap:band_energy:project:eigmax"):
+                            evals_max = _eig_max_power(Gram)
+                    else:
+                        with _prof_ctx("stap:band_energy:project:eigmax"):
+                            evals = torch.linalg.eigvalsh(Gram).real
+                        evals = torch.clamp(evals, min=1e-12)
+                        evals_max = evals.max(dim=1).values  # (B,)
                     ridge_vec = ridge_eff * torch.where(
                         evals_max < 1.0, evals_max, torch.ones_like(evals_max)
                     )
@@ -3390,8 +3541,23 @@ def _band_energy_whitened_batched(
                     #
                     # This is mathematically identical to z^H Gram^{-1} z because:
                     #   Pf = Cw Gram^{-1} Cw^H,  so  y^H Pf y = z^H Gram^{-1} z.
-                    Lg = torch.linalg.cholesky(Gram)
-                    X = torch.cholesky_solve(CwH, Lg)  # (B, K, Lt) = Gram^{-1} Cw^H
+                    with _prof_ctx("stap:band_energy:project:chol_Gram"):
+                        if capturing:
+                            Lg_ex, info_g = torch.linalg.cholesky_ex(Gram)
+                            diag_g = torch.real(torch.diagonal(Gram, dim1=-2, dim2=-1)).to(
+                                dtype=torch.float32
+                            )
+                            diag_g = torch.clamp(diag_g, min=1e-8)
+                            Lg_diag = torch.diag_embed(torch.sqrt(diag_g)).to(dtype=Gram.dtype)
+                            fail_g = (info_g != 0).view(Bm, 1, 1)
+                            Lg = torch.where(fail_g, Lg_diag, Lg_ex)
+                        else:
+                            Lg = torch.linalg.cholesky(Gram)
+                    # Avoid `torch.cholesky_solve` (non-capturable in some builds).
+                    tmp = torch.linalg.solve_triangular(Lg, CwH, upper=False)
+                    X = torch.linalg.solve_triangular(
+                        Lg.conj().transpose(-2, -1), tmp, upper=True
+                    )  # (B, K, Lt) = Gram^{-1} Cw^H
                     Pf = torch.bmm(Cw, X)  # (B, Lt, Lt)
                     Pf = 0.5 * (Pf + Pf.conj().transpose(-2, -1))
                     u = torch.bmm(Pf, Sw)  # (B, Lt, P)
@@ -3404,24 +3570,40 @@ def _band_energy_whitened_batched(
                     # and historically exhibited heavy-tail artifacts under precomputed
                     # projection-matrix formulations. The env-controlled fast mode above
                     # lets latency experiments opt into Pf explicitly.
-                    Lg = torch.linalg.cholesky(Gram)
+                    with _prof_ctx("stap:band_energy:project:chol_Gram"):
+                        if capturing:
+                            Lg_ex, info_g = torch.linalg.cholesky_ex(Gram)
+                            diag_g = torch.real(torch.diagonal(Gram, dim1=-2, dim2=-1)).to(
+                                dtype=torch.float32
+                            )
+                            diag_g = torch.clamp(diag_g, min=1e-8)
+                            Lg_diag = torch.diag_embed(torch.sqrt(diag_g)).to(dtype=Gram.dtype)
+                            fail_g = (info_g != 0).view(Bm, 1, 1)
+                            Lg = torch.where(fail_g, Lg_diag, Lg_ex)
+                        else:
+                            Lg = torch.linalg.cholesky(Gram)
                     # Projection energy: z^H Gram^{-1} z with Gram=Lg Lg^H.
                     #
                     # Algebra: ||Lg^{-1} z||^2 with z=(Cw^H)Sw.
                     # Prefer forming A = Lg^{-1} Cw^H once (small RHS K×Lt) then
                     # GEMM against the large RHS Sw (Lt×P) to avoid a TRSM on a
                     # very wide (K×P) matrix.
-                    A = torch.linalg.solve_triangular(Lg, CwH, upper=False)  # (B, K, Lt)
-                    tmp = torch.bmm(A, Sw)  # (B, K, P) = Lg^{-1} z
-                    T_band_flat = torch.sum(tmp.conj() * tmp, dim=1).real  # (B, P)
+                    with _prof_ctx("stap:band_energy:project:gram_solve"):
+                        A = torch.linalg.solve_triangular(Lg, CwH, upper=False)  # (B, K, Lt)
+                        tmp = torch.bmm(A, Sw)  # (B, K, P) = Lg^{-1} z
+                        T_band_flat = torch.sum(tmp.conj() * tmp, dim=1).real  # (B, P)
         except RuntimeError:
             # Fallback: use robust Hermitian solve on the full RHS.
             CwH = Cw.conj().transpose(1, 2)  # (B, K, Lt)
             Gram = torch.bmm(CwH, Cw)  # (B, K, K)
+            Gram = 0.5 * (Gram + Gram.conj().transpose(-2, -1))
             if ridge_eff > 0.0:
-                evals = torch.linalg.eigvalsh(Gram).real
-                evals = torch.clamp(evals, min=1e-12)
-                evals_max = evals.max(dim=1).values  # (B,)
+                try:
+                    evals = torch.linalg.eigvalsh(Gram).real
+                    evals = torch.clamp(evals, min=1e-12)
+                    evals_max = evals.max(dim=1).values  # (B,)
+                except RuntimeError:
+                    evals_max = _eig_max_power(Gram)
                 ridge_vec = ridge_eff * torch.where(
                     evals_max < 1.0, evals_max, torch.ones_like(evals_max)
                 )
@@ -3960,6 +4142,7 @@ def _tyler_covariance_batched(
     S_flat: torch.Tensor,
     *,
     R_init: torch.Tensor | None = None,
+    train_mask: torch.Tensor | None = None,
     max_iter: int = 25,
     tol: float = 1e-4,
     eps: float = 1e-8,
@@ -3988,6 +4171,18 @@ def _tyler_covariance_batched(
             pass
     early_stop_env = os.getenv("STAP_TYLER_EARLY_STOP", "").strip().lower()
     early_stop = early_stop_env not in {"0", "false", "no", "off"}
+    capturing = False
+    if bool(getattr(S_flat, "is_cuda", False)):
+        try:
+            capturing = bool(torch.cuda.is_current_stream_capturing())
+        except Exception:
+            capturing = False
+    triton_capture_env = os.getenv("STAP_TYLER_TRITON_CAPTURE", "").strip().lower()
+    allow_triton_capture = triton_capture_env in {"1", "true", "yes", "on"}
+    if capturing:
+        # CUDA-graph capture cannot perform host-sync convergence checks (`.item()`,
+        # `float(tensor)`), so force a fixed iteration count during capture.
+        early_stop = False
     check_every_env = os.getenv("STAP_TYLER_CONV_CHECK_EVERY", "").strip()
     if check_every_env:
         try:
@@ -3999,6 +4194,23 @@ def _tyler_covariance_batched(
         check_every = 2 if S_flat.is_cuda else 1
     check_every = max(1, int(check_every))
     B, Lt, P = S_flat.shape
+    train_mask_f: torch.Tensor | None = None
+    inv_P_scale_f: torch.Tensor | None = None
+    if train_mask is not None:
+        if train_mask.ndim != 2 or tuple(int(x) for x in train_mask.shape) != (int(B), int(P)):
+            raise ValueError(
+                f"train_mask must have shape (B,P)={(int(B), int(P))}, got {tuple(train_mask.shape)}"
+            )
+        if train_mask.dtype == torch.bool:
+            train_mask_f = train_mask.to(device=S_flat.device, dtype=torch.float32)
+        else:
+            train_mask_f = train_mask.to(device=S_flat.device, dtype=torch.float32)
+        # Scale factor to convert the fixed 1/P normalization used by the fast
+        # batched Tyler update into a per-tile 1/K_eff normalization when a
+        # training mask is applied (K_eff = number of retained snapshots).
+        k_eff = torch.sum(train_mask_f, dim=1).clamp_min(1.0)  # (B,)
+        inv_P_scale_f = (float(P) / k_eff).to(dtype=torch.float32)  # (B,)
+
     eye = torch.eye(Lt, dtype=S_flat.dtype, device=S_flat.device)
     eye_B = eye.unsqueeze(0)
     # Solve strategy for the Tyler whitening step (L^{-1} X):
@@ -4068,10 +4280,13 @@ def _tyler_covariance_batched(
         #   Xw[:,p] = X[:,p] * w[p]
         #
         # into a single kernel. It is numerically identical to the torch fallback
-        # (same accumulation order) but can substantially reduce kernel launches
-        # and memory traffic, even for small Lt regimes like Brain-* (Lt=8).
+    # (same accumulation order) but can substantially reduce kernel launches
+    # and memory traffic, even for small Lt regimes like Brain-* (Lt=8).
         use_triton_weights = True
     use_triton_weights = bool(S_flat.is_cuda) and S_flat.dtype == torch.complex64 and use_triton_weights
+    if capturing and not allow_triton_capture:
+        # Default: keep graph capture simple and robust by avoiding optional Triton paths.
+        use_triton_weights = False
     tyler_weights_triton = None
     tyler_weights_triton_cfg = None
     if use_triton_weights:
@@ -4089,8 +4304,128 @@ def _tyler_covariance_batched(
                 use_triton_weights = False
         except Exception:
             use_triton_weights = False
+    # Optional Triton kernel for the Tyler covariance update (Xw @ Xw^H).
+    triton_update_env = os.getenv("STAP_TYLER_TRITON_UPDATE", "").strip().lower()
+    if triton_update_env in {"0", "false", "no", "off"}:
+        use_triton_update = False
+    elif triton_update_env in {"1", "true", "yes", "on"}:
+        use_triton_update = True
+    else:
+        # Auto: enable whenever available on CUDA for small Lt regimes.
+        use_triton_update = True
+    use_triton_update = (
+        bool(S_flat.is_cuda)
+        and S_flat.dtype == torch.complex64
+        and int(Lt) <= 16
+        and bool(use_triton_update)
+    )
+    if capturing and not allow_triton_capture:
+        use_triton_update = False
+    tyler_update_triton = None
+    tyler_update_triton_cfg = None
+    if use_triton_update:
+        try:
+            from pipeline.stap.triton_ops import (
+                TylerCovUpdateConfig,
+                triton_available as _triton_available_update,
+                tyler_cov_update_triton,
+            )
+
+            if _triton_available_update():
+                tyler_update_triton = tyler_cov_update_triton
+                tyler_update_triton_cfg = TylerCovUpdateConfig()
+            else:
+                use_triton_update = False
+        except Exception:
+            use_triton_update = False
+    # Optional Triton fusion for (Tyler weights + covariance update) to avoid
+    # materializing Xw in global memory.
+    triton_fused_env = os.getenv("STAP_TYLER_TRITON_WEIGHTS_UPDATE", "").strip().lower()
+    if triton_fused_env in {"0", "false", "no", "off"}:
+        use_triton_weights_update = False
+    elif triton_fused_env in {"1", "true", "yes", "on"}:
+        use_triton_weights_update = True
+    else:
+        # Auto: enable whenever available on CUDA for small Lt regimes.
+        use_triton_weights_update = True
+    use_triton_weights_update = (
+        bool(S_flat.is_cuda)
+        and S_flat.dtype == torch.complex64
+        and int(Lt) <= 16
+        and bool(use_triton_weights)
+        and bool(use_triton_update)
+        and bool(use_triton_weights_update)
+    )
+    if capturing and not allow_triton_capture:
+        use_triton_weights_update = False
+    tyler_weights_update_triton = None
+    tyler_weights_update_triton_cfg = None
+    if use_triton_weights_update:
+        try:
+            from pipeline.stap.triton_ops import (
+                TylerWeightsUpdateConfig,
+                triton_available as _triton_available_fused,
+                tyler_weights_update_cov_triton,
+            )
+
+            if _triton_available_fused():
+                tyler_weights_update_triton = tyler_weights_update_cov_triton
+                tyler_weights_update_triton_cfg = TylerWeightsUpdateConfig()
+            else:
+                use_triton_weights_update = False
+        except Exception:
+            use_triton_weights_update = False
+    # Optional Triton fusion for (inv_gemm solve + Tyler weights + covariance update)
+    # to avoid materializing Y=(L^{-1}X) in global memory.
+    #
+    # Only applies when solve_mode == "inv_gemm" (i.e., Linv is computed).
+    triton_solve_update_env = os.getenv("STAP_TYLER_TRITON_SOLVE_UPDATE", "").strip().lower()
+    if triton_solve_update_env in {"0", "false", "no", "off"}:
+        use_triton_solve_update = False
+    elif triton_solve_update_env in {"1", "true", "yes", "on"}:
+        use_triton_solve_update = True
+    else:
+        # Auto: enable whenever available on CUDA for small Lt regimes.
+        use_triton_solve_update = True
+    use_triton_solve_update = (
+        solve_mode == "inv_gemm"
+        and Linv is not None
+        and bool(S_flat.is_cuda)
+        and S_flat.dtype == torch.complex64
+        and int(Lt) <= 16
+        and bool(use_triton_solve_update)
+    )
+    if capturing and not allow_triton_capture:
+        use_triton_solve_update = False
+    tyler_solve_update_triton = None
+    tyler_solve_update_triton_cfg = None
+    if use_triton_solve_update:
+        try:
+            from pipeline.stap.triton_ops import (
+                TylerInvGemmUpdateConfig,
+                triton_available as _triton_available_solve_update,
+                tyler_invgemm_weights_update_cov_triton,
+            )
+
+            if _triton_available_solve_update():
+                tyler_solve_update_triton = tyler_invgemm_weights_update_cov_triton
+                tyler_solve_update_triton_cfg = TylerInvGemmUpdateConfig()
+            else:
+                use_triton_solve_update = False
+        except Exception:
+            use_triton_solve_update = False
+    if train_mask_f is not None:
+        # Training-masked Tyler updates are used only for stability/ablations and
+        # are not latency-critical. Disable optional Triton fusions here to
+        # ensure the mask is applied consistently (the fused kernels do not
+        # currently support per-snapshot masking).
+        use_triton_weights = False
+        use_triton_update = False
+        use_triton_weights_update = False
+        use_triton_solve_update = False
     with _prof_ctx("stap:covariance:tyler"):
         tol2 = float(tol) * float(tol)
+        inv_P = 1.0 / float(P)
         for it in range(max_iter):
             # Numerical hygiene: enforce Hermitian symmetry before factorization.
             # On CUDA, small non-Hermitian drift can lead to `cholesky_ex` failures
@@ -4100,15 +4435,27 @@ def _tyler_covariance_batched(
                 R_new.mul_(0.5)
                 R, R_new = R_new, R
             with _prof_ctx("stap:covariance:tyler:chol"):
-                try:
-                    # Fast path: avoid per-iteration host synchronization on the
-                    # `info` tensor when everything is PD (the common case).
-                    L = torch.linalg.cholesky(R)
-                    info = None
-                except RuntimeError:
-                    # Rare path: fall back to `cholesky_ex` + adaptive jitter.
-                    L, info = torch.linalg.cholesky_ex(R)
-            if info is not None and torch.any(info != 0):
+                if capturing:
+                    # CUDA-graph safe: avoid `torch.linalg.cholesky` (can be non-capturable)
+                    # and avoid host-side branching on the `info` tensor.
+                    mu = torch.real(torch.diagonal(R, dim1=1, dim2=2)).mean(dim=1).clamp_min(eps)
+                    R_pd = R + (eps * mu).to(dtype=torch.float32).view(B, 1, 1) * eye_B
+                    L_ex, info = torch.linalg.cholesky_ex(R_pd)
+                    diag = torch.real(torch.diagonal(R_pd, dim1=1, dim2=2)).to(dtype=torch.float32)
+                    diag = torch.clamp(diag, min=1e-8)
+                    L_diag = torch.diag_embed(torch.sqrt(diag)).to(dtype=R_pd.dtype)
+                    fail = (info != 0).view(B, 1, 1)
+                    L = torch.where(fail, L_diag, L_ex)
+                else:
+                    try:
+                        # Fast path: avoid per-iteration host synchronization on the
+                        # `info` tensor when everything is PD (the common case).
+                        L = torch.linalg.cholesky(R)
+                        info = None
+                    except RuntimeError:
+                        # Rare path: fall back to `cholesky_ex` + adaptive jitter.
+                        L, info = torch.linalg.cholesky_ex(R)
+            if (not capturing) and info is not None and torch.any(info != 0):
                 # Adaptive jitter ladder (scaled by mu) so a few bad tiles do not
                 # poison the whole batch with NaNs.
                 mu = torch.real(torch.diagonal(R, dim1=1, dim2=2)).mean(dim=1).clamp_min(eps)
@@ -4123,15 +4470,29 @@ def _tyler_covariance_batched(
                 if solve_mode == "inv_gemm":
                     # L^{-1} X via explicit triangular inverse + GEMM.
                     torch.linalg.solve_triangular(L, eye_expand, upper=False, out=Linv)
-                    torch.bmm(Linv, S_flat, out=Xw)
+                    if not use_triton_solve_update:
+                        torch.bmm(Linv, S_flat, out=Xw)
+                        Y = Xw
+                    else:
+                        Y = None
                 else:
                     # L^{-1} X via batched TRSM.
                     torch.linalg.solve_triangular(L, S_flat, upper=False, out=Xw)
-                Y = Xw
+                    Y = Xw
             with _prof_ctx("stap:covariance:tyler:weights"):
+                weights_ready = False
+                if use_triton_solve_update or use_triton_weights_update:
+                    # Fused path: weights/update are computed together in the next stage.
+                    weights_ready = False
                 # q_p = ||L^{-1} x_p||^2 (per snapshot), but compute it without
                 # complex multiply to reduce kernel time.
-                if use_triton_weights and tyler_weights_triton is not None and tyler_weights_triton_cfg is not None:
+                if (
+                    (not use_triton_solve_update)
+                    and (not use_triton_weights_update)
+                    and use_triton_weights
+                    and tyler_weights_triton is not None
+                    and tyler_weights_triton_cfg is not None
+                ):
                     try:
                         tyler_weights_triton(
                             Y,
@@ -4145,7 +4506,7 @@ def _tyler_covariance_batched(
                         # Safety: fall back to the torch implementation if the
                         # Triton kernel fails for any reason.
                         use_triton_weights = False
-                if not use_triton_weights:
+                if (not use_triton_solve_update) and (not use_triton_weights_update) and not use_triton_weights:
                     # Torch fallback: compute q = ||Y||^2 without complex multiplies.
                     #
                     # NOTE: `Y` is not used after this stage, so it's safe (and faster)
@@ -4157,12 +4518,122 @@ def _tyler_covariance_batched(
                     q.clamp_min_(eps)
                     # Reuse `q` storage for the weights to save an allocation.
                     q.reciprocal_().mul_(float(Lt)).clamp_max_(1e6)
+                    if train_mask_f is not None:
+                        q.mul_(train_mask_f)
                     # Single-pass weighting into the preallocated buffer (avoids an
                     # extra full-tensor copy each iteration).
                     torch.mul(S_flat, q.unsqueeze(1), out=Xw)
+                if not use_triton_solve_update and not use_triton_weights_update:
+                    weights_ready = True
             with _prof_ctx("stap:covariance:tyler:update"):
-                torch.bmm(Xw, Xw.conj().transpose(-2, -1), out=R_new)
-                R_new.mul_(1.0 / float(P))
+                fused_ok = False
+                if (
+                    use_triton_solve_update
+                    and tyler_solve_update_triton is not None
+                    and tyler_solve_update_triton_cfg is not None
+                    and Linv is not None
+                ):
+                    try:
+                        tyler_solve_update_triton(
+                            Linv,
+                            S_flat,
+                            R_new,
+                            Lt=int(Lt),
+                            eps=float(eps),
+                            inv_P=float(inv_P),
+                            cfg=tyler_solve_update_triton_cfg,
+                        )
+                        fused_ok = True
+                    except Exception:
+                        use_triton_solve_update = False
+                        fused_ok = False
+                if (
+                    (not fused_ok)
+                    and use_triton_weights_update
+                    and tyler_weights_update_triton is not None
+                    and tyler_weights_update_triton_cfg is not None
+                ):
+                    try:
+                        if Y is None:
+                            if solve_mode == "inv_gemm" and Linv is not None:
+                                torch.bmm(Linv, S_flat, out=Xw)
+                            else:
+                                torch.linalg.solve_triangular(L, S_flat, upper=False, out=Xw)
+                            Y = Xw
+                        tyler_weights_update_triton(
+                            Y,
+                            S_flat,
+                            R_new,
+                            Lt=int(Lt),
+                            eps=float(eps),
+                            inv_P=float(inv_P),
+                            cfg=tyler_weights_update_triton_cfg,
+                        )
+                        fused_ok = True
+                    except Exception:
+                        use_triton_weights_update = False
+                        fused_ok = False
+                if not fused_ok and not weights_ready:
+                    # Fused path was requested but unavailable/failed; fall back
+                    # to the standard weights stage here so update has Xw.
+                    if Y is None:
+                        if solve_mode == "inv_gemm" and Linv is not None:
+                            torch.bmm(Linv, S_flat, out=Xw)
+                        else:
+                            torch.linalg.solve_triangular(L, S_flat, upper=False, out=Xw)
+                        Y = Xw
+                    if (
+                        use_triton_weights
+                        and tyler_weights_triton is not None
+                        and tyler_weights_triton_cfg is not None
+                    ):
+                        try:
+                            tyler_weights_triton(
+                                Y,
+                                S_flat,
+                                Xw,
+                                Lt=int(Lt),
+                                eps=float(eps),
+                                cfg=tyler_weights_triton_cfg,
+                            )
+                            weights_ready = True
+                        except Exception:
+                            use_triton_weights = False
+                    if not weights_ready:
+                        Y_ri = torch.view_as_real(Y)  # (B,Lt,P,2) float32 view
+                        Y_ri.mul_(Y_ri)
+                        q = torch.sum(Y_ri, dim=(1, 3))  # (B,P)
+                        q.clamp_min_(eps)
+                        q.reciprocal_().mul_(float(Lt)).clamp_max_(1e6)
+                        torch.mul(S_flat, q.unsqueeze(1), out=Xw)
+                        weights_ready = True
+                if (
+                    (not fused_ok)
+                    and use_triton_update
+                    and tyler_update_triton is not None
+                    and tyler_update_triton_cfg is not None
+                ):
+                    try:
+                        tyler_update_triton(
+                            Xw,
+                            R_new,
+                            Lt=int(Lt),
+                            inv_P=float(inv_P),
+                            cfg=tyler_update_triton_cfg,
+                        )
+                    except Exception:
+                        use_triton_update = False
+                if (not fused_ok) and not use_triton_update:
+                    torch.baddbmm(
+                        R_new,
+                        Xw,
+                        Xw.conj().transpose(-2, -1),
+                        beta=0.0,
+                        alpha=inv_P,
+                        out=R_new,
+                    )
+                if inv_P_scale_f is not None:
+                    R_new.mul_(inv_P_scale_f.view(B, 1, 1))
             # Trace normalization (Tyler is scale-invariant): enforce Tr(R)=Lt.
             #
             # IMPORTANT: compute the trace in float64 and avoid an overly-large
@@ -4202,6 +4673,7 @@ def _huber_covariance_batched(
     S_flat: torch.Tensor,
     *,
     c: float = 5.0,
+    train_mask: torch.Tensor | None = None,
     max_iter: int = 50,
     tol: float = 1e-4,
     eps: float = 1e-12,
@@ -4215,9 +4687,24 @@ def _huber_covariance_batched(
     """
     B, Lt, P = S_flat.shape
     eye = torch.eye(Lt, dtype=S_flat.dtype, device=S_flat.device).unsqueeze(0)  # (1,Lt,Lt)
+    train_mask_f: torch.Tensor | None = None
+    if train_mask is not None:
+        if train_mask.ndim != 2 or tuple(int(x) for x in train_mask.shape) != (int(B), int(P)):
+            raise ValueError(
+                f"train_mask must have shape (B,P)={(int(B), int(P))}, got {tuple(train_mask.shape)}"
+            )
+        if train_mask.dtype == torch.bool:
+            train_mask_f = train_mask.to(device=S_flat.device, dtype=torch.float32)
+        else:
+            train_mask_f = train_mask.to(device=S_flat.device, dtype=torch.float32)
 
     # SCM initialization
-    R = torch.matmul(S_flat, S_flat.conj().transpose(-2, -1)) / float(max(int(P), 1))
+    if train_mask_f is None:
+        R = torch.matmul(S_flat, S_flat.conj().transpose(-2, -1)) / float(max(int(P), 1))
+    else:
+        denom = torch.sum(train_mask_f, dim=1).clamp_min(1.0).to(dtype=torch.float32)  # (B,)
+        R = torch.matmul(S_flat * train_mask_f.unsqueeze(1), S_flat.conj().transpose(-2, -1))
+        R = R / denom.view(B, 1, 1)
     R = 0.5 * (R + R.conj().transpose(-2, -1))
 
     tr0 = torch.real(torch.diagonal(R, dim1=1, dim2=2).sum(dim=1)).to(torch.float64)
@@ -4250,10 +4737,14 @@ def _huber_covariance_batched(
             # d_i = Re{x_i^H R^{-1} x_i} / Lt
             d = torch.real(torch.sum(S_flat.conj() * Y, dim=1)) / float(Lt)  # (B,P)
             w = torch.minimum(torch.ones_like(d, dtype=torch.float32), c_val / torch.clamp(d, min=eps))
+            if train_mask_f is not None:
+                w = w * train_mask_f
+                denom = torch.sum(w, dim=1).clamp_min(1.0)
+            else:
+                denom = torch.full((B,), float(max(int(P), 1)), device=S_flat.device, dtype=torch.float32)
 
-            R_new = torch.matmul(S_flat * w.unsqueeze(1), S_flat.conj().transpose(-2, -1)) / float(
-                max(int(P), 1)
-            )
+            R_new = torch.matmul(S_flat * w.unsqueeze(1), S_flat.conj().transpose(-2, -1))
+            R_new = R_new / denom.view(B, 1, 1)
             R_new = 0.5 * (R_new + R_new.conj().transpose(-2, -1))
 
             tr = torch.real(torch.diagonal(R_new, dim1=1, dim2=2).sum(dim=1)).to(torch.float64)
@@ -4310,6 +4801,7 @@ def stap_temporal_core_batched(
     prf_hz: float,
     Lt: int,
     diag_load: float,
+    cov_train_trim_q: float = 0.0,
     kappa_shrink: float = 200.0,
     kappa_msd: float = 200.0,
     cov_estimator: str,
@@ -4325,10 +4817,12 @@ def stap_temporal_core_batched(
     msd_ratio_rho: float,
     msd_contrast_alpha: float,
     msd_lambda: Optional[float] = None,
+    detector_variant: str = "msd_ratio",
     device: Optional[str] = None,
     use_ref_cov: bool = False,
     fd_span_mode: str = "psd",
     flow_band_hz: Optional[Tuple[float, float]] = None,
+    Ct_override: Optional[torch.Tensor] = None,
     return_torch: bool = False,
 ) -> Tuple[np.ndarray | torch.Tensor, np.ndarray | torch.Tensor, List[dict]]:
     """
@@ -4339,6 +4833,24 @@ def stap_temporal_core_batched(
 
     telemetry_env = os.getenv("STAP_FAST_TELEMETRY", "").strip().lower()
     telemetry_enabled = telemetry_env not in {"0", "false", "no", "off"}
+    capturing = False
+    if bool(getattr(cube_batch_T_hw, "is_cuda", False)):
+        try:
+            capturing = bool(torch.cuda.is_current_stream_capturing())
+        except Exception:
+            capturing = False
+    if capturing:
+        telemetry_enabled = False
+    capturing = False
+    if bool(getattr(cube_batch_T_hw, "is_cuda", False)):
+        try:
+            capturing = bool(torch.cuda.is_current_stream_capturing())
+        except Exception:
+            capturing = False
+    if capturing:
+        # Telemetry builds Python dicts and performs device->host transfers for stats;
+        # disable it during CUDA-graph capture.
+        telemetry_enabled = False
 
     env_tile_stat = os.getenv("STAP_FAST_TILE_STATISTIC", "").strip().lower()
     tile_statistic = env_tile_stat in {"1", "true", "yes", "on"}
@@ -4347,6 +4859,12 @@ def stap_temporal_core_batched(
         tile_statistic = env_tile_stat in {"1", "true", "yes", "on"}
     if tile_statistic:
         _warn_tile_statistic_experimental()
+
+    variant = _normalize_detector_variant(detector_variant)
+    # The unwhitened detector ablation is implemented via the snapshot path
+    # (identity whitening). Disable cov-only approximations in this mode.
+    if variant == "unwhitened_ratio":
+        tile_statistic = False
 
     # Fine-grained runtime breakdown (seconds) for profiling.
     t_hankel = 0.0
@@ -4367,6 +4885,31 @@ def stap_temporal_core_batched(
     # silent stride/reshape-dependent behavior changes on non-contiguous Hankel
     # tensors (and to keep fast-path score maps comparable to the slow path).
     S_flat = S_B_Lt_N_hw.permute(0, 1, 3, 4, 2).contiguous().view(B, Lt, -1)
+    cov_train_trim_q = float(cov_train_trim_q or 0.0)
+    if cov_train_trim_q < 0.0 or cov_train_trim_q >= 1.0:
+        raise ValueError(f"cov_train_trim_q must be in [0,1), got {cov_train_trim_q}")
+    train_mask: torch.Tensor | None = None
+    k_eff: torch.Tensor | None = None
+    P = int(S_flat.shape[-1])
+    if cov_train_trim_q > 0.0 and P > 1:
+        # Training-trim ablation: exclude the top-q highest-energy snapshots from
+        # covariance estimation to test robustness against self-training effects.
+        #
+        # This path is intended for analysis/ablations, not latency; avoid the
+        # covariance-only tile-statistic approximation so the trimmed mask is
+        # applied consistently.
+        tile_statistic = False
+        # Keep at least a small multiple of Lt snapshots per tile.
+        min_keep = int(max(8, 2 * int(Lt)))
+        k_keep = int(math.ceil((1.0 - cov_train_trim_q) * float(P)))
+        k_keep = int(max(min_keep, min(P, k_keep)))
+        if k_keep < P:
+            with _prof_ctx("stap:covariance:train_trim"):
+                S_ri = torch.view_as_real(S_flat)  # (B,Lt,P,2) float view
+                pow_flat = torch.sum(S_ri * S_ri, dim=(1, 3))  # (B,P) float
+                thresh = torch.kthvalue(pow_flat, k_keep, dim=1).values  # (B,)
+                train_mask = pow_flat <= thresh.view(B, 1)
+                k_eff = torch.sum(train_mask.to(dtype=torch.int32), dim=1)  # (B,)
     cov_est = cov_estimator.lower()
     t1 = time.perf_counter()
     with _prof_ctx("stap:covariance"):
@@ -4376,10 +4919,19 @@ def stap_temporal_core_batched(
             )
         else:
             if cov_est == "scm":
-                R_hat = R_scm
+                if train_mask is None:
+                    R_hat = R_scm
+                else:
+                    train_mask_f = train_mask.to(device=device, dtype=torch.float32)
+                    denom = torch.sum(train_mask_f, dim=1).clamp_min(1.0)
+                    R_hat = torch.matmul(
+                        S_flat * train_mask_f.unsqueeze(1), S_flat.conj().transpose(-2, -1)
+                    )
+                    R_hat = R_hat / denom.view(B, 1, 1)
+                    R_hat = 0.5 * (R_hat + R_hat.conj().transpose(-2, -1))
             elif cov_est in {"huber", "huber_s"}:
                 R_hat = _huber_covariance_batched(
-                    S_flat, c=float(huber_c), max_iter=50, tol=1e-4
+                    S_flat, c=float(huber_c), train_mask=train_mask, max_iter=50, tol=1e-4
                 )
             else:
                 # Very short ensembles (e.g., Twinkling/Gammex with T=17, Lt=16 -> N=2)
@@ -4387,16 +4939,41 @@ def stap_temporal_core_batched(
                 # a robust Huber IRLS covariance directly in this regime.
                 if cov_est in {"tyler_pca", "tylerpca", "tyler-pca"} and int(N) <= 4:
                     R_hat = _huber_covariance_batched(
-                        S_flat, c=float(huber_c), max_iter=50, tol=1e-4
+                        S_flat, c=float(huber_c), train_mask=train_mask, max_iter=50, tol=1e-4
                     )
                 else:
                     try:
+                        # Tyler initialization (performance knob).
+                        #
+                        # Starting Tyler from the SCM often reduces iterations for
+                        # larger Lt regimes (e.g., Shin/ULM Lt=64), directly reducing
+                        # the dominant solve/update wall time. For small Lt (Brain-*),
+                        # the identity init can be faster overall.
                         tyler_init_env = os.getenv("STAP_TYLER_INIT", "").strip().lower()
-                        R_init = R_scm if tyler_init_env in {"scm", "r_scm", "cov_scm"} else None
-                        R_hat = _tyler_covariance_batched(S_flat, R_init=R_init)
+                        if not tyler_init_env or tyler_init_env == "auto":
+                            use_scm_init = bool(S_flat.is_cuda) and int(Lt) >= 32
+                            tyler_init_env = "scm" if use_scm_init else "identity"
+                        if tyler_init_env in {"scm", "r_scm", "cov_scm"}:
+                            if train_mask is None:
+                                R_init = R_scm
+                            else:
+                                train_mask_f = train_mask.to(device=device, dtype=torch.float32)
+                                denom = torch.sum(train_mask_f, dim=1).clamp_min(1.0)
+                                R_init = torch.matmul(
+                                    S_flat * train_mask_f.unsqueeze(1),
+                                    S_flat.conj().transpose(-2, -1),
+                                )
+                                R_init = R_init / denom.view(B, 1, 1)
+                                R_init = 0.5 * (R_init + R_init.conj().transpose(-2, -1))
+                        else:
+                            # identity/none/unrecognized -> default to identity init
+                            R_init = None
+                        R_hat = _tyler_covariance_batched(
+                            S_flat, R_init=R_init, train_mask=train_mask
+                        )
                     except Exception:
                         R_hat = _huber_covariance_batched(
-                            S_flat, c=float(huber_c), max_iter=50, tol=1e-4
+                            S_flat, c=float(huber_c), train_mask=train_mask, max_iter=50, tol=1e-4
                         )
     t_cov = time.perf_counter() - t1
 
@@ -4457,10 +5034,8 @@ def stap_temporal_core_batched(
             ev_min_post = torch.clamp(ev_min_post, min=0.0)
             ev_max_post = torch.clamp(ev_max_post, min=0.0)
 
-            denom = torch.clamp(
-                torch.as_tensor(kappa_msd - 1.0, device=device, dtype=torch.float64),
-                min=1e-8,
-            )
+            # CUDA-graph safe: avoid creating a CUDA scalar via host->device copy.
+            denom = float(max(kappa_msd - 1.0, 1e-8))
             lam_needed = torch.where(
                 ev_min_post > 0.0,
                 torch.clamp((ev_max_post - kappa_msd * ev_min_post) / denom, min=0.0),
@@ -4538,14 +5113,17 @@ def stap_temporal_core_batched(
     t_fdgrid = time.perf_counter() - t3
 
     with _prof_ctx("stap:constraints"):
-        Ct = bandpass_constraints_temporal(
-            Lt,
-            prf_hz,
-            fd_grid_hz=fd_grid.tolist(),
-            device=device,
-            dtype=R_hat.dtype,
-            mode="exp+deriv",
-        )
+        if Ct_override is not None:
+            Ct = Ct_override.to(device=device, dtype=R_hat.dtype)
+        else:
+            Ct = bandpass_constraints_temporal(
+                Lt,
+                prf_hz,
+                fd_grid_hz=fd_grid.tolist(),
+                device=device,
+                dtype=R_hat.dtype,
+                mode="exp+deriv",
+            )
 
     # Batched band-energy computation (PD-focused fast path)
     t4 = time.perf_counter()
@@ -4566,6 +5144,7 @@ def stap_temporal_core_batched(
                         eps=1e-10,
                     )
                     sw_pow_safe = torch.clamp(sw_pow_mean_hw, min=1e-10)
+                    pow_stack = sw_pow_safe
                     band_frac_stack = torch.clamp(T_band_mean_hw / sw_pow_safe, min=0.0, max=1.0)
                     denom = torch.clamp(
                         sw_pow_safe - T_band_mean_hw + float(msd_ratio_rho) * sw_pow_safe, min=1e-10
@@ -4583,6 +5162,7 @@ def stap_temporal_core_batched(
                         eps=1e-10,
                     )
                     sw_pow_safe = torch.clamp(sw_pow_mean, min=1e-10)
+                    pow_stack = sw_pow_safe.view(B, 1, 1).expand(B, h, w)
                     band_frac_scalar = torch.clamp(T_band_mean / sw_pow_safe, min=0.0, max=1.0)
                     denom = torch.clamp(
                         sw_pow_safe - T_band_mean + float(msd_ratio_rho) * sw_pow_safe, min=1e-10
@@ -4590,6 +5170,8 @@ def stap_temporal_core_batched(
                     ratio_scalar = torch.clamp(T_band_mean / denom, min=0.0)
                     band_frac_stack = band_frac_scalar.view(B, 1, 1).expand(B, h, w)
                     score_stack = ratio_scalar.view(B, 1, 1).expand(B, h, w)
+            if variant == "whitened_power":
+                score_stack = pow_stack
             det_list = [{} for _ in range(B)]
             t_msd = time.perf_counter() - t4
         except Exception:
@@ -4598,11 +5180,19 @@ def stap_temporal_core_batched(
     if not tile_statistic:
         try:
             with _prof_ctx("stap:band_energy:snapshots"):
+                R_for_band = R_hat
+                lam_for_band = lam_msd_tensor
+                if variant == "unwhitened_ratio":
+                    eye_b = torch.eye(Lt, device=device, dtype=R_hat.dtype).unsqueeze(0).expand(
+                        B, Lt, Lt
+                    )
+                    R_for_band = eye_b
+                    lam_for_band = torch.zeros_like(lam_msd_tensor)
                 T_band, sw_pow = _band_energy_whitened_batched(
-                    R_hat,
+                    R_for_band,
                     S_B_Lt_N_hw,
                     Ct,
-                    lam_msd_tensor,
+                    lam_for_band,
                     ridge=msd_ridge,
                     ratio_rho=msd_ratio_rho,
                     kappa_target=kappa_msd,
@@ -4618,20 +5208,28 @@ def stap_temporal_core_batched(
             ratio = torch.clamp(T_band / denom, min=0.0)
             with _prof_ctx("stap:aggregate"):
                 band_frac_stack = aggregate_over_snapshots_batched(r_flow, mode=msd_agg_mode)
-                score_stack = aggregate_over_snapshots_batched(ratio, mode=msd_agg_mode)
+                ratio_stack = aggregate_over_snapshots_batched(ratio, mode=msd_agg_mode)
+                pow_stack = aggregate_over_snapshots_batched(sw_pow_safe, mode=msd_agg_mode)
+                score_stack = pow_stack if variant == "whitened_power" else ratio_stack
             det_list = [{} for _ in range(B)]
             t_msd = time.perf_counter() - t4
         except Exception:
             # Fallback to per-tile band-energy computation if batched path fails.
             band_frac_list = []
-            score_list = []
+            ratio_list = []
+            pow_list = []
             det_list = []
             for b in range(B):
+                R_single = R_hat[b]
+                lam_abs = float(lam_msd_tensor[b].real.item())
+                if variant == "unwhitened_ratio":
+                    R_single = torch.eye(Lt, device=device, dtype=R_hat.dtype)
+                    lam_abs = 0.0
                 T_band_b, sw_pow_b = msd_snapshot_energies_batched(
-                    R_hat[b],
+                    R_single,
                     S_B_Lt_N_hw[b],
                     Ct,
-                    lam_abs=float(lam_msd_tensor[b].real.item()),
+                    lam_abs=lam_abs,
                     kappa_target=kappa_msd,
                     ridge=msd_ridge,
                     ratio_rho=msd_ratio_rho,
@@ -4650,10 +5248,13 @@ def stap_temporal_core_batched(
                 )
                 ratio_b = torch.clamp(T_band_b / denom_b, min=0.0)
                 band_frac_list.append(aggregate_over_snapshots(r_flow_b, mode=msd_agg_mode))
-                score_list.append(aggregate_over_snapshots(ratio_b, mode=msd_agg_mode))
+                ratio_list.append(aggregate_over_snapshots(ratio_b, mode=msd_agg_mode))
+                pow_list.append(aggregate_over_snapshots(sw_pow_b_safe, mode=msd_agg_mode))
                 det_list.append({})
             band_frac_stack = torch.stack(band_frac_list, dim=0)
-            score_stack = torch.stack(score_list, dim=0)
+            ratio_stack = torch.stack(ratio_list, dim=0)
+            pow_stack = torch.stack(pow_list, dim=0)
+            score_stack = pow_stack if variant == "whitened_power" else ratio_stack
             t_msd = time.perf_counter() - t4
 
     band_frac_out = band_frac_stack.to(dtype=torch.float32)
@@ -4661,6 +5262,11 @@ def stap_temporal_core_batched(
 
     if not telemetry_enabled:
         infos = [{} for _ in range(int(B))]
+        for b, d in enumerate(infos):
+            d["detector_variant"] = str(variant)
+            d["cov_train_trim_q"] = float(cov_train_trim_q)
+            if k_eff is not None:
+                d["cov_train_trim_k_eff"] = int(k_eff[b].item())
         if return_torch:
             return band_frac_out.detach(), score_out.detach(), infos
         band_frac_np = band_frac_out.detach().cpu().numpy().astype(np.float32, copy=False)
@@ -4708,6 +5314,7 @@ def stap_temporal_core_batched(
             infos.append(
                 {
                     "Lt": Lt,
+                    "detector_variant": str(variant),
                     "fd_grid_len": int(len(fd_grid)),
                     "fd_grid_source": str(fd_grid_source),
                     "span_hz": float(fd_meta.get("span_hz", 0.0)),
@@ -4719,6 +5326,8 @@ def stap_temporal_core_batched(
                     ),
                     "cov_estimator": cov_estimator,
                     "diag_load": float(diag_load),
+                    "cov_train_trim_q": float(cov_train_trim_q),
+                    "cov_train_trim_k_eff": int(k_eff[b].item()) if k_eff is not None else None,
                     "motion_half_span_hz": float(motion_half_span_hz),
                     "msd_lambda": float(msd_lambda_base),
                     "msd_lambda_conditioned": float(lam_cond[b]),
@@ -4750,6 +5359,7 @@ def pd_temporal_core_batched(
     prf_hz: float,
     Lt: int,
     diag_load: float,
+    cov_train_trim_q: float = 0.0,
     kappa_shrink: float = 200.0,
     kappa_msd: float = 200.0,
     cov_estimator: str,
@@ -4765,19 +5375,22 @@ def pd_temporal_core_batched(
     msd_ratio_rho: float,
     msd_contrast_alpha: float,
     msd_lambda: Optional[float] = None,
+    detector_variant: str = "msd_ratio",
     device: Optional[str] = None,
     use_ref_cov: bool = False,
     fd_span_mode: str = "psd",
     flow_band_hz: Optional[Tuple[float, float]] = None,
+    Ct_override: Optional[torch.Tensor] = None,
     return_torch: bool = False,
 ) -> Tuple[np.ndarray | torch.Tensor, np.ndarray | torch.Tensor, List[dict]]:
     """
-    PD-oriented fast-path core: compute band fraction maps only, skipping MSD contrast.
+    PD-oriented fast-path core: compute whitened band-fraction and matched-subspace scores.
 
     This reuses the same covariance and loading logic as stap_temporal_core_batched
-    but uses a lighter matched-subspace energy computation instead of the full MSD
-    contrast kernel. The returned score map is a placeholder and should not be used
-    as a detector score; PD should be derived from the band-fraction map.
+    but avoids the MSD-contrast augmentation. By default it returns the same
+    whitened matched-subspace ratio family used by the fast STAP core (ACE/MSD-style),
+    and `detector_variant` enables small detector ablations (e.g., unwhitened ratio or
+    total whitened power).
     """
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -4792,6 +5405,12 @@ def pd_temporal_core_batched(
         tile_statistic = env_tile_stat in {"1", "true", "yes", "on"}
     if tile_statistic:
         _warn_tile_statistic_experimental()
+
+    variant = _normalize_detector_variant(detector_variant)
+    # The unwhitened detector ablation is implemented via the snapshot path
+    # (identity whitening). Disable cov-only approximations in this mode.
+    if variant == "unwhitened_ratio":
+        tile_statistic = False
 
     # Runtime breakdown (seconds) for profiling.
     t_hankel = 0.0
@@ -4811,6 +5430,24 @@ def pd_temporal_core_batched(
     # silent stride/reshape-dependent behavior changes on non-contiguous Hankel
     # tensors (and to keep fast-path score maps comparable to the slow path).
     S_flat = S_B_Lt_N_hw.permute(0, 1, 3, 4, 2).contiguous().view(B, Lt, -1)
+    cov_train_trim_q = float(cov_train_trim_q or 0.0)
+    if cov_train_trim_q < 0.0 or cov_train_trim_q >= 1.0:
+        raise ValueError(f"cov_train_trim_q must be in [0,1), got {cov_train_trim_q}")
+    train_mask: torch.Tensor | None = None
+    k_eff: torch.Tensor | None = None
+    P = int(S_flat.shape[-1])
+    if cov_train_trim_q > 0.0 and P > 1:
+        tile_statistic = False
+        min_keep = int(max(8, 2 * int(Lt)))
+        k_keep = int(math.ceil((1.0 - cov_train_trim_q) * float(P)))
+        k_keep = int(max(min_keep, min(P, k_keep)))
+        if k_keep < P:
+            with _prof_ctx("stap:covariance:train_trim"):
+                S_ri = torch.view_as_real(S_flat)
+                pow_flat = torch.sum(S_ri * S_ri, dim=(1, 3))
+                thresh = torch.kthvalue(pow_flat, k_keep, dim=1).values
+                train_mask = pow_flat <= thresh.view(B, 1)
+                k_eff = torch.sum(train_mask.to(dtype=torch.int32), dim=1)
     cov_est = cov_estimator.lower()
 
     t1 = time.perf_counter()
@@ -4820,24 +5457,58 @@ def pd_temporal_core_batched(
         )
     else:
         if cov_est == "scm":
-            R_hat = R_scm
+            if train_mask is None:
+                R_hat = R_scm
+            else:
+                train_mask_f = train_mask.to(device=device, dtype=torch.float32)
+                denom = torch.sum(train_mask_f, dim=1).clamp_min(1.0)
+                R_hat = torch.matmul(
+                    S_flat * train_mask_f.unsqueeze(1), S_flat.conj().transpose(-2, -1)
+                )
+                R_hat = R_hat / denom.view(B, 1, 1)
+                R_hat = 0.5 * (R_hat + R_hat.conj().transpose(-2, -1))
         elif cov_est in {"huber", "huber_s"}:
             R_hat = _huber_covariance_batched(
-                S_flat, c=float(huber_c), max_iter=50, tol=1e-4
+                S_flat, c=float(huber_c), train_mask=train_mask, max_iter=50, tol=1e-4
             )
         else:
             if cov_est in {"tyler_pca", "tylerpca", "tyler-pca"} and int(N) <= 4:
                 R_hat = _huber_covariance_batched(
-                    S_flat, c=float(huber_c), max_iter=50, tol=1e-4
+                    S_flat, c=float(huber_c), train_mask=train_mask, max_iter=50, tol=1e-4
                 )
             else:
                 try:
+                    # Tyler initialization (performance knob).
+                    #
+                    # Starting Tyler from the SCM often reduces iterations for
+                    # larger Lt regimes (e.g., Shin/ULM Lt=64), directly reducing
+                    # the dominant solve/update wall time. For small Lt (Brain-*),
+                    # the identity init can be faster overall.
                     tyler_init_env = os.getenv("STAP_TYLER_INIT", "").strip().lower()
-                    R_init = R_scm if tyler_init_env in {"scm", "r_scm", "cov_scm"} else None
-                    R_hat = _tyler_covariance_batched(S_flat, R_init=R_init)
+                    if not tyler_init_env or tyler_init_env == "auto":
+                        use_scm_init = bool(S_flat.is_cuda) and int(Lt) >= 32
+                        tyler_init_env = "scm" if use_scm_init else "identity"
+                    if tyler_init_env in {"scm", "r_scm", "cov_scm"}:
+                        if train_mask is None:
+                            R_init = R_scm
+                        else:
+                            train_mask_f = train_mask.to(device=device, dtype=torch.float32)
+                            denom = torch.sum(train_mask_f, dim=1).clamp_min(1.0)
+                            R_init = torch.matmul(
+                                S_flat * train_mask_f.unsqueeze(1),
+                                S_flat.conj().transpose(-2, -1),
+                            )
+                            R_init = R_init / denom.view(B, 1, 1)
+                            R_init = 0.5 * (R_init + R_init.conj().transpose(-2, -1))
+                    else:
+                        # identity/none/unrecognized -> default to identity init
+                        R_init = None
+                    R_hat = _tyler_covariance_batched(
+                        S_flat, R_init=R_init, train_mask=train_mask
+                    )
                 except Exception:
                     R_hat = _huber_covariance_batched(
-                        S_flat, c=float(huber_c), max_iter=50, tol=1e-4
+                        S_flat, c=float(huber_c), train_mask=train_mask, max_iter=50, tol=1e-4
                     )
     t_cov = time.perf_counter() - t1
 
@@ -4888,10 +5559,8 @@ def pd_temporal_core_batched(
             ev_min_post = torch.clamp(ev_min_post, min=0.0)
             ev_max_post = torch.clamp(ev_max_post, min=0.0)
 
-            denom = torch.clamp(
-                torch.as_tensor(kappa_msd - 1.0, device=device, dtype=torch.float64),
-                min=1e-8,
-            )
+            # CUDA-graph safe: avoid creating a CUDA scalar via host->device copy.
+            denom = float(max(kappa_msd - 1.0, 1e-8))
             lam_needed = torch.where(
                 ev_min_post > 0.0,
                 torch.clamp((ev_max_post - kappa_msd * ev_min_post) / denom, min=0.0),
@@ -4971,14 +5640,17 @@ def pd_temporal_core_batched(
 
     # Constraints for the entire band (no motion/alias split in this PD-only mode).
     with _prof_ctx("stap:constraints"):
-        Ct = bandpass_constraints_temporal(
-            Lt,
-            prf_hz,
-            fd_grid_hz=fd_grid.tolist(),
-            device=device,
-            dtype=R_hat.dtype,
-            mode="exp+deriv",
-        )
+        if Ct_override is not None:
+            Ct = Ct_override.to(device=device, dtype=R_hat.dtype)
+        else:
+            Ct = bandpass_constraints_temporal(
+                Lt,
+                prf_hz,
+                fd_grid_hz=fd_grid.tolist(),
+                device=device,
+                dtype=R_hat.dtype,
+                mode="exp+deriv",
+            )
 
     # Compute per-snapshot band energy and total whitened power, then aggregate.
     t4 = time.perf_counter()
@@ -4998,6 +5670,7 @@ def pd_temporal_core_batched(
                     eps=1e-10,
                 )
                 sw_pow_safe = torch.clamp(sw_pow_mean_hw, min=1e-10)
+                pow_stack = sw_pow_safe
                 band_frac_stack = torch.clamp(T_band_mean_hw / sw_pow_safe, min=0.0, max=1.0)
                 ratio_denom = torch.clamp(
                     sw_pow_safe - T_band_mean_hw + float(msd_ratio_rho) * sw_pow_safe, min=1e-10
@@ -5015,6 +5688,7 @@ def pd_temporal_core_batched(
                     eps=1e-10,
                 )
                 sw_pow_safe = torch.clamp(sw_pow_mean, min=1e-10)
+                pow_stack = sw_pow_safe.view(B, 1, 1).expand(B, h, w)
                 band_frac_scalar = torch.clamp(T_band_mean / sw_pow_safe, min=0.0, max=1.0)
                 ratio_denom = torch.clamp(
                     sw_pow_safe - T_band_mean + float(msd_ratio_rho) * sw_pow_safe, min=1e-10
@@ -5022,13 +5696,23 @@ def pd_temporal_core_batched(
                 ratio_scalar = torch.clamp(T_band_mean / ratio_denom, min=0.0)
                 band_frac_stack = band_frac_scalar.view(B, 1, 1).expand(B, h, w)
                 score_stack = ratio_scalar.view(B, 1, 1).expand(B, h, w)
+            if variant == "whitened_power":
+                score_stack = pow_stack
         else:
             # Use the same batched whitening + projection path as the full STAP fast core.
+            R_for_band = R_hat
+            lam_for_band = lam_msd_tensor
+            if variant == "unwhitened_ratio":
+                eye_b = torch.eye(Lt, device=device, dtype=R_hat.dtype).unsqueeze(0).expand(
+                    B, Lt, Lt
+                )
+                R_for_band = eye_b
+                lam_for_band = torch.zeros_like(lam_msd_tensor)
             T_band, sw_pow = _band_energy_whitened_batched(
-                R_hat,
+                R_for_band,
                 S_B_Lt_N_hw,
                 Ct,
-                lam_msd_tensor,
+                lam_for_band,
                 ridge=msd_ridge,
                 ratio_rho=msd_ratio_rho,
                 kappa_target=kappa_msd,
@@ -5044,13 +5728,20 @@ def pd_temporal_core_batched(
             ratio = torch.clamp(T_band / ratio_denom, min=0.0)
             with _prof_ctx("stap:aggregate"):
                 band_frac_stack = aggregate_over_snapshots_batched(r_flow, mode=msd_agg_mode)
-                score_stack = aggregate_over_snapshots_batched(ratio, mode=msd_agg_mode)
+                ratio_stack = aggregate_over_snapshots_batched(ratio, mode=msd_agg_mode)
+                pow_stack = aggregate_over_snapshots_batched(sw_pow_safe, mode=msd_agg_mode)
+                score_stack = pow_stack if variant == "whitened_power" else ratio_stack
     t_band = time.perf_counter() - t4
 
     band_frac_out = band_frac_stack.to(dtype=torch.float32)
     score_out = score_stack.to(dtype=torch.float32)
     if not telemetry_enabled:
         infos = [{} for _ in range(int(B))]
+        for b, d in enumerate(infos):
+            d["detector_variant"] = str(variant)
+            d["cov_train_trim_q"] = float(cov_train_trim_q)
+            if k_eff is not None:
+                d["cov_train_trim_k_eff"] = int(k_eff[b].item())
         if return_torch:
             return band_frac_out.detach(), score_out.detach(), infos
         band_frac_np = band_frac_out.detach().cpu().numpy().astype(np.float32, copy=False)
@@ -5092,6 +5783,7 @@ def pd_temporal_core_batched(
             alias = max(0.0, 1.0 - flow)
             info = {
                 "Lt": Lt,
+                "detector_variant": str(variant),
                 "fd_grid_len": int(len(fd_grid)),
                 "fd_grid_source": str(fd_grid_source),
                 "span_hz": float(fd_meta.get("span_hz", 0.0)),
@@ -5103,6 +5795,8 @@ def pd_temporal_core_batched(
                 ),
                 "cov_estimator": cov_estimator,
                 "diag_load": float(diag_load),
+                "cov_train_trim_q": float(cov_train_trim_q),
+                "cov_train_trim_k_eff": int(k_eff[b].item()) if k_eff is not None else None,
                 "motion_half_span_hz": float(motion_half_span_hz),
                 "msd_lambda": float(msd_lambda_base),
                 "msd_lambda_conditioned": float(lam_cond[b]),

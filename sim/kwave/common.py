@@ -1,7 +1,7 @@
 # sim/kwave/common.py
 from __future__ import annotations
 
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 import json
 import math
 import os
@@ -114,6 +114,144 @@ def _normalize_feasibility_mode(mode: str | None) -> FeasibilityMode:
 
 
 _GPU_AVAILABLE_CACHE: bool | None = None
+
+
+@contextmanager
+def _temporary_environ(overrides: Dict[str, str | None]):
+    prev: Dict[str, str | None] = {}
+    for k, v in overrides.items():
+        prev[k] = os.environ.get(k)
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = str(v)
+    try:
+        yield
+    finally:
+        for k, v_prev in prev.items():
+            if v_prev is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v_prev
+
+
+@dataclass
+class _StapFastCudaGraphEntry:
+    graph: object
+    static_in: "torch.Tensor"
+    band_out: "torch.Tensor"
+    score_out: "torch.Tensor"
+    ct: "torch.Tensor | None" = None
+
+
+_STAP_FAST_CUDA_GRAPH_CACHE: Dict[tuple, _StapFastCudaGraphEntry] = {}
+_STAP_FAST_CUDA_GRAPH_FAILED: set[tuple] = set()
+
+
+def _stap_fast_cuda_graph_enabled() -> bool:
+    val = os.getenv("STAP_FAST_CUDA_GRAPH", "").strip().lower()
+    return val in {"1", "true", "yes", "on"}
+
+
+def _stap_fast_cuda_graph_run(
+    core_fn: Callable[..., object],
+    cube_tensor: "torch.Tensor",
+    *,
+    core_kwargs: Dict[str, object],
+    cache_key: tuple,
+) -> tuple["torch.Tensor", "torch.Tensor", list[dict]]:
+    if torch is None:  # pragma: no cover - torch optional
+        raise RuntimeError("CUDA graph requested but torch is unavailable.")
+    if not cube_tensor.is_cuda:
+        raise RuntimeError("CUDA graph requested but input is not on CUDA.")
+    if cache_key in _STAP_FAST_CUDA_GRAPH_FAILED:
+        raise RuntimeError("CUDA graph capture previously failed for this key.")
+
+    entry = _STAP_FAST_CUDA_GRAPH_CACHE.get(cache_key)
+    if entry is None:
+        # Capture a fresh graph for this fixed-shape configuration.
+        static_in = torch.empty_like(cube_tensor)
+        static_in.copy_(cube_tensor)
+        g = torch.cuda.CUDAGraph()
+        core_kwargs_graph = dict(core_kwargs)
+        ct_override = None
+        try:
+            from pipeline.stap.temporal_shared import build_fd_grid_flow_band, build_fd_grid_span
+        except Exception:  # pragma: no cover - defensive
+            build_fd_grid_flow_band = None  # type: ignore[assignment]
+            build_fd_grid_span = None  # type: ignore[assignment]
+        if bandpass_constraints_temporal is not None and build_fd_grid_span is not None:
+            try:
+                prf_hz = float(core_kwargs_graph.get("prf_hz", 0.0) or 0.0)
+                Lt = int(core_kwargs_graph.get("Lt", 0) or 0)
+                fd_span_mode = str(core_kwargs_graph.get("fd_span_mode", "psd") or "psd").strip().lower()
+                flow_band_hz = core_kwargs_graph.get("flow_band_hz", None)
+                min_pts = int(core_kwargs_graph.get("min_pts", 3) or 3)
+                max_pts = int(core_kwargs_graph.get("max_pts", 21) or 21)
+                if fd_span_mode in {"flow_band", "band"} and flow_band_hz is not None and build_fd_grid_flow_band is not None:
+                    base = prf_hz / float(max(Lt, 1))
+                    motion_half_span_rel = core_kwargs_graph.get("motion_half_span_rel", None)
+                    if motion_half_span_rel is not None:
+                        motion_half_span_hz = max(0.0, float(motion_half_span_rel) * base)
+                    else:
+                        motion_half_span_hz = 0.1 * base
+                    fd_grid, _ = build_fd_grid_flow_band(
+                        prf_hz,
+                        Lt,
+                        (float(flow_band_hz[0]), float(flow_band_hz[1])),
+                        motion_half_span_hz=float(motion_half_span_hz),
+                        min_pts=min_pts,
+                        max_pts=max_pts,
+                    )
+                else:
+                    fd_span_rel = core_kwargs_graph.get("fd_span_rel", (-0.25, 0.25))
+                    grid_step_rel = float(core_kwargs_graph.get("grid_step_rel", 0.20) or 0.20)
+                    fd_min_abs_hz = float(core_kwargs_graph.get("fd_min_abs_hz", 0.0) or 0.0)
+                    fd_grid, _ = build_fd_grid_span(
+                        prf_hz,
+                        Lt,
+                        fd_span_rel=(float(fd_span_rel[0]), float(fd_span_rel[1])),
+                        grid_step_rel=float(grid_step_rel),
+                        fd_min_abs_hz=float(fd_min_abs_hz),
+                        min_pts=min_pts,
+                        max_pts=max_pts,
+                    )
+                ct_override = bandpass_constraints_temporal(
+                    Lt,
+                    prf_hz,
+                    fd_grid_hz=fd_grid.tolist(),
+                    device=str(core_kwargs_graph.get("device", "cuda")),
+                    dtype=cube_tensor.dtype,
+                    mode="exp+deriv",
+                )
+                core_kwargs_graph["Ct_override"] = ct_override
+            except Exception:
+                ct_override = None
+        with torch.no_grad(), _temporary_environ({"STAP_FAST_TELEMETRY": "0"}):
+            # Warm up to populate CUDA kernels/caches and ensure allocations are stable.
+            _ = core_fn(static_in, return_torch=True, **core_kwargs_graph)
+            torch.cuda.synchronize()
+            with torch.cuda.graph(g):
+                band_out, score_out, _ = core_fn(static_in, return_torch=True, **core_kwargs_graph)
+        entry = _StapFastCudaGraphEntry(
+            graph=g, static_in=static_in, band_out=band_out, score_out=score_out, ct=ct_override
+        )
+        _STAP_FAST_CUDA_GRAPH_CACHE[cache_key] = entry
+        if os.getenv("STAP_FAST_CUDA_GRAPH_VERBOSE", "").strip().lower() in {"1", "true", "yes", "on"}:
+            try:
+                shape = tuple(int(x) for x in cube_tensor.shape)
+            except Exception:
+                shape = None
+            print(
+                f"[stap_fast_cuda_graph] captured graph for shape={shape} dtype={cube_tensor.dtype} device={cube_tensor.device}",
+                flush=True,
+            )
+
+    entry.static_in.copy_(cube_tensor)
+    entry.graph.replay()
+    B = int(cube_tensor.shape[0])
+    infos = [{"stap_fast_cuda_graph": True} for _ in range(B)]
+    return entry.band_out, entry.score_out, infos
 
 
 def _conditioned_lambda(
@@ -2859,6 +2997,274 @@ def _baseline_pd_svd_bandpass(
     return pd.astype(np.float32), telemetry
 
 
+def _baseline_pd_svd_similarity(
+    Icube: np.ndarray,
+    *,
+    svd_sim_smooth: int = 7,
+    svd_sim_kappa: float = 2.5,
+    svd_sim_r_min: int = 1,
+    svd_sim_r_max: Optional[int] = None,
+    device: str = "cpu",
+    return_filtered_cube: bool = False,
+) -> tuple:
+    """Adaptive global SVD clutter filter with spatial singular-vector similarity cutoff.
+
+    This is a deterministic baseline inspired by Baranger et al. (2018): the clutter
+    rank is selected per-window by detecting a drop in similarity between successive
+    *spatial* singular vectors (measured on magnitudes to avoid arbitrary complex
+    phase/sign flips).
+    """
+
+    def _median_smooth_1d(x: np.ndarray, width: int) -> np.ndarray:
+        x = np.asarray(x, dtype=np.float32).ravel()
+        width = int(width)
+        if x.size == 0 or width <= 1:
+            return x.copy()
+        if width % 2 == 0:
+            width += 1
+        half = width // 2
+        out = np.empty_like(x, dtype=np.float32)
+        for i in range(x.size):
+            lo = max(0, i - half)
+            hi = min(x.size, i + half + 1)
+            out[i] = float(np.median(x[lo:hi]))
+        return out
+
+    t_start = time.perf_counter()
+    if Icube.ndim != 3:
+        raise ValueError(f"Icube must have shape (T,H,W), got {Icube.shape}")
+    if not np.iscomplexobj(Icube):
+        raise ValueError("Icube must be complex-valued IQ")
+    Icube = np.asarray(Icube, dtype=np.complex64)
+    T, H, W = (int(x) for x in Icube.shape)
+    A_np = Icube.reshape(T, -1)
+
+    r_max_eff = int(svd_sim_r_max) if svd_sim_r_max is not None else min(32, T - 1)
+    r_max_eff = int(max(0, min(r_max_eff, T - 1)))
+    r_min_eff = int(max(0, min(int(svd_sim_r_min), r_max_eff)))
+    smooth = int(max(1, svd_sim_smooth))
+    kappa = float(svd_sim_kappa)
+
+    use_cuda = (
+        device and device.lower().startswith("cuda") and _HAS_TORCH and torch.cuda.is_available()
+    )
+    sims_sm = np.zeros((0,), dtype=np.float32)
+    tau = float("nan")
+    r_sel = int(r_min_eff)
+    if use_cuda:
+        At = torch.as_tensor(A_np, dtype=torch.complex64, device=device)
+        if At.is_cuda:
+            torch.cuda.synchronize()
+        C = At @ At.conj().T
+        evals, U = torch.linalg.eigh(C)
+        idx = torch.argsort(evals, descending=True)
+        s2 = torch.clamp(evals[idx].real, min=0.0)
+        U = U[:, idx]
+
+        # Similarity curve on |v_k|, where v_k are spatial singular vectors.
+        # Compute v_k = A^H u_k / s_k for k=1..(r_max_eff+1).
+        if r_max_eff >= 1:
+            cols = int(r_max_eff + 1)
+            U_r = U[:, :cols]
+            s = torch.sqrt(s2[:cols] + 1e-12)
+            V_r = (At.conj().T @ U_r) / s.unsqueeze(0)  # (N,cols)
+            mags = V_r.abs().to(dtype=torch.float32)
+            mags = mags / (torch.linalg.norm(mags, dim=0) + 1e-12)
+            sims = torch.sum(mags[:, :-1] * mags[:, 1:], dim=0)  # (cols-1,)
+            sims_sm = _median_smooth_1d(
+                sims.detach().cpu().numpy().astype(np.float32, copy=False), smooth
+            )
+        else:
+            sims_sm = np.zeros((0,), dtype=np.float32)
+
+        if sims_sm.size:
+            med = float(np.median(sims_sm))
+            mad = float(np.median(np.abs(sims_sm - med)) + 1e-12)
+            tau = float(med - kappa * mad)
+            idx_cross = np.nonzero(sims_sm < tau)[0]
+            if idx_cross.size:
+                r_sel = int(idx_cross[0] + 1)  # 1-based k in the paper
+            else:
+                r_sel = int(r_max_eff)
+        r_sel = int(max(r_min_eff, min(r_sel, r_max_eff)))
+
+        U_k = U[:, :r_sel]
+        A_f = (At - U_k @ (U_k.conj().T @ At)).to(dtype=torch.complex64)
+        cube_f = A_f.reshape(T, H, W)
+        pd_t = (cube_f.abs() ** 2).mean(dim=0).to(dtype=torch.float32)
+        pd = pd_t.detach().cpu().numpy().astype(np.float32, copy=False)
+
+        if cube_f.is_cuda:
+            torch.cuda.synchronize()
+        s2_vals = s2.detach().cpu().numpy()
+        s_top = np.sqrt(np.clip(s2_vals[: min(5, s2_vals.size)], 0.0, None))
+        telemetry = {
+            "baseline_type": "svd_similarity",
+            "svd_similarity_r": int(r_sel),
+            "svd_similarity_r_min": int(r_min_eff),
+            "svd_similarity_r_max": int(r_max_eff),
+            "svd_similarity_smooth": int(smooth),
+            "svd_similarity_kappa": float(kappa),
+            "svd_similarity_tau": float(tau) if np.isfinite(tau) else None,
+            "svd_top_singular_vals": [float(x) for x in s_top],
+            "svd_ms": float(1000.0 * (time.perf_counter() - t_start)),
+        }
+        telemetry["baseline_ms"] = telemetry["svd_ms"]
+        if return_filtered_cube:
+            cube_np = cube_f.detach().cpu().numpy().astype(np.complex64, copy=False)
+            return pd, telemetry, cube_np
+        return pd, telemetry
+
+    # CPU / NumPy path.
+    C = A_np @ A_np.conj().T
+    s2, U = np.linalg.eigh(C)
+    idx = np.argsort(s2)[::-1]
+    s2 = np.clip(s2[idx].real, 0.0, None)
+    U = U[:, idx]
+    if r_max_eff >= 1:
+        cols = int(r_max_eff + 1)
+        U_r = U[:, :cols]
+        s = np.sqrt(np.clip(s2[:cols], 0.0, None) + 1e-12)
+        V_r = (A_np.conj().T @ U_r) / s[None, :]
+        mags = np.abs(V_r).astype(np.float32, copy=False)
+        mags /= (np.linalg.norm(mags, axis=0) + 1e-12)
+        sims = np.sum(mags[:, :-1] * mags[:, 1:], axis=0).astype(np.float32, copy=False)
+        sims_sm = _median_smooth_1d(sims, smooth)
+
+    if sims_sm.size:
+        med = float(np.median(sims_sm))
+        mad = float(np.median(np.abs(sims_sm - med)) + 1e-12)
+        tau = float(med - kappa * mad)
+        idx_cross = np.nonzero(sims_sm < tau)[0]
+        if idx_cross.size:
+            r_sel = int(idx_cross[0] + 1)
+        else:
+            r_sel = int(r_max_eff)
+    r_sel = int(max(r_min_eff, min(r_sel, r_max_eff)))
+
+    U_k = U[:, :r_sel]
+    A_f = (A_np - U_k @ (U_k.conj().T @ A_np)).astype(np.complex64, copy=False)
+    cube_f = A_f.reshape(T, H, W)
+    pd = np.mean((np.abs(cube_f) ** 2).astype(np.float32), axis=0).astype(np.float32, copy=False)
+    s_top = np.sqrt(np.clip(s2[: min(5, s2.size)], 0.0, None))
+    telemetry = {
+        "baseline_type": "svd_similarity",
+        "svd_similarity_r": int(r_sel),
+        "svd_similarity_r_min": int(r_min_eff),
+        "svd_similarity_r_max": int(r_max_eff),
+        "svd_similarity_smooth": int(smooth),
+        "svd_similarity_kappa": float(kappa),
+        "svd_similarity_tau": float(tau) if np.isfinite(tau) else None,
+        "svd_top_singular_vals": [float(x) for x in s_top[: min(5, s_top.size)]],
+        "baseline_ms": float(1000.0 * (time.perf_counter() - t_start)),
+    }
+    if return_filtered_cube:
+        return pd, telemetry, cube_f.astype(np.complex64, copy=False)
+    return pd, telemetry
+
+
+def _baseline_pd_local_svd(
+    Icube: np.ndarray,
+    *,
+    tile_hw: tuple[int, int] = (8, 8),
+    stride: int = 3,
+    svd_energy_frac: float = 0.90,
+    hann: bool = True,
+    device: str = "cpu",
+    return_filtered_cube: bool = False,
+) -> tuple:
+    """Block-wise (local) SVD clutter filter with overlap-add reconstruction.
+
+    For each spatial tile, removes a tile-local low-rank clutter subspace chosen
+    by a frozen energy-fraction rule, then overlap-adds residual tiles (Hann
+    weighted) to reconstruct a full-resolution residual cube.
+    """
+    _ = device  # reserved for a future CUDA implementation
+    t_start = time.perf_counter()
+    if Icube.ndim != 3:
+        raise ValueError(f"Icube must have shape (T,H,W), got {Icube.shape}")
+    if not np.iscomplexobj(Icube):
+        raise ValueError("Icube must be complex-valued IQ")
+    Icube = np.asarray(Icube, dtype=np.complex64)
+    T, H, W = (int(x) for x in Icube.shape)
+    th, tw = (int(tile_hw[0]), int(tile_hw[1]))
+    if th <= 0 or tw <= 0:
+        raise ValueError("tile_hw must be positive")
+    if th > H or tw > W:
+        raise ValueError(f"tile_hw={tile_hw} exceeds frame size {(H, W)}")
+    stride = int(max(1, stride))
+    e = float(np.clip(float(svd_energy_frac), 0.0, 1.0))
+
+    if hann:
+        wy = np.hanning(th).astype(np.float32) if th > 1 else np.ones((th,), dtype=np.float32)
+        wx = np.hanning(tw).astype(np.float32) if tw > 1 else np.ones((tw,), dtype=np.float32)
+        w_tile = (wy[:, None] * wx[None, :]).astype(np.float32, copy=False)
+    else:
+        w_tile = np.ones((th, tw), dtype=np.float32)
+
+    y_starts = list(range(0, H - th + 1, stride))
+    x_starts = list(range(0, W - tw + 1, stride))
+    if not y_starts:
+        y_starts = [0]
+    if not x_starts:
+        x_starts = [0]
+    if y_starts[-1] != H - th:
+        y_starts.append(H - th)
+    if x_starts[-1] != W - tw:
+        x_starts.append(W - tw)
+
+    out = np.zeros((T, H, W), dtype=np.complex64)
+    wsum = np.zeros((H, W), dtype=np.float32)
+
+    ranks: list[int] = []
+    for y0 in y_starts:
+        for x0 in x_starts:
+            tile = Icube[:, y0 : y0 + th, x0 : x0 + tw]
+            A = tile.reshape(T, -1)
+            C = A @ A.conj().T
+            s2, U = np.linalg.eigh(C)
+            idx = np.argsort(s2)[::-1]
+            s2 = np.clip(s2[idx].real, 0.0, None)
+            U = U[:, idx]
+            total = float(np.sum(s2) + 1e-12)
+            if e <= 0.0:
+                r = 0
+            elif e >= 1.0:
+                r = T
+            else:
+                cum = np.cumsum(s2) / total
+                r = int(np.searchsorted(cum, e) + 1)
+            r = int(max(0, min(r, T)))
+            ranks.append(r)
+            U_k = U[:, :r]
+            A_f = (A - U_k @ (U_k.conj().T @ A)).astype(np.complex64, copy=False)
+            tile_f = A_f.reshape(T, th, tw)
+            out[:, y0 : y0 + th, x0 : x0 + tw] += tile_f * w_tile[None, :, :]
+            wsum[y0 : y0 + th, x0 : x0 + tw] += w_tile
+
+    out /= (wsum[None, :, :] + 1e-12)
+    pd = np.mean((np.abs(out) ** 2).astype(np.float32), axis=0).astype(np.float32, copy=False)
+
+    r_arr = np.asarray(ranks, dtype=np.int32) if ranks else np.zeros((0,), dtype=np.int32)
+    telemetry = {
+        "baseline_type": "local_svd",
+        "local_svd_tile_hw": [int(th), int(tw)],
+        "local_svd_stride": int(stride),
+        "local_svd_hann": bool(hann),
+        "svd_energy_frac": float(e),
+        "local_svd_rank_removed_mean": float(r_arr.mean()) if r_arr.size else 0.0,
+        "local_svd_rank_removed_median": float(np.median(r_arr)) if r_arr.size else 0.0,
+        "local_svd_rank_removed_p10": float(np.quantile(r_arr, 0.10)) if r_arr.size else 0.0,
+        "local_svd_rank_removed_p90": float(np.quantile(r_arr, 0.90)) if r_arr.size else 0.0,
+        "local_svd_rank_removed_min": int(r_arr.min()) if r_arr.size else 0,
+        "local_svd_rank_removed_max": int(r_arr.max()) if r_arr.size else 0,
+        "baseline_ms": float(1000.0 * (time.perf_counter() - t_start)),
+    }
+    if return_filtered_cube:
+        return pd, telemetry, out.astype(np.complex64, copy=False)
+    return pd, telemetry
+
+
 def _baseline_pd_rpca(
     Icube: np.ndarray,
     *,
@@ -3702,12 +4108,12 @@ def _stap_pd_tile_lcmv(
     ka_opts: dict[str, float] | None = None,
     Lt_fixed: int | None = None,
     post_filter_callback: Callable[[np.ndarray], None] | None = None,
-	    ka_gate: dict | None = None,
-	    feasibility_mode: FeasibilityMode = "legacy",
-	    motion_basis_geom: np.ndarray | None = None,
-	    flow_band_hz: tuple[float, float] | None = None,
-	    alias_band_hz: tuple[float, float] | None = None,
-	    psd_telemetry: bool = False,
+    ka_gate: dict | None = None,
+    feasibility_mode: FeasibilityMode = "legacy",
+    motion_basis_geom: np.ndarray | None = None,
+    flow_band_hz: tuple[float, float] | None = None,
+    alias_band_hz: tuple[float, float] | None = None,
+    psd_telemetry: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, dict, dict | None]:
     T, h, w = cube_T_hw.shape
     feas_mode = _normalize_feasibility_mode(feasibility_mode)
@@ -5629,12 +6035,14 @@ def _stap_pd_tile_lcmv_batch(
     *,
     prf_hz: float,
     diag_load: float,
+    cov_train_trim_q: float = 0.0,
     cov_estimator: str,
     huber_c: float,
     mvdr_load_mode: str = "auto",
     mvdr_auto_kappa: float = 50.0,
     constraint_ridge: float = 0.10,
     msd_lambda: float | None = None,
+    detector_variant: str = "msd_ratio",
     msd_ridge: float = 0.10,
     msd_agg_mode: str = "trim10",
     msd_ratio_rho: float = 0.0,
@@ -5659,14 +6067,14 @@ def _stap_pd_tile_lcmv_batch(
     ka_opts: dict[str, float] | None = None,
     Lt_fixed: int | None = None,
     post_filter_callback: Callable[[np.ndarray], None] | None = None,
-	    ka_gate: dict | None = None,
-	    feasibility_mode: FeasibilityMode = "legacy",
-	    motion_basis_geom: np.ndarray | None = None,
-	    flow_band_hz: tuple[float, float] | None = None,
-	    alias_band_hz: tuple[float, float] | None = None,
-	    enable_fast_path: bool | None = None,
-	    psd_telemetry: bool = False,
-	) -> tuple[np.ndarray, np.ndarray, list[dict], list[dict | None]]:
+    ka_gate: dict | None = None,
+    feasibility_mode: FeasibilityMode = "legacy",
+    motion_basis_geom: np.ndarray | None = None,
+    flow_band_hz: tuple[float, float] | None = None,
+    alias_band_hz: tuple[float, float] | None = None,
+    enable_fast_path: bool | None = None,
+    psd_telemetry: bool = False,
+) -> tuple[np.ndarray, np.ndarray, list[dict], list[dict | None]]:
     """
     Thin batch wrapper around `_stap_pd_tile_lcmv`.
 
@@ -5693,6 +6101,26 @@ def _stap_pd_tile_lcmv_batch(
     else:
         lt_for_batch = int(Lt_fixed)
 
+    det_variant = str(detector_variant or "msd_ratio").strip().lower()
+    det_variant = {
+        "msd": "msd_ratio",
+        "ratio": "msd_ratio",
+        "default": "msd_ratio",
+        "stap": "msd_ratio",
+        "whitened_pd": "whitened_power",
+        "power": "whitened_power",
+        "raw": "unwhitened_ratio",
+        "unwhitened": "unwhitened_ratio",
+        "raw_ratio": "unwhitened_ratio",
+        "no_whiten": "unwhitened_ratio",
+        "msd_unwhitened": "unwhitened_ratio",
+    }.get(det_variant, det_variant)
+    if det_variant not in {"msd_ratio", "whitened_power", "unwhitened_ratio"}:
+        raise ValueError(
+            f"Unsupported detector_variant={detector_variant!r}. Expected 'msd_ratio', "
+            "'whitened_power', or 'unwhitened_ratio'."
+        )
+
     # Optional fast-path (batched STAP core) when explicitly enabled.
     fast_flag = bool(enable_fast_path) if enable_fast_path is not None else False
     if enable_fast_path is None:
@@ -5709,6 +6137,11 @@ def _stap_pd_tile_lcmv_batch(
         and ka_mode == "none"
         and not debug_requested
     )
+    if det_variant != "msd_ratio" and not fast_eligible:
+        raise RuntimeError(
+            "detector_variant ablations require the fast STAP core (set STAP_FAST_PATH=1, "
+            "disable KA/debug, and ensure torch/CUDA are available)."
+        )
     if fast_eligible:
         dev = device or ("cuda" if torch.cuda.is_available() else "cpu")
         if batch_is_tensor:
@@ -5729,63 +6162,111 @@ def _stap_pd_tile_lcmv_batch(
             kappa_msd = float(os.getenv("STAP_KAPPA_MSD", "200.0"))
         except Exception:
             kappa_msd = 200.0
-        if pd_only:
-            band_frac_fast, score_fast, info_fast = pd_temporal_core_batched(
-                cube_tensor,
-                prf_hz=prf_hz,
-                Lt=lt_for_batch,
-                diag_load=diag_load,
-                kappa_shrink=kappa_shrink,
-                kappa_msd=kappa_msd,
-                cov_estimator=cov_estimator,
-                huber_c=huber_c,
-                grid_step_rel=grid_step_rel,
-                fd_span_rel=fd_span_rel,
-                min_pts=min_pts,
-                max_pts=max_pts,
-                fd_min_abs_hz=fd_min_abs_hz,
-                motion_half_span_rel=motion_half_span_rel,
-                msd_ridge=msd_ridge,
-                msd_agg_mode=msd_agg_mode,
-                msd_ratio_rho=msd_ratio_rho,
-                msd_contrast_alpha=msd_contrast_alpha if msd_contrast_alpha is not None else 0.0,
-                msd_lambda=msd_lambda,
-                device=dev,
-                use_ref_cov=use_ref_cov,
-                fd_span_mode=fd_span_mode,
-                flow_band_hz=flow_band_hz,
+        core_kwargs: Dict[str, object] = {
+            "prf_hz": float(prf_hz),
+            "Lt": int(lt_for_batch),
+            "diag_load": float(diag_load),
+            "cov_train_trim_q": float(cov_train_trim_q),
+            "kappa_shrink": float(kappa_shrink),
+            "kappa_msd": float(kappa_msd),
+            "cov_estimator": str(cov_estimator).lower(),
+            "huber_c": float(huber_c),
+            "grid_step_rel": float(grid_step_rel),
+            "fd_span_rel": (float(fd_span_rel[0]), float(fd_span_rel[1])),
+            "min_pts": int(min_pts),
+            "max_pts": int(max_pts),
+            "fd_min_abs_hz": float(fd_min_abs_hz),
+            "motion_half_span_rel": motion_half_span_rel,
+            "msd_ridge": float(msd_ridge),
+            "msd_agg_mode": str(msd_agg_mode),
+            "msd_ratio_rho": float(msd_ratio_rho),
+            "msd_contrast_alpha": float(msd_contrast_alpha) if msd_contrast_alpha is not None else 0.0,
+            "msd_lambda": msd_lambda,
+            "detector_variant": str(det_variant),
+            "device": dev,
+            "use_ref_cov": bool(use_ref_cov),
+            "fd_span_mode": str(fd_span_mode),
+            "flow_band_hz": flow_band_hz,
+        }
+        core_fn = pd_temporal_core_batched if pd_only else stap_temporal_core_batched
+        use_graph = (
+            _stap_fast_cuda_graph_enabled()
+            and torch is not None
+            and bool(getattr(cube_tensor, "is_cuda", False))
+            and bool(torch.cuda.is_available())
+        )
+        if float(cov_train_trim_q or 0.0) > 0.0:
+            # Training trim builds a data-dependent mask (kthvalue), which is not
+            # currently validated under CUDA-graph capture. Disable capture for
+            # this ablation path.
+            use_graph = False
+        if use_graph:
+            graph_key = (
+                "pd" if pd_only else "full",
+                tuple(int(x) for x in cube_tensor.shape),
+                str(cube_tensor.dtype),
+                str(cube_tensor.device),
+                core_kwargs["prf_hz"],
+                core_kwargs["Lt"],
+                core_kwargs["diag_load"],
+                core_kwargs["cov_train_trim_q"],
+                core_kwargs["kappa_shrink"],
+                core_kwargs["kappa_msd"],
+                core_kwargs["cov_estimator"],
+                core_kwargs["huber_c"],
+                core_kwargs["grid_step_rel"],
+                core_kwargs["fd_span_rel"],
+                core_kwargs["min_pts"],
+                core_kwargs["max_pts"],
+                core_kwargs["fd_min_abs_hz"],
+                core_kwargs["motion_half_span_rel"],
+                core_kwargs["msd_ridge"],
+                core_kwargs["msd_agg_mode"],
+                core_kwargs["msd_ratio_rho"],
+                core_kwargs["msd_contrast_alpha"],
+                core_kwargs["msd_lambda"],
+                core_kwargs["device"],
+                core_kwargs["use_ref_cov"],
+                core_kwargs["fd_span_mode"],
+                core_kwargs["flow_band_hz"],
+                core_kwargs["detector_variant"],
+                os.getenv("STAP_SNAPSHOT_STRIDE", ""),
+                os.getenv("STAP_MAX_SNAPSHOTS", ""),
+                os.getenv("STAP_TYLER_MAX_ITER", ""),
+                os.getenv("STAP_TYLER_SOLVE_MODE", ""),
+                os.getenv("STAP_TYLER_EARLY_STOP", ""),
+                os.getenv("STAP_TYLER_TRITON_CAPTURE", ""),
+                os.getenv("STAP_TYLER_TRITON_WEIGHTS", ""),
+                os.getenv("STAP_TYLER_TRITON_UPDATE", ""),
+                os.getenv("STAP_TYLER_TRITON_WEIGHTS_UPDATE", ""),
+                os.getenv("STAP_TYLER_TRITON_SOLVE_UPDATE", ""),
+                os.getenv("STAP_BAND_SOLVE_MODE", ""),
+                os.getenv("STAP_BAND_PROJECT_MODE", ""),
+                os.getenv("STAP_BAND_DUAL_QUAD_MODE", ""),
+                os.getenv("STAP_BAND_RIDGE_EIG_MODE", ""),
+                os.getenv("STAP_SHRINK_EIG_MODE", ""),
             )
+            try:
+                band_t, score_t, info_fast = _stap_fast_cuda_graph_run(
+                    core_fn, cube_tensor, core_kwargs=core_kwargs, cache_key=graph_key
+                )
+                band_frac_batch = (
+                    band_t.detach().cpu().numpy().astype(np.float32, copy=False)
+                )
+                score_batch = score_t.detach().cpu().numpy().astype(np.float32, copy=False)
+            except Exception:
+                _STAP_FAST_CUDA_GRAPH_FAILED.add(graph_key)
+                _STAP_FAST_CUDA_GRAPH_CACHE.pop(graph_key, None)
+                band_frac_fast, score_fast, info_fast = core_fn(cube_tensor, **core_kwargs)
+                band_frac_batch = np.asarray(band_frac_fast, dtype=np.float32)
+                score_batch = np.asarray(score_fast, dtype=np.float32)
         else:
-            band_frac_fast, score_fast, info_fast = stap_temporal_core_batched(
-                cube_tensor,
-                prf_hz=prf_hz,
-                Lt=lt_for_batch,
-                diag_load=diag_load,
-                kappa_shrink=kappa_shrink,
-                kappa_msd=kappa_msd,
-                cov_estimator=cov_estimator,
-                huber_c=huber_c,
-                grid_step_rel=grid_step_rel,
-                fd_span_rel=fd_span_rel,
-                min_pts=min_pts,
-                max_pts=max_pts,
-                fd_min_abs_hz=fd_min_abs_hz,
-                motion_half_span_rel=motion_half_span_rel,
-                msd_ridge=msd_ridge,
-                msd_agg_mode=msd_agg_mode,
-                msd_ratio_rho=msd_ratio_rho,
-                msd_contrast_alpha=msd_contrast_alpha if msd_contrast_alpha is not None else 0.0,
-                msd_lambda=msd_lambda,
-                device=dev,
-                use_ref_cov=use_ref_cov,
-                fd_span_mode=fd_span_mode,
-                flow_band_hz=flow_band_hz,
-            )
+            band_frac_fast, score_fast, info_fast = core_fn(cube_tensor, **core_kwargs)
+            band_frac_batch = np.asarray(band_frac_fast, dtype=np.float32)
+            score_batch = np.asarray(score_fast, dtype=np.float32)
         for d in info_fast:
             d.setdefault("stap_fast_path_used", True)
         debug_list_fast: list[dict | None] = [None] * B
-        band_frac_batch = np.asarray(band_frac_fast, dtype=np.float32)
-        score_batch = np.asarray(score_fast, dtype=np.float32)
         return band_frac_batch, score_batch, info_fast, debug_list_fast
 
     if cube_batch_np is None:
@@ -5837,13 +6318,13 @@ def _stap_pd_tile_lcmv_batch(
             ka_opts=ka_opts,
             Lt_fixed=Lt_fixed,
             post_filter_callback=post_filter_callback,
-	            ka_gate=ka_gate,
-	            feasibility_mode=feasibility_mode,
-	            motion_basis_geom=motion_basis_geom,
-	            flow_band_hz=flow_band_hz,
-	            alias_band_hz=alias_band_hz,
-	            psd_telemetry=psd_telemetry,
-	        )
+            ka_gate=ka_gate,
+            feasibility_mode=feasibility_mode,
+            motion_basis_geom=motion_basis_geom,
+            flow_band_hz=flow_band_hz,
+            alias_band_hz=alias_band_hz,
+            psd_telemetry=psd_telemetry,
+        )
         band_frac_list.append(band_frac_tile)
         score_list.append(score_tile)
         info_list.append(info_tile)
@@ -5862,6 +6343,7 @@ def _stap_pd(
     Lt: int,
     prf_hz: float,
     diag_load: float,
+    cov_train_trim_q: float = 0.0,
     estimator: str,
     huber_c: float,
     mvdr_load_mode: str = "auto",
@@ -5876,6 +6358,7 @@ def _stap_pd(
     max_pts: int = 21,
     fd_min_abs_hz: float = 0.0,
     msd_lambda: float | None = None,
+    detector_variant: str = "msd_ratio",
     msd_ridge: float = 0.10,
     msd_agg_mode: str = "trim10",
     msd_ratio_rho: float = 0.0,
@@ -5905,6 +6388,20 @@ def _stap_pd(
     flow_alias_hz: float | None = None,
     flow_alias_fraction: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, dict]:
+    det_variant = str(detector_variant or "msd_ratio").strip().lower()
+    det_variant = {
+        "msd": "msd_ratio",
+        "ratio": "msd_ratio",
+        "default": "msd_ratio",
+        "stap": "msd_ratio",
+        "whitened_pd": "whitened_power",
+        "power": "whitened_power",
+        "raw": "unwhitened_ratio",
+        "unwhitened": "unwhitened_ratio",
+        "raw_ratio": "unwhitened_ratio",
+        "no_whiten": "unwhitened_ratio",
+        "msd_unwhitened": "unwhitened_ratio",
+    }.get(det_variant, det_variant)
     feas_mode = _normalize_feasibility_mode(feasibility_mode)
     if not _STAP_AVAILABLE:
         pd_map = _baseline_pd(Icube)
@@ -5921,6 +6418,7 @@ def _stap_pd(
                 "requested_msd_lambda": None,
                 "requested_msd_ridge": float(msd_ridge),
                 "msd_agg_mode": msd_agg_mode,
+                "detector_variant": det_variant,
             },
         )
 
@@ -6369,13 +6867,13 @@ def _stap_pd(
                 ka_opts=ka_opts_dict if ka_active else None,
                 Lt_fixed=Lt,
                 post_filter_callback=br_callback,
-	                ka_gate=gate_payload,
-	                feasibility_mode=feas_mode,
-	                motion_basis_geom=motion_basis_geom_np,
-	                flow_band_hz=flow_band_hz_tuple,
-	                alias_band_hz=alias_band_hz_tuple,
-	                psd_telemetry=psd_telemetry,
-	            )
+                ka_gate=gate_payload,
+                feasibility_mode=feas_mode,
+                motion_basis_geom=motion_basis_geom_np,
+                flow_band_hz=flow_band_hz_tuple,
+                alias_band_hz=alias_band_hz_tuple,
+                psd_telemetry=psd_telemetry,
+            )
         else:
             band_frac_tile, score_tile, info_tile, debug_payload = precomputed
 
@@ -6676,13 +7174,13 @@ def _stap_pd(
                 ka_opts=ka_opts_dict if ka_active else None,
                 Lt_fixed=Lt,
                 post_filter_callback=br_callback,
-	                ka_gate=gate_payload,
-	                feasibility_mode=feas_mode,
-	                motion_basis_geom=motion_basis_geom_np,
-	                flow_band_hz=flow_band_hz_tuple,
-	                alias_band_hz=alias_band_hz_tuple,
-	                psd_telemetry=psd_telemetry,
-	            )
+                ka_gate=gate_payload,
+                feasibility_mode=feas_mode,
+                motion_basis_geom=motion_basis_geom_np,
+                flow_band_hz=flow_band_hz_tuple,
+                alias_band_hz=alias_band_hz_tuple,
+                psd_telemetry=psd_telemetry,
+            )
             if dbg_extra is not None:
                 dbg_extra["tile_index"] = int(tile_idx)
                 dbg_extra["y0"] = int(y0)
@@ -6768,6 +7266,7 @@ def _stap_pd(
                 batch_tensor,
                 prf_hz=prf_hz,
                 diag_load=diag_load,
+                cov_train_trim_q=float(cov_train_trim_q),
                 cov_estimator=estimator,
                 huber_c=huber_c,
                 mvdr_load_mode=mvdr_load_mode,
@@ -6785,6 +7284,7 @@ def _stap_pd(
                 alias_psd_select_ratio_thresh=alias_psd_select_ratio_thresh_val,
                 alias_psd_select_bins=alias_psd_select_bins_val,
                 msd_lambda=msd_lambda,
+                detector_variant=det_variant,
                 msd_ridge=msd_ridge,
                 msd_agg_mode=msd_agg_mode,
                 msd_ratio_rho=msd_ratio_rho,
@@ -6798,14 +7298,14 @@ def _stap_pd(
                 ka_opts=ka_opts_dict if ka_active else None,
                 Lt_fixed=Lt,
                 post_filter_callback=None,
-	                ka_gate=None,
-	                feasibility_mode=feas_mode,
-	                motion_basis_geom=motion_basis_geom_np,
-	                flow_band_hz=flow_band_hz_tuple,
-	                alias_band_hz=alias_band_hz_tuple,
-	                psd_telemetry=psd_telemetry,
-	                enable_fast_path=fast_path_flag,
-	            )
+                ka_gate=None,
+                feasibility_mode=feas_mode,
+                motion_basis_geom=motion_basis_geom_np,
+                flow_band_hz=flow_band_hz_tuple,
+                alias_band_hz=alias_band_hz_tuple,
+                psd_telemetry=psd_telemetry,
+                enable_fast_path=fast_path_flag,
+            )
             t_batch_proc += time.perf_counter() - t0_batch
             t0_post = time.perf_counter()
             for idx, (cube_np, (y0, x0), capture_flag, capture_coord_flag, tile_idx) in enumerate(
@@ -6928,6 +7428,46 @@ def _stap_pd(
                 except Exception:
                     kappa_msd = 200.0
 
+                core_kwargs_unfold: Dict[str, object] = {
+                    "prf_hz": float(prf_hz),
+                    "Lt": int(Lt),
+                    "diag_load": float(diag_load),
+                    "cov_train_trim_q": float(cov_train_trim_q),
+                    "kappa_shrink": float(kappa_shrink),
+                    "kappa_msd": float(kappa_msd),
+                    "cov_estimator": str(estimator).lower(),
+                    "huber_c": float(huber_c),
+                    "grid_step_rel": float(grid_step_rel),
+                    "fd_span_rel": (float(fd_span_rel[0]), float(fd_span_rel[1])),
+                    "min_pts": int(min_pts),
+                    "max_pts": int(max_pts),
+                    "fd_min_abs_hz": float(fd_min_abs_hz),
+                    "motion_half_span_rel": motion_half_span_rel,
+                    "msd_ridge": float(msd_ridge),
+                    "msd_agg_mode": str(msd_agg_mode),
+                    "msd_ratio_rho": float(msd_ratio_rho),
+                    "msd_contrast_alpha": (
+                        float(msd_contrast_alpha)
+                        if msd_contrast_alpha is not None
+                        else 0.0
+                    ),
+                    "msd_lambda": msd_lambda,
+                    "detector_variant": str(det_variant),
+                    "device": dev,
+                    "use_ref_cov": bool(use_ref_cov),
+                    "fd_span_mode": str(fd_span_mode),
+                    "flow_band_hz": flow_band_hz_tuple,
+                }
+                core_fn_unfold = pd_temporal_core_batched if pd_only else stap_temporal_core_batched
+                use_graph_unfold = (
+                    _stap_fast_cuda_graph_enabled()
+                    and torch is not None
+                    and bool(getattr(torch.cuda, "is_available", lambda: False)())
+                    and str(dev).lower().startswith("cuda")
+                )
+                if float(cov_train_trim_q or 0.0) > 0.0:
+                    use_graph_unfold = False
+
                 # Cube tile view (T,nY,th,nX,tw).
                 # Note: unfold inserts the window dimension at the end, so after unfolding
                 # height then width we permute to place `th` before `nX`.
@@ -6993,63 +7533,71 @@ def _stap_pd(
                         if stap_stage_ctx is not None
                         else nullcontext()
                     ):
-                        if pd_only:
-                            band_act, score_act, info_act = pd_temporal_core_batched(
-                                cube_active,
-                                prf_hz=prf_hz,
-                                Lt=int(Lt),
-                                diag_load=diag_load,
-                                kappa_shrink=kappa_shrink,
-                                kappa_msd=kappa_msd,
-                                cov_estimator=estimator,
-                                huber_c=huber_c,
-                                grid_step_rel=grid_step_rel,
-                                fd_span_rel=fd_span_rel,
-                                min_pts=min_pts,
-                                max_pts=max_pts,
-                                fd_min_abs_hz=fd_min_abs_hz,
-                                motion_half_span_rel=motion_half_span_rel,
-                                msd_ridge=msd_ridge,
-                                msd_agg_mode=msd_agg_mode,
-                                msd_ratio_rho=msd_ratio_rho,
-                                msd_contrast_alpha=(
-                                    msd_contrast_alpha if msd_contrast_alpha is not None else 0.0
-                                ),
-                                msd_lambda=msd_lambda,
-                                device=dev,
-                                use_ref_cov=use_ref_cov,
-                                fd_span_mode=fd_span_mode,
-                                flow_band_hz=flow_band_hz_tuple,
-                                return_torch=True,
+                        if use_graph_unfold and core_fn_unfold is not None and bool(getattr(cube_active, "is_cuda", False)):
+                            graph_key = (
+                                "unfold",
+                                "pd" if pd_only else "full",
+                                tuple(int(x) for x in cube_active.shape),
+                                str(cube_active.dtype),
+                                str(cube_active.device),
+                                core_kwargs_unfold["prf_hz"],
+                                core_kwargs_unfold["Lt"],
+                                core_kwargs_unfold["diag_load"],
+                                core_kwargs_unfold["cov_train_trim_q"],
+                                core_kwargs_unfold["kappa_shrink"],
+                                core_kwargs_unfold["kappa_msd"],
+                                core_kwargs_unfold["cov_estimator"],
+                                core_kwargs_unfold["huber_c"],
+                                core_kwargs_unfold["grid_step_rel"],
+                                core_kwargs_unfold["fd_span_rel"],
+                                core_kwargs_unfold["min_pts"],
+                                core_kwargs_unfold["max_pts"],
+                                core_kwargs_unfold["fd_min_abs_hz"],
+                                core_kwargs_unfold["motion_half_span_rel"],
+                                core_kwargs_unfold["msd_ridge"],
+                                core_kwargs_unfold["msd_agg_mode"],
+                                core_kwargs_unfold["msd_ratio_rho"],
+                                core_kwargs_unfold["msd_contrast_alpha"],
+                                core_kwargs_unfold["msd_lambda"],
+                                core_kwargs_unfold["device"],
+                                core_kwargs_unfold["use_ref_cov"],
+                                core_kwargs_unfold["fd_span_mode"],
+                                core_kwargs_unfold["flow_band_hz"],
+                                core_kwargs_unfold["detector_variant"],
+                                os.getenv("STAP_SNAPSHOT_STRIDE", ""),
+                                os.getenv("STAP_MAX_SNAPSHOTS", ""),
+                                os.getenv("STAP_TYLER_MAX_ITER", ""),
+                                os.getenv("STAP_TYLER_SOLVE_MODE", ""),
+                                os.getenv("STAP_TYLER_EARLY_STOP", ""),
+                                os.getenv("STAP_TYLER_TRITON_CAPTURE", ""),
+                                os.getenv("STAP_TYLER_TRITON_WEIGHTS", ""),
+                                os.getenv("STAP_TYLER_TRITON_UPDATE", ""),
+                                os.getenv("STAP_TYLER_TRITON_WEIGHTS_UPDATE", ""),
+                                os.getenv("STAP_TYLER_TRITON_SOLVE_UPDATE", ""),
+                                os.getenv("STAP_BAND_SOLVE_MODE", ""),
+                                os.getenv("STAP_BAND_PROJECT_MODE", ""),
+                                os.getenv("STAP_BAND_DUAL_QUAD_MODE", ""),
+                                os.getenv("STAP_BAND_RIDGE_EIG_MODE", ""),
+                                os.getenv("STAP_SHRINK_EIG_MODE", ""),
                             )
+                            try:
+                                band_act, score_act, info_act = _stap_fast_cuda_graph_run(
+                                    core_fn_unfold,
+                                    cube_active,
+                                    core_kwargs=core_kwargs_unfold,
+                                    cache_key=graph_key,
+                                )
+                            except Exception:
+                                _STAP_FAST_CUDA_GRAPH_FAILED.add(graph_key)
+                                _STAP_FAST_CUDA_GRAPH_CACHE.pop(graph_key, None)
+                                band_act, score_act, info_act = core_fn_unfold(
+                                    cube_active, return_torch=True, **core_kwargs_unfold
+                                )
                         else:
-                            band_act, score_act, info_act = stap_temporal_core_batched(
-                                cube_active,
-                                prf_hz=prf_hz,
-                                Lt=int(Lt),
-                                diag_load=diag_load,
-                                kappa_shrink=kappa_shrink,
-                                kappa_msd=kappa_msd,
-                                cov_estimator=estimator,
-                                huber_c=huber_c,
-                                grid_step_rel=grid_step_rel,
-                                fd_span_rel=fd_span_rel,
-                                min_pts=min_pts,
-                                max_pts=max_pts,
-                                fd_min_abs_hz=fd_min_abs_hz,
-                                motion_half_span_rel=motion_half_span_rel,
-                                msd_ridge=msd_ridge,
-                                msd_agg_mode=msd_agg_mode,
-                                msd_ratio_rho=msd_ratio_rho,
-                                msd_contrast_alpha=(
-                                    msd_contrast_alpha if msd_contrast_alpha is not None else 0.0
-                                ),
-                                msd_lambda=msd_lambda,
-                                device=dev,
-                                use_ref_cov=use_ref_cov,
-                                fd_span_mode=fd_span_mode,
-                                flow_band_hz=flow_band_hz_tuple,
-                                return_torch=True,
+                            if core_fn_unfold is None:
+                                raise RuntimeError("STAP unfold tiling requested but core function is unavailable.")
+                            band_act, score_act, info_act = core_fn_unfold(
+                                cube_active, return_torch=True, **core_kwargs_unfold
                             )
                     t_core_total += time.perf_counter() - t0_core
 
@@ -9542,6 +10090,8 @@ def _stap_pd(
     info_out["stap_tile_statistic_used"] = bool(
         any(info.get("stap_tile_statistic_used", False) for info in tile_infos)
     )
+    info_out["detector_variant"] = str(det_variant)
+    info_out["cov_train_trim_q"] = float(cov_train_trim_q or 0.0)
     first_err = None
     for info in tile_infos:
         err = info.get("stap_fast_error")
@@ -9782,6 +10332,7 @@ def write_acceptance_bundle(
     tile_stride: int = 4,
     Lt: int = 4,
     diag_load: float = 1e-2,
+    stap_cov_train_trim_q: float = 0.0,
     cov_estimator: str = "huber",
     huber_c: float = 5.0,
     mvdr_load_mode: str = "auto",
@@ -9801,6 +10352,7 @@ def write_acceptance_bundle(
     msd_ratio_rho: float = 0.0,
     motion_half_span_rel: float | None = None,
     msd_contrast_alpha: float | None = None,
+    stap_detector_variant: str = "msd_ratio",
     alias_psd_select_enable: bool = False,
     alias_psd_select_ratio_thresh: float = 1.2,
     alias_psd_select_bins: int = 1,
@@ -10795,25 +11347,67 @@ def write_acceptance_bundle(
             baseline_filtered_cube_for_br = baseline_filtered_cube_full
             pd_base = pd_tmp
             baseline_telemetry["baseline_pd_support"] = "baseline_support"
+    elif baseline_type_norm in {"svd_similarity", "svd_sim"}:
+        if use_whitened_ratio:
+            raise ValueError("Whitened band-ratio scoring requires mc_svd baseline.")
+        pd_base, baseline_telemetry, baseline_filtered_cube = _baseline_pd_svd_similarity(
+            Icube,
+            svd_sim_r_max=svd_rank,
+            device=baseline_device,
+            return_filtered_cube=True,
+        )
+    elif baseline_type_norm in {"local_svd", "svd_local"}:
+        if use_whitened_ratio:
+            raise ValueError("Whitened band-ratio scoring requires mc_svd baseline.")
+        pd_base, baseline_telemetry, baseline_filtered_cube = _baseline_pd_local_svd(
+            Icube,
+            tile_hw=tile_hw,
+            stride=tile_stride,
+            svd_energy_frac=float(svd_energy_frac) if svd_energy_frac is not None else 0.90,
+            hann=True,
+            device=baseline_device,
+            return_filtered_cube=True,
+        )
     elif baseline_type_norm == "hosvd":
         if use_whitened_ratio:
             raise ValueError("Whitened band-ratio scoring requires mc_svd baseline.")
-        pd_base, baseline_telemetry = _baseline_pd_hosvd(
-            Icube,
-            ranks=hosvd_ranks,
-            energy_fracs=hosvd_energy_fracs,
-            max_iters=hosvd_max_iters,
-            spatial_downsample=hosvd_spatial_downsample,
-            t_sub=hosvd_t_sub,
-        )
+        if stap_enable:
+            pd_base, baseline_telemetry, baseline_filtered_cube = _baseline_pd_hosvd(
+                Icube,
+                ranks=hosvd_ranks,
+                energy_fracs=hosvd_energy_fracs,
+                max_iters=hosvd_max_iters,
+                spatial_downsample=hosvd_spatial_downsample,
+                t_sub=hosvd_t_sub,
+                return_filtered_cube=True,
+            )
+        else:
+            pd_base, baseline_telemetry = _baseline_pd_hosvd(
+                Icube,
+                ranks=hosvd_ranks,
+                energy_fracs=hosvd_energy_fracs,
+                max_iters=hosvd_max_iters,
+                spatial_downsample=hosvd_spatial_downsample,
+                t_sub=hosvd_t_sub,
+                return_filtered_cube=False,
+            )
     elif baseline_type_norm == "rpca" and rpca_enable:
         if use_whitened_ratio:
             raise ValueError("Whitened band-ratio scoring requires mc_svd baseline.")
-        pd_base, baseline_telemetry = _baseline_pd_rpca(
-            Icube,
-            lambda_=rpca_lambda,
-            max_iters=int(rpca_max_iters),
-        )
+        if stap_enable:
+            pd_base, baseline_telemetry, baseline_filtered_cube = _baseline_pd_rpca(
+                Icube,
+                lambda_=rpca_lambda,
+                max_iters=int(rpca_max_iters),
+                return_filtered_cube=True,
+            )
+        else:
+            pd_base, baseline_telemetry = _baseline_pd_rpca(
+                Icube,
+                lambda_=rpca_lambda,
+                max_iters=int(rpca_max_iters),
+                return_filtered_cube=False,
+            )
     else:
         if use_whitened_ratio:
             raise ValueError("Whitened band-ratio scoring requires mc_svd baseline.")
@@ -11071,6 +11665,26 @@ def write_acceptance_bundle(
 
     band_ratio_spec_meta = dict(band_ratio_spec)
 
+    stap_detector_variant_norm = str(stap_detector_variant or "msd_ratio").strip().lower()
+    stap_detector_variant_norm = {
+        "msd": "msd_ratio",
+        "ratio": "msd_ratio",
+        "default": "msd_ratio",
+        "stap": "msd_ratio",
+        "whitened_pd": "whitened_power",
+        "power": "whitened_power",
+        "raw": "unwhitened_ratio",
+        "unwhitened": "unwhitened_ratio",
+        "raw_ratio": "unwhitened_ratio",
+        "no_whiten": "unwhitened_ratio",
+        "msd_unwhitened": "unwhitened_ratio",
+    }.get(stap_detector_variant_norm, stap_detector_variant_norm)
+    if stap_detector_variant_norm not in {"msd_ratio", "whitened_power", "unwhitened_ratio"}:
+        raise ValueError(
+            f"Unsupported stap_detector_variant={stap_detector_variant!r}. Expected 'msd_ratio', "
+            "'whitened_power', or 'unwhitened_ratio'."
+        )
+
     gate_mask_flow = None
     gate_mask_bg = None
     if not stap_enable:
@@ -11089,16 +11703,23 @@ def write_acceptance_bundle(
             "stap_fast_failed": False,
             "stap_fast_forced": False,
             "stap_fast_error": None,
+            "detector_variant": stap_detector_variant_norm,
         }
         baseline_filtered_cube = None
     else:
         t_stap_start = time.perf_counter()
-        # STAP operates on the baseline-filtered residual cube when available
-        # (MC-SVD baseline). This is the intended pipeline: baseline clutter
-        # suppression -> STAP on residual. For other baselines where we do not
-        # retain a residual cube, fall back to running STAP on the raw cube.
+        # STAP operates on the baseline-filtered residual cube when available.
+        # This is the intended pipeline: baseline clutter suppression -> STAP
+        # on the residual. If no residual cube is retained, fall back to
+        # running STAP on the raw cube (useful for STAP-only ablations).
         stap_input_cube = baseline_filtered_cube if baseline_filtered_cube is not None else Icube
-        stap_input_source = "mcsvd_residual" if baseline_filtered_cube is not None else "raw_cube"
+        if baseline_filtered_cube is not None:
+            if baseline_type_norm == "mc_svd":
+                stap_input_source = "mcsvd_residual"
+            else:
+                stap_input_source = f"baseline_residual:{baseline_type_norm}"
+        else:
+            stap_input_source = "raw_cube"
         pd_stap, stap_scores, stap_info = _stap_pd(
             stap_input_cube,
             tile_hw=tile_hw,
@@ -11106,6 +11727,7 @@ def write_acceptance_bundle(
             Lt=Lt,
             prf_hz=prf_hz,
             diag_load=diag_load,
+            cov_train_trim_q=float(stap_cov_train_trim_q),
             estimator=cov_estimator,
             huber_c=huber_c,
             mvdr_load_mode=mvdr_load_mode,
@@ -11120,6 +11742,7 @@ def write_acceptance_bundle(
             max_pts=fd_max_pts,
             fd_min_abs_hz=fd_min_abs_hz,
             msd_lambda=msd_lambda,
+            detector_variant=stap_detector_variant_norm,
             msd_ridge=msd_ridge,
             msd_agg_mode=msd_agg_mode,
             msd_ratio_rho=msd_ratio_rho,
@@ -11957,10 +12580,38 @@ def write_acceptance_bundle(
     _save("score_base", score_pd_base)
     _save("score_stap_preka", score_stap_preka_map.astype(np.float32, copy=False))
     _save("score_stap", score_stap_map.astype(np.float32, copy=False))
+    if stap_detector_variant_norm == "msd_ratio":
+        score_name_text = "stap_score_v1: whitened flow matched-subspace ratio (right tail)\n"
+        score_stap_definition_vnext = (
+            "score_stap_preka is the STAP matched-subspace ratio computed from the "
+            "baseline-filtered IQ cube via local covariance whitening and fixed Pf "
+            "subspace projection; score_stap equals score_stap_preka unless a "
+            "score-space KA veto is applied."
+        )
+    elif stap_detector_variant_norm == "whitened_power":
+        score_name_text = (
+            "stap_score_v1: whitened total power (no band partition; right tail)\n"
+        )
+        score_stap_definition_vnext = (
+            "score_stap_preka is a detector ablation: total whitened slow-time power "
+            "computed by whitening snapshots with local R^{-1/2} and averaging ||y||^2 "
+            "(no Doppler band partition or Pf projection); score_stap equals score_stap_preka "
+            "unless a score-space KA veto is applied."
+        )
+    else:
+        score_name_text = (
+            "stap_score_v1: unwhitened flow matched-subspace ratio (no whitening; right tail)\n"
+        )
+        score_stap_definition_vnext = (
+            "score_stap_preka is a detector ablation: flow-band matched-subspace ratio "
+            "computed without covariance whitening (R=I), using the same fixed Pf "
+            "subspace projection; score_stap equals score_stap_preka unless a "
+            "score-space KA veto is applied."
+        )
     _save_text(
         "score_name",
         "score_name.txt",
-        "stap_score_v1: whitened flow matched-subspace ratio (right tail)\n",
+        score_name_text,
     )
     if pd_stap_pre_ka is not None:
         _save("pd_stap_pre_ka", pd_stap_pre_ka.astype(np.float32, copy=False))
@@ -12290,6 +12941,7 @@ def write_acceptance_bundle(
         ),
         "Lt": int(Lt),
         "diag_load": float(diag_load),
+        "stap_cov_train_trim_q": float(stap_cov_train_trim_q),
         "cov_estimator": cov_estimator,
         "huber_c": float(huber_c),
         "fd_config": {
@@ -12336,12 +12988,8 @@ def write_acceptance_bundle(
             "score_name_file": "score_name.txt",
             "score_convention": "right_tail (higher = more flow evidence)",
             "score_base_definition": "score_base equals score_pd_base (right-tail PD score map; score_pd=pd).",
-            "score_stap_definition": (
-                "score_stap_preka is the STAP matched-subspace ratio computed from the "
-                "baseline-filtered IQ cube via local covariance whitening and fixed Pf "
-                "subspace projection; score_stap equals score_stap_preka unless a "
-                "score-space KA veto is applied."
-            ),
+            "stap_detector_variant": str(stap_detector_variant_norm),
+            "score_stap_definition": score_stap_definition_vnext,
         },
         "pd_mode": {
             "pd_files": {

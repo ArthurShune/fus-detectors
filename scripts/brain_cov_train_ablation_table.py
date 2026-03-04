@@ -1,0 +1,296 @@
+#!/usr/bin/env python3
+"""
+Brain-* covariance-training ablation: trim high-energy snapshots during R_i estimation.
+
+This script compares the within-window strict-tail operating points for:
+  - STAP default covariance training (use all Hankel snapshots in each tile)
+  - STAP with covariance-training trim (exclude top-q highest-energy snapshots)
+
+It is intended to address reviewer concerns about self-training / covariance
+contamination. The trim ablation is enabled via replay_stap_from_run.py
+--stap-cov-trim-q, which plumbs through to the fast temporal core.
+
+Inputs:
+  - runs/pilot/fair_filter_matrix_pd_r3_localbaselines/*_mcsvd_full/pw_*_win*_off*
+  - runs/pilot/fair_filter_matrix_pd_r3_localbaselines/*_mcsvd_covtrim_q05/pw_*_win*_off*
+
+Outputs:
+  - reports/brain_cov_train_ablation.csv
+  - reports/brain_cov_train_ablation.json
+  - reports/brain_cov_train_ablation_table.tex
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import math
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Iterable
+
+import numpy as np
+
+
+def _finite(vals: Iterable[float]) -> np.ndarray:
+    v = np.asarray(list(vals), dtype=np.float64)
+    return v[np.isfinite(v)]
+
+
+def _quantile_summary(vals: Iterable[float]) -> tuple[float, float, float]:
+    v = _finite(vals)
+    if v.size <= 0:
+        return float("nan"), float("nan"), float("nan")
+    med = float(np.quantile(v, 0.5))
+    q25 = float(np.quantile(v, 0.25))
+    q75 = float(np.quantile(v, 0.75))
+    return med, q25, q75
+
+
+def _fmt_cell(med: float, q25: float, q75: float) -> str:
+    if not (np.isfinite(med) and np.isfinite(q25) and np.isfinite(q75)):
+        return "n/a"
+    return f"{med:.4f} ({q25:.4f},{q75:.4f})"
+
+
+def _glob_windows(root: Path) -> list[Path]:
+    wins = [p for p in root.glob("pw_*_win*_off*") if p.is_dir()]
+    wins.sort()
+    return wins
+
+
+def _load_stap_scores(bundle_dir: Path) -> tuple[np.ndarray, np.ndarray]:
+    score = np.load(bundle_dir / "score_stap_preka.npy").astype(np.float64, copy=False)
+    mf = np.load(bundle_dir / "mask_flow.npy").astype(bool, copy=False)
+    mb = np.load(bundle_dir / "mask_bg.npy").astype(bool, copy=False)
+    pos = score[mf].ravel()
+    neg = score[mb].ravel()
+    return pos, neg
+
+
+def _tau_for_fpr(neg: np.ndarray, alpha: float) -> float:
+    n = int(neg.size)
+    if n <= 0:
+        return float("inf")
+    neg_sorted = np.sort(neg)
+    q = 1.0 - float(alpha)
+    k = int(np.ceil(q * n)) - 1
+    k = max(0, min(n - 1, k))
+    return float(neg_sorted[k])
+
+
+def _tpr_at_alpha(bundle_dir: Path, alpha: float) -> float:
+    pos, neg = _load_stap_scores(bundle_dir)
+    tau = _tau_for_fpr(neg, alpha)
+    if not np.isfinite(tau) or pos.size <= 0:
+        return 0.0
+    return float(np.mean(pos >= tau))
+
+
+@dataclass(frozen=True)
+class Cell:
+    regime: str
+    method: str
+    fpr: float
+    n_windows: int
+    tpr_med: float
+    tpr_q25: float
+    tpr_q75: float
+
+
+def parse_args() -> argparse.Namespace:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument(
+        "--runs-root",
+        type=Path,
+        default=Path("runs/pilot/fair_filter_matrix_pd_r3_localbaselines"),
+        help="Runs root containing matrix replay bundles.",
+    )
+    ap.add_argument(
+        "--alphas",
+        type=str,
+        default="1e-4,3e-4,1e-3",
+        help="Comma-separated strict-tail FPR targets.",
+    )
+    ap.add_argument(
+        "--out-csv",
+        type=Path,
+        default=Path("reports/brain_cov_train_ablation.csv"),
+        help="Output CSV path.",
+    )
+    ap.add_argument(
+        "--out-json",
+        type=Path,
+        default=Path("reports/brain_cov_train_ablation.json"),
+        help="Output JSON path.",
+    )
+    ap.add_argument(
+        "--out-tex",
+        type=Path,
+        default=Path("reports/brain_cov_train_ablation_table.tex"),
+        help="Output LaTeX table path.",
+    )
+    return ap.parse_args()
+
+
+def _alpha_tex(a: float) -> str:
+    a = float(a)
+    if abs(a - 1e-4) <= 1e-12:
+        return "10^{-4}"
+    if abs(a - 3e-4) <= 1e-12:
+        return "3\\!\\times\\!10^{-4}"
+    if abs(a - 1e-3) <= 1e-12:
+        return "10^{-3}"
+    if a > 0.0 and np.isfinite(a):
+        e = int(round(math.log10(a)))
+        m = a / (10.0**e)
+        m_round = round(m)
+        if abs(m - m_round) <= 1e-12:
+            if int(m_round) == 1:
+                return f"10^{{{e}}}"
+            return f"{int(m_round)}\\!\\times\\!10^{{{e}}}"
+    return f"{a:g}"
+
+
+def _render_table_tex(
+    *,
+    out_path: Path,
+    cells: dict[tuple[str, str, float], tuple[float, float, float]],
+    regimes: list[tuple[str, str]],
+    methods: list[str],
+    method_display: dict[str, str],
+    fprs: list[float],
+) -> None:
+    cols = "l" + (("c" * len(fprs)) + " ") * len(regimes)
+    lines: list[str] = []
+    lines.append("% AUTO-GENERATED by scripts/brain_cov_train_ablation_table.py; DO NOT EDIT BY HAND.")
+    lines.append("\\begin{table}[t]")
+    lines.append("\\centering")
+    lines.append("\\small")
+    lines.append("\\setlength{\\tabcolsep}{3pt}")
+    lines.append("\\resizebox{\\linewidth}{!}{%")
+    lines.append(f"\\begin{{tabular}}{{@{{}}{cols.strip()}@{{}}}}")
+    lines.append("\\hline")
+
+    header = ["Method"]
+    for _, display in regimes:
+        header.append(f"\\multicolumn{{{len(fprs)}}}{{c}}{{{display}}}")
+    lines.append(" & ".join(header) + " \\\\")
+    start = 2
+    clines: list[str] = []
+    for _ in regimes:
+        end = start + len(fprs) - 1
+        clines.append(f"\\cline{{{start}-{end}}}")
+        start = end + 1
+    lines.append(" ".join(clines))
+
+    sub = [" "]
+    for _ in regimes:
+        sub += [f"$\\alpha={_alpha_tex(a)}$" for a in fprs]
+    lines.append(" & ".join(sub) + " \\\\")
+    lines.append("\\hline")
+
+    def _cell(regime_key: str, method: str, a: float) -> str:
+        stats = cells.get((regime_key, method, float(a)))
+        return _fmt_cell(*stats) if stats is not None else "n/a"
+
+    for method in methods:
+        row = [method_display.get(method, method)]
+        for regime_key, _ in regimes:
+            for a in fprs:
+                row.append(_cell(regime_key, method, float(a)))
+        lines.append(" & ".join(row) + " \\\\")
+
+    lines.append("\\hline")
+    lines.append("\\end{tabular}%")
+    lines.append("}")
+    lines.append(
+        "\\caption{Covariance-training trim ablation on Brain-* regimes. "
+        "We compare the default STAP covariance training (all Hankel snapshots) "
+        "to a trimmed variant that excludes the top-q highest-energy snapshots "
+        "from the tile-local covariance estimator (q=0.05). "
+        "Entries are within-window TPR medians (IQR) over five disjoint 64-frame windows, "
+        "reported at strict-tail FPR targets $\\alpha\\in\\{10^{-4},3\\times 10^{-4},10^{-3}\\}$.}"
+    )
+    lines.append("\\label{tab:brain_cov_train_ablation}")
+    lines.append("\\end{table}")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    args = parse_args()
+    runs_root = Path(args.runs_root)
+    alphas = [float(x) for x in args.alphas.split(",") if x.strip()]
+
+    regimes = [
+        ("open", "OpenSkull"),
+        ("aliascontract", "AliasContract"),
+        ("skullor", "SkullOR"),
+    ]
+    methods = ["STAP (default)", "STAP (cov-trim q=0.05)"]
+    method_display = {
+        "STAP (default)": "STAP (default covariance training)",
+        "STAP (cov-trim q=0.05)": "STAP (cov-trim $q=0.05$)",
+    }
+
+    run_dir_for_method = {
+        "STAP (default)": "mcsvd_full",
+        "STAP (cov-trim q=0.05)": "mcsvd_covtrim_q05",
+    }
+
+    rows: list[dict[str, object]] = []
+    cells: dict[tuple[str, str, float], tuple[float, float, float]] = {}
+
+    for regime_key, _regime_display in regimes:
+        seed = 1 if regime_key == "open" else 2
+        for method in methods:
+            run_key = run_dir_for_method[method]
+            run_dir = runs_root / f"{regime_key}_seed{seed}_{run_key}"
+            wins = _glob_windows(run_dir)
+            if not wins:
+                continue
+            for alpha in alphas:
+                tprs = [_tpr_at_alpha(d, alpha) for d in wins]
+                med, q25, q75 = _quantile_summary(tprs)
+                cells[(regime_key, method, float(alpha))] = (med, q25, q75)
+                rows.append(
+                    {
+                        "regime": regime_key,
+                        "seed": int(seed),
+                        "method": method,
+                        "alpha": float(alpha),
+                        "n_windows": int(len(wins)),
+                        "tpr_median": float(med),
+                        "tpr_q25": float(q25),
+                        "tpr_q75": float(q75),
+                    }
+                )
+
+    args.out_csv.parent.mkdir(parents=True, exist_ok=True)
+    with args.out_csv.open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()) if rows else [])
+        if rows:
+            w.writeheader()
+            for r in rows:
+                w.writerow(r)
+
+    payload = {"runs_root": str(runs_root), "alphas": alphas, "rows": rows}
+    args.out_json.parent.mkdir(parents=True, exist_ok=True)
+    args.out_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    _render_table_tex(
+        out_path=args.out_tex,
+        cells=cells,
+        regimes=regimes,
+        methods=methods,
+        method_display=method_display,
+        fprs=alphas,
+    )
+
+    print(f"[brain_cov_train_ablation_table] wrote {args.out_csv} / {args.out_json} / {args.out_tex}")
+
+
+if __name__ == "__main__":
+    main()

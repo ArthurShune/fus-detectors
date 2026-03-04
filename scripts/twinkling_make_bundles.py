@@ -172,7 +172,7 @@ def main() -> None:
         "--baseline-type",
         type=str,
         default="svd_bandpass",
-        choices=["svd_bandpass", "mc_svd", "raw", "none", "identity"],
+        choices=["svd_bandpass", "mc_svd", "svd_similarity", "local_svd", "raw", "none", "identity"],
         help=(
             "Baseline clutter filter (default: svd_bandpass). "
             "Use baseline-type=raw/none to run STAP directly on raw (optionally registered) IQ."
@@ -221,6 +221,15 @@ def main() -> None:
         type=int,
         default=None,
         help="SVD bandpass keep_max (default: None).",
+    )
+    parser.add_argument(
+        "--svd-energy-frac",
+        type=float,
+        default=0.95,
+        help=(
+            "SVD energy fraction removed for baseline-type=mc_svd or local_svd "
+            "(ignored by baseline-type=svd_bandpass; default: %(default)s)."
+        ),
     )
     parser.add_argument(
         "--flow-band-hz",
@@ -386,6 +395,7 @@ def main() -> None:
             cov_estimator=cov_estimator,
             score_mode=str(args.score_mode),
             baseline_type=str(args.baseline_type),
+            svd_energy_frac=float(args.svd_energy_frac),
             svd_keep_min=int(args.svd_keep_min),
             svd_keep_max=int(args.svd_keep_max) if args.svd_keep_max is not None else None,
             band_ratio_flow_low_hz=flow_lo,

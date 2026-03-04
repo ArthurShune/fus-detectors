@@ -11,8 +11,7 @@ Inputs: precomputed per-window pooled score arrays in each bundle directory:
   - base_pos.npy / base_neg.npy (baseline PD right-tail scores)
   - score_stap_preka.npy (STAP matched-subspace score map; only present in MC--SVD runs)
 
-Default bundle roots match the repository's "fair_filter_matrix_full_clinical_cpu_v2"
-output layout.
+Default bundle roots match the repository's latest fair-filter matrix output layout.
 """
 
 from __future__ import annotations
@@ -81,7 +80,7 @@ def main() -> None:
     ap.add_argument(
         "--runs-root",
         type=Path,
-        default=Path("runs/pilot/fair_filter_matrix_full_clinical_cpu_v2"),
+        default=Path("runs/pilot/fair_filter_matrix_pd_r3_localbaselines"),
         help="Root containing per-regime run folders (default: %(default)s).",
     )
     ap.add_argument(
@@ -98,9 +97,33 @@ def main() -> None:
     out_pdf.parent.mkdir(parents=True, exist_ok=True)
 
     regimes = [
-        ("Brain-OpenSkull", "open_seed1", runs_root / "open_seed1_mcsvd_full", runs_root / "open_seed1_rpca_full", runs_root / "open_seed1_hosvd_full"),
-        ("Brain-AliasContract", "aliascontract_seed2", runs_root / "aliascontract_seed2_mcsvd_full", runs_root / "aliascontract_seed2_rpca_full", runs_root / "aliascontract_seed2_hosvd_full"),
-        ("Brain-SkullOR", "skullor_seed2", runs_root / "skullor_seed2_mcsvd_full", runs_root / "skullor_seed2_rpca_full", runs_root / "skullor_seed2_hosvd_full"),
+        (
+            "Brain-OpenSkull",
+            "open_seed1",
+            runs_root / "open_seed1_mcsvd_full",
+            runs_root / "open_seed1_svd_similarity_full",
+            runs_root / "open_seed1_local_svd_full",
+            runs_root / "open_seed1_rpca_full",
+            runs_root / "open_seed1_hosvd_full",
+        ),
+        (
+            "Brain-AliasContract",
+            "aliascontract_seed2",
+            runs_root / "aliascontract_seed2_mcsvd_full",
+            runs_root / "aliascontract_seed2_svd_similarity_full",
+            runs_root / "aliascontract_seed2_local_svd_full",
+            runs_root / "aliascontract_seed2_rpca_full",
+            runs_root / "aliascontract_seed2_hosvd_full",
+        ),
+        (
+            "Brain-SkullOR",
+            "skullor_seed2",
+            runs_root / "skullor_seed2_mcsvd_full",
+            runs_root / "skullor_seed2_svd_similarity_full",
+            runs_root / "skullor_seed2_local_svd_full",
+            runs_root / "skullor_seed2_rpca_full",
+            runs_root / "skullor_seed2_hosvd_full",
+        ),
     ]
 
     # Common FPR grid for plotting (log-x). The labeled k-Wave windows have n_neg~5e4,
@@ -127,6 +150,8 @@ def main() -> None:
 
     colors = {
         "mcsvd": "#666666",
+        "svd_similarity": "#9467bd",
+        "local_svd": "#8c564b",
         "rpca": "#2ca02c",
         "hosvd": "#ff7f0e",
         "stap": "#1f77b4",
@@ -136,18 +161,25 @@ def main() -> None:
     if not isinstance(axes, np.ndarray):
         axes = np.asarray([axes])
 
-    for ax, (title, tag, d_mcsvd, d_rpca, d_hosvd) in zip(axes, regimes, strict=False):
+    for ax, (title, tag, d_mcsvd, d_svd_sim, d_local_svd, d_rpca, d_hosvd) in zip(
+        axes, regimes, strict=False
+    ):
         # Window directories.
         win_mcsvd = _glob_windows(d_mcsvd)
+        win_svd_sim = _glob_windows(d_svd_sim)
+        win_local_svd = _glob_windows(d_local_svd)
         win_rpca = _glob_windows(d_rpca)
         win_hosvd = _glob_windows(d_hosvd)
-        if not (win_mcsvd and win_rpca and win_hosvd):
+        if not (win_mcsvd and win_svd_sim and win_local_svd and win_rpca and win_hosvd):
             raise SystemExit(
-                f"Missing windows for {tag}: mcsvd={len(win_mcsvd)}, rpca={len(win_rpca)}, hosvd={len(win_hosvd)}"
+                f"Missing windows for {tag}: mcsvd={len(win_mcsvd)}, svd_sim={len(win_svd_sim)}, "
+                f"local_svd={len(win_local_svd)}, rpca={len(win_rpca)}, hosvd={len(win_hosvd)}"
             )
 
         # Baselines: base curves from their own bundles.
         mc_med, mc_q25, mc_q75 = _summarize_windows(win_mcsvd, "base", fpr_grid)
+        ss_med, ss_q25, ss_q75 = _summarize_windows(win_svd_sim, "base", fpr_grid)
+        ls_med, ls_q25, ls_q75 = _summarize_windows(win_local_svd, "base", fpr_grid)
         rp_med, rp_q25, rp_q75 = _summarize_windows(win_rpca, "base", fpr_grid)
         ho_med, ho_q25, ho_q75 = _summarize_windows(win_hosvd, "base", fpr_grid)
         # STAP: stap curves from the MC--SVD bundles.
@@ -155,6 +187,24 @@ def main() -> None:
 
         ax.plot(fpr_grid, mc_med, color=colors["mcsvd"], linewidth=1.5, label="MC--SVD")
         ax.fill_between(fpr_grid, mc_q25, mc_q75, color=colors["mcsvd"], alpha=0.14, linewidth=0)
+
+        ax.plot(
+            fpr_grid,
+            ss_med,
+            color=colors["svd_similarity"],
+            linewidth=1.3,
+            label="Adaptive SVD (SV similarity cutoff)",
+        )
+        ax.fill_between(fpr_grid, ss_q25, ss_q75, color=colors["svd_similarity"], alpha=0.10, linewidth=0)
+
+        ax.plot(
+            fpr_grid,
+            ls_med,
+            color=colors["local_svd"],
+            linewidth=1.3,
+            label="Block-wise local SVD (overlap-add)",
+        )
+        ax.fill_between(fpr_grid, ls_q25, ls_q75, color=colors["local_svd"], alpha=0.10, linewidth=0)
 
         ax.plot(fpr_grid, rp_med, color=colors["rpca"], linewidth=1.4, label="RPCA")
         ax.fill_between(fpr_grid, rp_q25, rp_q75, color=colors["rpca"], alpha=0.12, linewidth=0)
