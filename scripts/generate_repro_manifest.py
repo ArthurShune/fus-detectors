@@ -636,6 +636,42 @@ def _default_selections() -> dict[str, str]:
 def _default_artifacts() -> list[ArtifactInfo]:
     return [
         ArtifactInfo(
+            name="RTX 4080 SUPER audit logs (nvidia-smi + stap-fus conda env versions)",
+            paper_refs=["Table: latency_summary_4080super"],
+            outputs=[
+                "reports/hw/4080super_nvidia_smi.txt",
+                "reports/hw/4080super_env.txt",
+            ],
+            commands=[
+                "nvidia-smi > reports/hw/4080super_nvidia_smi.txt",
+                "",
+                "conda run -n stap-fus python -c \"import platform,sys; import torch; "
+                "print('platform:', platform.platform()); "
+                "print('python:', sys.version.splitlines()[0]); "
+                "print('torch:', torch.__version__); "
+                "print('torch.version.cuda:', torch.version.cuda); "
+                "print('cuda_is_available:', torch.cuda.is_available()); "
+                "print('device0_name:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None);\" "
+                "> reports/hw/4080super_env.txt",
+            ],
+            notes="These logs are hardware-dependent and are captured once per machine/driver stack.",
+        ),
+        ArtifactInfo(
+            name="RTX 4080 SUPER refactor gates (quick/phase/full)",
+            paper_refs=["Reproducibility gates (Phase 7)"],
+            outputs=[
+                "reports/refactor/4080super_refactor_quick.log",
+                "reports/refactor/4080super_refactor_phase.log",
+                "reports/refactor/4080super_refactor_full.log",
+            ],
+            commands=[
+                "conda run -n stap-fus make refactor-quick 2>&1 | tee reports/refactor/4080super_refactor_quick.log",
+                "conda run -n stap-fus make refactor-phase 2>&1 | tee reports/refactor/4080super_refactor_phase.log",
+                "conda run -n stap-fus make refactor-full  2>&1 | tee reports/refactor/4080super_refactor_full.log",
+            ],
+            notes="The 'full' gate is optional on constrained machines; see Makefile targets.",
+        ),
+        ArtifactInfo(
             name="PD-mode sanity checks (PD-mode map and score S=PD)",
             paper_refs=["Notation (PD convention)"],
             outputs=["reports/pd_mode_sanity/ (optional figs)"],
@@ -885,6 +921,129 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "(legacy: STAP_FAST_CUDA_GRAPH=0; optimized: STAP_FAST_CUDA_GRAPH=1). "
                 "Gammex latency reruns may be skipped if the dataset is unavailable; see docs/data_download.md."
             ),
+        ),
+        ArtifactInfo(
+            name="RTX 4080 SUPER CUDA latency replay (Brain-* k-Wave; legacy vs optimized; steady-state windows 2..5)",
+            paper_refs=["Table: latency_summary_4080super"],
+            outputs=[
+                "runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256/",
+                "runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256_cond/",
+                "runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256/",
+                "runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256_cond/",
+                "runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256/",
+                "runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256_cond/",
+            ],
+            commands=[
+                # OpenSkull seed1
+                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+                "  --src runs/pilot/r4c_kwave_seed1 \\",
+                "  --out-root runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256 \\",
+                "  --profile Brain-OpenSkull \\",
+                "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+                "  --stap-device cuda --stap-debug-samples 0 \\",
+                "  --tile-batch 192 --cuda-warmup-heavy \\",
+                "  --stap-conditional off",
+                "",
+                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+                "  --src runs/pilot/r4c_kwave_seed1 \\",
+                "  --out-root runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256_cond \\",
+                "  --profile Brain-OpenSkull \\",
+                "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+                "  --stap-device cuda --stap-debug-samples 0 \\",
+                "  --tile-batch 192 --cuda-warmup-heavy \\",
+                "  --stap-conditional on",
+                "",
+                # AliasContract seed2
+                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+                "  --src runs/pilot/r4c_kwave_hab_seed2 \\",
+                "  --out-root runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256 \\",
+                "  --profile Brain-AliasContract \\",
+                "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+                "  --stap-device cuda --stap-debug-samples 0 \\",
+                "  --tile-batch 192 --cuda-warmup-heavy \\",
+                "  --stap-conditional off",
+                "",
+                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+                "  --src runs/pilot/r4c_kwave_hab_seed2 \\",
+                "  --out-root runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256_cond \\",
+                "  --profile Brain-AliasContract \\",
+                "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+                "  --stap-device cuda --stap-debug-samples 0 \\",
+                "  --tile-batch 192 --cuda-warmup-heavy \\",
+                "  --stap-conditional on",
+                "",
+                # SkullOR seed2
+                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+                "  --src runs/pilot/r4c_kwave_hab_v3_skull_seed2 \\",
+                "  --out-root runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256 \\",
+                "  --profile Brain-SkullOR \\",
+                "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+                "  --stap-device cuda --stap-debug-samples 0 \\",
+                "  --tile-batch 192 --cuda-warmup-heavy \\",
+                "  --stap-conditional off",
+                "",
+                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+                "  --src runs/pilot/r4c_kwave_hab_v3_skull_seed2 \\",
+                "  --out-root runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256_cond \\",
+                "  --profile Brain-SkullOR \\",
+                "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+                "  --stap-device cuda --stap-debug-samples 0 \\",
+                "  --tile-batch 192 --cuda-warmup-heavy \\",
+                "  --stap-conditional on",
+            ],
+            notes=(
+                "The script writes both legacy/ and optimized/ subtrees per out-root and reports "
+                "cold(win1) and steady(avg win2..N). Publishable latency uses windows 2..N."
+            ),
+        ),
+        ArtifactInfo(
+            name="RTX 4080 SUPER CUDA latency replay (real data: Shin; legacy vs optimized; steady-state frames 2..N)",
+            paper_refs=["Table: latency_summary_4080super"],
+            outputs=[
+                "runs/latency_4080super_shin_fig3_w128_tb192/legacy/",
+                "runs/latency_4080super_shin_fig3_w128_tb192/optimized/",
+            ],
+            commands=[
+                # Legacy (graphs disabled)
+                "PYTHONPATH=. \\",
+                "STAP_TILING_UNFOLD=0 STAP_FAST_CUDA_GRAPH=0 \\",
+                "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \\",
+                "STAP_TYLER_TRITON_CAPTURE=1 \\",
+                "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "  --stap-device cuda --tile-batch 192 --clean \\",
+                "  --out-root runs/latency_4080super_shin_fig3_w128_tb192/legacy \\",
+                "  shin --iq-file IQData001.dat \\",
+                "  --windows 0:128,64:192,122:250 \\",
+                "  --Lt 64 --svd-energy-frac 0.97",
+                "",
+                # Optimized (graphs enabled when supported)
+                "PYTHONPATH=. \\",
+                "STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \\",
+                "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \\",
+                "STAP_TYLER_TRITON_CAPTURE=1 \\",
+                "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "  --stap-device cuda --tile-batch 192 --clean \\",
+                "  --out-root runs/latency_4080super_shin_fig3_w128_tb192/optimized \\",
+                "  shin --iq-file IQData001.dat \\",
+                "  --windows 0:128,64:192,122:250 \\",
+                "  --Lt 64 --svd-energy-frac 0.97",
+            ],
+            notes=(
+                "These are 'latency-only' replay settings (e.g., STAP_TYLER_MAX_ITER=1, STAP_SNAPSHOT_STRIDE=4) "
+                "to isolate compute throughput; see per-bundle meta.json for exact telemetry."
+            ),
+        ),
+        ArtifactInfo(
+            name="RTX 4080 SUPER latency summary aggregation (CSV/JSON)",
+            paper_refs=["Table: latency_summary_4080super"],
+            outputs=[
+                "reports/latency/4080super_latency_summary.csv",
+                "reports/latency/4080super_latency_summary.json",
+            ],
+            commands=[
+                "PYTHONPATH=. conda run -n stap-fus python scripts/collect_latency_summary.py",
+            ],
+            notes="Reads existing runs/latency_4080super_* folders and writes steady-state windows 2..N summaries.",
         ),
         ArtifactInfo(
             name="Brain-* baseline fairness: MC--SVD(e) tune-once sweep",
