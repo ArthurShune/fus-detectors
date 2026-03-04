@@ -42,6 +42,7 @@ Deliverables:
 - Clear separation between algorithm, orchestration, and I/O.
 - Better debug telemetry and deterministic replay hooks.
 - Simplified API boundaries around STAP core.
+- Execute per-chunk boundary plan from `docs/refactor/PHASE3_KICKOFF_CHECKLIST.md`.
 
 Exit gate:
 - `scripts/verify_refactor.py --mode phase --execute`
