@@ -11,10 +11,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import os
 import time
 from pathlib import Path
-from typing import List, Sequence, Tuple
 
 import numpy as np
 
@@ -28,6 +26,12 @@ from scripts.refactor.replay_telemetry import (
     build_guard_opts,
     build_ka_opts_extra,
     compose_window_meta_extra,
+)
+from scripts.refactor.replay_profiles import (
+    apply_brain_profile_defaults,
+    apply_stap_profile_defaults,
+    apply_svd_profile_defaults,
+    parse_coords,
 )
 from scripts.refactor.replay_warmup import run_cuda_warmup, run_heavy_cuda_warmup
 from scripts.refactor.replay_write_args import build_write_acceptance_kwargs
@@ -915,207 +919,15 @@ def parse_args() -> argparse.Namespace:
     return ap.parse_args()
 
 
-def parse_coords(coord_list: Sequence[str]) -> List[Tuple[int, int]]:
-    coords: List[Tuple[int, int]] = []
-    for entry in coord_list:
-        clean = entry.replace(":", ",")
-        parts = [p.strip() for p in clean.split(",") if p.strip()]
-        if len(parts) != 2:
-            raise ValueError(f"Invalid coord '{entry}'")
-        coords.append((int(parts[0]), int(parts[1])))
-    return coords
-
-
-def _apply_brain_profile_defaults(args: argparse.Namespace) -> None:
-    """Apply high-level Brain-* profile defaults.
-
-    The Brain-* profiles mirror the operating regimes described in the
-    methodology (Brain-OpenSkull / Brain-AliasContract / Brain-SkullOR /
-    Brain-Pial128). When a Brain-* profile is requested we:
-      - use a motion-compensated SVD baseline with registration and a
-        literature-style energy-fraction rule,
-      - enable the clinical STAP preset with PD-based scoring, and
-      - configure PD-based flow masks consistent with the brain fUS methods.
-    """
-    profile = getattr(args, "profile", None)
-    if profile is None:
-        return
-
-    # Common defaults for all Brain-* profiles: MC-SVD baseline with
-    # registration, clinical STAP PD preset, and PD-based flow masks.
-    #
-    # IMPORTANT: allow callers to override the baseline (e.g. RPCA/HOSVD) for
-    # fair baseline comparisons. We only force MC-SVD when the caller left the
-    # baseline at its parser default ("svd").
-    if getattr(args, "baseline", "svd") == "svd":
-        args.baseline = "mc_svd"
-    args.reg_enable = True
-    args.reg_method = "phasecorr"
-    args.reg_subpixel = 4
-    args.reg_reference = "median"
-    args.svd_profile = "literature"
-    # Phase 3 (baseline fairness): tune-once-then-freeze MC--SVD energy-fraction
-    # baseline for Brain-* on a pre-committed calibration configuration.
-    # See: reports/brain_mcsvd_energy_sweep.csv (summary of the calibration sweep).
-    if args.svd_rank is None and args.svd_energy_frac is None:
-        args.svd_energy_frac = 0.90
-
-    args.stap_profile = "clinical"
-    args.score_mode = "pd"
-
-    # Slow-time cube synthesis (pre-injection): for Brain-* pilots we prefer a
-    # largely coherent, low-rank tissue stack so that MC--SVD removes a small
-    # clutter subspace and the explicit Doppler/alias/clutter injections drive
-    # spectral structure. The legacy synth jitter defaults can make the stack
-    # unrealistically high-rank for short windows (e.g. 64 frames), causing
-    # MC--SVD to remove dozens of modes and wiping out flow evidence.
-    if getattr(args, "synth_amp_jitter", 0.05) == 0.05:
-        args.synth_amp_jitter = 0.0
-    if getattr(args, "synth_phase_jitter", 0.25) == 0.25:
-        args.synth_phase_jitter = 0.0
-    if getattr(args, "synth_noise_level", 0.01) == 0.01:
-        args.synth_noise_level = 0.0
-    if getattr(args, "synth_shift_max_px", 1) == 1:
-        args.synth_shift_max_px = 0
-
-    # Temporal clutter injection: model clutter as low-rank global modes to
-    # match the MC--SVD "low-rank clutter" assumption used throughout the
-    # Brain-* methodology. Users can still override to fullrank explicitly.
-    if getattr(args, "clutter_mode", "fullrank") == "fullrank":
-        args.clutter_mode = "lowrank"
-    if getattr(args, "clutter_rank", 3) == 3:
-        args.clutter_rank = 3
-
-    # Evaluation masks for Brain-* simulations should reflect simulator truth
-    # (default geometric/injection masks). A separate PD-derived proxy mask is
-    # still exported and used for conditional execution / contract telemetry.
-    args.flow_mask_mode = "default"
-    # Allow explicit CLI overrides for the proxy-mask extraction knobs by only
-    # applying these defaults when the user did not provide a different value.
-    if getattr(args, "flow_mask_pd_quantile", 0.995) == 0.995:
-        args.flow_mask_pd_quantile = 0.995
-    if getattr(args, "flow_mask_depth_min_frac", 0.25) == 0.25:
-        args.flow_mask_depth_min_frac = 0.25
-    if getattr(args, "flow_mask_depth_max_frac", 0.85) == 0.85:
-        args.flow_mask_depth_max_frac = 0.85
-    if getattr(args, "flow_mask_dilate_iters", 2) == 2:
-        args.flow_mask_dilate_iters = 2
-    if getattr(args, "flow_mask_union_default", True) is True:
-        args.flow_mask_union_default = False
-
-    # Pial profile additionally suppresses the shallow alias depth band when
-    # building the flow mask so the pial band is always treated as H0.
-    if profile == "Brain-Pial128":
-        args.flow_mask_suppress_alias_depth = True
-
-
 def main() -> None:
     args = parse_args()
 
-    # Apply high-level Brain-* operating profile presets (if any) before
-    # expanding the lower-level STAP presets.
-    _apply_brain_profile_defaults(args)
-
-    if getattr(args, "stap_profile", "lab") == "clinical":
-        # Clinical STAP profile: fixed, conservative configuration intended to
-        # reflect deployable intra-op fUS constraints. This preset is applied
-        # before downstream configuration is built.
-        # Allow explicit CLI overrides by only applying these defaults when the
-        # user did not provide a different value. We detect this by checking
-        # whether the argument is still at the parser default.
-        if getattr(args, "tile_h", 12) == 12:
-            args.tile_h = 8
-        if getattr(args, "tile_w", 12) == 12:
-            args.tile_w = 8
-        if getattr(args, "tile_stride", 6) == 6:
-            args.tile_stride = 3
-        if getattr(args, "lt", 4) == 4:
-            args.lt = 8
-
-        # Covariance / MVDR configuration
-        if getattr(args, "diag_load", 1e-2) == 1e-2:
-            args.diag_load = 0.07
-        args.cov_estimator = "tyler_pca"
-        args.huber_c = 5.0
-        # Primary STAP score uses a *fixed* Doppler grid (frozen per profile)
-        # rather than a per-tile PSD-adaptive grid. This avoids silent regime
-        # shifts where alias-dominant tiles drive the "flow" subspace selection.
-        #
-        # Use a fixed span covering Pf (up to ~250 Hz for PRF~1.5 kHz brain fUS).
-        # The underlying tile kernel will cap the effective grid to fit Lt.
-        args.fd_span_mode = "fixed"
-        args.fd_span_rel = "0.30,1.10"
-        args.fd_fixed_span_hz = 250.0
-        args.grid_step_rel = 0.20
-        # Keep a small but nontrivial grid. A tiny grid (e.g. 3 points) can
-        # under-represent heterogeneous flow Dopplers; a very dense grid is
-        # unnecessary for the conservative profile.
-        args.max_pts = 15
-        args.fd_min_pts = 9
-        args.constraint_mode = "exp+deriv"
-        args.constraint_ridge = 0.18
-        args.mvdr_load_mode = "auto"
-        args.mvdr_auto_kappa = 120.0
-
-        # MSD scoring configuration
-        args.msd_lambda = 0.05
-        args.msd_ridge = 0.10
-        args.msd_agg = "median"
-        args.msd_ratio_rho = 0.05
-        args.msd_contrast_alpha = 0.6
-
-        # Whitened band-ratio telemetry configuration (only when using an
-        # MC-SVD/SVD baseline, since the whitened ratio path assumes an
-        # MC-SVD-style clutter prior). For other baselines (e.g. RPCA, HOSVD)
-        # we leave the default legacy band-ratio so that PD scoring still
-        # works without triggering whitened-ratio constraints.
-        if getattr(args, "baseline", "mc_svd") in {"mc_svd", "svd"}:
-            args.band_ratio_mode = "whitened"
-            args.psd_br_flow_low = 30.0
-            # Match the brain-fUS band geometry described in the methodology:
-            # Pf ~ [30,250] Hz, guard ~ [250,400] Hz, Pa ~ [400,Nyquist] Hz.
-            # The band-ratio recorder uses (flow_low, flow_high) and an
-            # (alias_center, alias_half_width) parameterization; center=575 and
-            # half-width=175 yields an alias band starting at ~400 Hz.
-            args.psd_br_flow_high = 250.0
-            args.psd_br_alias_center = 575.0
-            args.psd_br_alias_width = 175.0
-
-        # Limit effective slow-time support per window if not explicitly set.
-        if args.time_window_length is None:
-            args.time_window_length = 32
-
-        # Limit training snapshots per tile via environment controls if not
-        # already set by the user.
-        os.environ.setdefault("STAP_SNAPSHOT_STRIDE", "4")
-        os.environ.setdefault("STAP_MAX_SNAPSHOTS", "64")
-
-        # Enable the batched fast-path by default for the clinical preset.
-        # The core will fall back to the slow path automatically if it is not
-        # eligible (e.g., torch unavailable, KA enabled, debug requested).
-        os.environ.setdefault("STAP_FAST_PATH", "1")
-
-        # For PD-based clinical runs, default to the PD-only fast path so that
-        # the GPU batched core uses the lighter band-energy computation instead
-        # of the full MSD contrast kernel. This preserves PD ROC while reducing
-        # latency, and can be disabled manually by clearing STAP_FAST_PD_ONLY.
-        if getattr(args, "score_mode", "pd") == "pd":
-            os.environ.setdefault("STAP_FAST_PD_ONLY", "1")
+    apply_brain_profile_defaults(args)
+    apply_stap_profile_defaults(args)
 
     run_cuda_warmup(args)
 
-    # Optional preset for motion-compensated SVD baseline. When the user
-    # selects the 'literature' profile and has not provided an explicit SVD
-    # rank or energy fraction, fall back to an energy-fraction rule that
-    # removes the smallest number of singular components accounting for ~95%
-    # of the slow-time energy (default). Brain-* profiles override this to a
-    # separately frozen value (currently e=0.90; see _apply_brain_profile_defaults).
-    # This mirrors common practice in spatiotemporal SVD clutter filtering for
-    # ultrafast Doppler / fUS, while leaving manual --svd-rank/--svd-energy-frac
-    # overrides untouched.
-    if getattr(args, "svd_profile", "default") == "literature":
-        if args.svd_rank is None and args.svd_energy_frac is None:
-            args.svd_energy_frac = 0.95
+    apply_svd_profile_defaults(args)
 
     src_root = args.src
     out_root = args.out
