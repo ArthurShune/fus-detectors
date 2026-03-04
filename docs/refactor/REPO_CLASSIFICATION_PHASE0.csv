@@ -198,6 +198,11 @@ scripts/r4c_guards.py,experiments,analysis/experiment script
 scripts/r4c_phase2_sweep.py,experiments,analysis/experiment script
 scripts/r4c_psd_metrics.py,experiments,analysis/experiment script
 scripts/redteam_directional_shrink.py,experiments,analysis/experiment script
+scripts/refactor/__init__.py,core,repro/runtime orchestration script
+scripts/refactor/cli_compat.py,core,repro/runtime orchestration script
+scripts/refactor/inventory.py,core,repro/runtime orchestration script
+scripts/refactor/phase_close.py,core,repro/runtime orchestration script
+scripts/refactor/verify_gate.py,core,repro/runtime orchestration script
 scripts/refactor_inventory.py,core,repro/runtime orchestration script
 scripts/replay_stap_from_run.py,core,repro/runtime orchestration script
 scripts/reproduce_table5_brain_kwave.sh,core,repro/runtime orchestration script

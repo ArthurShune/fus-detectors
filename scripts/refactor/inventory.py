@@ -123,6 +123,9 @@ def _classify(path: str) -> tuple[str, str]:
     if path.startswith(CORE_PREFIXES):
         return "core", "core source/test/config directory"
 
+    if path.startswith("scripts/refactor/"):
+        return "core", "repro/runtime orchestration script"
+
     if path.startswith("scripts/"):
         script_name = Path(path).name
         if script_name in CORE_SCRIPT_EXACT:
@@ -253,4 +256,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
