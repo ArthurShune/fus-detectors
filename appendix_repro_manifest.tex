@@ -4,15 +4,26 @@
 
 This appendix records a minimal reproduction recipe: exact commands, data locations, and a pinned repository state.
 The manifest lists the minimal set of commands/outputs needed to reproduce the main claims; additional exploratory reports referenced in the text are not required unless explicitly listed here.
-Run \path{PYTHONPATH=. python scripts/generate_repro_manifest.py} to refresh this manifest.
+Run \path{PYTHONPATH=. conda run -n stap-fus python scripts/generate_repro_manifest.py} to refresh this manifest.
 
 \paragraph{Repository state.}
-Commit: \texttt{6db311e} (full: \texttt{6db311e65c1bea51cb6f126709d619630c4532eb}); branch: \texttt{main}; dirty: \texttt{true}.
+Public repository: (not recorded; set \texttt{STAP\_FUS\_PUBLIC\_REPO\_URL} or add a git remote such as \texttt{origin}).
+Release tag: (not recorded; set \texttt{STAP\_FUS\_RELEASE\_TAG} or create a git tag).
+Commit: \texttt{8848a72} (full: \texttt{8848a72005}\allowbreak\texttt{8f5932dfbd}\allowbreak\texttt{76adfaa28b}\allowbreak\texttt{f1bfead4e3}); branch: \texttt{main}; dirty: \texttt{true}.
+Dirty details: non-ignored paths=8, ignored build products=0.
+Note: dirty status ignores common LaTeX build products (e.g., \texttt{*.aux, *.log, *.out, *.fls, *.fdb\_latexmk, *.synctex.gz, *.pdf}).
+For archival reproducibility, generate this manifest from a clean, tagged release commit (\texttt{dirty=false}) and record the public repository URL and tag.
 
 \paragraph{Environment.}
-Python: \path{3.12.8 | packaged by Anaconda, Inc. | (main, Dec 11 2024, 16:31:09) [GCC 11.2.0]}.
+Conda spec: \path{environment.yml} (sha256: \texttt{a251307a0fc842f5}\allowbreak\texttt{b956cf64d9861321}\allowbreak\texttt{3f7e1519b0b0c2c2}\allowbreak\texttt{cb0e950edf64bd61}).
+Create env: \path{conda env create -f environment.yml}.
+Docker: \path{Dockerfile} (sha256: \texttt{1dbf3078785426b4}\allowbreak\texttt{5770b85f7b2f7794}\allowbreak\texttt{cd14435c20e1c587}\allowbreak\texttt{a3c38cf097128e16}).
+Build container: \path{docker build -t stap-fus -f Dockerfile .}.
+Runtime (conda env \texttt{stap-fus}):
+Python: \path{3.11.14 | packaged by conda-forge | (main, Oct 22 2025, 22:46:25) [GCC 14.3.0]}.
 Platform: \path{Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39}.
-Packages: \texttt{numpy}={1.26.4}, \texttt{scipy}={1.14.1}, \texttt{torch}={2.2.2+cpu}, \texttt{matplotlib}={3.10.0}.
+Packages: \texttt{numpy}={2.2.6}, \texttt{scipy}={1.14.1}, \texttt{torch}={2.4.1}, \texttt{matplotlib}={3.10.0}, \texttt{cupy}={13.6.0}.
+Torch CUDA: available=\texttt{true}, cuda=\texttt{12.1}, device0=\path{NVIDIA GeForce RTX 3050 6GB Laptop GPU}.
 
 \paragraph{Datasets.}
 Paths below are the expected on-disk locations used by the scripts in this repository. Large outputs under \path{runs/} and \path{reports/} are not tracked.
@@ -38,7 +49,7 @@ Paths below are the expected on-disk locations used by the scripts in this repos
 
 \paragraph{Pre-registered selections used in this manuscript.}
 \begin{itemize}[nosep]
-  \item \textbf{Brain seed sweep (AliasContract pilot)}: seed2-seed12 (n=11).
+  \item \textbf{Brain low-FPR matrix (fixed-profile pilots)}: OpenSkull seed1; AliasContract seed2; SkullOR seed2; 64-frame windows at offsets {0,64,128,192,256}.
   \item \textbf{Shin all-clips telemetry}: IQData001-IQData080 (n=80), window 0:128.
   \item \textbf{Shin motion subset}: IQData001-005, IQData010, IQData020, IQData040, IQData060, IQData080 (n=10).
   \item \textbf{Mace holdout split (deduplicated)}: train: scan1/2 + scan3/6; test: scan4 + scan5.
@@ -82,12 +93,126 @@ PYTHONPATH=. python scripts/pd_mode_sanity.py \
 {\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python scripts/conditional_stap_leakage_ablation.py \
-  --pilots runs/pilot/r4_kwave_seed1 runs/pilot/r4_kwave_seed2 \
+  --pilots runs/pilot/r4c_kwave_seed1 \
   --profile Brain-OpenSkull \
   --out-root runs/ablation/condstap_leakage \
   --window-length 64 --window-offset 0 --disjoint-offset 64 \
   --summary-csv reports/condstap_leakage.csv \
   --summary-json reports/condstap_leakage.json
+\end{verbatim}
+}
+
+  \item \textbf{CUDA latency replay (Brain-* k-Wave; steady-state windows 2..5)}
+    (paper refs: Table: latency\_summary).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{runs/latency_s12_publish_}\allowbreak\path{offsets/ (Brain-OpenSkull; full)}
+      \item \path{runs/latency_s13_publish_offsets_}\allowbreak\path{cond/ (Brain-OpenSkull; conditional)}
+      \item \path{runs/latency_s14_aliascontract_}\allowbreak\path{full/ (Brain-AliasContract; full)}
+      \item \path{runs/latency_s14_aliascontract_}\allowbreak\path{cond/ (Brain-AliasContract; conditional)}
+      \item \path{runs/latency_s15_skullor_}\allowbreak\path{full/ (Brain-SkullOR; full)}
+      \item \path{runs/latency_s15_skullor_}\allowbreak\path{cond/ (Brain-SkullOR; conditional)}
+    \end{itemize}
+    \endgroup
+    Notes: GPU latency is reported as the steady-state mean over windows 2..5 (window1 is cold: CUDA init, Triton JIT, and CUDA-graph capture). Use the script's 'optimized steady(avg win2..5)' line.
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \
+  python scripts/latency_rerun_check.py \
+  --src runs/latency_pilot_open \
+  --out-root runs/latency_s12_publish_offsets \
+  --profile Brain-OpenSkull \
+  --window-length 64 --window-offset 0 \
+  --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --stap-debug-samples 0 \
+  --tile-batch 192 --cuda-warmup-heavy
+
+PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \
+  python scripts/latency_rerun_check.py \
+  --src runs/latency_pilot_open \
+  --out-root runs/latency_s13_publish_offsets_cond \
+  --profile Brain-OpenSkull \
+  --window-length 64 --window-offset 0 \
+  --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --stap-debug-samples 0 \
+  --tile-batch 192 --cuda-warmup-heavy \
+  --stap-conditional on
+
+PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \
+  python scripts/latency_rerun_check.py \
+  --src runs/latency_pilot_aliascontract \
+  --out-root runs/latency_s14_aliascontract_full \
+  --profile Brain-AliasContract \
+  --window-length 64 --window-offset 0 \
+  --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --stap-debug-samples 0 \
+  --tile-batch 192 --cuda-warmup-heavy
+
+PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \
+  python scripts/latency_rerun_check.py \
+  --src runs/latency_pilot_aliascontract \
+  --out-root runs/latency_s14_aliascontract_cond \
+  --profile Brain-AliasContract \
+  --window-length 64 --window-offset 0 \
+  --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --stap-debug-samples 0 \
+  --tile-batch 192 --cuda-warmup-heavy \
+  --stap-conditional on
+
+PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \
+  python scripts/latency_rerun_check.py \
+  --src runs/latency_pilot_skullor \
+  --out-root runs/latency_s15_skullor_full \
+  --profile Brain-SkullOR \
+  --window-length 64 --window-offset 0 \
+  --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --stap-debug-samples 0 \
+  --tile-batch 192 --cuda-warmup-heavy
+
+PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \
+  python scripts/latency_rerun_check.py \
+  --src runs/latency_pilot_skullor \
+  --out-root runs/latency_s15_skullor_cond \
+  --profile Brain-SkullOR \
+  --window-length 64 --window-offset 0 \
+  --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --stap-debug-samples 0 \
+  --tile-batch 192 --cuda-warmup-heavy \
+  --stap-conditional on
+\end{verbatim}
+}
+
+  \item \textbf{CUDA latency replay (real data: Shin + Gammex; steady-state frames 2..N)}
+    (paper refs: Table: latency\_summary).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{runs/latency_s17_realdata_cuda_}\allowbreak\path{unfold/ (Shin + Gammex CUDA latency runs)}
+    \end{itemize}
+    \endgroup
+    Notes: The script prints cold(win1) and steady(avg win2..N); the latency table uses the steady-state mean and excludes window/frame 1 (graph capture + Triton JIT).
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. \
+STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \
+STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \
+STAP_TYLER_TRITON_CAPTURE=1 \
+conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
+  --stap-device cuda --tile-batch 192 --clean \
+  --out-root runs/latency_s17_realdata_cuda_unfold \
+  shin --iq-file IQData001.dat \
+  --windows 0:128,64:192,122:250 \
+  --Lt 64 --svd-energy-frac 0.97
+
+PYTHONPATH=. \
+STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \
+STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \
+STAP_TYLER_TRITON_CAPTURE=1 \
+conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
+  --stap-device cuda --tile-batch 512 --clean \
+  --out-root runs/latency_s17_realdata_cuda_unfold \
+  gammex --frames-along 0:6 --frames-across 0:6
 \end{verbatim}
 }
 
@@ -103,7 +228,7 @@ PYTHONPATH=. python scripts/conditional_stap_leakage_ablation.py \
 {\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python scripts/brain_mcsvd_energy_sweep.py \
-  --pilot runs/pilot/r4_kwave_seed1 \
+  --pilot runs/pilot/r4c_kwave_seed1 \
   --profile Brain-OpenSkull \
   --out-root runs/sweep/mcsvd_energy_brain_seed1 \
   --window-length 64 --window-offset 0 \
@@ -111,6 +236,46 @@ PYTHONPATH=. python scripts/brain_mcsvd_energy_sweep.py \
   --fprs 1e-4,3e-4,1e-3 \
   --summary-csv reports/brain_mcsvd_energy_sweep_seed1.csv \
   --summary-json reports/brain_mcsvd_energy_sweep_seed1.json
+\end{verbatim}
+}
+
+  \item \textbf{Brain-* low-FPR baseline matrix (vnext; includes adaptive/local SVD baselines)}
+    Paper refs:
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item Table: brain\_kwave\_vnext\_baselines
+      \item Figure: \path{brain_kwave_roc_curves.pdf}
+    \end{itemize}
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{runs/pilot/}\allowbreak\path{fair_filter_matrix_pd_r3_}\allowbreak\path{localbaselines/ (generated bundles)}
+      \item \path{reports/}\allowbreak\path{fair_matrix_vnext_r3_localbaselines.csv}
+      \item \path{reports/}\allowbreak\path{fair_matrix_vnext_r3_localbaselines.json}
+      \item \path{reports/}\allowbreak\path{brain_kwave_vnext_baselines_table.tex}
+    \end{itemize}
+    \endgroup
+    Notes: Generates per-window acceptance bundles and writes a vnext-style strict-tail report, then renders the LaTeX table used in the main Brain-* baseline table; this run root is also consumed by the ROC and cross-window calibration scripts.
+{\footnotesize
+\begin{verbatim}
+bash scripts/reproduce_table5_brain_kwave.sh
+
+# Manual breakdown (equivalent to the script above):
+PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py \
+  --mode matrix --eval-score vnext \
+  --matrix-regimes open,aliascontract,skullor \
+  --matrix-seeds-open 1 --matrix-seeds-aliascontract 2 --matrix-seeds-skullor 2 \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --matrix-use-profile \
+  --matrix-mcsvd-energy-frac 0.90 --matrix-mcsvd-baseline-support window \
+  --methods mcsvd,svd_similarity,local_svd,rpca,hosvd,stap_full \
+  --generated-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \
+  --autogen-missing --stap-device cuda \
+  --out-csv reports/fair_matrix_vnext_r3_localbaselines.csv \
+  --out-json reports/fair_matrix_vnext_r3_localbaselines.json
+
+PYTHONPATH=. conda run -n stap-fus python scripts/brain_kwave_vnext_baselines_table.py \
+  --fair-matrix-json reports/fair_matrix_vnext_r3_localbaselines.json \
+  --out-tex reports/brain_kwave_vnext_baselines_table.tex
 \end{verbatim}
 }
 
@@ -122,11 +287,11 @@ PYTHONPATH=. python scripts/brain_mcsvd_energy_sweep.py \
       \item \path{figs/paper/}\allowbreak\path{brain_kwave_roc_curves.pdf}
     \end{itemize}
     \endgroup
-    Notes: Reads precomputed per-window score/mask arrays under runs/pilot/fair\_filter\_matrix\_full\_clinical\_cpu\_v2.
+    Notes: Reads per-window score/mask arrays under the Brain-* pilot run root.
 {\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python scripts/fig_brain_kwave_roc_curves.py \
-  --runs-root runs/pilot/fair_filter_matrix_full_clinical_cpu_v2 \
+  --runs-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \
   --out-pdf figs/paper/brain_kwave_roc_curves.pdf
 \end{verbatim}
 }
@@ -145,10 +310,185 @@ PYTHONPATH=. python scripts/fig_brain_kwave_roc_curves.py \
 {\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python scripts/brain_crosswindow_calibration.py \
-  --runs-root runs/pilot/fair_filter_matrix_full_clinical_cpu_v2 \
+  --runs-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \
   --alphas 1e-4,3e-4,1e-3 \
   --out-csv reports/brain_crosswindow_calibration.csv \
   --out-json reports/brain_crosswindow_calibration_summary.json
+\end{verbatim}
+}
+
+  \item \textbf{Brain-* baseline sanity table (strict vs relaxed operating points)}
+    (paper refs: Appendix: baseline sanity checks at relaxed operating points (Brain-*)).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{brain_baseline_sanity_relaxed.csv}
+      \item \path{reports/}\allowbreak\path{brain_baseline_sanity_relaxed.json}
+      \item \path{reports/}\allowbreak\path{brain_baseline_sanity_relaxed_table.tex}
+    \end{itemize}
+    \endgroup
+    Notes: Reads per-window score/mask arrays under the Brain-* pilot run root.
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. python scripts/brain_baseline_sanity_table.py \
+  --fair-matrix-json reports/fair_matrix_vnext_r3_localbaselines.json \
+  --alphas 0.001,0.01,0.1 \
+  --out-csv reports/brain_baseline_sanity_relaxed.csv \
+  --out-json reports/brain_baseline_sanity_relaxed.json \
+  --out-tex reports/brain_baseline_sanity_relaxed_table.tex
+\end{verbatim}
+}
+
+  \item \textbf{Brain-* detector-component ablation (whitening vs band selectivity)}
+    (paper refs: Table: brain\_detector\_ablation (detector-component ablation)).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{runs/pilot/}\allowbreak\path{fair_filter_matrix_pd_r3_localbaselines/*_}\allowbreak\path{mcsvd_det_whitened_}\allowbreak\path{power/ (generated bundles)}
+      \item \path{runs/pilot/}\allowbreak\path{fair_filter_matrix_pd_r3_localbaselines/*_}\allowbreak\path{mcsvd_det_unwhitened_}\allowbreak\path{ratio/ (generated bundles)}
+      \item \path{reports/}\allowbreak\path{fair_matrix_detector_ablations.csv}
+      \item \path{reports/}\allowbreak\path{fair_matrix_detector_ablations.json}
+      \item \path{reports/}\allowbreak\path{brain_detector_ablation.csv}
+      \item \path{reports/}\allowbreak\path{brain_detector_ablation.json}
+      \item \path{reports/}\allowbreak\path{brain_detector_ablation_table.tex}
+    \end{itemize}
+    \endgroup
+    Notes: Ablates detector components on the identical MC--SVD residual: whitened total power (no band partition) and unwhitened matched-subspace ratio (R=I).
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py \
+  --mode matrix --eval-score vnext \
+  --matrix-regimes open,aliascontract,skullor \
+  --matrix-seeds-open 1 --matrix-seeds-aliascontract 2 --matrix-seeds-skullor 2 \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --matrix-use-profile \
+  --matrix-mcsvd-energy-frac 0.90 --matrix-mcsvd-baseline-support full \
+  --methods mcsvd,stap_det_whitened_power,stap_det_unwhitened_ratio,stap_full \
+  --generated-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \
+  --autogen-missing --stap-device cuda \
+  --out-csv reports/fair_matrix_detector_ablations.csv \
+  --out-json reports/fair_matrix_detector_ablations.json
+PYTHONPATH=. python scripts/brain_detector_ablation_table.py \
+  --fair-matrix-json reports/fair_matrix_detector_ablations.json \
+  --out-csv reports/brain_detector_ablation.csv \
+  --out-json reports/brain_detector_ablation.json \
+  --out-tex reports/brain_detector_ablation_table.tex
+\end{verbatim}
+}
+
+  \item \textbf{Brain-* detector-swap fairness check (matched-subspace scoring on competing residuals)}
+    (paper refs: Table: brain\_detector\_swap (paired residual detector swap)).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{runs/pilot/}\allowbreak\path{fair_filter_matrix_pd_r3_localbaselines/*_}\allowbreak\path{hosvd_stap_full/ (generated bundles)}
+      \item \path{runs/pilot/}\allowbreak\path{fair_filter_matrix_pd_r3_localbaselines/*_}\allowbreak\path{rpca_stap_full/ (generated bundles)}
+      \item \path{reports/}\allowbreak\path{fair_matrix_detector_swap.csv}
+      \item \path{reports/}\allowbreak\path{fair_matrix_detector_swap.json}
+      \item \path{reports/}\allowbreak\path{brain_detector_swap.csv}
+      \item \path{reports/}\allowbreak\path{brain_detector_swap.json}
+      \item \path{reports/}\allowbreak\path{brain_detector_swap_table.tex}
+    \end{itemize}
+    \endgroup
+    Notes: Paired-residual comparison: each run generates both PD (score\_base.npy) and STAP (score\_stap\_preka.npy) scores on the same RPCA/HOSVD residual for each window.
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py \
+  --mode matrix --eval-score vnext \
+  --matrix-regimes open,aliascontract,skullor \
+  --matrix-seeds-open 1 --matrix-seeds-aliascontract 2 --matrix-seeds-skullor 2 \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --matrix-use-profile \
+  --methods rpca_pair,rpca_stap,hosvd_pair,hosvd_stap \
+  --generated-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \
+  --regen-runs --autogen-missing --stap-device cuda \
+  --out-csv reports/fair_matrix_detector_swap.csv \
+  --out-json reports/fair_matrix_detector_swap.json
+PYTHONPATH=. python scripts/brain_detector_swap_table.py \
+  --fair-matrix-json reports/fair_matrix_detector_swap.json \
+  --out-csv reports/brain_detector_swap.csv \
+  --out-json reports/brain_detector_swap.json \
+  --out-tex reports/brain_detector_swap_table.tex
+\end{verbatim}
+}
+
+  \item \textbf{Brain-* covariance-training trim ablation (self-training sensitivity)}
+    (paper refs: Results: covariance-training contamination ablation (Brain-*)).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{runs/pilot/}\allowbreak\path{fair_filter_matrix_pd_r3_localbaselines/*_}\allowbreak\path{mcsvd_covtrim_q05/ (generated bundles)}
+      \item \path{reports/}\allowbreak\path{fair_matrix_covtrim.csv}
+      \item \path{reports/}\allowbreak\path{fair_matrix_covtrim.json}
+      \item \path{reports/}\allowbreak\path{brain_cov_train_ablation.csv}
+      \item \path{reports/}\allowbreak\path{brain_cov_train_ablation.json}
+      \item \path{reports/}\allowbreak\path{brain_cov_train_ablation_table.tex}
+    \end{itemize}
+    \endgroup
+    Notes: Enables the ablation via replay\_stap\_from\_run.py --stap-cov-trim-q (plumbed through fair\_filter\_comparison method key stap\_covtrim\_q05). This excludes the top 5\% highest-energy Hankel snapshots per tile when estimating R\_i (guard/trim style training contamination check).
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py \
+  --mode matrix --eval-score vnext \
+  --matrix-regimes open,aliascontract,skullor \
+  --matrix-seeds-open 1 --matrix-seeds-aliascontract 2 --matrix-seeds-skullor 2 \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --matrix-use-profile \
+  --matrix-mcsvd-energy-frac 0.90 --matrix-mcsvd-baseline-support full \
+  --methods stap_full,stap_covtrim_q05 \
+  --generated-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \
+  --autogen-missing --stap-device cuda \
+  --out-csv reports/fair_matrix_covtrim.csv \
+  --out-json reports/fair_matrix_covtrim.json
+PYTHONPATH=. python scripts/brain_cov_train_ablation_table.py \
+  --runs-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \
+  --alphas 1e-4,3e-4,1e-3 \
+  --out-csv reports/brain_cov_train_ablation.csv \
+  --out-json reports/brain_cov_train_ablation.json \
+  --out-tex reports/brain_cov_train_ablation_table.tex
+\end{verbatim}
+}
+
+  \item \textbf{Brain-OpenSkull fixed-profile parameter sensitivity sweep (diag-load, tile size, Lt)}
+    Paper refs:
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item Appendix: fixed-profile parameter sensitivity (Brain-OpenSkull)
+      \item Results: covariance-training contamination ablation (Brain-*)
+    \end{itemize}
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{runs/pilot/}\allowbreak\path{brain_openskull_profile_sensitivity_}\allowbreak\path{r1/ (generated bundles)}
+      \item \path{reports/}\allowbreak\path{brain_openskull_profile_sensitivity.csv}
+      \item \path{reports/}\allowbreak\path{brain_openskull_profile_sensitivity.json}
+      \item \path{figs/paper/}\allowbreak\path{brain_openskull_profile_sensitivity.pdf}
+    \end{itemize}
+    \endgroup
+    Notes: Runs 1D sweeps (vary one parameter at a time) around the frozen Brain-OpenSkull operating profile, reporting within-window strict-tail TPR medians/IQR over five disjoint windows. Sweep ranges are configurable via --diag-loads/--tile-sizes/--lts.
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. conda run -n stap-fus python scripts/brain_openskull_profile_sensitivity.py \
+  --autogen-missing --stap-device cuda
+\end{verbatim}
+}
+
+  \item \textbf{Brain-* strict-tail collapse visual (representative window; baseline vs STAP)}
+    (paper refs: Appendix: baseline sanity checks at relaxed operating points (Brain-*)).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{figs/paper/}\allowbreak\path{brain_tail_collapse_visual.pdf}
+    \end{itemize}
+    \endgroup
+    Notes: Uses one representative Brain-OpenSkull window to visualize background-tail dominance (baseline PD) and tail reshaping (STAP).
+{\footnotesize
+\begin{verbatim}
+ROOT="runs/pilot/fair_filter_matrix_pd_r3_localbaselines/open_seed1_mcsvd_full"
+BUNDLE_DIR="$ROOT/pw_7.5MHz_5ang_5ens_64T_seed1_win0_off0"
+PYTHONPATH=. python scripts/fig_brain_tail_collapse_visual.py \
+  --bundle-dir "$BUNDLE_DIR" \
+  --alphas 0.1,0.01,1e-3 \
+  --out figs/paper/brain_tail_collapse_visual.pdf
 \end{verbatim}
 }
 
@@ -164,7 +504,7 @@ PYTHONPATH=. python scripts/brain_crosswindow_calibration.py \
 {\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python scripts/ka_contract_v2_ablation.py \
-  --pilot runs/pilot/r4c_kwave_hab_contract_seed2 \
+  --pilot runs/pilot/r4c_kwave_hab_contract_seed2_v2 \
   --profile Brain-AliasContract \
   --out-root runs/ablation/ka_v2_falsifiability \
   --stap-device cpu \
@@ -188,7 +528,7 @@ PYTHONPATH=. python scripts/ka_contract_v2_ablation.py \
 {\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python scripts/ka_contract_v2_ablation.py \
-  --pilot runs/pilot/r4_kwave_seed1 \
+  --pilot runs/pilot/r4c_kwave_seed1 \
   --profile Brain-OpenSkull \
   --out-root runs/ablation/openskull_shallowalias_e50 \
   --stap-device cpu \
@@ -283,7 +623,7 @@ PYTHONPATH=. python scripts/mace_atlas_overlay_fig.py \
 \begin{verbatim}
 # Sample Brain-* replay bundles (write meta.json with ka_contract_v2 telemetry):
 PYTHONPATH=. python scripts/replay_stap_from_run.py \
-  --src runs/pilot/r4_kwave_seed1 \
+  --src runs/pilot/r4c_kwave_seed1 \
   --out runs/telemetry_regime_compare/brain_open_seed1 \
   --profile Brain-OpenSkull \
   --time-window-length 64 \
@@ -416,6 +756,34 @@ PYTHONPATH=. python -m scripts.shin_ratbrain_motion_sensitivity_posthoc \
   --crop-margins 0,4,8,12 \
   --align-maps-list 0,1 \
   --out-csv reports/shin_motion_brainlike_batch_U_crop_sensitivity.csv
+\end{verbatim}
+}
+
+  \item \textbf{Leading structural-fidelity figure (Gammex phantom; matched-FPR decision differences)}
+    (paper refs: Figure 1: \path{leading_structural_fidelity_gammex.pdf}).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{figs/paper/}\allowbreak\path{leading_structural_fidelity_gammex.pdf}
+    \end{itemize}
+    \endgroup
+    Notes: Generates a single-frame qualitative panel using the structurally labeled tube mask; the script writes a temporary one-frame acceptance bundle under runs/\_tmp\_leading\_structural\_fidelity/.
+{\footnotesize
+\begin{verbatim}
+SEQ_DIR="data/twinkling_artifact/Flow in Gammex phantom"
+SEQ_DIR="$SEQ_DIR/Flow in Gammex phantom (along - linear probe)"
+PYTHONPATH=. conda run -n stap-fus python scripts/fig_leading_structural_fidelity.py \
+  --seq-dir "$SEQ_DIR" \
+  --frame-idx 0 --mask-ref-frames 0:10 \
+  --prf-hz 2500 --Lt 16 \
+  --tile-hw 8 8 --tile-stride 6 \
+  --cov-estimator tyler_pca --diag-load 0.07 \
+  --fd-span-mode psd --feasibility-mode legacy \
+  --svd-keep-min 2 --svd-keep-max 17 \
+  --flow-band-hz 150 450 --alias-band-hz 700 1200 \
+  --fpr 1e-2 \
+  --stap-device auto \
+  --out figs/paper/leading_structural_fidelity_gammex.pdf
 \end{verbatim}
 }
 

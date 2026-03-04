@@ -10,7 +10,7 @@ Operating points are reported under a fixed-profile protocol by selecting thresh
 Uncertainty is quantified at the natural unit of variation (windows for Brain-*; frames for cine acquisitions) rather than treating pooled pixels as independent samples.
 Conditional execution is treated as a changed decision rule and is reported only with explicit leakage controls.
 For Twinkling sequences, PRF is treated as an explicit experimental assumption (frozen overrides) and band-discretization sentinels force conservative behavior when discretized bands are invalid.
-When KA is enabled, it is shrink-only with protected-set invariance; labeled ROC reporting uses the pre-KA STAP score.
+When KA is enabled, it is shrink-only and preserves a protected do-not-penalize set (scores unchanged on high-confidence flow locations); labeled ROC reporting uses the pre-KA STAP score.
 \end{minipage}}
 \end{center}
 
@@ -19,6 +19,7 @@ When KA is enabled, it is shrink-only with protected-set invariance; labeled ROC
   \item Full ROC curve shapes for labeled regimes: Figure~\ref{fig:brain_kwave_roc_curves} (Brain-*) and Figure~\ref{fig:twinkling_gammex_structural_roc_curves} (Gammex).
   \item STAP-only ablation and PRF override sensitivity (Gammex): Figure~\ref{fig:twinkling_gammex_ablation_prf_sensitivity}.
   \item Conditional-execution leakage ablation (Brain-OpenSkull): Table~\ref{tab:condstap_leakage_ablation}.
+  \item Fixed-profile sensitivity sweep (Brain-OpenSkull; $\lambda$, tile size, $L_t$): Figure~\ref{fig:brain_openskull_profile_sensitivity}.
   \item Shin proxy-metric comparisons, runtime, and measured rigid-motion telemetry: Figure~\ref{fig:shin_baseline_matrix_proxy_metrics} and Figure~\ref{fig:shin_motion_telemetry}.
 \end{itemize}
 
@@ -47,32 +48,90 @@ The main text reports strict low-FPR operating points. Here we provide represent
 
 \subsection{Cross-window threshold calibration audit (Brain-*)}
 \label{app:brain-crosswindow-calib}
-The main Brain-* tables calibrate the operating threshold $\tau_\alpha$ on the negative set of the \emph{same} 64-frame window being evaluated. To quantify how sensitive these strict low-FPR operating points are to window-to-window distribution shift (and to avoid over-interpreting quantized tail points), we perform a simple cross-window audit: for each regime and FPR target $\alpha$, we calibrate $\tau_\alpha$ on one window's negatives and apply it to the other windows. Table~\ref{tab:brain_crosswindow_calibration} reports within-window TPR (as in the main text) alongside cross-window TPR and the realized cross-window FPR.
+\ifSTAPSUPPLEMENTONLY
+The main Brain-* results calibrate the operating threshold $\tau_\alpha$ on the negative set of the \emph{same} 64-frame window being evaluated. To quantify how sensitive these strict low-FPR operating points are to window-to-window distribution shift (and to avoid over-interpreting quantized tail points), we perform a simple cross-window audit: for each regime and FPR target $\alpha$, we calibrate $\tau_\alpha$ on one window's negatives and apply it to the other windows. Table~\ref{tab:brain_crosswindow_calibration} reports within-window TPR (as in the main reporting protocol) alongside cross-window TPR and the realized cross-window FPR.
+\noindent \textbf{Checksum.} The within-window column in Table~\ref{tab:brain_crosswindow_calibration} matches the STAP operating-point values reported in the main paper build under the same score/mask protocol.
 
 \begin{table}[t]
 \centering
 \small
 \begingroup
 \setlength{\tabcolsep}{4pt}
-\begin{tabular}{P{3.0cm} c P{4.3cm} P{4.3cm} P{4.4cm}}
-\hline
-Regime & $\alpha$ & within-window TPR med (IQR) & cross-window TPR med (IQR) & cross-window realized FPR med (IQR) \\
-\hline
-Brain-OpenSkull & $10^{-4}$ & 0.0223 (0.0031,0.3922) & 0.0254 (0.0018,0.2226) & 1.59e-04 (0,1.25e-03) \\
-Brain-OpenSkull & $3\times 10^{-4}$ & 0.2107 (0.0077,0.4610) & 0.2253 (0.0045,0.3409) & 3.19e-04 (0,1.82e-03) \\
-Brain-OpenSkull & $10^{-3}$ & 0.2834 (0.1496,0.5590) & 0.3026 (0.1158,0.4226) & 1.15e-03 (7.47e-05,3.38e-03) \\
-Brain-AliasContract & $10^{-4}$ & 0.3499 (0.2649,0.3756) & 0.3303 (0.2534,0.3998) & 1.10e-04 (0,5.28e-04) \\
-Brain-AliasContract & $3\times 10^{-4}$ & 0.4033 (0.3283,0.4560) & 0.4016 (0.3188,0.4569) & 2.99e-04 (5.48e-05,9.21e-04) \\
-Brain-AliasContract & $10^{-3}$ & 0.5063 (0.4383,0.5113) & 0.4927 (0.4096,0.5416) & 9.76e-04 (3.54e-04,2.18e-03) \\
-Brain-SkullOR & $10^{-4}$ & 0.3791 (0.2622,0.3987) & 0.3491 (0.2624,0.4213) & 1.20e-04 (0,7.37e-04) \\
-Brain-SkullOR & $3\times 10^{-4}$ & 0.4460 (0.3230,0.4648) & 0.4010 (0.3242,0.4741) & 3.19e-04 (2.99e-05,1.39e-03) \\
-Brain-SkullOR & $10^{-3}$ & 0.5102 (0.4364,0.5456) & 0.5136 (0.4131,0.5377) & 9.86e-04 (1.74e-04,2.72e-03) \\
-\hline
-\end{tabular}
+\IfFileExists{reports/brain_crosswindow_calibration_table.tex}{%
+  \input{reports/brain_crosswindow_calibration_table.tex}%
+}{%
+  \begin{center}
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/brain_crosswindow_calibration_table.tex}.\\
+    Reproduce it with \path{PYTHONPATH=. python scripts/brain_crosswindow_calibration.py --runs-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines}.
+  \end{minipage}}
+  \end{center}
+}
 \endgroup
 \caption{Brain-* cross-window threshold calibration audit for the pre-KA STAP score. ``Within-window'' matches the main reporting protocol (calibrate $\tau_\alpha$ on a window's negatives and evaluate on that same window). ``Cross-window'' calibrates $\tau_\alpha$ on one window and evaluates on a disjoint window ($n=20$ ordered window pairs). Reported values are median (IQR) over windows/pairs. Full outputs are written to \path{reports/brain_crosswindow_calibration.csv} / \path{reports/brain_crosswindow_calibration_summary.json}.}
 \label{tab:brain_crosswindow_calibration}
 \end{table}
+\else
+\noindent In the paper build, the cross-window threshold-transfer audit is promoted to the main Results section (Table~\ref{tab:brain_crosswindow_calibration}) to emphasize deployable calibration (train on one window, evaluate on another) and to quantify realized FPR drift. Full per-pair outputs are written to \path{reports/brain_crosswindow_calibration.csv} / \path{reports/brain_crosswindow_calibration_summary.json}.
+\fi
+
+\subsection{Baseline sanity checks at relaxed operating points (Brain-*)}
+\label{app:brain-baseline-sanity-relaxed}
+\ifSTAPSUPPLEMENTONLY
+Several baseline rows in the main Brain-* strict low-FPR table take the value $\mathrm{TPR}(\alpha)\approx 0$ at $\alpha\le 10^{-3}$. This can occur even when a baseline is not degenerate: if the background right tail is extreme, the background-calibrated threshold $\tau_\alpha$ can lie above essentially all $H_1$ pixels at strict-tail $\alpha$.
+To provide a reviewer-facing sanity anchor, Table~\ref{tab:brain_baseline_sanity_relaxed} contrasts one strict-tail operating point ($\alpha=10^{-3}$) with two relaxed operating points ($\alpha\in\{10^{-2},10^{-1}\}$) under the same window protocol and evaluation discipline; $\alpha=10^{-2}$ is a moderate reference point and $\alpha=10^{-1}$ is an intentionally relaxed non-degeneracy check.
+
+\IfFileExists{reports/brain_baseline_sanity_relaxed_table.tex}{%
+  \input{reports/brain_baseline_sanity_relaxed_table.tex}%
+}{%
+  \begin{center}
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/brain_baseline_sanity_relaxed_table.tex}.\\
+    Reproduce it with \path{PYTHONPATH=. python scripts/brain_baseline_sanity_table.py}.
+  \end{minipage}}
+  \end{center}
+}
+
+\begin{figure}[t]
+\centering
+\IfFileExists{figs/paper/brain_tail_collapse_visual.pdf}{%
+  \includegraphics[width=\linewidth]{figs/paper/brain_tail_collapse_visual.pdf}%
+}{%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    \centering
+    \vspace{0.5em}
+    Missing figure \path{figs/paper/brain_tail_collapse_visual.pdf}.\\
+    Reproduce it with \path{PYTHONPATH=. python scripts/fig_brain_tail_collapse_visual.py}.
+    \vspace{0.5em}
+  \end{minipage}}%
+}
+\caption{Representative Brain-OpenSkull window illustrating strict-tail collapse of PD-after-filter baselines. Curves show empirical tail probabilities $\mathbb{P}\{S\ge\tau\}$ for background ($H_0$) and flow ($H_1$) score distributions versus score threshold $\tau$, for (left) the baseline power Doppler score on the MC--SVD residual and (right) the pre-KA matched-subspace STAP score computed on the same residual. Vertical lines mark background-calibrated thresholds $\tau_\alpha$ at $\alpha\in\{10^{-1},10^{-2},10^{-3}\}$ and markers show the corresponding $\mathrm{TPR}(\alpha)=\mathbb{P}\{S\ge\tau_\alpha\mid H_1\}$. For the baseline PD score, $\tau_{10^{-3}}$ lies above $\max(H_1)$, yielding $\mathrm{TPR}\approx 0$ by construction; the STAP score retains nonzero sensitivity at the same strict-tail operating point.}
+\label{fig:brain_tail_collapse_visual}
+\end{figure}
+\else
+\noindent In the full build (main text + appendices), this sanity anchor and representative tail visualization are shown in the main Results section (Table~\ref{tab:brain_baseline_sanity_relaxed}; Figure~\ref{fig:brain_tail_collapse_visual}).
+\fi
+
+\subsection{Fixed-profile parameter sensitivity (Brain-OpenSkull)}
+\label{app:brain-openskull-profile-sensitivity}
+Because the detector relies on covariance whitening, a natural concern is sensitivity to conditioning and geometry choices. We therefore run a simple 1D sweep on Brain-OpenSkull (the canonical k-Wave pilot) by varying one parameter at a time around the frozen profile: covariance diagonal loading $\lambda$ (conditioning strength), tile size (with stride chosen to preserve overlap), and slow-time aperture $L_t$. Each point reports within-window TPR medians (IQR) over five disjoint 64-frame windows at fixed strict-tail FPR targets $\alpha\in\{10^{-4},3\times 10^{-4},10^{-3}\}$ under the same baseline and mask protocol as the main Brain-* tables. In this pilot, performance is effectively insensitive to $\lambda$ over the tested range, exhibits modest dependence on tile geometry, and is strongly sensitive to under-sized $L_t$ (e.g.\ $L_t=6$ collapses strict-tail TPR), consistent with the need for adequate slow-time support to estimate and invert $R_i$.
+
+\begin{figure}[t]
+\centering
+\IfFileExists{figs/paper/brain_openskull_profile_sensitivity.pdf}{%
+  \includegraphics[width=\linewidth]{figs/paper/brain_openskull_profile_sensitivity.pdf}%
+}{%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    \centering
+    \vspace{0.5em}
+    Missing figure \path{figs/paper/brain_openskull_profile_sensitivity.pdf}.\\
+    Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/brain_openskull_profile_sensitivity.py --autogen-missing --stap-device cuda}.
+    \vspace{0.5em}
+  \end{minipage}}%
+}
+\caption{Brain-OpenSkull fixed-profile sensitivity sweep. Left: covariance diagonal loading $\lambda$ (conditioning). Middle: tile size (stride chosen to approximately preserve overlap fraction relative to the default $8\times 8$/stride-3 profile). Right: slow-time aperture $L_t$. Points show within-window TPR medians with IQR error bars over five disjoint 64-frame windows at strict-tail operating points $\alpha\in\{10^{-4},3\times 10^{-4},10^{-3}\}$.}
+\label{fig:brain_openskull_profile_sensitivity}
+\end{figure}
 
 \subsection{STAP-only ablation and PRF override sensitivity (Gammex)}
 To isolate the role of the STAP core from baseline prefiltering, we run a small STAP-only ablation on the Gammex flow phantom by applying STAP directly to raw (registered) CFM IQ without the SVD band-pass baseline. We also provide a small PRF override sensitivity check on the along view to assess brittleness to the frozen PRF assumption required by Twinkling metadata limitations.
@@ -106,7 +165,7 @@ Random mask (matched coverage) & $-3.05\,[-5.65,-0.92]$ & $-2.97\,[-5.68,-0.71]$
 \hline
 \end{tabular}
 \endgroup
-\caption{Conditional-execution leakage ablation on Brain-OpenSkull pilots (five independent realizations; 64-frame window; matched-subspace STAP score). Entries report mean $\Delta\mathrm{TPR}$ (conditional minus full STAP) at fixed FPR targets, with 95\% bootstrap CIs over realizations ($n=5$). Evaluation masks are identical across conditions; only the conditional-execution gating mask varies.}
+\caption{Conditional-execution leakage ablation on Brain-OpenSkull pilots (five independent realizations; 64-frame window; matched-subspace STAP score). Entries report mean $\Delta\mathrm{TPR}$ (conditional minus full STAP) at fixed FPR targets, with 95\% bootstrap CIs over realizations ($n=5$). This table provides uncertainty details for the conditional-execution tradeoff summarized in the main Results. Evaluation masks are identical across conditions; only the conditional-execution gating mask varies.}
 \label{tab:condstap_leakage_ablation}
 \end{table}
 \noindent This behavior is expected because gating changes the decision rule: leakage-controlled gating produces a small TPR decrease in exchange for a large runtime reduction, making it a clear engineering tradeoff rather than a free performance gain.
@@ -428,7 +487,7 @@ Figure~\ref{fig:shin_dashboard} shows the corresponding KA prior summary panel f
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{figs/paper/shin_IQData001_shinU_pfpeakflowguard_bundle.png}
-\caption{Representative Shin RatBrain Fig3 example (clip \texttt{IQData001}; window $0{:}128$) illustrating the end-to-end real-IQ pipeline: baseline PD-derived map, STAP PD-mode score map (pre-KA), KA gate/scale overlay, and final PD-mode score map (post-KA), together with band-energy maps and the flow-proxy mask that defines protected tiles. The KA layer is shrink-only and preserves protected-set invariance exactly. Reproducibility details are provided in \SuppOrApp{app:repro}.}
+\caption{Representative Shin RatBrain Fig3 example (clip \texttt{IQData001}; window $0{:}128$) illustrating the end-to-end real-IQ pipeline: baseline PD-derived map, STAP PD-mode score map (pre-KA), KA gate/scale overlay, and final PD-mode score map (post-KA), together with band-energy maps and the flow-proxy mask that defines protected (do-not-penalize) tiles. The KA layer is shrink-only and leaves protected tiles unchanged. Reproducibility details are provided in \SuppOrApp{app:repro}.}
 \label{fig:shin_bundle}
 \end{figure}
 
@@ -436,4 +495,4 @@ Figure~\ref{fig:shin_dashboard} shows the corresponding KA prior summary panel f
 The Shin RatBrain Fig3 analysis is intended as an end-to-end \emph{real-IQ viability and generalization} anchor, not a clinical detection benchmark.
 Because there are no task labels and no ground-truth vessel segmentation, quantitative endpoints reported here are label-free proxies: baseline comparisons use deterministic flow/background proxy masks and report both threshold-free proxy separation (AUC) and tail-calibrated flow-proxy hit rates, while motion-sweep endpoints measure within-method consistency relative to each method's own no-motion reference and persistence of a fixed flow proxy under a matched background-proxy tail operating point.
 In addition, the ``brain-like'' motion stress test is an image-domain warp applied to beamformed IQ (rigid + depth-decaying elastic components) rather than a scatterer-level forward model; it is designed to mimic the specific high-rank, spatially varying residual-motion mismatch represented in Brain-SkullOR, not to reproduce full ultrasound physics.
-Accordingly, we interpret Shin results as evidence of (i) deterministic real-IQ ingestion and band-energy summaries, (ii) KA prior auditability and invariants (shrink-only; exact protected-set invariance), and (iii) self-consistency under controlled residual-motion corruption, while leaving ROC uplift claims to labeled regimes (Brain-* simulations) and to future raw-IQ datasets with task/landmark structure.
+Accordingly, we interpret Shin results as evidence of (i) deterministic real-IQ ingestion and band-energy summaries, (ii) KA prior auditability and invariants (shrink-only; protected tiles unchanged), and (iii) self-consistency under controlled residual-motion corruption, while leaving ROC uplift claims to labeled regimes (Brain-* simulations) and to future raw-IQ datasets with task/landmark structure.

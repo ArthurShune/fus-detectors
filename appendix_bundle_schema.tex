@@ -52,15 +52,15 @@ Bundle file(s) & Meaning & Primary use / direction \\
 Exported artifact & Property / monotonicity & Allowed claim scope (this manuscript) \\
 \hline
 \path{score_stap_preka.npy} & Primary STAP detector score (matched-subspace; right tail). Not a shrink-only reweighting of baseline PD. & Quantitative ROC on labeled simulations and structurally labeled phantoms; label-free motion robustness endpoints on unlabeled IQ. \\
-\path{score_base.npy} & Baseline power Doppler score (right tail). & Quantitative ROC as baseline comparator (same labels/masks as STAP). \\
-\path{score_base_pdlog.npy} & Monotone transform of \path{score_base} (right tail). & Baseline-score fairness check; does not change within-method rankings. \\
-\path{score_base_kasai.npy} & Lag-1 autocorrelation magnitude score (Kasai power; right tail). & Short-ensemble baseline-score fairness check (Twinkling). \\
+\path{score_base.npy} & Baseline power Doppler flow-evidence score (higher = more flow-like). & Quantitative ROC as baseline comparator (same labels/masks as STAP). \\
+\path{score_base_pdlog.npy} & Monotone transform of \path{score_base} (ordering preserved). & Baseline-score fairness check; does not change within-method rankings. \\
+\path{score_base_kasai.npy} & Lag-1 autocorrelation magnitude score (Kasai power; higher = more flow-like). & Short-ensemble baseline-score fairness check (Twinkling). \\
 \path{score_stap.npy} & Post-KA score map. By construction, shrink-only relative to \path{score_stap_preka} on gated regions ($S_{\mathrm{post}}\le S_{\mathrm{pre}}$). & KA auditing and tail-hygiene reporting; not used as the primary detector score unless stated explicitly. \\
 \path{pd_base.npy} & Conventional PD brightness proxy $\mathrm{PD}^{\uparrow}$ (nonnegative). & Deterministic preprocessing (proxy masks) and legacy visualization; quantitative reporting uses detector \emph{scores}. \\
 \path{pd_stap.npy} & PD-mode ``STAP'' map exported for legacy compatibility/visualization. In PD-mode it is a non-increasing reweighting of \path{pd_base.npy}. & Visualization / compatibility output; can suppress background tails but cannot recover flow removed by baseline clutter suppression. \\
 \hline
 \end{tabular}
 \endgroup
-\caption{Score taxonomy and claim scope. Quantitative detection results are reported using right-tail detector scores (baseline power Doppler vs matched-subspace STAP). PD-mode maps are treated as legacy/visualization artifacts with explicit monotonicity constraints.}
+\caption{Score taxonomy and claim scope. Quantitative detection results are reported using flow-evidence detection scores (baseline power Doppler vs matched-subspace STAP; higher = more likely flow). PD-mode maps are treated as legacy/visualization artifacts with explicit monotonicity constraints.}
 \label{tab:score_taxonomy_bundle_schema}
 \end{table}

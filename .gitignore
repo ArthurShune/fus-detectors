@@ -25,6 +25,7 @@ tmp/
 *.fdb_latexmk
 *.fls
 *.log
+*.out
 *.synctex.gz
 
 # Large run outputs (tracked via LFS or archived)
