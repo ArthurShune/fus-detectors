@@ -1,10 +1,10 @@
 # Repo Classification (Phase 0)
 
-Generated: 2026-03-04 13:33:31Z (UTC)
+Generated: 2026-03-04 13:43:09Z (UTC)
 
 ## Summary
 
-- core: 239 files
+- core: 244 files
 - experiments: 142 files
 - legacy_candidate: 0 files
 
@@ -12,7 +12,7 @@ Generated: 2026-03-04 13:33:31Z (UTC)
 
 - tests: 117
 - pipeline: 56
-- scripts: 18
+- scripts: 23
 - eval: 13
 - configs: 8
 - docs: 8
