@@ -35,7 +35,8 @@ jobs:
             scripts/phase_close_report.py \
             scripts/refactor/verify_gate.py \
             scripts/refactor/inventory.py \
-            scripts/refactor/phase_close.py
+            scripts/refactor/phase_close.py \
+            scripts/refactor/cli_compat.py
 
       - name: Run quick refactor gate (CI-safe)
         env:
