@@ -23,6 +23,7 @@ configs/sims_r1.yaml,core,core source/test/config directory
 configs/sims_r2.yaml,core,core source/test/config directory
 docs/refactor/PHASE0_BASELINE_FREEZE.md,core,refactor governance doc
 docs/refactor/PHASE1_VERIFICATION_CONTRACT.md,core,refactor governance doc
+docs/refactor/PHASE2_KICKOFF_CHECKLIST.md,core,refactor governance doc
 docs/refactor/PHASED_REFACTOR_PLAN.md,core,refactor governance doc
 docs/refactor/PHASE_CLOSE_TEMPLATE.md,core,refactor governance doc
 docs/refactor/REPO_CLASSIFICATION_PHASE0.csv,core,refactor governance doc
@@ -52,8 +53,6 @@ figs/latency/latency_bar.pdf,experiments,figure artifact/source
 figs/latency/latency_bar.png,experiments,figure artifact/source
 figs/latency/roc_points.pdf,experiments,figure artifact/source
 figs/latency/roc_points.png,experiments,figure artifact/source
-foo.txt,legacy_candidate,temporary/ad-hoc file
-foo_conda.txt,legacy_candidate,temporary/ad-hoc file
 notebooks/colab_play.ipynb,experiments,exploratory notebook
 pipeline/__init__.py,core,core source/test/config directory
 pipeline/baseline/__init__.py,core,core source/test/config directory
@@ -380,6 +379,4 @@ tests/test_tile_temporal.py,core,core source/test/config directory
 tests/test_tiles.py,core,core source/test/config directory
 tests/test_tyler_covariance_batched.py,core,core source/test/config directory
 tests/test_weibull_pot.py,core,core source/test/config directory
-tmp_ratio_current.py,legacy_candidate,temporary/ad-hoc file
-tmp_ratio_mix.py,legacy_candidate,temporary/ad-hoc file
 zenodo_10711806.json,experiments,paper/supporting artifact
