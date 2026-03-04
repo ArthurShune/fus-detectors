@@ -529,11 +529,14 @@ def _run_replay_generation(
     out_dir: Path,
     profile: str | None,
     baseline: str,
+    stap_disable: bool,
     inject_args: Sequence[str],
     conditional: bool,
     window_length: int,
     offsets: Sequence[int],
     stap_device: str,
+    stap_detector_variant: str = "msd_ratio",
+    stap_cov_trim_q: float = 0.0,
     synth_amp_jitter: float | None,
     synth_phase_jitter: float | None,
     synth_noise_level: float | None,
@@ -564,6 +567,14 @@ def _run_replay_generation(
         baseline,
         "--stap-device",
         stap_device,
+        "--stap-detector-variant",
+        str(stap_detector_variant),
+        "--stap-cov-trim-q",
+        str(float(stap_cov_trim_q or 0.0)),
+        # Disable per-window debug tile capture so batched CUDA fast paths remain eligible.
+        # Debug capture is useful for interactive audits but makes matrix mode prohibitively slow.
+        "--stap-debug-samples",
+        "0",
         "--score-mode",
         "pd",
         "--flow-mask-mode",
@@ -618,7 +629,6 @@ def _run_replay_generation(
             "--hosvd-energy-fracs",
             str(hosvd_energy_fracs),
         ]
-        cmd += ["--stap-disable"]
         if reg_enable:
             cmd += [
                 "--reg-enable",
@@ -634,7 +644,30 @@ def _run_replay_generation(
         if rpca_lambda is not None:
             cmd += ["--rpca-lambda", str(float(rpca_lambda))]
         cmd += ["--rpca-max-iters", str(int(rpca_max_iters))]
-        cmd += ["--stap-disable"]
+        if reg_enable:
+            cmd += [
+                "--reg-enable",
+                "--reg-method",
+                "phasecorr",
+                "--reg-subpixel",
+                "4",
+                "--reg-reference",
+                "median",
+            ]
+    elif baseline == "svd_similarity":
+        cmd += ["--svd-rank", "32"]
+        if reg_enable:
+            cmd += [
+                "--reg-enable",
+                "--reg-method",
+                "phasecorr",
+                "--reg-subpixel",
+                "4",
+                "--reg-reference",
+                "median",
+            ]
+    elif baseline == "local_svd":
+        cmd += ["--svd-energy-frac", str(float(mcsvd_energy_frac))]
         if reg_enable:
             cmd += [
                 "--reg-enable",
@@ -648,6 +681,9 @@ def _run_replay_generation(
     else:
         raise ValueError(f"Unsupported baseline for generation: {baseline}")
 
+    if stap_disable:
+        cmd += ["--stap-disable"]
+
     cmd += list(inject_args)
 
     cmd.append("--stap-conditional-enable" if conditional else "--stap-conditional-disable")
@@ -657,6 +693,7 @@ def _run_replay_generation(
     env["PYTHONPATH"] = str(REPO) + (os.pathsep + env["PYTHONPATH"] if "PYTHONPATH" in env else "")
     env.setdefault("STAP_FAST_PATH", "1")
     env.setdefault("STAP_FAST_PD_ONLY", "1")
+    env.setdefault("STAP_TILING_UNFOLD", "1")
     env.setdefault("STAP_MAX_SNAPSHOTS", "64")
     env.setdefault("STAP_SNAPSHOT_STRIDE", "4")
 
@@ -685,13 +722,44 @@ class RunConfig:
     run_key: str
     baseline: str
     conditional: bool
+    stap_disable: bool
+    detector_variant: str = "msd_ratio"
+    stap_cov_trim_q: float = 0.0
 
 
 RUN_CONFIGS: Dict[str, RunConfig] = {
-    "mcsvd_full": RunConfig("mcsvd_full", baseline="mc_svd", conditional=False),
-    "mcsvd_cond": RunConfig("mcsvd_cond", baseline="mc_svd", conditional=True),
-    "rpca_full": RunConfig("rpca_full", baseline="rpca", conditional=False),
-    "hosvd_full": RunConfig("hosvd_full", baseline="hosvd", conditional=False),
+    "mcsvd_full": RunConfig("mcsvd_full", baseline="mc_svd", conditional=False, stap_disable=False),
+    "mcsvd_cond": RunConfig("mcsvd_cond", baseline="mc_svd", conditional=True, stap_disable=False),
+    "rpca_full": RunConfig("rpca_full", baseline="rpca", conditional=False, stap_disable=True),
+    "hosvd_full": RunConfig("hosvd_full", baseline="hosvd", conditional=False, stap_disable=True),
+    "svd_similarity_full": RunConfig("svd_similarity_full", baseline="svd_similarity", conditional=False, stap_disable=True),
+    "local_svd_full": RunConfig("local_svd_full", baseline="local_svd", conditional=False, stap_disable=True),
+    # Detector-swap ablations: compute STAP score on top of alternative baseline residuals.
+    "rpca_stap_full": RunConfig("rpca_stap_full", baseline="rpca", conditional=False, stap_disable=False),
+    "hosvd_stap_full": RunConfig("hosvd_stap_full", baseline="hosvd", conditional=False, stap_disable=False),
+    # Detector ablations (same MC--SVD residual; different score statistic).
+    "mcsvd_det_whitened_power": RunConfig(
+        "mcsvd_det_whitened_power",
+        baseline="mc_svd",
+        conditional=False,
+        stap_disable=False,
+        detector_variant="whitened_power",
+    ),
+    "mcsvd_det_unwhitened_ratio": RunConfig(
+        "mcsvd_det_unwhitened_ratio",
+        baseline="mc_svd",
+        conditional=False,
+        stap_disable=False,
+        detector_variant="unwhitened_ratio",
+    ),
+    "mcsvd_covtrim_q05": RunConfig(
+        "mcsvd_covtrim_q05",
+        baseline="mc_svd",
+        conditional=False,
+        stap_disable=False,
+        detector_variant="msd_ratio",
+        stap_cov_trim_q=0.05,
+    ),
 }
 
 
@@ -701,6 +769,20 @@ MATRIX_METHODS: Dict[str, MatrixMethodSpec] = {
         method="MC-SVD",
         role="baseline",
         run_key="mcsvd_full",
+        score_kind="base",
+    ),
+    "svd_similarity": MatrixMethodSpec(
+        key="svd_similarity",
+        method="Adaptive SVD (similarity cutoff)",
+        role="baseline",
+        run_key="svd_similarity_full",
+        score_kind="base",
+    ),
+    "local_svd": MatrixMethodSpec(
+        key="local_svd",
+        method="Local SVD (block-wise)",
+        role="baseline",
+        run_key="local_svd_full",
         score_kind="base",
     ),
     "rpca": MatrixMethodSpec(
@@ -717,11 +799,60 @@ MATRIX_METHODS: Dict[str, MatrixMethodSpec] = {
         run_key="hosvd_full",
         score_kind="base",
     ),
+    "rpca_pair": MatrixMethodSpec(
+        key="rpca_pair",
+        method="RPCA+PD (paired)",
+        role="baseline",
+        run_key="rpca_stap_full",
+        score_kind="base",
+    ),
+    "rpca_stap": MatrixMethodSpec(
+        key="rpca_stap",
+        method="RPCA+STAP (paired; pre-KA)",
+        role="stap",
+        run_key="rpca_stap_full",
+        score_kind="stap",
+    ),
+    "hosvd_pair": MatrixMethodSpec(
+        key="hosvd_pair",
+        method="HOSVD+PD (paired)",
+        role="baseline",
+        run_key="hosvd_stap_full",
+        score_kind="base",
+    ),
+    "hosvd_stap": MatrixMethodSpec(
+        key="hosvd_stap",
+        method="HOSVD+STAP (paired; pre-KA)",
+        role="stap",
+        run_key="hosvd_stap_full",
+        score_kind="stap",
+    ),
     "stap_full": MatrixMethodSpec(
         key="stap_full",
         method="STAP (MC-SVD+STAP, full)",
         role="stap",
         run_key="mcsvd_full",
+        score_kind="stap",
+    ),
+    "stap_covtrim_q05": MatrixMethodSpec(
+        key="stap_covtrim_q05",
+        method="STAP (MC-SVD+STAP, cov-trim q=0.05)",
+        role="stap",
+        run_key="mcsvd_covtrim_q05",
+        score_kind="stap",
+    ),
+    "stap_det_whitened_power": MatrixMethodSpec(
+        key="stap_det_whitened_power",
+        method="Detector ablation: whitened power (no band)",
+        role="stap",
+        run_key="mcsvd_det_whitened_power",
+        score_kind="stap",
+    ),
+    "stap_det_unwhitened_ratio": MatrixMethodSpec(
+        key="stap_det_unwhitened_ratio",
+        method="Detector ablation: unwhitened ratio (no whitening)",
+        role="stap",
+        run_key="mcsvd_det_unwhitened_ratio",
         score_kind="stap",
     ),
     "stap_cond": MatrixMethodSpec(
@@ -1032,11 +1163,14 @@ def _run_matrix_mode(args: argparse.Namespace) -> List[Dict[str, Any]]:
                         out_dir=out_dir,
                         profile=profile_by_regime.get(regime) if args.matrix_use_profile else None,
                         baseline=cfg.baseline,
+                        stap_disable=bool(getattr(cfg, "stap_disable", False)),
                         inject_args=inject_args,
                         conditional=cfg.conditional,
                         window_length=window_length,
-                        offsets=offsets,
+                        offsets=missing,
                         stap_device=args.stap_device,
+                        stap_detector_variant=str(getattr(cfg, "detector_variant", "msd_ratio")),
+                        stap_cov_trim_q=float(getattr(cfg, "stap_cov_trim_q", 0.0) or 0.0),
                         synth_amp_jitter=args.matrix_synth_amp_jitter,
                         synth_phase_jitter=args.matrix_synth_phase_jitter,
                         synth_noise_level=args.matrix_synth_noise_level,
@@ -1296,7 +1430,11 @@ def parse_args() -> argparse.Namespace:
         "--methods",
         type=str,
         default="mcsvd,rpca,hosvd,stap_full",
-        help="Matrix mode methods: subset of mcsvd,rpca,hosvd,stap_full,stap_cond.",
+        help=(
+            "Matrix mode methods: subset of mcsvd,svd_similarity,local_svd,rpca,hosvd,"
+            "rpca_pair,rpca_stap,hosvd_pair,hosvd_stap,stap_full,"
+            "stap_covtrim_q05,stap_det_whitened_power,stap_det_unwhitened_ratio,stap_cond."
+        ),
     )
     ap.add_argument(
         "--matrix-reg-enable",

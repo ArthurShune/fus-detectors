@@ -219,20 +219,97 @@ def shrinkage_alpha_for_kappa_batch(
         ev_max = evals[:, -1].to(dtype=torch.float32)
         return ev_min, ev_max
 
+    def _eig_extrema_power(
+        A_B_N_N: "torch.Tensor",
+        *,
+        iters: int,
+        eps: float,
+        jitter_rel: float,
+        jitter_abs: float,
+    ) -> Tuple["torch.Tensor", "torch.Tensor"]:
+        """
+        Approximate (ev_min, ev_max) for a batch of Hermitian matrices via
+        power iteration (max) and inverse power iteration (min).
+
+        This path is CUDA-graph friendly: it avoids eigen-decompositions and
+        uses only batched matmul + triangular solves.
+
+        Notes
+        -----
+        - Inverse iteration requires a PD matrix. We add a tiny diagonal jitter
+          scaled by mu=trace/Lt to keep the factorization defined in practice.
+        - This is an *approximation* intended for latency/graph-capture paths.
+        """
+        B, N = int(A_B_N_N.shape[0]), int(A_B_N_N.shape[1])
+        if N <= 0:
+            zeros = torch.zeros((B,), device=A_B_N_N.device, dtype=torch.float32)
+            return zeros, zeros
+
+        # Deterministic initial vector (no RNG / seed dependence).
+        v = torch.ones((B, N, 1), device=A_B_N_N.device, dtype=A_B_N_N.dtype)
+        denom = torch.sum(v.conj() * v, dim=1, keepdim=True).real.clamp_min(eps)
+        v = v / torch.sqrt(denom)
+
+        # Max eigenvalue via power iteration.
+        for _ in range(max(1, int(iters))):
+            w = torch.bmm(A_B_N_N, v)
+            denom = torch.sum(w.conj() * w, dim=1, keepdim=True).real.clamp_min(eps)
+            v = w / torch.sqrt(denom)
+        Av = torch.bmm(A_B_N_N, v)
+        ev_max = torch.sum(v.conj() * Av, dim=1).real.squeeze(-1).to(dtype=torch.float32)
+
+        # Min eigenvalue via inverse power iteration.
+        # Add a tiny diagonal jitter to keep the solve stable.
+        diag = torch.real(torch.diagonal(A_B_N_N, dim1=-2, dim2=-1)).to(dtype=torch.float32)
+        mu = diag.mean(dim=1).clamp_min(eps)
+        eye = torch.eye(N, device=A_B_N_N.device, dtype=A_B_N_N.dtype).unsqueeze(0)
+        jitter = (float(jitter_rel) * mu + float(jitter_abs)).to(dtype=torch.float32)
+        A_pd = A_B_N_N + jitter.view(B, 1, 1).to(dtype=A_B_N_N.dtype) * eye
+        L, _ = torch.linalg.cholesky_ex(A_pd)
+
+        vmin = torch.ones((B, N, 1), device=A_B_N_N.device, dtype=A_B_N_N.dtype)
+        denom = torch.sum(vmin.conj() * vmin, dim=1, keepdim=True).real.clamp_min(eps)
+        vmin = vmin / torch.sqrt(denom)
+        Lh = L.conj().transpose(-2, -1)
+        for _ in range(max(1, int(iters))):
+            y = torch.linalg.solve_triangular(L, vmin, upper=False)
+            x = torch.linalg.solve_triangular(Lh, y, upper=True)
+            denom = torch.sum(x.conj() * x, dim=1, keepdim=True).real.clamp_min(eps)
+            vmin = x / torch.sqrt(denom)
+        Avmin = torch.bmm(A_B_N_N, vmin)
+        ev_min = torch.sum(vmin.conj() * Avmin, dim=1).real.squeeze(-1).to(dtype=torch.float32)
+
+        ev_min = torch.clamp(ev_min, min=0.0)
+        ev_max = torch.clamp(ev_max, min=0.0)
+        return ev_min, ev_max
+
     # Eigen-extrema per tile: (B,). In practice, numerical non-Hermitian drift
     # (or near-repeated eigenvalues) can trigger non-convergence in batched
     # eigensolvers. Hermitize and provide a fast Lanczos mode for large Lt on CUDA.
     herm = 0.5 * (R_B_Lt_Lt + R_B_Lt_Lt.conj().transpose(-2, -1))
+    capturing = False
+    if bool(getattr(herm, "is_cuda", False)):
+        try:
+            capturing = bool(torch.cuda.is_current_stream_capturing())
+        except Exception:
+            capturing = False
     mode_env = os.getenv("STAP_SHRINK_EIG_MODE", "").strip().lower()
     if not mode_env or mode_env == "auto":
-        mode = "lanczos" if herm.is_cuda and int(herm.shape[1]) >= 32 else "eigvalsh"
+        # CUDA graphs cannot capture some linalg eigen ops in certain torch/CUDA
+        # builds. When capturing, switch to the graph-safe power-iteration mode.
+        if capturing:
+            mode = "power"
+        else:
+            mode = "lanczos" if herm.is_cuda and int(herm.shape[1]) >= 32 else "eigvalsh"
     elif mode_env in {"eigvalsh", "exact"}:
         mode = "eigvalsh"
     elif mode_env in {"lanczos", "lanczos_minmax"}:
         mode = "lanczos"
+    elif mode_env in {"power", "power_iter", "power_iteration", "graph"}:
+        mode = "power"
     else:
         raise ValueError(
-            f"Unknown STAP_SHRINK_EIG_MODE='{mode_env}'. Expected auto|eigvalsh|lanczos."
+            f"Unknown STAP_SHRINK_EIG_MODE='{mode_env}'. Expected auto|eigvalsh|lanczos|power."
         )
 
     ev_min: torch.Tensor
@@ -248,6 +325,23 @@ def shrinkage_alpha_for_kappa_batch(
         ev_min, ev_max = _eig_extrema_lanczos(herm, iters=iters, eps=eps)
         # Trace/Lt is equal to mean(eigs) for Hermitian matrices; clamp to keep
         # the shrinkage defined even if tiny numerical negatives are present.
+        mu = torch.real(torch.diagonal(herm, dim1=-2, dim2=-1)).mean(dim=1).to(dtype=torch.float32)
+        mu = torch.clamp(mu, min=0.0)
+        e_min = torch.clamp(ev_min, min=0.0)
+        e_max = torch.clamp(ev_max, min=0.0)
+    elif mode == "power":
+        iters_env = os.getenv("STAP_SHRINK_POWER_ITERS", "").strip()
+        try:
+            iters = int(iters_env) if iters_env else 4
+        except Exception:
+            iters = 4
+        iters = max(1, int(iters))
+        eps = float(os.getenv("STAP_SHRINK_POWER_EPS", "").strip() or 1e-12)
+        jitter_rel = float(os.getenv("STAP_SHRINK_POWER_JITTER_REL", "").strip() or 1e-6)
+        jitter_abs = float(os.getenv("STAP_SHRINK_POWER_JITTER_ABS", "").strip() or 1e-12)
+        ev_min, ev_max = _eig_extrema_power(
+            herm, iters=iters, eps=eps, jitter_rel=jitter_rel, jitter_abs=jitter_abs
+        )
         mu = torch.real(torch.diagonal(herm, dim1=-2, dim2=-1)).mean(dim=1).to(dtype=torch.float32)
         mu = torch.clamp(mu, min=0.0)
         e_min = torch.clamp(ev_min, min=0.0)

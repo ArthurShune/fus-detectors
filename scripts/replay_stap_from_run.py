@@ -155,6 +155,18 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--stap-debug-samples", type=int, default=32)
     ap.add_argument("--stap-device", type=str, default="cuda")
     ap.add_argument(
+        "--stap-detector-variant",
+        type=str,
+        default="msd_ratio",
+        choices=["msd_ratio", "whitened_power", "unwhitened_ratio"],
+        help=(
+            "Detector statistic exported as score_stap_preka.npy. "
+            "'msd_ratio' (default) is the whitened matched-subspace ratio; "
+            "'whitened_power' is total whitened slow-time power (no Doppler band partition); "
+            "'unwhitened_ratio' disables covariance whitening (R=I) while keeping the same band partition."
+        ),
+    )
+    ap.add_argument(
         "--cuda-warmup",
         dest="cuda_warmup",
         action="store_true",
@@ -171,9 +183,10 @@ def parse_args() -> argparse.Namespace:
         "--baseline",
         type=str,
         default="svd",
-        choices=["svd", "mc_svd", "rpca", "hosvd"],
+        choices=["svd", "mc_svd", "svd_similarity", "local_svd", "rpca", "hosvd"],
         help=(
-            "Baseline PD computation: plain SVD, motion-compensated SVD, RPCA, or tensor HOSVD."
+            "Baseline PD computation: plain SVD, motion-compensated SVD, adaptive SVD "
+            "(spatial-singular similarity cutoff), block-wise local SVD, RPCA, or tensor HOSVD."
         ),
     )
     ap.add_argument(
@@ -265,6 +278,16 @@ def parse_args() -> argparse.Namespace:
         help="Slow-time offset for a replay window; repeat to export multiple windows.",
     )
     ap.add_argument("--diag-load", type=float, default=1e-2)
+    ap.add_argument(
+        "--stap-cov-trim-q",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional covariance-training trim fraction in [0,1): exclude the top-q "
+            "highest-energy Hankel snapshots from covariance estimation (ablation for "
+            "self-training/contamination sensitivity)."
+        ),
+    )
     ap.add_argument("--cov-estimator", type=str, default="tyler_pca")
     ap.add_argument("--huber-c", type=float, default=5.0)
     ap.add_argument("--fd-span-mode", type=str, default="psd")
@@ -1073,13 +1096,21 @@ def main() -> None:
         # Clinical STAP profile: fixed, conservative configuration intended to
         # reflect deployable intra-op fUS constraints. This preset is applied
         # before downstream configuration is built.
-        args.tile_h = 8
-        args.tile_w = 8
-        args.tile_stride = 3
-        args.lt = 8
+        # Allow explicit CLI overrides by only applying these defaults when the
+        # user did not provide a different value. We detect this by checking
+        # whether the argument is still at the parser default.
+        if getattr(args, "tile_h", 12) == 12:
+            args.tile_h = 8
+        if getattr(args, "tile_w", 12) == 12:
+            args.tile_w = 8
+        if getattr(args, "tile_stride", 6) == 6:
+            args.tile_stride = 3
+        if getattr(args, "lt", 4) == 4:
+            args.lt = 8
 
         # Covariance / MVDR configuration
-        args.diag_load = 0.07
+        if getattr(args, "diag_load", 1e-2) == 1e-2:
+            args.diag_load = 0.07
         args.cov_estimator = "tyler_pca"
         args.huber_c = 5.0
         # Primary STAP score uses a *fixed* Doppler grid (frozen per profile)
@@ -1739,6 +1770,7 @@ def main() -> None:
             tile_stride=int(args.tile_stride),
             Lt=int(args.lt),
             diag_load=float(args.diag_load),
+            stap_cov_train_trim_q=float(args.stap_cov_trim_q),
             cov_estimator=str(args.cov_estimator).lower(),
             huber_c=float(args.huber_c),
             stap_debug_samples=int(args.stap_debug_samples),
@@ -1756,6 +1788,7 @@ def main() -> None:
             msd_ratio_rho=float(args.msd_ratio_rho),
             motion_half_span_rel=motion_half_span,
             msd_contrast_alpha=args.msd_contrast_alpha,
+            stap_detector_variant=str(getattr(args, "stap_detector_variant", "msd_ratio")),
             tile_debug_limit=args.tile_debug_limit,
             alias_psd_select_enable=bool(args.alias_psd_select),
             alias_psd_select_ratio_thresh=float(args.alias_psd_select_ratio),

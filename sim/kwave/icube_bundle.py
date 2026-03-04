@@ -177,6 +177,55 @@ def write_acceptance_bundle_from_icube(
             device=baseline_device,
             return_filtered_cube=True,
         )
+    elif baseline_type_norm in {"svd_similarity", "svd_sim"}:
+        if reg_method != "phasecorr":
+            raise ValueError("Only phasecorr registration is supported for SVD baselines.")
+        reg_cube, tele_reg = kw._register_stack_phasecorr(
+            Icube,
+            reg_enable=reg_enable,
+            upsample=max(1, int(reg_subpixel)),
+            ref_strategy=reg_reference,
+        )
+        pd_base, baseline_telemetry, baseline_filtered_cube = kw._baseline_pd_svd_similarity(
+            reg_cube,
+            svd_sim_r_max=svd_rank,
+            device=baseline_device,
+            return_filtered_cube=True,
+        )
+        try:
+            baseline_ms = float((baseline_telemetry or {}).get("baseline_ms", 0.0) or 0.0)
+            reg_ms = float((tele_reg or {}).get("reg_ms", 0.0) or 0.0)
+            baseline_telemetry = dict(baseline_telemetry or {})
+            baseline_telemetry["baseline_ms"] = baseline_ms + reg_ms
+        except Exception:
+            baseline_telemetry = dict(baseline_telemetry or {})
+        baseline_telemetry = {**dict(tele_reg or {}), **dict(baseline_telemetry or {})}
+    elif baseline_type_norm in {"local_svd", "svd_local"}:
+        if reg_method != "phasecorr":
+            raise ValueError("Only phasecorr registration is supported for SVD baselines.")
+        reg_cube, tele_reg = kw._register_stack_phasecorr(
+            Icube,
+            reg_enable=reg_enable,
+            upsample=max(1, int(reg_subpixel)),
+            ref_strategy=reg_reference,
+        )
+        pd_base, baseline_telemetry, baseline_filtered_cube = kw._baseline_pd_local_svd(
+            reg_cube,
+            tile_hw=tile_hw,
+            stride=int(tile_stride),
+            svd_energy_frac=float(svd_energy_frac) if svd_energy_frac is not None else 0.90,
+            hann=True,
+            device=baseline_device,
+            return_filtered_cube=True,
+        )
+        try:
+            baseline_ms = float((baseline_telemetry or {}).get("baseline_ms", 0.0) or 0.0)
+            reg_ms = float((tele_reg or {}).get("reg_ms", 0.0) or 0.0)
+            baseline_telemetry = dict(baseline_telemetry or {})
+            baseline_telemetry["baseline_ms"] = baseline_ms + reg_ms
+        except Exception:
+            baseline_telemetry = dict(baseline_telemetry or {})
+        baseline_telemetry = {**dict(tele_reg or {}), **dict(baseline_telemetry or {})}
     elif baseline_type_norm in {"raw", "none", "identity"}:
         # STAP-only / no baseline clutter suppression: keep the (optionally registered) IQ cube
         # and use PD as a simple magnitude-squared average.
@@ -245,7 +294,7 @@ def write_acceptance_bundle_from_icube(
     else:
         raise ValueError(
             f"Unsupported baseline_type={baseline_type_norm!r} for IQ bundle writer. "
-            "Use mc_svd, raw/none, svd_bandpass, rpca, or hosvd."
+            "Use mc_svd, svd_similarity, local_svd, raw/none, svd_bandpass, rpca, or hosvd."
         )
 
     H, W = pd_base.shape
@@ -375,6 +424,14 @@ def write_acceptance_bundle_from_icube(
         stap_device_resolved = kw._resolve_stap_device(stap_device)
         env_fast = os.getenv("STAP_FAST_PATH", "").lower() in {"1", "true", "yes", "on"}
         tile_batch_eff = 192 if stap_device_resolved.startswith("cuda") else (64 if env_fast else 1)
+        env_tile_batch = os.getenv("STAP_TILE_BATCH", "").strip()
+        if env_tile_batch:
+            try:
+                tb = int(env_tile_batch)
+                if tb > 0:
+                    tile_batch_eff = tb
+            except Exception:
+                pass
         pd_stap, stap_scores, stap_info = kw._stap_pd(
             cube_for_stap,
             tile_hw=tile_hw,

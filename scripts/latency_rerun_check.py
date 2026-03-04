@@ -26,6 +26,7 @@ import argparse
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -36,6 +37,134 @@ import numpy as np
 from eval.metrics import partial_auc, roc_curve, tpr_at_fpr_target
 
 
+def _generate_synthetic_pilot(
+    out_root: Path,
+    *,
+    profile: str,
+    window_length: int,
+    window_offset: int,
+    seed: int = 1,
+) -> None:
+    """
+    Create a minimal synthetic "pilot run" directory compatible with replay_stap_from_run.py.
+
+    This is intended only for latency/parity checks (not manuscript results).
+    The layout matches sim/kwave/pilot_motion.py --synthetic.
+    """
+    out_root.mkdir(parents=True, exist_ok=True)
+
+    profile_norm = str(profile or "").strip()
+    # Frozen Brain-* acquisition profile (stap_fus_methodology.tex, App. sim-details).
+    Nx = 240
+    Ny = 240
+    dx = 90e-6
+    dy = 90e-6
+    c0 = 1540.0
+    rho0 = 1000.0
+    pml = 16
+    cfl = 0.3
+    f0_hz = 7.5e6
+    ncycles = 3
+    base_angles_deg = [-12.0, -6.0, 0.0, 6.0, 12.0]
+    prf_hz = 1500.0
+
+    if profile_norm == "Brain-Pial128":
+        ensembles = 4
+        pulses_per_ensemble = 32
+    else:
+        ensembles = 5
+        pulses_per_ensemble = 64
+
+    # Ensure the requested window lies within the synthesized slow-time stack.
+    required_T = int(window_offset) + int(window_length)
+    total_T = int(ensembles) * int(pulses_per_ensemble)
+    if required_T > total_T:
+        # Expand by adding ensembles (keep per-ensemble pulse length fixed).
+        ensembles = int(np.ceil(required_T / float(pulses_per_ensemble)))
+        total_T = int(ensembles) * int(pulses_per_ensemble)
+
+    rng = np.random.default_rng(int(seed))
+    Nt = max(128, int(Ny) * 2)
+    dt = float(cfl) * float(min(dx, dy)) / float(max(c0, 1.0))
+    angles_used_meta: list[list[float]] = []
+
+    for ens in range(int(ensembles)):
+        used_angles: list[float] = []
+        for idx, base_angle in enumerate(base_angles_deg):
+            angle_dir = out_root / f"ens{ens}_angle_{int(round(base_angle))}"
+            angle_dir.mkdir(parents=True, exist_ok=True)
+            rf = rng.standard_normal((Nt, Nx)).astype(np.float32)
+            rf += 0.25 * rng.standard_normal((Nt, Nx)).astype(np.float32)
+            t = (np.arange(Nt, dtype=np.float32) * np.float32(dt)).astype(np.float32, copy=False)
+            mod = 0.04 * float(ens + 1) + 0.01 * float(idx + 1)
+            rf += (0.08 * np.sin(2.0 * np.pi * mod * t)).astype(np.float32, copy=False)[:, None]
+            np.save(angle_dir / "rf.npy", rf.astype(np.float32, copy=False), allow_pickle=False)
+            np.save(
+                angle_dir / "dt.npy",
+                np.array(dt, dtype=np.float32),
+                allow_pickle=False,
+            )
+            used_angles.append(float(base_angle))
+        angles_used_meta.append(used_angles)
+
+    meta = {
+        "geometry": {
+            "Nx": int(Nx),
+            "Ny": int(Ny),
+            "dx": float(dx),
+            "dy": float(dy),
+            "c0": float(c0),
+            "rho0": float(rho0),
+            "pml": int(pml),
+            "cfl": float(cfl),
+        },
+        "base_angles_deg": [float(a) for a in base_angles_deg],
+        "angles_used_deg": angles_used_meta,
+        "f0_hz": float(f0_hz),
+        "ncycles": int(ncycles),
+        "ensembles": int(ensembles),
+        "jitter_um": 0.0,
+        "seed": int(seed),
+        "pulses_per_ensemble": int(pulses_per_ensemble),
+        "prf_hz": float(prf_hz),
+        "synthetic": True,
+        "generated_by": "scripts/latency_rerun_check.py",
+        "generated_for_profile": profile_norm,
+        "generated_total_frames": int(total_T),
+    }
+    (out_root / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
+
+
+def _ensure_src_pilot_exists(args: argparse.Namespace) -> None:
+    src = Path(getattr(args, "src"))
+    meta_path = src / "meta.json"
+    if meta_path.exists():
+        return
+    if src.exists():
+        # Avoid clobbering a partially-populated directory that might be a real pilot.
+        try:
+            has_any = any(src.iterdir())
+        except Exception:
+            has_any = False
+        if has_any:
+            raise FileNotFoundError(
+                f"Missing {meta_path} but {src} is not empty. "
+                "Refusing to auto-generate a synthetic pilot. "
+                "Either point --src to a valid pilot run directory or delete/rename this folder."
+            )
+    print(
+        f"[src] {meta_path} missing; generating a synthetic Brain-* pilot under {src} for replay...",
+        flush=True,
+    )
+    _generate_synthetic_pilot(
+        src,
+        profile=str(getattr(args, "profile", "")),
+        window_length=int(getattr(args, "window_length", 64) or 64),
+        window_offset=int(getattr(args, "window_offset", 0) or 0),
+        seed=1,
+    )
+
+
 def _find_single_bundle(out_dir: Path) -> Path:
     bundles = sorted(out_dir.glob("pw_*"))
     if not bundles:
@@ -44,6 +173,13 @@ def _find_single_bundle(out_dir: Path) -> Path:
         names = ", ".join(b.name for b in bundles[:5])
         raise RuntimeError(f"Expected one pw_* bundle under {out_dir}, found {len(bundles)}: {names}")
     return bundles[0]
+
+
+def _find_bundles(out_dir: Path) -> List[Path]:
+    bundles = sorted(out_dir.glob("pw_*"))
+    if not bundles:
+        raise FileNotFoundError(f"No pw_* bundles produced under {out_dir}")
+    return bundles
 
 
 def _load_telemetry(bundle_dir: Path) -> Dict:
@@ -80,6 +216,52 @@ def _print_latency(label: str, tele: Dict, *, t_data_ms: float | None = None) ->
                 print(f"  rtf: {e2e_ms / t_data_ms}")
     except Exception:
         pass
+
+
+def _print_latency_windows(label: str, teles: List[Dict], *, t_data_ms: float | None = None) -> None:
+    if not teles:
+        raise ValueError(f"No telemetry entries provided for '{label}'.")
+    if len(teles) == 1:
+        _print_latency(label, teles[0], t_data_ms=t_data_ms)
+        return
+
+    cold = teles[0]
+    steady = teles[1:]
+    _print_latency(f"{label} cold(win1)", cold, t_data_ms=t_data_ms)
+
+    keys_ms = [
+        "baseline_ms",
+        "reg_ms",
+        "svd_ms",
+        "stap_total_ms",
+        "stap_extract_ms",
+        "stap_batch_proc_ms",
+        "stap_post_ms",
+    ]
+    keys_bool = [
+        "stap_fast_path_used",
+        "stap_tile_statistic_used",
+        "stap_unfold_tiling_used",
+    ]
+    mean_tele: Dict[str, float | bool] = {}
+    for k in keys_ms:
+        vals: List[float] = []
+        for tele in steady:
+            if k not in tele:
+                continue
+            try:
+                vals.append(float(tele[k]))
+            except Exception:
+                pass
+        if vals:
+            mean_tele[k] = float(sum(vals) / float(len(vals)))
+    for k in keys_bool:
+        mean_tele[k] = bool(all(bool(tele.get(k, False)) for tele in steady))
+
+    _print_latency(f"{label} steady(avg win2..{len(teles)})", mean_tele, t_data_ms=t_data_ms)
+
+    stap_ms = [float(tele.get("stap_total_ms", float("nan"))) for tele in teles]
+    print(f"  per_window_stap_total_ms: {stap_ms}")
 
 
 def _compare_maps(
@@ -189,13 +371,23 @@ def _run_replay(
     stap_device: str,
     stap_debug_samples: int,
     window_length: int,
-    window_offset: int,
+    window_offset: int | List[int],
     baseline: str,
     baseline_support: str,
     extra_replay_args: List[str],
     env_overrides: Dict[str, str],
-) -> Tuple[Path, Dict]:
+) -> Tuple[List[Path], List[Dict]]:
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Avoid accumulating pw_* directories across runs (this script expects only the
+    # bundles produced by the current invocation).
+    for old in sorted(out_dir.glob("pw_*")):
+        try:
+            if old.is_dir():
+                shutil.rmtree(old)
+            else:
+                old.unlink()
+        except Exception:
+            pass
     env = os.environ.copy()
     env.update(env_overrides)
     cmd = [
@@ -219,16 +411,23 @@ def _run_replay(
         str(baseline_support),
         "--time-window-length",
         str(int(window_length)),
-        "--time-window-offset",
-        str(int(window_offset)),
     ]
+    offsets: List[int]
+    if isinstance(window_offset, list):
+        offsets = [int(o) for o in window_offset]
+    else:
+        offsets = [int(window_offset)]
+    if not offsets:
+        raise ValueError("At least one window offset is required.")
+    for off in offsets:
+        cmd.extend(["--time-window-offset", str(int(off))])
     if extra_replay_args:
         cmd.extend(list(extra_replay_args))
     print(f"[run] {' '.join(cmd)}", flush=True)
     subprocess.run(cmd, check=True, env=env)
-    bundle = _find_single_bundle(out_dir)
-    tele = _load_telemetry(bundle)
-    return bundle, tele
+    bundles = _find_bundles(out_dir)
+    teles = [_load_telemetry(b) for b in bundles]
+    return bundles, teles
 
 
 def parse_args() -> argparse.Namespace:
@@ -245,10 +444,35 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--stap-profile", type=str, default="clinical", choices=["lab", "clinical"])
     ap.add_argument("--stap-device", type=str, default="cuda")
     ap.add_argument("--stap-debug-samples", type=int, default=0)
-    ap.add_argument("--baseline", type=str, default="mc_svd", choices=["svd", "mc_svd", "rpca", "hosvd"])
+    ap.add_argument(
+        "--baseline",
+        type=str,
+        default="mc_svd",
+        choices=["svd", "mc_svd", "svd_similarity", "local_svd", "rpca", "hosvd"],
+    )
     ap.add_argument("--baseline-support", type=str, default="window", choices=["window", "full"])
     ap.add_argument("--window-length", type=int, default=64)
     ap.add_argument("--window-offset", type=int, default=0)
+    ap.add_argument(
+        "--window-offsets",
+        type=str,
+        default="",
+        help=(
+            "Optional comma-separated list of window offsets to replay in a single process "
+            "(e.g., '0,64,128'). When provided, overrides --window-offset/--steady-windows. "
+            "Latency reporting treats window1 as cold and averages windows 2..N as steady-state."
+        ),
+    )
+    ap.add_argument(
+        "--steady-windows",
+        type=int,
+        default=1,
+        help=(
+            "If >1, replay the same window (at --window-offset) this many times in a single process "
+            "and report steady-state latency as the mean over windows 2..N. "
+            "This avoids counting CUDA-graph capture and other one-time effects in publishable numbers."
+        ),
+    )
     ap.add_argument(
         "--cuda-warmup-heavy",
         action="store_true",
@@ -332,6 +556,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    _ensure_src_pilot_exists(args)
     roc_fprs = [float(x) for x in str(args.roc_fprs).split(",") if x.strip()]
     roc_thresh = int(args.roc_thresholds)
     extra_replay_args = []
@@ -375,6 +600,20 @@ def main() -> None:
     legacy_out = args.out_root / "legacy"
     opt_out = args.out_root / "optimized"
 
+    # Build the list of offsets to replay. When multiple offsets are used,
+    # replay_stap_from_run.py emits multiple bundles in a single subprocess, so
+    # CUDA-graph capture and other one-time effects are paid only once per variant.
+    window_offsets: List[int]
+    offsets_spec = str(getattr(args, "window_offsets", "") or "").strip()
+    if offsets_spec:
+        window_offsets = [int(float(s)) for s in offsets_spec.replace(";", ",").split(",") if s.strip()]
+        if not window_offsets:
+            raise ValueError("--window-offsets was provided but parsed as empty.")
+    else:
+        steady_n = int(getattr(args, "steady_windows", 1) or 1)
+        steady_n = max(1, steady_n)
+        window_offsets = [int(args.window_offset)] * steady_n
+
     prf_hz = None
     try:
         src_meta = json.loads((args.src / "meta.json").read_text())
@@ -386,7 +625,7 @@ def main() -> None:
         t_data_ms = 1000.0 * float(args.window_length) / float(prf_hz)
         print(f"[data] prf_hz={prf_hz} window={int(args.window_length)} -> t_data_ms={t_data_ms}")
 
-    legacy_bundle, tele_legacy = _run_replay(
+    legacy_bundles, tele_legacy_list = _run_replay(
         src=args.src,
         out_dir=legacy_out,
         profile=args.profile,
@@ -394,13 +633,13 @@ def main() -> None:
         stap_device=args.stap_device,
         stap_debug_samples=args.stap_debug_samples,
         window_length=args.window_length,
-        window_offset=args.window_offset,
+        window_offset=window_offsets,
         baseline=args.baseline,
         baseline_support=args.baseline_support,
         extra_replay_args=extra_replay_args,
         env_overrides=legacy_env,
     )
-    opt_bundle, tele_opt = _run_replay(
+    opt_bundles, tele_opt_list = _run_replay(
         src=args.src,
         out_dir=opt_out,
         profile=args.profile,
@@ -408,25 +647,35 @@ def main() -> None:
         stap_device=args.stap_device,
         stap_debug_samples=args.stap_debug_samples,
         window_length=args.window_length,
-        window_offset=args.window_offset,
+        window_offset=window_offsets,
         baseline=args.baseline,
         baseline_support=args.baseline_support,
         extra_replay_args=extra_replay_args,
         env_overrides=opt_env,
     )
 
-    _print_latency("legacy", tele_legacy, t_data_ms=t_data_ms)
-    _print_latency("optimized", tele_opt, t_data_ms=t_data_ms)
+    _print_latency_windows("legacy", tele_legacy_list, t_data_ms=t_data_ms)
+    _print_latency_windows("optimized", tele_opt_list, t_data_ms=t_data_ms)
 
     compare_files = ["pd_base.npy", "pd_stap.npy", "score_stap.npy", "stap_score_map.npy"]
-    _compare_maps(legacy_bundle, opt_bundle, compare_files, rtol=float(args.rtol), atol=float(args.atol))
+    if len(legacy_bundles) != len(opt_bundles):
+        raise RuntimeError(
+            f"Legacy/optimized bundle count mismatch: legacy={len(legacy_bundles)} opt={len(opt_bundles)}"
+        )
+    for lb, ob in zip(legacy_bundles, opt_bundles):
+        if lb.name != ob.name:
+            raise RuntimeError(
+                f"Legacy/optimized bundle name mismatch: {lb.name} vs {ob.name}. "
+                "Ensure both replays used the same window offsets."
+            )
+        _compare_maps(lb, ob, compare_files, rtol=float(args.rtol), atol=float(args.atol))
     print("\n[parity] OK (maps match within tolerance).")
 
     if args.profile_tile_statistic:
         tile_stat_env = dict(opt_env)
         tile_stat_env["STAP_FAST_TILE_STATISTIC"] = "1"
         tile_stat_out = args.out_root / "tile_statistic"
-        tile_bundle, tele_tile = _run_replay(
+        tile_bundles, tele_tile_list = _run_replay(
             src=args.src,
             out_dir=tile_stat_out,
             profile=args.profile,
@@ -434,19 +683,21 @@ def main() -> None:
             stap_device=args.stap_device,
             stap_debug_samples=args.stap_debug_samples,
             window_length=args.window_length,
-            window_offset=args.window_offset,
+            window_offset=window_offsets,
             baseline=args.baseline,
             baseline_support=args.baseline_support,
             extra_replay_args=extra_replay_args,
             env_overrides=tile_stat_env,
         )
-        _print_latency("tile_statistic", tele_tile, t_data_ms=t_data_ms)
+        _print_latency_windows("tile_statistic", tele_tile_list, t_data_ms=t_data_ms)
         # Note: tile-statistic mode intentionally produces different score maps and is
         # NOT ROC-equivalent to the manuscript detector (ratio-of-means vs nonlinear
         # per-snapshot aggregation). It is kept only as a latency experiment and is
         # known to catastrophically regress strict-FPR ROC on Twinkling/Gammex, so we
         # do not enforce parity here.
         try:
+            opt_bundle = opt_bundles[-1]
+            tile_bundle = tile_bundles[-1]
             _print_roc_compare(
                 label_a="optimized",
                 bundle_a=opt_bundle,
@@ -463,7 +714,7 @@ def main() -> None:
         reg_torch_env = dict(opt_env)
         reg_torch_env["MC_SVD_REG_TORCH"] = "1"
         reg_torch_out = args.out_root / "baseline_reg_torch"
-        reg_bundle, tele_reg = _run_replay(
+        reg_bundles, tele_reg_list = _run_replay(
             src=args.src,
             out_dir=reg_torch_out,
             profile=args.profile,
@@ -471,13 +722,13 @@ def main() -> None:
             stap_device=args.stap_device,
             stap_debug_samples=args.stap_debug_samples,
             window_length=args.window_length,
-            window_offset=args.window_offset,
+            window_offset=window_offsets,
             baseline=args.baseline,
             baseline_support=args.baseline_support,
             extra_replay_args=extra_replay_args,
             env_overrides=reg_torch_env,
         )
-        _print_latency("baseline_reg_torch", tele_reg, t_data_ms=t_data_ms)
+        _print_latency_windows("baseline_reg_torch", tele_reg_list, t_data_ms=t_data_ms)
         # Note: torch registration can produce slightly different registered
         # cubes vs the NumPy path, so we do not enforce parity here.
 
