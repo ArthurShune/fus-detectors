@@ -52,6 +52,7 @@ Deliverables:
 - Profile-driven optimization of top hotspots.
 - Better CUDA/Triton launch efficiency where applicable.
 - Performance toggles and rollback-safe paths.
+- Execute per-chunk performance plan from `docs/refactor/PHASE4_KICKOFF_CHECKLIST.md`.
 
 Exit gate:
 - `scripts/verify_refactor.py --mode phase --execute`
