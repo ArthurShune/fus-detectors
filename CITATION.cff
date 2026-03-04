@@ -8,7 +8,7 @@ authors:
   - family-names: Shune
     given-names: Arthur
     orcid: "https://orcid.org/0009-0004-6433-3856"
-repository-code: "https://github.com/ashune/stap-for-fus"
+repository-code: "https://github.com/ArthurShune/stap-for-fus"
 abstract: >
   Reproducible implementation and evaluation framework for knowledge-aided
   space-time adaptive processing (STAP) in functional ultrasound, including
