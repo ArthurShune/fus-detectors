@@ -1,24 +1,18 @@
 {
   "repo": {
-    "public_url": null,
+    "public_url": "https://github.com/ArthurShune/stap-for-fus.git",
     "release_tag": null
   },
   "git": {
-    "commit": "8848a720058f5932dfbd76adfaa28bf1bfead4e3",
-    "commit_short": "8848a72",
+    "commit": "d13aa12f137417b25552c445542ebf7bde347142",
+    "commit_short": "d13aa12",
     "branch": "main",
     "dirty": true,
-    "dirty_paths_count": 8,
+    "dirty_paths_count": 2,
     "dirty_ignored_paths_count": 0,
     "dirty_paths": [
-      "M .gitignore",
-      "M Dockerfile",
-      "M LATENCY_OPTIMIZATION_SPEC.md",
-      "M appendix_bundle_schema.tex",
-      "M appendix_repro_manifest.tex",
-      "M appendix_supp_results.tex",
-      "M repro_manifest.json",
-      "?? simulation_spec.txt"
+      "M CITATION.cff",
+      "M stap_fus_methodology.tex"
     ],
     "dirty_ignored_paths": []
   },

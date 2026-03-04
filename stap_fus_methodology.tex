@@ -786,6 +786,9 @@ Future work is to (i) evaluate Doppler-side STAP/KA on pre-registered, labeled r
 \section*{Data and code availability}
 All datasets used in this work are either publicly available (as cited) or derived deterministically from those sources. All code used to generate the reported tables and figures is versioned; the exact commit hash (and, when available, a public repository URL and release tag) are recorded in the reproducibility manifest (\SuppOrApp{app:repro}). A minimal CUDA-enabled software environment is specified in \path{environment.yml} (Python 3.11; PyTorch 2.4 + CUDA 12.1); a container recipe is provided as \path{Dockerfile}. As a single-command example, Table~\ref{tab:brain_kwave_vnext_baselines} can be regenerated (pilot generation + baseline matrix + LaTeX table) by running \path{bash scripts/reproduce_table5_brain_kwave.sh} (expected output: \path{reports/brain_kwave_vnext_baselines_table.tex}).
 
+\paragraph{Code repository.}
+The reference implementation and reproduction scripts are available at \path{https://github.com/ArthurShune/stap-for-fus}. The canonical commit hash and (when available) a release tag are recorded in the reproducibility manifest (\SuppOrApp{app:repro}).
+
 \fi % end main-text block (skipped in supplement-only build)
 \begin{thebibliography}{99}
 \raggedright
