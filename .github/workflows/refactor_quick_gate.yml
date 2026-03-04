@@ -35,6 +35,7 @@ jobs:
             scripts/phase_close_report.py \
             scripts/refactor/verify_gate.py \
             scripts/refactor/verify_runtime.py \
+            scripts/refactor/replay_bundle_io.py \
             scripts/refactor/inventory.py \
             scripts/refactor/phase_close.py \
             scripts/refactor/cli_compat.py

@@ -11,7 +11,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import time
 from pathlib import Path
@@ -19,7 +18,8 @@ from typing import List, Sequence, Tuple
 
 import numpy as np
 
-from sim.kwave.common import AngleData, SimGeom, write_acceptance_bundle
+from scripts.refactor.replay_bundle_io import build_window_specs, load_replay_source
+from sim.kwave.common import SimGeom, write_acceptance_bundle
 
 
 def _maybe_resize_roi_mask(mask: np.ndarray, geom: SimGeom) -> np.ndarray:
@@ -60,54 +60,6 @@ def _maybe_resize_roi_mask(mask: np.ndarray, geom: SimGeom) -> np.ndarray:
         f"ROI mask height mismatch: {H_roi} vs geom.Ny={H_geom}; "
         "only ±1 pixel differences are supported."
     )
-
-
-def _load_angle_data(src_root: Path, angles: Sequence[float]) -> List[List[AngleData]]:
-    """Load one or more ensembles of angle data from the source directory."""
-
-    def _load_dir(path: Path, ang: float) -> AngleData:
-        if not path.exists():
-            raise FileNotFoundError(f"Expected {path} with rf.npy/dt.npy")
-        rf = np.load(path / "rf.npy")
-        dt = float(np.load(path / "dt.npy"))
-        return AngleData(angle_deg=float(ang), rf=rf, dt=dt)
-
-    # First try the simple layout angle_{deg}
-    angle_data: List[AngleData] = []
-    simple_ok = True
-    for ang in angles:
-        name = f"angle_{int(round(ang))}"
-        d = src_root / name
-        if not d.exists():
-            simple_ok = False
-            break
-        angle_data.append(_load_dir(d, ang))
-    if simple_ok:
-        return [angle_data]
-
-    # Otherwise look for ensemble-prefixed directories (e.g., ens0_angle_-6)
-    ensemble_dirs = sorted(
-        {
-            p.name.split("_")[0]
-            for p in src_root.iterdir()
-            if p.is_dir() and p.name.startswith("ens")
-        }
-    )
-    if not ensemble_dirs:
-        missing = ", ".join(f"angle_{int(round(a))}" for a in angles)
-        raise FileNotFoundError(
-            f"Expected angle directories {missing} under {src_root}, none found."
-        )
-
-    angle_sets: List[List[AngleData]] = []
-    for ens in ensemble_dirs:
-        ens_set: List[AngleData] = []
-        for ang in angles:
-            name = f"{ens}_angle_{int(round(ang))}"
-            d = src_root / name
-            ens_set.append(_load_dir(d, ang))
-        angle_sets.append(ens_set)
-    return angle_sets
 
 
 def parse_args() -> argparse.Namespace:
@@ -1233,47 +1185,7 @@ def main() -> None:
     out_root = args.out
     out_root.mkdir(parents=True, exist_ok=True)
 
-    meta = json.loads((src_root / "meta.json").read_text())
-    geom_meta = meta.get("geometry") or meta.get("sim_geom")
-    if geom_meta is None:
-        raise KeyError("meta.json missing 'geometry' or 'sim_geom'")
-    geom = SimGeom(
-        Nx=int(geom_meta["Nx"]),
-        Ny=int(geom_meta["Ny"]),
-        dx=float(geom_meta["dx"]),
-        dy=float(geom_meta["dy"]),
-        c0=float(geom_meta["c0"]),
-        rho0=float(geom_meta["rho0"]),
-        pml_size=int(geom_meta.get("pml", 20)),
-        cfl=float(geom_meta.get("cfl", 0.3)),
-        f0=float(meta.get("f0_hz", 7.5e6)),
-        ncycles=int(meta.get("ncycles", 3)),
-    )
-    if "angles_deg" in meta:
-        angles = [float(a) for a in meta["angles_deg"]]
-    elif "angles_deg_sets" in meta:
-        angle_sets_meta = meta["angles_deg_sets"]
-        if not angle_sets_meta:
-            raise ValueError("meta['angles_deg_sets'] is empty")
-        angles = [float(a) for a in angle_sets_meta[0]]
-    elif "base_angles_deg" in meta:
-        # Pilot generators (e.g., pilot_motion) record base angles and
-        # per-ensemble jittered 'angles_used_deg'. Replay directories are named
-        # by base angles (ensX_angle_{deg}), so prefer base_angles_deg here.
-        angles = [float(a) for a in meta["base_angles_deg"]]
-    elif "angles_used_deg" in meta:
-        # Fallback: take the first ensemble's used angles. Directory names remain
-        # based on rounded base angles, but in some pilots they may coincide. If
-        # not, this will raise downstream when directories are missing.
-        used = meta["angles_used_deg"]
-        if not used:
-            raise ValueError("meta['angles_used_deg'] is empty")
-        angles = [float(a) for a in used[0]]
-    else:
-        raise KeyError(
-            "meta.json missing 'angles_deg'/'angles_deg_sets'/'base_angles_deg'/'angles_used_deg'"
-        )
-    angle_sets = _load_angle_data(src_root, angles)
+    meta, geom, angle_sets = load_replay_source(src_root)
 
     # Optional heavy CUDA warmup for steady-state latency measurements.
     #
@@ -1675,34 +1587,20 @@ def main() -> None:
 
     window_length = args.time_window_length
     window_offsets = args.time_window_offset or []
-    window_specs: list[dict[str, int | None | str]] = []
-    if window_length is None:
-        if window_offsets:
-            raise ValueError("--time-window-offset requires --time-window-length")
-        window_specs.append({"offset": None, "length": None, "suffix": None})
-    else:
-        if window_length <= 0:
-            raise ValueError("--time-window-length must be positive")
-        offsets = window_offsets if window_offsets else [0]
-        for idx, offset in enumerate(offsets):
-            if offset < 0:
-                raise ValueError("time-window offsets must be non-negative")
-            if offset + window_length > total_frames_full:
-                raise ValueError(
-                    "time window offset "
-                    f"{offset} + length {window_length} exceeds total frames {total_frames_full}"
-                )
-            suffix = None if len(offsets) == 1 else f"win{idx}_off{offset}"
-            window_specs.append({"offset": offset, "length": window_length, "suffix": suffix})
+    window_specs = build_window_specs(
+        window_length=window_length,
+        window_offsets=window_offsets,
+        total_frames_full=total_frames_full,
+    )
 
     total_windows = len(window_specs)
     overall_start = time.time()
     for idx, spec in enumerate(window_specs):
         window_idx = idx + 1
-        offset = spec["offset"]
-        length = spec["length"]
-        suffix = spec["suffix"]
-        window_label = suffix or (f"offset{offset}_len{length}" if length is not None else "full")
+        offset = spec.offset
+        length = spec.length
+        suffix = spec.suffix
+        window_label = spec.label
         slow_time_offset = None
         slow_time_length = None
         if length is None or offset is None:
