@@ -15,7 +15,7 @@ Key constraints:
 Source: `stap_fus_methodology.tex` Table `tab:fixed_profiles`.
 
 - **Brain-* (k-Wave; PRF 1500; 64-frame windows)**:
-  - Baselines: MC–SVD energy fraction `e=0.90`; RPCA; HOSVD (baselines scored by PD on residual)
+  - Baselines: MC–SVD energy fraction `e=0.90`; adaptive/global SVD similarity-cutoff; block-wise local SVD; RPCA; HOSVD (baselines scored by PD on residual)
   - STAP: tiles `8×8`, stride `3`, `Lt=8`, robust covariance (Tyler-type) + diagonal loading `λ=0.07`
   - Bands (Hz): `Pf=[30,250]`, guard `[250,400]`, `Pa=[400,750]`
 
@@ -32,10 +32,10 @@ Source: `stap_fus_methodology.tex` Table `tab:fixed_profiles`.
 ### Acceptance numbers (paper anchors)
 Source: `stap_fus_methodology.tex`.
 
-- Brain-* STAP TPR@`1e-3` medians (Table `tab:brain_kwave_vnext_baselines`):
-  - Brain-OpenSkull: `0.2834`
-  - Brain-AliasContract: `0.5063`
-  - Brain-SkullOR: `0.5102`
+- Brain-* STAP TPR@`1e-3` medians (Table `tab:brain_kwave_vnext_baselines`; matched-subspace pre-KA on MC--SVD residual):
+  - Brain-OpenSkull: `0.7751`
+  - Brain-AliasContract: `0.1619`
+  - Brain-SkullOR: `0.8055`
 
 - Gammex STAP TPR@`1e-3` (Table `tab:twinkling_gammex_structural_roc`):
   - Along: `0.946 [0.943,0.948]`
@@ -44,19 +44,35 @@ Source: `stap_fus_methodology.tex`.
 ### Repro commands (canonical)
 Source: `appendix_repro_manifest.tex` (included by `stap_fus_methodology.tex`).
 
-Note: `appendix_repro_manifest.tex` currently prints an older commit hash; the **commands** are still the canonical recipe. Refresh via `PYTHONPATH=. python scripts/generate_repro_manifest.py` when needed.
+Refresh via `PYTHONPATH=. conda run -n stap-fus python scripts/generate_repro_manifest.py` when needed.
 
 **Brain-* ROC curve figure (reads precomputed runs):**
 ```bash
 PYTHONPATH=. python scripts/fig_brain_kwave_roc_curves.py \
-  --runs-root runs/pilot/fair_filter_matrix_full_clinical_cpu_v2 \
+  --runs-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \
   --out-pdf figs/paper/brain_kwave_roc_curves.pdf
+```
+
+**Brain-* low-FPR baseline matrix report (writes the baseline table inputs):**
+```bash
+PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py \
+  --mode matrix --eval-score vnext \
+  --matrix-regimes open,aliascontract,skullor \
+  --matrix-seeds-open 1 --matrix-seeds-aliascontract 2 --matrix-seeds-skullor 2 \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --matrix-use-profile \
+  --matrix-mcsvd-energy-frac 0.90 --matrix-mcsvd-baseline-support window \
+  --methods mcsvd,svd_similarity,local_svd,rpca,hosvd,stap_full \
+  --generated-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \
+  --autogen-missing --stap-device cuda \
+  --out-csv reports/fair_matrix_vnext_r3_localbaselines.csv \
+  --out-json reports/fair_matrix_vnext_r3_localbaselines.json
 ```
 
 **Brain-* cross-window threshold-transfer audit:**
 ```bash
 PYTHONPATH=. python scripts/brain_crosswindow_calibration.py \
-  --runs-root runs/pilot/fair_filter_matrix_full_clinical_cpu_v2 \
+  --runs-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \
   --alphas 1e-4,3e-4,1e-3 \
   --out-csv reports/brain_crosswindow_calibration.csv \
   --out-json reports/brain_crosswindow_calibration_summary.json
@@ -105,6 +121,93 @@ Targets (recommended):
 - near real-time: `1 < RTF ≤ 2`
 
 Example (Brain-*): `T=64`, `PRF=1500 Hz` → `t_data≈42.7 ms`.
+
+---
+
+## 1.5) What Makes GPU STAP Fast Here (Shipped Implementation)
+
+This section is the “how”: the concrete engineering strategy that takes STAP from “thousands of tiny per-tile ops” to a small number of high-throughput GPU kernels with low control-plane overhead.
+
+### A) Vectorize tiling (remove Python/NumPy raster loops)
+
+Problem: STAP is applied per tile (e.g., `8×8` tiles over a ~`240×240` plane), so a naive implementation spends most time in:
+- Python loops over tiles
+- `np.stack(...)` per batch
+- CPU→GPU copies per tile/batch
+
+Shipped fix (opt-in):
+- `sim/kwave/common.py:_stap_pd` has an **unfold-tiling** path gated by `STAP_TILING_UNFOLD=1`.
+- Tiles are extracted on-device via `torch.Tensor.unfold(...)` views, processed in chunks, and overlap-added back into full maps without returning to NumPy on the hot path.
+
+Key outputs for sanity:
+- `meta.json` telemetry fields: `stap_unfold_tiling_enabled/eligible/used/error`.
+
+### B) Batch the temporal core (turn “many small tiles” into “one batched solve”)
+
+Shipped core:
+- `pipeline/stap/temporal.py:stap_temporal_core_batched(...)` (matched-subspace / MSD score mode)
+- `pipeline/stap/temporal.py:pd_temporal_core_batched(...)` (PD-oriented “band-fraction only” mode)
+
+Used by:
+- `sim/kwave/common.py:_stap_pd_tile_lcmv_batch(...)` (batched wrapper; forced-on for CUDA when KA/debug are off)
+
+Microbatching knob:
+- `STAP_TILE_BATCH` (or `--tile-batch` in the latency scripts) controls the chunk size `B` processed per batched core call.
+
+### C) Reduce “wide TRSM” overhead with `inv_gemm` strategies (Tyler + band-energy)
+
+Hotspot: batched triangular solves (`solve_triangular`) with a **very wide RHS** (snapshot count `P=N*h*w`) can be slower than GEMM on CUDA.
+
+Shipped strategy:
+- In Tyler whitening, `pipeline/stap/temporal.py:_tyler_covariance_batched(...)` chooses between:
+  - `direct`: TRSM on the full RHS, or
+  - `inv_gemm`: compute `L^{-1}` once (small RHS) then use `bmm` (GEMM) on the wide RHS.
+- In band-energy whitening/projection, `pipeline/stap/temporal.py:_band_energy_whitened_batched(...)` applies the same idea and additionally prefers “small solve + GEMM” forms for Gram/projection work.
+
+Control knobs:
+- `STAP_TYLER_SOLVE_MODE=auto|direct|inv_gemm`
+- `STAP_BAND_SOLVE_MODE=auto|direct|inv_gemm`
+- `STAP_BAND_PROJECT_MODE` / `STAP_BAND_DUAL_QUAD_MODE` (projection algebra choices; defaults aim to preserve baseline behavior)
+
+### D) Cut kernel-launch overhead with optional Triton fusion (Tyler iteration)
+
+Shipped optional kernels:
+- `pipeline/stap/triton_ops.py` provides fused kernels for Tyler weights and covariance updates.
+- These are enabled on CUDA when Triton is available and the toggles allow them.
+
+Key toggles (all optional):
+- `STAP_TYLER_TRITON_WEIGHTS`
+- `STAP_TYLER_TRITON_UPDATE`
+- `STAP_TYLER_TRITON_WEIGHTS_UPDATE`
+- `STAP_TYLER_TRITON_SOLVE_UPDATE`
+
+### E) CUDA graphs for fixed-shape steady-state replay (cut Python+launch overhead further)
+
+Shipped mechanism:
+- `sim/kwave/common.py:_stap_fast_cuda_graph_run(...)` captures the **fixed-shape batched core** into a `torch.cuda.CUDAGraph` and replays it.
+- Cache key includes shapes + key env knobs so captures are safe and repeatable.
+
+Enable with:
+- `STAP_FAST_CUDA_GRAPH=1`
+
+Important capture constraints (by design):
+- During capture, **Tyler early-stop is disabled** because convergence checks require host sync; capture uses a fixed iteration count:
+  - `pipeline/stap/temporal.py:_tyler_covariance_batched(...)` forces `early_stop=False` when capturing.
+  - Latency experiments can additionally set `STAP_TYLER_MAX_ITER` and `STAP_TYLER_EARLY_STOP=0`.
+- Optional Triton paths are **disabled by default during capture** for robustness; opt-in with:
+  - `STAP_TYLER_TRITON_CAPTURE=1`
+
+### F) Report “steady-state” latency (exclude capture/JIT/cold window)
+
+Why: GPU runs include one-time overheads (CUDA init, Triton JIT, CUDA-graph capture). We publish steady-state means that exclude the first window/frame.
+
+Shipped harnesses:
+- Brain-* pilot replay: `scripts/latency_rerun_check.py` prints `cold(win1)` and `steady(avg win2..N)`.
+- Real-data Shin/Gammex replay: `scripts/latency_realdata_rerun_check.py` prints the same and emits a JSON summary.
+
+Publication rule of thumb:
+- Use **steady-state mean windows/frames 2..N** for tables/claims.
+- Treat window/frame 1 as “cold/capture” overhead, report separately only if needed.
 
 ---
 

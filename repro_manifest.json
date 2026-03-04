@@ -1,100 +1,76 @@
 {
+  "repo": {
+    "public_url": null,
+    "release_tag": null
+  },
   "git": {
-    "commit": "6db311e65c1bea51cb6f126709d619630c4532eb",
-    "commit_short": "6db311e",
+    "commit": "8848a720058f5932dfbd76adfaa28bf1bfead4e3",
+    "commit_short": "8848a72",
     "branch": "main",
     "dirty": true,
+    "dirty_paths_count": 8,
+    "dirty_ignored_paths_count": 0,
     "dirty_paths": [
-      "M appendix_ka_contract_theory.tex",
+      "M .gitignore",
+      "M Dockerfile",
+      "M LATENCY_OPTIMIZATION_SPEC.md",
+      "M appendix_bundle_schema.tex",
       "M appendix_repro_manifest.tex",
-      "M pipeline/gpu/linalg.py",
-      "M pipeline/stap/ka_contract_v2.py",
-      "M pipeline/stap/temporal.py",
-      "M pipeline/stap/temporal_shared.py",
+      "M appendix_supp_results.tex",
       "M repro_manifest.json",
-      "M scripts/conditional_stap_leakage_ablation.py",
-      "M scripts/generate_repro_manifest.py",
-      "M scripts/hab_contract_check.py",
-      "M scripts/ka_contract_v2_ablation.py",
-      "M scripts/ka_contract_v2_dashboard_fig.py",
-      "M scripts/mace_pdonly_contract_v2_dashboard_fig.py",
-      "M scripts/pd_mode_sanity.py",
-      "M scripts/replay_stap_from_run.py",
-      "M scripts/shin_ratbrain_allclips_contract_hygiene.py",
-      "M scripts/shin_ratbrain_hygiene_metrics.py",
-      "M scripts/shin_ratbrain_motion_aggregate.py",
-      "M scripts/shin_ratbrain_motion_compare.py",
-      "M scripts/shin_ratbrain_motion_sweep.py",
-      "M scripts/shin_ratbrain_plot_bundle.py",
-      "M sim/kwave/common.py",
-      "M sim/kwave/icube_bundle.py",
-      "M sim/kwave/pilot_motion.py",
-      "M stap_fus_methodology.tex",
-      "M stap_fus_paper.tex",
-      "M stap_fus_supplement.tex",
-      "M tests/test_ka_score_shrink_v2.py",
-      "M tests/test_kwave_physics.py",
-      "M tests/test_kwave_pilot_smoke.py",
-      "M tests/test_pilot_meta.py",
-      "?? appendix_bundle_schema.tex",
-      "?? appendix_supp_results.tex",
-      "?? pipeline/realdata/twinkling_artifact.py",
-      "?? pipeline/realdata/twinkling_bmode_mask.py",
-      "?? pipeline/realdata/ulm_zenodo_7883227.py",
-      "?? scripts/brain_crosswindow_calibration.py",
-      "?? scripts/fair_filter_comparison.py",
-      "?? scripts/fig_brain_kwave_roc_curves.py",
-      "?? scripts/fig_doppler_band_geometry_psd.py",
-      "?? scripts/fig_hankelization_local_stap.py",
-      "?? scripts/fig_shin_baseline_matrix_example.py",
-      "?? scripts/fig_shin_baseline_matrix_proxy_metrics.py",
-      "?? scripts/fig_shin_motion_telemetry.py",
-      "?? scripts/fig_shrink_only_tail_suppression.py",
-      "?? scripts/fig_stap_pipeline_bayes_block.py",
-      "?? scripts/fig_twinkling_gammex_ablation_prf_sensitivity.py",
-      "?? scripts/fig_twinkling_gammex_baseline_tail.py",
-      "?? scripts/fig_twinkling_gammex_structural_roc_curves.py",
-      "?? scripts/fig_twinkling_mask_overlay.py",
-      "?? scripts/figure_qc.py",
-      "?? scripts/mace_phase2_summary_fig.py",
-      "?? scripts/shin_ratbrain_baseline_matrix.py",
-      "?? scripts/shin_ratbrain_crossmask_audit.py",
-      "?? scripts/twinkling_backfill_baseline_scores.py",
-      "?? scripts/twinkling_contract_figpack.py",
-      "?? scripts/twinkling_decode_sanity.py",
-      "?? scripts/twinkling_decode_sanity_summary.py",
-      "?? scripts/twinkling_eval_motion_ladder.py",
-      "?? scripts/twinkling_eval_structural.py",
-      "?? scripts/twinkling_gammex_within_ensemble_motion_sweep.py",
-      "?? scripts/twinkling_make_bundles.py",
-      "?? scripts/twinkling_prf_override_table.py",
-      "?? scripts/ulm_zenodo_7883227_baseline_sweep.py",
-      "?? scripts/ulm_zenodo_7883227_make_bundle.py",
-      "?? scripts/ulm_zenodo_7883227_motion_sweep.py",
-      "?? scripts/ulm_zenodo_7883227_motion_sweep_plot.py",
-      "?? scripts/upscale_png_nearest.py",
-      "?? stap_fus_methodology.out",
-      "?? stap_fus_methodology.pdf",
-      "?? stap_fus_paper.out",
-      "?? stap_fus_paper.pdf",
-      "?? stap_fus_supplement.out",
-      "?? stap_fus_supplement.pdf",
-      "?? test_url_spaces.out",
-      "?? test_url_spaces.pdf"
-    ]
+      "?? simulation_spec.txt"
+    ],
+    "dirty_ignored_paths": []
   },
   "env": {
-    "python": "3.12.8 | packaged by Anaconda, Inc. | (main, Dec 11 2024, 16:31:09) [GCC 11.2.0]",
-    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
-    "machine": "x86_64",
-    "processor": "x86_64",
-    "versions": {
-      "numpy": "1.26.4",
-      "scipy": "1.14.1",
-      "torch": "2.2.2+cpu",
-      "matplotlib": "3.10.0"
+    "preferred_conda_env": "stap-fus",
+    "conda": {
+      "python": "3.11.14 | packaged by conda-forge | (main, Oct 22 2025, 22:46:25) [GCC 14.3.0]",
+      "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+      "machine": "x86_64",
+      "processor": "x86_64",
+      "versions": {
+        "numpy": "2.2.6",
+        "scipy": "1.14.1",
+        "torch": "2.4.1",
+        "matplotlib": "3.10.0",
+        "cupy": "13.6.0"
+      },
+      "torch_cuda": {
+        "cuda_is_available": true,
+        "cuda_version": "12.1",
+        "device_count": 1,
+        "device0_name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU"
+      }
     },
-    "cwd": "/home/ashune/stap-for-fus"
+    "current": {
+      "python": "3.11.14 | packaged by conda-forge | (main, Oct 22 2025, 22:46:25) [GCC 14.3.0]",
+      "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+      "machine": "x86_64",
+      "processor": "x86_64",
+      "versions": {
+        "numpy": "2.2.6",
+        "scipy": "1.14.1",
+        "torch": "2.4.1",
+        "matplotlib": "3.10.0",
+        "cupy": "13.6.0"
+      },
+      "torch_cuda": {
+        "cuda_is_available": true,
+        "cuda_version": "12.1",
+        "device_count": 1,
+        "device0_name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU"
+      },
+      "cwd": "/home/ashune/stap-for-fus"
+    },
+    "environment_yml": {
+      "path": "environment.yml",
+      "sha256": "a251307a0fc842f5b956cf64d98613213f7e1519b0b0c2c2cb0e950edf64bd61"
+    },
+    "dockerfile": {
+      "path": "Dockerfile",
+      "sha256": "1dbf3078785426b45770b85f7b2f7794cd14435c20e1c587a3c38cf097128e16"
+    }
   },
   "datasets": [
     {
@@ -129,7 +105,7 @@
     }
   ],
   "selections": {
-    "Brain seed sweep (AliasContract pilot)": "seed2-seed12 (n=11).",
+    "Brain low-FPR matrix (fixed-profile pilots)": "OpenSkull seed1; AliasContract seed2; SkullOR seed2; 64-frame windows at offsets {0,64,128,192,256}.",
     "Shin all-clips telemetry": "IQData001-IQData080 (n=80), window 0:128.",
     "Shin motion subset": "IQData001-005, IQData010, IQData020, IQData040, IQData060, IQData080 (n=10).",
     "Mace holdout split (deduplicated)": "train: scan1/2 + scan3/6; test: scan4 + scan5.",
@@ -167,7 +143,7 @@
       ],
       "commands": [
         "PYTHONPATH=. python scripts/conditional_stap_leakage_ablation.py \\",
-        "  --pilots runs/pilot/r4_kwave_seed1 runs/pilot/r4_kwave_seed2 \\",
+        "  --pilots runs/pilot/r4c_kwave_seed1 \\",
         "  --profile Brain-OpenSkull \\",
         "  --out-root runs/ablation/condstap_leakage \\",
         "  --window-length 64 --window-offset 0 --disjoint-offset 64 \\",
@@ -175,6 +151,116 @@
         "  --summary-json reports/condstap_leakage.json"
       ],
       "notes": null
+    },
+    {
+      "name": "CUDA latency replay (Brain-* k-Wave; steady-state windows 2..5)",
+      "paper_refs": [
+        "Table: latency_summary"
+      ],
+      "outputs": [
+        "runs/latency_s12_publish_offsets/ (Brain-OpenSkull; full)",
+        "runs/latency_s13_publish_offsets_cond/ (Brain-OpenSkull; conditional)",
+        "runs/latency_s14_aliascontract_full/ (Brain-AliasContract; full)",
+        "runs/latency_s14_aliascontract_cond/ (Brain-AliasContract; conditional)",
+        "runs/latency_s15_skullor_full/ (Brain-SkullOR; full)",
+        "runs/latency_s15_skullor_cond/ (Brain-SkullOR; conditional)"
+      ],
+      "commands": [
+        "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \\",
+        "  python scripts/latency_rerun_check.py \\",
+        "  --src runs/latency_pilot_open \\",
+        "  --out-root runs/latency_s12_publish_offsets \\",
+        "  --profile Brain-OpenSkull \\",
+        "  --window-length 64 --window-offset 0 \\",
+        "  --window-offsets 0,64,128,192,256 \\",
+        "  --stap-device cuda --stap-debug-samples 0 \\",
+        "  --tile-batch 192 --cuda-warmup-heavy",
+        "",
+        "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \\",
+        "  python scripts/latency_rerun_check.py \\",
+        "  --src runs/latency_pilot_open \\",
+        "  --out-root runs/latency_s13_publish_offsets_cond \\",
+        "  --profile Brain-OpenSkull \\",
+        "  --window-length 64 --window-offset 0 \\",
+        "  --window-offsets 0,64,128,192,256 \\",
+        "  --stap-device cuda --stap-debug-samples 0 \\",
+        "  --tile-batch 192 --cuda-warmup-heavy \\",
+        "  --stap-conditional on",
+        "",
+        "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \\",
+        "  python scripts/latency_rerun_check.py \\",
+        "  --src runs/latency_pilot_aliascontract \\",
+        "  --out-root runs/latency_s14_aliascontract_full \\",
+        "  --profile Brain-AliasContract \\",
+        "  --window-length 64 --window-offset 0 \\",
+        "  --window-offsets 0,64,128,192,256 \\",
+        "  --stap-device cuda --stap-debug-samples 0 \\",
+        "  --tile-batch 192 --cuda-warmup-heavy",
+        "",
+        "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \\",
+        "  python scripts/latency_rerun_check.py \\",
+        "  --src runs/latency_pilot_aliascontract \\",
+        "  --out-root runs/latency_s14_aliascontract_cond \\",
+        "  --profile Brain-AliasContract \\",
+        "  --window-length 64 --window-offset 0 \\",
+        "  --window-offsets 0,64,128,192,256 \\",
+        "  --stap-device cuda --stap-debug-samples 0 \\",
+        "  --tile-batch 192 --cuda-warmup-heavy \\",
+        "  --stap-conditional on",
+        "",
+        "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \\",
+        "  python scripts/latency_rerun_check.py \\",
+        "  --src runs/latency_pilot_skullor \\",
+        "  --out-root runs/latency_s15_skullor_full \\",
+        "  --profile Brain-SkullOR \\",
+        "  --window-length 64 --window-offset 0 \\",
+        "  --window-offsets 0,64,128,192,256 \\",
+        "  --stap-device cuda --stap-debug-samples 0 \\",
+        "  --tile-batch 192 --cuda-warmup-heavy",
+        "",
+        "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \\",
+        "  python scripts/latency_rerun_check.py \\",
+        "  --src runs/latency_pilot_skullor \\",
+        "  --out-root runs/latency_s15_skullor_cond \\",
+        "  --profile Brain-SkullOR \\",
+        "  --window-length 64 --window-offset 0 \\",
+        "  --window-offsets 0,64,128,192,256 \\",
+        "  --stap-device cuda --stap-debug-samples 0 \\",
+        "  --tile-batch 192 --cuda-warmup-heavy \\",
+        "  --stap-conditional on"
+      ],
+      "notes": "GPU latency is reported as the steady-state mean over windows 2..5 (window1 is cold: CUDA init, Triton JIT, and CUDA-graph capture). Use the script's 'optimized steady(avg win2..5)' line."
+    },
+    {
+      "name": "CUDA latency replay (real data: Shin + Gammex; steady-state frames 2..N)",
+      "paper_refs": [
+        "Table: latency_summary"
+      ],
+      "outputs": [
+        "runs/latency_s17_realdata_cuda_unfold/ (Shin + Gammex CUDA latency runs)"
+      ],
+      "commands": [
+        "PYTHONPATH=. \\",
+        "STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \\",
+        "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \\",
+        "STAP_TYLER_TRITON_CAPTURE=1 \\",
+        "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+        "  --stap-device cuda --tile-batch 192 --clean \\",
+        "  --out-root runs/latency_s17_realdata_cuda_unfold \\",
+        "  shin --iq-file IQData001.dat \\",
+        "  --windows 0:128,64:192,122:250 \\",
+        "  --Lt 64 --svd-energy-frac 0.97",
+        "",
+        "PYTHONPATH=. \\",
+        "STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \\",
+        "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \\",
+        "STAP_TYLER_TRITON_CAPTURE=1 \\",
+        "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+        "  --stap-device cuda --tile-batch 512 --clean \\",
+        "  --out-root runs/latency_s17_realdata_cuda_unfold \\",
+        "  gammex --frames-along 0:6 --frames-across 0:6"
+      ],
+      "notes": "The script prints cold(win1) and steady(avg win2..N); the latency table uses the steady-state mean and excludes window/frame 1 (graph capture + Triton JIT)."
     },
     {
       "name": "Brain-* baseline fairness: MC--SVD(e) tune-once sweep",
@@ -187,7 +273,7 @@
       ],
       "commands": [
         "PYTHONPATH=. python scripts/brain_mcsvd_energy_sweep.py \\",
-        "  --pilot runs/pilot/r4_kwave_seed1 \\",
+        "  --pilot runs/pilot/r4c_kwave_seed1 \\",
         "  --profile Brain-OpenSkull \\",
         "  --out-root runs/sweep/mcsvd_energy_brain_seed1 \\",
         "  --window-length 64 --window-offset 0 \\",
@@ -199,6 +285,41 @@
       "notes": null
     },
     {
+      "name": "Brain-* low-FPR baseline matrix (vnext; includes adaptive/local SVD baselines)",
+      "paper_refs": [
+        "Table: brain_kwave_vnext_baselines",
+        "Figure: brain_kwave_roc_curves.pdf"
+      ],
+      "outputs": [
+        "runs/pilot/fair_filter_matrix_pd_r3_localbaselines/ (generated bundles)",
+        "reports/fair_matrix_vnext_r3_localbaselines.csv",
+        "reports/fair_matrix_vnext_r3_localbaselines.json",
+        "reports/brain_kwave_vnext_baselines_table.tex"
+      ],
+      "commands": [
+        "bash scripts/reproduce_table5_brain_kwave.sh",
+        "",
+        "# Manual breakdown (equivalent to the script above):",
+        "PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py \\",
+        "  --mode matrix --eval-score vnext \\",
+        "  --matrix-regimes open,aliascontract,skullor \\",
+        "  --matrix-seeds-open 1 --matrix-seeds-aliascontract 2 --matrix-seeds-skullor 2 \\",
+        "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+        "  --matrix-use-profile \\",
+        "  --matrix-mcsvd-energy-frac 0.90 --matrix-mcsvd-baseline-support window \\",
+        "  --methods mcsvd,svd_similarity,local_svd,rpca,hosvd,stap_full \\",
+        "  --generated-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \\",
+        "  --autogen-missing --stap-device cuda \\",
+        "  --out-csv reports/fair_matrix_vnext_r3_localbaselines.csv \\",
+        "  --out-json reports/fair_matrix_vnext_r3_localbaselines.json",
+        "",
+        "PYTHONPATH=. conda run -n stap-fus python scripts/brain_kwave_vnext_baselines_table.py \\",
+        "  --fair-matrix-json reports/fair_matrix_vnext_r3_localbaselines.json \\",
+        "  --out-tex reports/brain_kwave_vnext_baselines_table.tex"
+      ],
+      "notes": "Generates per-window acceptance bundles and writes a vnext-style strict-tail report, then renders the LaTeX table used in the main Brain-* baseline table; this run root is also consumed by the ROC and cross-window calibration scripts."
+    },
+    {
       "name": "Brain-* ROC curve figure (median+IQR over disjoint windows)",
       "paper_refs": [
         "Figure: brain_kwave_roc_curves.pdf"
@@ -208,10 +329,10 @@
       ],
       "commands": [
         "PYTHONPATH=. python scripts/fig_brain_kwave_roc_curves.py \\",
-        "  --runs-root runs/pilot/fair_filter_matrix_full_clinical_cpu_v2 \\",
+        "  --runs-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \\",
         "  --out-pdf figs/paper/brain_kwave_roc_curves.pdf"
       ],
-      "notes": "Reads precomputed per-window score/mask arrays under runs/pilot/fair_filter_matrix_full_clinical_cpu_v2."
+      "notes": "Reads per-window score/mask arrays under the Brain-* pilot run root."
     },
     {
       "name": "Brain-* cross-window threshold-transfer audit (STAP)",
@@ -225,12 +346,172 @@
       ],
       "commands": [
         "PYTHONPATH=. python scripts/brain_crosswindow_calibration.py \\",
-        "  --runs-root runs/pilot/fair_filter_matrix_full_clinical_cpu_v2 \\",
+        "  --runs-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \\",
         "  --alphas 1e-4,3e-4,1e-3 \\",
         "  --out-csv reports/brain_crosswindow_calibration.csv \\",
         "  --out-json reports/brain_crosswindow_calibration_summary.json"
       ],
       "notes": "Calibrates thresholds on one 64-frame window's negatives and evaluates on disjoint windows (ordered pairs)."
+    },
+    {
+      "name": "Brain-* baseline sanity table (strict vs relaxed operating points)",
+      "paper_refs": [
+        "Appendix: baseline sanity checks at relaxed operating points (Brain-*)"
+      ],
+      "outputs": [
+        "reports/brain_baseline_sanity_relaxed.csv",
+        "reports/brain_baseline_sanity_relaxed.json",
+        "reports/brain_baseline_sanity_relaxed_table.tex"
+      ],
+      "commands": [
+        "PYTHONPATH=. python scripts/brain_baseline_sanity_table.py \\",
+        "  --fair-matrix-json reports/fair_matrix_vnext_r3_localbaselines.json \\",
+        "  --alphas 0.001,0.01,0.1 \\",
+        "  --out-csv reports/brain_baseline_sanity_relaxed.csv \\",
+        "  --out-json reports/brain_baseline_sanity_relaxed.json \\",
+        "  --out-tex reports/brain_baseline_sanity_relaxed_table.tex"
+      ],
+      "notes": "Reads per-window score/mask arrays under the Brain-* pilot run root."
+    },
+    {
+      "name": "Brain-* detector-component ablation (whitening vs band selectivity)",
+      "paper_refs": [
+        "Table: brain_detector_ablation (detector-component ablation)"
+      ],
+      "outputs": [
+        "runs/pilot/fair_filter_matrix_pd_r3_localbaselines/*_mcsvd_det_whitened_power/ (generated bundles)",
+        "runs/pilot/fair_filter_matrix_pd_r3_localbaselines/*_mcsvd_det_unwhitened_ratio/ (generated bundles)",
+        "reports/fair_matrix_detector_ablations.csv",
+        "reports/fair_matrix_detector_ablations.json",
+        "reports/brain_detector_ablation.csv",
+        "reports/brain_detector_ablation.json",
+        "reports/brain_detector_ablation_table.tex"
+      ],
+      "commands": [
+        "PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py \\",
+        "  --mode matrix --eval-score vnext \\",
+        "  --matrix-regimes open,aliascontract,skullor \\",
+        "  --matrix-seeds-open 1 --matrix-seeds-aliascontract 2 --matrix-seeds-skullor 2 \\",
+        "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+        "  --matrix-use-profile \\",
+        "  --matrix-mcsvd-energy-frac 0.90 --matrix-mcsvd-baseline-support full \\",
+        "  --methods mcsvd,stap_det_whitened_power,stap_det_unwhitened_ratio,stap_full \\",
+        "  --generated-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \\",
+        "  --autogen-missing --stap-device cuda \\",
+        "  --out-csv reports/fair_matrix_detector_ablations.csv \\",
+        "  --out-json reports/fair_matrix_detector_ablations.json",
+        "PYTHONPATH=. python scripts/brain_detector_ablation_table.py \\",
+        "  --fair-matrix-json reports/fair_matrix_detector_ablations.json \\",
+        "  --out-csv reports/brain_detector_ablation.csv \\",
+        "  --out-json reports/brain_detector_ablation.json \\",
+        "  --out-tex reports/brain_detector_ablation_table.tex"
+      ],
+      "notes": "Ablates detector components on the identical MC--SVD residual: whitened total power (no band partition) and unwhitened matched-subspace ratio (R=I)."
+    },
+    {
+      "name": "Brain-* detector-swap fairness check (matched-subspace scoring on competing residuals)",
+      "paper_refs": [
+        "Table: brain_detector_swap (paired residual detector swap)"
+      ],
+      "outputs": [
+        "runs/pilot/fair_filter_matrix_pd_r3_localbaselines/*_hosvd_stap_full/ (generated bundles)",
+        "runs/pilot/fair_filter_matrix_pd_r3_localbaselines/*_rpca_stap_full/ (generated bundles)",
+        "reports/fair_matrix_detector_swap.csv",
+        "reports/fair_matrix_detector_swap.json",
+        "reports/brain_detector_swap.csv",
+        "reports/brain_detector_swap.json",
+        "reports/brain_detector_swap_table.tex"
+      ],
+      "commands": [
+        "PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py \\",
+        "  --mode matrix --eval-score vnext \\",
+        "  --matrix-regimes open,aliascontract,skullor \\",
+        "  --matrix-seeds-open 1 --matrix-seeds-aliascontract 2 --matrix-seeds-skullor 2 \\",
+        "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+        "  --matrix-use-profile \\",
+        "  --methods rpca_pair,rpca_stap,hosvd_pair,hosvd_stap \\",
+        "  --generated-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \\",
+        "  --regen-runs --autogen-missing --stap-device cuda \\",
+        "  --out-csv reports/fair_matrix_detector_swap.csv \\",
+        "  --out-json reports/fair_matrix_detector_swap.json",
+        "PYTHONPATH=. python scripts/brain_detector_swap_table.py \\",
+        "  --fair-matrix-json reports/fair_matrix_detector_swap.json \\",
+        "  --out-csv reports/brain_detector_swap.csv \\",
+        "  --out-json reports/brain_detector_swap.json \\",
+        "  --out-tex reports/brain_detector_swap_table.tex"
+      ],
+      "notes": "Paired-residual comparison: each run generates both PD (score_base.npy) and STAP (score_stap_preka.npy) scores on the same RPCA/HOSVD residual for each window."
+    },
+    {
+      "name": "Brain-* covariance-training trim ablation (self-training sensitivity)",
+      "paper_refs": [
+        "Results: covariance-training contamination ablation (Brain-*)"
+      ],
+      "outputs": [
+        "runs/pilot/fair_filter_matrix_pd_r3_localbaselines/*_mcsvd_covtrim_q05/ (generated bundles)",
+        "reports/fair_matrix_covtrim.csv",
+        "reports/fair_matrix_covtrim.json",
+        "reports/brain_cov_train_ablation.csv",
+        "reports/brain_cov_train_ablation.json",
+        "reports/brain_cov_train_ablation_table.tex"
+      ],
+      "commands": [
+        "PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py \\",
+        "  --mode matrix --eval-score vnext \\",
+        "  --matrix-regimes open,aliascontract,skullor \\",
+        "  --matrix-seeds-open 1 --matrix-seeds-aliascontract 2 --matrix-seeds-skullor 2 \\",
+        "  --window-length 64 --window-offsets 0,64,128,192,256 \\",
+        "  --matrix-use-profile \\",
+        "  --matrix-mcsvd-energy-frac 0.90 --matrix-mcsvd-baseline-support full \\",
+        "  --methods stap_full,stap_covtrim_q05 \\",
+        "  --generated-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \\",
+        "  --autogen-missing --stap-device cuda \\",
+        "  --out-csv reports/fair_matrix_covtrim.csv \\",
+        "  --out-json reports/fair_matrix_covtrim.json",
+        "PYTHONPATH=. python scripts/brain_cov_train_ablation_table.py \\",
+        "  --runs-root runs/pilot/fair_filter_matrix_pd_r3_localbaselines \\",
+        "  --alphas 1e-4,3e-4,1e-3 \\",
+        "  --out-csv reports/brain_cov_train_ablation.csv \\",
+        "  --out-json reports/brain_cov_train_ablation.json \\",
+        "  --out-tex reports/brain_cov_train_ablation_table.tex"
+      ],
+      "notes": "Enables the ablation via replay_stap_from_run.py --stap-cov-trim-q (plumbed through fair_filter_comparison method key stap_covtrim_q05). This excludes the top 5% highest-energy Hankel snapshots per tile when estimating R_i (guard/trim style training contamination check)."
+    },
+    {
+      "name": "Brain-OpenSkull fixed-profile parameter sensitivity sweep (diag-load, tile size, Lt)",
+      "paper_refs": [
+        "Appendix: fixed-profile parameter sensitivity (Brain-OpenSkull)",
+        "Results: covariance-training contamination ablation (Brain-*)"
+      ],
+      "outputs": [
+        "runs/pilot/brain_openskull_profile_sensitivity_r1/ (generated bundles)",
+        "reports/brain_openskull_profile_sensitivity.csv",
+        "reports/brain_openskull_profile_sensitivity.json",
+        "figs/paper/brain_openskull_profile_sensitivity.pdf"
+      ],
+      "commands": [
+        "PYTHONPATH=. conda run -n stap-fus python scripts/brain_openskull_profile_sensitivity.py \\",
+        "  --autogen-missing --stap-device cuda"
+      ],
+      "notes": "Runs 1D sweeps (vary one parameter at a time) around the frozen Brain-OpenSkull operating profile, reporting within-window strict-tail TPR medians/IQR over five disjoint windows. Sweep ranges are configurable via --diag-loads/--tile-sizes/--lts."
+    },
+    {
+      "name": "Brain-* strict-tail collapse visual (representative window; baseline vs STAP)",
+      "paper_refs": [
+        "Appendix: baseline sanity checks at relaxed operating points (Brain-*)"
+      ],
+      "outputs": [
+        "figs/paper/brain_tail_collapse_visual.pdf"
+      ],
+      "commands": [
+        "ROOT=\"runs/pilot/fair_filter_matrix_pd_r3_localbaselines/open_seed1_mcsvd_full\"",
+        "BUNDLE_DIR=\"$ROOT/pw_7.5MHz_5ang_5ens_64T_seed1_win0_off0\"",
+        "PYTHONPATH=. python scripts/fig_brain_tail_collapse_visual.py \\",
+        "  --bundle-dir \"$BUNDLE_DIR\" \\",
+        "  --alphas 0.1,0.01,1e-3 \\",
+        "  --out figs/paper/brain_tail_collapse_visual.pdf"
+      ],
+      "notes": "Uses one representative Brain-OpenSkull window to visualize background-tail dominance (baseline PD) and tail reshaping (STAP)."
     },
     {
       "name": "Knowledge-aided prior falsifiability ablation (STAP-only vs contract vs forced)",
@@ -243,7 +524,7 @@
       ],
       "commands": [
         "PYTHONPATH=. python scripts/ka_contract_v2_ablation.py \\",
-        "  --pilot runs/pilot/r4c_kwave_hab_contract_seed2 \\",
+        "  --pilot runs/pilot/r4c_kwave_hab_contract_seed2_v2 \\",
         "  --profile Brain-AliasContract \\",
         "  --out-root runs/ablation/ka_v2_falsifiability \\",
         "  --stap-device cpu \\",
@@ -265,7 +546,7 @@
       ],
       "commands": [
         "PYTHONPATH=. python scripts/ka_contract_v2_ablation.py \\",
-        "  --pilot runs/pilot/r4_kwave_seed1 \\",
+        "  --pilot runs/pilot/r4c_kwave_seed1 \\",
         "  --profile Brain-OpenSkull \\",
         "  --out-root runs/ablation/openskull_shallowalias_e50 \\",
         "  --stap-device cpu \\",
@@ -353,7 +634,7 @@
       "commands": [
         "# Sample Brain-* replay bundles (write meta.json with ka_contract_v2 telemetry):",
         "PYTHONPATH=. python scripts/replay_stap_from_run.py \\",
-        "  --src runs/pilot/r4_kwave_seed1 \\",
+        "  --src runs/pilot/r4c_kwave_seed1 \\",
         "  --out runs/telemetry_regime_compare/brain_open_seed1 \\",
         "  --profile Brain-OpenSkull \\",
         "  --time-window-length 64 \\",
@@ -480,6 +761,32 @@
         "  --out-csv reports/shin_motion_brainlike_batch_U_crop_sensitivity.csv"
       ],
       "notes": null
+    },
+    {
+      "name": "Leading structural-fidelity figure (Gammex phantom; matched-FPR decision differences)",
+      "paper_refs": [
+        "Figure 1: leading_structural_fidelity_gammex.pdf"
+      ],
+      "outputs": [
+        "figs/paper/leading_structural_fidelity_gammex.pdf"
+      ],
+      "commands": [
+        "SEQ_DIR=\"data/twinkling_artifact/Flow in Gammex phantom\"",
+        "SEQ_DIR=\"$SEQ_DIR/Flow in Gammex phantom (along - linear probe)\"",
+        "PYTHONPATH=. conda run -n stap-fus python scripts/fig_leading_structural_fidelity.py \\",
+        "  --seq-dir \"$SEQ_DIR\" \\",
+        "  --frame-idx 0 --mask-ref-frames 0:10 \\",
+        "  --prf-hz 2500 --Lt 16 \\",
+        "  --tile-hw 8 8 --tile-stride 6 \\",
+        "  --cov-estimator tyler_pca --diag-load 0.07 \\",
+        "  --fd-span-mode psd --feasibility-mode legacy \\",
+        "  --svd-keep-min 2 --svd-keep-max 17 \\",
+        "  --flow-band-hz 150 450 --alias-band-hz 700 1200 \\",
+        "  --fpr 1e-2 \\",
+        "  --stap-device auto \\",
+        "  --out figs/paper/leading_structural_fidelity_gammex.pdf"
+      ],
+      "notes": "Generates a single-frame qualitative panel using the structurally labeled tube mask; the script writes a temporary one-frame acceptance bundle under runs/_tmp_leading_structural_fidelity/."
     },
     {
       "name": "Twinkling decode sanity (RawBCF -> B-mode/CFM)",
