@@ -18,6 +18,10 @@ Command:
 ```bash
 PYTHONPATH=. python scripts/verify_refactor.py --mode quick --execute
 ```
+Make target:
+```bash
+make refactor-quick
+```
 
 ### `phase` (phase close gate)
 Scope:
@@ -30,6 +34,10 @@ Command:
 ```bash
 PYTHONPATH=. python scripts/verify_refactor.py --mode phase --execute
 ```
+Make target:
+```bash
+make refactor-phase
+```
 
 ### `full` (milestone/release gate)
 Scope:
@@ -40,6 +48,10 @@ Scope:
 Command:
 ```bash
 PYTHONPATH=. python scripts/verify_refactor.py --mode full --execute
+```
+Make target:
+```bash
+make refactor-full
 ```
 
 ## Pass/Fail Rules (current)
@@ -65,4 +77,20 @@ These are guardrails, not publication numbers. Tighten after Phase 0 baseline fr
 To print steps without executing:
 ```bash
 PYTHONPATH=. python scripts/verify_refactor.py --mode phase
+```
+
+## CI Integration
+- GitHub Actions workflow: `.github/workflows/refactor_quick_gate.yml`
+- CI executes `quick` mode in a data-safe configuration:
+  - `--python-runner local`
+  - `--allow-missing-data-gates`
+- Local data-backed gate remains authoritative for threshold checks.
+
+CI command:
+```bash
+PYTHONPATH=. python scripts/verify_refactor.py \
+  --mode quick \
+  --execute \
+  --python-runner local \
+  --allow-missing-data-gates
 ```

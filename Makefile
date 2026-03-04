@@ -56,6 +56,7 @@ AGG_OUT_CSV ?= results/mc_summary.csv
 AGG_OUT_MD ?= results/mc_summary.md
 
 .PHONY: env activate fmt lint tests figs precommit acceptance report mc_sweep stress_sweep aggregate_runs motion-figs motion-metrics r4c_brw_replay r4c_brw_roc r4c_brw_confirm2 r4c_brw_all
+.PHONY: refactor-inventory refactor-quick refactor-quick-ci refactor-phase refactor-full phase-close-report
 
 env:
 	conda env create -f environment.yml || conda env update -f environment.yml
@@ -71,6 +72,28 @@ lint:
 
 tests:
 	pytest -q
+
+refactor-inventory:
+	PYTHONPATH=. python scripts/refactor_inventory.py
+
+refactor-quick:
+	PYTHONPATH=. python scripts/verify_refactor.py --mode quick --execute
+
+refactor-quick-ci:
+	PYTHONPATH=. python scripts/verify_refactor.py --mode quick --execute --python-runner local --allow-missing-data-gates
+
+refactor-phase:
+	PYTHONPATH=. python scripts/verify_refactor.py --mode phase --execute
+
+refactor-full:
+	PYTHONPATH=. python scripts/verify_refactor.py --mode full --execute
+
+PHASE ?= 1
+VERIFY_MODE ?= phase
+PHASE_REPORT_OUT ?=
+
+phase-close-report:
+	PYTHONPATH=. python scripts/phase_close_report.py --phase $(PHASE) --verification-mode $(VERIFY_MODE) $(if $(PHASE_REPORT_OUT),--out $(PHASE_REPORT_OUT),)
 
 figs:
 	python figs/fig1_before_after.py

@@ -187,6 +187,8 @@ def _build_steps(*, mode: str, conda_env: str, use_conda: bool, device: str) -> 
                     "reports/refactor/refactor_quick_fair_matrix.json",
                 ],
             ),
+            requires=(REPO / "runs" / "pilot" / "r4c_kwave_seed1",),
+            optional=True,
         ),
     ]
 
@@ -297,6 +299,14 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_THRESHOLDS,
         help="Threshold JSON for quick gate checks.",
     )
+    ap.add_argument(
+        "--allow-missing-data-gates",
+        action="store_true",
+        help=(
+            "Allow optional data-backed steps (and metric checks that depend on them) "
+            "to be skipped without failing. Intended for CI environments without local data roots."
+        ),
+    )
     return ap.parse_args()
 
 
@@ -334,6 +344,9 @@ def main() -> int:
     env = os.environ.copy()
     env["PYTHONPATH"] = "."
 
+    completed_steps: set[str] = set()
+    skipped_steps: set[str] = set()
+
     for step in steps:
         missing = [p for p in step.requires if not p.exists()]
         if missing:
@@ -345,6 +358,7 @@ def main() -> int:
             if step.optional:
                 print(msg)
                 print(f"[verify-refactor] skipping optional step: {step.key}")
+                skipped_steps.add(step.key)
                 continue
             print(msg, file=sys.stderr)
             return 3
@@ -357,15 +371,33 @@ def main() -> int:
                 file=sys.stderr,
             )
             return proc.returncode
+        completed_steps.add(step.key)
 
     thresholds = _load_thresholds(args.thresholds)
     quick_json = REPO / "reports" / "refactor" / "refactor_quick_fair_matrix.json"
-    errors = _quick_metric_check(matrix_json=quick_json, thresholds=thresholds)
-    if errors:
-        print("[verify-refactor] quick metric checks failed:", file=sys.stderr)
-        for err in errors:
-            print(f"  - {err}", file=sys.stderr)
-        return 4
+    quick_step_needed = any(step.key == "brain_quick_matrix" for step in steps)
+    quick_step_attempted = "brain_quick_matrix" in completed_steps
+    quick_step_skipped = "brain_quick_matrix" in skipped_steps
+    if quick_step_needed and not quick_step_attempted:
+        if args.allow_missing_data_gates and quick_step_skipped:
+            print(
+                "[verify-refactor] quick metric checks skipped "
+                "(brain_quick_matrix was skipped and --allow-missing-data-gates is set)"
+            )
+        else:
+            print(
+                "[verify-refactor] quick metric checks unavailable because "
+                "brain_quick_matrix did not run",
+                file=sys.stderr,
+            )
+            return 4
+    else:
+        errors = _quick_metric_check(matrix_json=quick_json, thresholds=thresholds)
+        if errors:
+            print("[verify-refactor] quick metric checks failed:", file=sys.stderr)
+            for err in errors:
+                print(f"  - {err}", file=sys.stderr)
+            return 4
 
     print("[verify-refactor] all checks passed")
     return 0
