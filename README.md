@@ -1,38 +1,52 @@
-# STAP-for-fUS (skeleton)
+# STAP-for-fUS
 
-CUDA-enabled, MATLAB-free scaffold for the public demo.
-- **Propagation/heterogeneity**: via `k-Wave-python` (wraps k-Wave C++/CUDA binaries).
-- **GPU math**: PyTorch + CuPy.
-- **Pipeline**: SVD baseline and STAP tiles; EVT + conformal; Confirm-2.
+Knowledge-aided space-time adaptive processing (STAP) for functional ultrasound (fUS), with reproducible simulation/phantom evaluation and latency profiling workflows.
 
-## Quickstart
+This repository contains:
+- STAP core implementations and baselines (MC-SVD, RPCA, HOSVD, adaptive/local SVD variants).
+- Reproduction scripts for manuscript tables/figures.
+- Refactor verification gates (`quick`, `phase`, `full`) used to control regressions.
+
+## Quick Start
+
 ```bash
 conda env create -f environment.yml
 conda activate stap-fus
 pre-commit install
-python scripts/verify_gpu.py  # checks Torch/CuPy/k-Wave imports
+python scripts/verify_gpu.py
 ```
 
-## Reproduce (one-command example)
-```bash
-bash scripts/reproduce_table5_brain_kwave.sh
-```
+## Reproducibility Entry Points
 
-## Refactor Verification Gates
-```bash
-# quick
-make refactor-quick
+- **Smoke gate (data-safe):**
+  - `make refactor-quick-ci`
+- **Local quick regression gate:**
+  - `make refactor-quick`
+- **Phase boundary gate:**
+  - `make refactor-phase`
+- **Release boundary gate:**
+  - `make refactor-full`
+- **Example manuscript reproduction command:**
+  - `bash scripts/reproduce_table5_brain_kwave.sh`
 
-# phase boundary
-make refactor-phase
+## Repository Map
 
-# release/milestone
-make refactor-full
-```
-CI uses a data-safe quick gate (`make refactor-quick-ci`) in `.github/workflows/refactor_quick_gate.yml`.
+- `pipeline/` — STAP and covariance/detector core code.
+- `sim/` — simulation and STAP integration runtime.
+- `scripts/` — experiment/reproduction/orchestration scripts.
+- `tests/` — focused unit/regression tests for core paths.
+- `docs/refactor/` — phased refactor plans, checklists, and phase reports.
+- `configs/` — reproducibility and sweep configurations.
 
-### Notes
+## Public-Repo Policies
 
-* `k-Wave-python` auto-downloads the needed CPU/GPU binaries on first use.
-* The env installs `pytorch-cuda=12.1`; ensure a compatible NVIDIA driver.
-* If no GPU is available, the pipeline will still run on CPU for dev.
+- Contribution guide: `CONTRIBUTING.md`
+- Code of conduct: `CODE_OF_CONDUCT.md`
+- Security policy: `SECURITY.md`
+- Citation metadata: `CITATION.cff`
+
+## Notes
+
+- `k-Wave-python` downloads required binaries on first use.
+- `environment.yml` targets CUDA-capable PyTorch; ensure NVIDIA driver compatibility.
+- Large datasets and run artifacts are intentionally ignored by git (`runs/`, `reports/`, `data/`).
