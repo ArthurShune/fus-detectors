@@ -824,6 +824,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256/",
                 "runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256_cond/",
                 "runs/latency_4080super_shin_fig3_w128_tb192/",
+                "runs/latency_4080super_gammex_linear17_f0_6_tb512/",
                 "reports/latency/4080super_latency_summary.csv",
                 "reports/latency/4080super_latency_summary.json",
             ],
@@ -912,14 +913,28 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --windows 0:128,64:192,122:250 \\",
                 "  --prf-hz 1000 --Lt 64 --svd-energy-frac 0.97",
                 "",
+                "# Gammex linear17 latency (along/across frames 0..5):",
+                "PYTHONPATH=. STAP_FAST_PATH=1 STAP_TILING_UNFOLD=0 STAP_FAST_CUDA_GRAPH=0 \\",
+                "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 STAP_TYLER_TRITON_CAPTURE=1 \\",
+                "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "  --stap-device cuda --tile-batch 512 --clean \\",
+                "  --out-root runs/latency_4080super_gammex_linear17_f0_6_tb512/legacy \\",
+                "  gammex --frames-along 0:6 --frames-across 0:6",
+                "",
+                "PYTHONPATH=. STAP_FAST_PATH=1 STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \\",
+                "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 STAP_TYLER_TRITON_CAPTURE=1 \\",
+                "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "  --stap-device cuda --tile-batch 512 --clean \\",
+                "  --out-root runs/latency_4080super_gammex_linear17_f0_6_tb512/optimized \\",
+                "  gammex --frames-along 0:6 --frames-across 0:6",
+                "",
                 "# Collect consolidated CSV/JSON (steady windows/frames 2..N; includes parity checks):",
                 "PYTHONPATH=. conda run -n stap-fus python scripts/collect_latency_summary.py",
             ],
             notes=(
                 "The replay scripts print cold(win1) and steady(avg win2..N); the paper tables report steady-state means. "
                 "For Brain k-Wave, scripts/latency_rerun_check.py forces legacy vs optimized CUDA-graph settings internally "
-                "(legacy: STAP_FAST_CUDA_GRAPH=0; optimized: STAP_FAST_CUDA_GRAPH=1). "
-                "Gammex latency reruns may be skipped if the dataset is unavailable; see docs/data_download.md."
+                "(legacy: STAP_FAST_CUDA_GRAPH=0; optimized: STAP_FAST_CUDA_GRAPH=1)."
             ),
         ),
         ArtifactInfo(
@@ -997,11 +1012,13 @@ def _default_artifacts() -> list[ArtifactInfo]:
             ),
         ),
         ArtifactInfo(
-            name="RTX 4080 SUPER CUDA latency replay (real data: Shin; legacy vs optimized; steady-state frames 2..N)",
+            name="RTX 4080 SUPER CUDA latency replay (real data: Shin + Gammex; legacy vs optimized; steady-state frames 2..N)",
             paper_refs=["Table: latency_summary_4080super"],
             outputs=[
                 "runs/latency_4080super_shin_fig3_w128_tb192/legacy/",
                 "runs/latency_4080super_shin_fig3_w128_tb192/optimized/",
+                "runs/latency_4080super_gammex_linear17_f0_6_tb512/legacy/",
+                "runs/latency_4080super_gammex_linear17_f0_6_tb512/optimized/",
             ],
             commands=[
                 # Legacy (graphs disabled)
@@ -1016,6 +1033,16 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --windows 0:128,64:192,122:250 \\",
                 "  --Lt 64 --svd-energy-frac 0.97",
                 "",
+                # Gammex legacy
+                "PYTHONPATH=. \\",
+                "STAP_FAST_PATH=1 STAP_TILING_UNFOLD=0 STAP_FAST_CUDA_GRAPH=0 \\",
+                "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \\",
+                "STAP_TYLER_TRITON_CAPTURE=1 \\",
+                "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "  --stap-device cuda --tile-batch 512 --clean \\",
+                "  --out-root runs/latency_4080super_gammex_linear17_f0_6_tb512/legacy \\",
+                "  gammex --frames-along 0:6 --frames-across 0:6",
+                "",
                 # Optimized (graphs enabled when supported)
                 "PYTHONPATH=. \\",
                 "STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \\",
@@ -1027,6 +1054,16 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  shin --iq-file IQData001.dat \\",
                 "  --windows 0:128,64:192,122:250 \\",
                 "  --Lt 64 --svd-energy-frac 0.97",
+                "",
+                # Gammex optimized
+                "PYTHONPATH=. \\",
+                "STAP_FAST_PATH=1 STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \\",
+                "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \\",
+                "STAP_TYLER_TRITON_CAPTURE=1 \\",
+                "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "  --stap-device cuda --tile-batch 512 --clean \\",
+                "  --out-root runs/latency_4080super_gammex_linear17_f0_6_tb512/optimized \\",
+                "  gammex --frames-along 0:6 --frames-across 0:6",
             ],
             notes=(
                 "These are 'latency-only' replay settings (e.g., STAP_TYLER_MAX_ITER=1, STAP_SNAPSHOT_STRIDE=4) "
