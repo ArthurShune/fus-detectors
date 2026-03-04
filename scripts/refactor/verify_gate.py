@@ -15,44 +15,19 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
-import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+
+from scripts.refactor.verify_runtime import (
+    Step,
+    build_py_cmd,
+    execute_steps,
+    format_cmd,
+    have_conda,
+)
 
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_THRESHOLDS = REPO / "configs" / "refactor_verify_thresholds.json"
-
-
-@dataclass(frozen=True)
-class Step:
-    key: str
-    description: str
-    cmd: list[str]
-    requires: tuple[Path, ...] = ()
-    optional: bool = False
-
-
-def _have_conda() -> bool:
-    return shutil.which("conda") is not None
-
-
-def _py_cmd(
-    *,
-    conda_env: str,
-    use_conda: bool,
-    script: str,
-    args: Sequence[str],
-) -> list[str]:
-    if use_conda and _have_conda():
-        return ["conda", "run", "-n", conda_env, "python", script, *args]
-    return [sys.executable, script, *args]
-
-
-def _format_cmd(cmd: Sequence[str]) -> str:
-    return " ".join(subprocess.list2cmdline([part]) if " " in part else part for part in cmd)
 
 
 def _load_thresholds(path: Path) -> dict:
@@ -152,7 +127,7 @@ def _build_steps(*, mode: str, conda_env: str, use_conda: bool, device: str) -> 
         Step(
             key="brain_quick_matrix",
             description="Single-window Brain-OpenSkull matrix replay (MC-SVD vs STAP)",
-            cmd=_py_cmd(
+            cmd=build_py_cmd(
                 conda_env=conda_env,
                 use_conda=use_conda,
                 script="scripts/fair_filter_comparison.py",
@@ -196,7 +171,7 @@ def _build_steps(*, mode: str, conda_env: str, use_conda: bool, device: str) -> 
         Step(
             key="brain_crosswindow",
             description="Cross-window threshold transfer audit refresh",
-            cmd=_py_cmd(
+            cmd=build_py_cmd(
                 conda_env=conda_env,
                 use_conda=use_conda,
                 script="scripts/brain_crosswindow_calibration.py",
@@ -217,7 +192,7 @@ def _build_steps(*, mode: str, conda_env: str, use_conda: bool, device: str) -> 
         Step(
             key="latency_open_steady",
             description="Brain-OpenSkull latency replay with steady-state windows 2..N",
-            cmd=_py_cmd(
+            cmd=build_py_cmd(
                 conda_env=conda_env,
                 use_conda=use_conda,
                 script="scripts/latency_rerun_check.py",
@@ -257,7 +232,7 @@ def _build_steps(*, mode: str, conda_env: str, use_conda: bool, device: str) -> 
         Step(
             key="manifest_refresh",
             description="Refresh central reproducibility manifest",
-            cmd=_py_cmd(
+            cmd=build_py_cmd(
                 conda_env=conda_env,
                 use_conda=use_conda,
                 script="scripts/generate_repro_manifest.py",
@@ -315,7 +290,7 @@ def main() -> int:
     use_conda = args.python_runner in {"auto", "conda"}
     if args.python_runner == "local":
         use_conda = False
-    if args.python_runner == "conda" and not _have_conda():
+    if args.python_runner == "conda" and not have_conda():
         print(
             "[verify-refactor] ERROR: --python-runner=conda but conda was not found",
             file=sys.stderr,
@@ -332,7 +307,7 @@ def main() -> int:
     print(f"[verify-refactor] mode={args.mode} execute={args.execute} steps={len(steps)}")
     for idx, step in enumerate(steps, start=1):
         print(f"  {idx:02d}. {step.key}: {step.description}")
-        print(f"      cmd: {_format_cmd(step.cmd)}")
+        print(f"      cmd: {format_cmd(step.cmd)}")
         if step.requires:
             req = ", ".join(str(p) for p in step.requires)
             print(f"      requires: {req}")
@@ -344,34 +319,13 @@ def main() -> int:
     env = os.environ.copy()
     env["PYTHONPATH"] = "."
 
-    completed_steps: set[str] = set()
-    skipped_steps: set[str] = set()
-
-    for step in steps:
-        missing = [p for p in step.requires if not p.exists()]
-        if missing:
-            missing_paths = ", ".join(str(p) for p in missing)
-            msg = (
-                f"[verify-refactor] missing required path(s) for {step.key}: "
-                f"{missing_paths}"
-            )
-            if step.optional:
-                print(msg)
-                print(f"[verify-refactor] skipping optional step: {step.key}")
-                skipped_steps.add(step.key)
-                continue
-            print(msg, file=sys.stderr)
-            return 3
-
-        print(f"[verify-refactor] running: {step.key}")
-        proc = subprocess.run(step.cmd, cwd=str(REPO), env=env)
-        if proc.returncode != 0:
-            print(
-                f"[verify-refactor] step failed: {step.key} (code={proc.returncode})",
-                file=sys.stderr,
-            )
-            return proc.returncode
-        completed_steps.add(step.key)
+    run_code, completed_steps, skipped_steps = execute_steps(
+        steps=steps,
+        repo=REPO,
+        env=env,
+    )
+    if run_code != 0:
+        return run_code
 
     thresholds = _load_thresholds(args.thresholds)
     quick_json = REPO / "reports" / "refactor" / "refactor_quick_fair_matrix.json"
