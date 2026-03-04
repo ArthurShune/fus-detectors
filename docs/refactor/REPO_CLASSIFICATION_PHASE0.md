@@ -1,12 +1,12 @@
 # Repo Classification (Phase 0)
 
-Generated: 2026-03-04 05:51:30Z (UTC)
+Generated: 2026-03-04 13:33:31Z (UTC)
 
 ## Summary
 
-- core: 238 files
+- core: 239 files
 - experiments: 142 files
-- legacy_candidate: 4 files
+- legacy_candidate: 0 files
 
 ## Core Candidates (keep + refactor first)
 
@@ -15,8 +15,8 @@ Generated: 2026-03-04 05:51:30Z (UTC)
 - scripts: 18
 - eval: 13
 - configs: 8
+- docs: 8
 - sim: 8
-- docs: 7
 - .gitattributes: 1
 - .gitignore: 1
 - .pre-commit-config.yaml: 1
@@ -40,10 +40,7 @@ Generated: 2026-03-04 05:51:30Z (UTC)
 
 ## Legacy Candidates (review remove/archive)
 
-- `foo.txt` (temporary/ad-hoc file)
-- `foo_conda.txt` (temporary/ad-hoc file)
-- `tmp_ratio_current.py` (temporary/ad-hoc file)
-- `tmp_ratio_mix.py` (temporary/ad-hoc file)
+- none
 
 ## Notes
 
