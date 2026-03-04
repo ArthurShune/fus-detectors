@@ -63,6 +63,7 @@ Deliverables:
 - Professional repo polish (docs, onboarding, contribution guide).
 - Clean release tag with reproducibility commands.
 - Final paper/supplement reproduction package.
+- Execute per-chunk release-hardening plan from `docs/refactor/PHASE5_KICKOFF_CHECKLIST.md`.
 
 Exit gate:
 - `scripts/verify_refactor.py --mode full --execute`
