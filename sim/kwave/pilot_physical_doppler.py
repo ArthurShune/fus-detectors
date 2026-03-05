@@ -5,6 +5,7 @@ import dataclasses
 import hashlib
 import json
 import platform
+import shutil
 import subprocess
 import sys
 import time
@@ -468,6 +469,10 @@ def main() -> None:
     bundle_root.mkdir(parents=True, exist_ok=True)
 
     cfg = _build_cfg(args)
+    if cfg.psf.calib_path is not None:
+        calib_src = Path(str(cfg.psf.calib_path))
+        if not calib_src.is_file():
+            raise FileNotFoundError(f"--psf-calib-path not found: {calib_src}")
 
     result = generate_icube(cfg)
     icube = result["Icube"]
@@ -492,6 +497,29 @@ def main() -> None:
     _save(debug_dir, "vx_mps", np.asarray(debug.get("vx_mps"), dtype=np.float32))
     _save(debug_dir, "vz_mps", np.asarray(debug.get("vz_mps"), dtype=np.float32))
     _save(debug_dir, "fd_expected_hz", np.asarray(debug.get("fd_expected_hz"), dtype=np.float32))
+
+    psf_calib_meta: dict[str, Any] | None = None
+    if cfg.psf.calib_path is not None:
+        calib_src = Path(str(cfg.psf.calib_path))
+        calib_dst = debug_dir / "psf_calib.json"
+        try:
+            shutil.copy2(calib_src, calib_dst)
+            paths["psf_calib_json"] = calib_dst
+            with calib_dst.open("r", encoding="utf-8") as f:
+                calib = json.load(f)
+            eff = {
+                "sigma_x0_px": float(calib.get("sigma_x0_px", cfg.psf.sigma_x0_px)),
+                "sigma_z0_px": float(calib.get("sigma_z0_px", cfg.psf.sigma_z0_px)),
+                "alpha_x_per_m": float(calib.get("alpha_x_per_m", cfg.psf.alpha_x_per_m)),
+                "alpha_z_per_m": float(calib.get("alpha_z_per_m", cfg.psf.alpha_z_per_m)),
+            }
+            psf_calib_meta = {
+                "requested_path": str(calib_src),
+                "embedded_rel": str(calib_dst.relative_to(out_root)),
+                "effective": eff,
+            }
+        except Exception as e:
+            psf_calib_meta = {"requested_path": str(calib_src), "error": str(e)}
 
     alias_qc_diag: dict[str, Any] | None = None
     if not bool(args.no_alias_qc):
@@ -580,6 +608,7 @@ def main() -> None:
         },
         "slow_time": {"pulses_per_set": int(cfg.pulses_per_set), "ensembles": int(cfg.ensembles), "T": int(cfg.T)},
         "config": dataset_meta(cfg),
+        "psf_calibration": psf_calib_meta,
         "alias_qc": alias_qc_diag,
         "files": hashes,
     }
