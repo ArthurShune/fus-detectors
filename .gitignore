@@ -52,3 +52,8 @@ reports/**
 # SIMUS bundle/contract check logs (small, paper-critical reproducibility artifacts).
 !reports/simus_contract/
 !reports/simus_contract/*.txt
+
+# SIMUS baseline vs STAP comparisons (paper-style baselines on SIMUS Icube).
+!reports/simus_baseline_compare/
+!reports/simus_baseline_compare/*.csv
+!reports/simus_baseline_compare/*.json
