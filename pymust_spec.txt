@@ -40,15 +40,15 @@ Phase 0: Canonical Dataset Contract (Done)
         debug/...
       bundle/<dataset_name>/...    (derived; optional)
 
-Phase 1: Minimal PyMUST "Smoke" Generator (Implement Now)
+Phase 1: Minimal PyMUST "Smoke" Generator (Done)
   Objective:
   - Prove the integration works end-to-end (PyMUST -> RF -> IQ -> beamformed IQ image -> Icube),
     while keeping runtime tiny and outputs deterministic.
 
   Deliverables:
   - sim/simus/pymust_smoke.py:
-    - generate a tiny Icube with a single circular vessel region, static tissue scatterers,
-      and moving blood scatterers (plug flow) updated per PRP.
+    - generate a tiny Icube with a single vertical vessel *strip* (2-D SIMUS, no elevation),
+      static tissue scatterers, and moving blood scatterers updated per PRP.
     - output masks and an expected_fd_hz debug map.
   - sim/simus/pilot_pymust_simus.py:
     - CLI to write canonical dataset/ + optional derived bundle/ using the existing bundle writer.
@@ -67,7 +67,7 @@ Phase 1: Minimal PyMUST "Smoke" Generator (Implement Now)
     - pre-generate a per-vessel reservoir of blood scatterer positions from the run seed
     - when a blood scatterer exits the ROI, replace it from reservoir using a pointer walk
 
-Phase 2: Paper-Scale Presets (Microvascular + Alias Stress)
+Phase 2: Paper-Scale Presets (Microvascular + Alias Stress) (Done)
   Objective:
   - Add named presets aligned to the repo's band conventions and typical PRF.
   - Add expected alias labeling (|fD| > PRF/2) from geometry/velocity (not PSD-derived).
@@ -88,4 +88,3 @@ Phase 3: Validation + Paper Hook (Non-Performance Claims)
   Deliverables:
   - reports/physdoppler_sanity_link/*simus*.json
   - optional: one figure/table row in methods/supp describing this backend as a "credibility anchor"
-
