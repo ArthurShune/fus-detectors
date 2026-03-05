@@ -1867,6 +1867,73 @@ def _default_artifacts() -> list[ArtifactInfo]:
             ],
         ),
         ArtifactInfo(
+            name="SIMUS/PyMUST moving-scatterer sanity link + bundle contract (micro + alias; non-performance claims)",
+            paper_refs=[
+                "Simulation spec: moving-scatterer physical Doppler regime (SIMUS)",
+                "Appendix (QC): physical-doppler sanity-link telemetry",
+            ],
+            outputs=[
+                # Sanity-link telemetry vs real IQ (tracked).
+                "reports/physdoppler_sanity_link/simus_micro_paper_seed0_vs_shin_gammex_summary.json",
+                "reports/physdoppler_sanity_link/simus_micro_paper_seed0_vs_shin_gammex_table.json",
+                "reports/physdoppler_sanity_link/simus_alias_paper_seed0_vs_shin_gammex_summary.json",
+                "reports/physdoppler_sanity_link/simus_alias_paper_seed0_vs_shin_gammex_table.json",
+                # Contract check logs (tracked).
+                "reports/simus_contract/simus_pymust_paper_micro_seed0_hab_contract.txt",
+                "reports/simus_contract/simus_pymust_paper_alias_seed0_hab_contract.txt",
+                # Derived acceptance bundles (not tracked; runs/ is ignored).
+                "runs/sim/simus_pymust_paper_micro_seed0/bundle/simus_pymust_paper_micro_seed0/",
+                "runs/sim/simus_pymust_paper_alias_seed0/bundle/simus_pymust_paper_alias_seed0/",
+            ],
+            commands=[
+                # Canonical SIMUS datasets (not tracked; deterministic given seed).
+                "PYTHONPATH=. conda run -n stap-fus python sim/simus/pilot_pymust_simus.py \\",
+                "  --out runs/sim/simus_pymust_paper_micro_seed0 --preset microvascular_like --tier paper --seed 0 --skip-bundle",
+                "PYTHONPATH=. conda run -n stap-fus python sim/simus/pilot_pymust_simus.py \\",
+                "  --out runs/sim/simus_pymust_paper_alias_seed0 --preset alias_stress --tier paper --seed 0 --skip-bundle",
+                "",
+                # Bundle derivation from canonical dataset/ (no re-sim).
+                "PYTHONPATH=. conda run -n stap-fus python scripts/icube_make_bundle.py \\",
+                "  --run runs/sim/simus_pymust_paper_micro_seed0 --stap-device cpu",
+                "PYTHONPATH=. conda run -n stap-fus python scripts/icube_make_bundle.py \\",
+                "  --run runs/sim/simus_pymust_paper_alias_seed0 --stap-device cpu",
+                "",
+                # HAB contract check logs.
+                "PYTHONPATH=. conda run -n stap-fus python scripts/hab_contract_check.py \\",
+                "  runs/sim/simus_pymust_paper_micro_seed0/bundle/simus_pymust_paper_micro_seed0 \\",
+                "  2>&1 | tee reports/simus_contract/simus_pymust_paper_micro_seed0_hab_contract.txt",
+                "PYTHONPATH=. conda run -n stap-fus python scripts/hab_contract_check.py \\",
+                "  runs/sim/simus_pymust_paper_alias_seed0/bundle/simus_pymust_paper_alias_seed0 \\",
+                "  2>&1 | tee reports/simus_contract/simus_pymust_paper_alias_seed0_hab_contract.txt",
+                "",
+                # Sanity-link telemetry vs real IQ (Shin Fig3 + Gammex phantom).
+                "PYTHONPATH=. conda run -n stap-fus python scripts/physical_doppler_sanity_link.py \\",
+                "  --sim-run runs/sim/simus_pymust_paper_micro_seed0 \\",
+                "  --shin-root data/shin_zenodo_10711806/ratbrain_fig3_raw --shin-iq-file IQData001.dat \\",
+                "  --shin-frames 0:128 --shin-prf-hz 1000 \\",
+                "  --gammex-seq-root \"data/twinkling_artifact/Flow in Gammex phantom\" \\",
+                "  --gammex-frames-along 0 --gammex-frames-across 0 --gammex-prf-hz 2500 \\",
+                "  --gammex-mask-mode bmode_tube --gammex-mask-ref-frames 0:6 \\",
+                "  --pf 30 250 --pg 250 400 --pa-lo 400 --tile-hw 8 8 --tile-stride 3 \\",
+                "  --tag simus_micro_paper_seed0_vs_shin_gammex",
+                "PYTHONPATH=. conda run -n stap-fus python scripts/physical_doppler_sanity_link.py \\",
+                "  --sim-run runs/sim/simus_pymust_paper_alias_seed0 \\",
+                "  --shin-root data/shin_zenodo_10711806/ratbrain_fig3_raw --shin-iq-file IQData001.dat \\",
+                "  --shin-frames 0:128 --shin-prf-hz 1000 \\",
+                "  --gammex-seq-root \"data/twinkling_artifact/Flow in Gammex phantom\" \\",
+                "  --gammex-frames-along 0 --gammex-frames-across 0 --gammex-prf-hz 2500 \\",
+                "  --gammex-mask-mode bmode_tube --gammex-mask-ref-frames 0:6 \\",
+                "  --pf 30 250 --pg 250 400 --pa-lo 400 --tile-hw 8 8 --tile-stride 3 \\",
+                "  --tag simus_alias_paper_seed0_vs_shin_gammex",
+            ],
+            notes=(
+                "SIMUS/PyMUST runs are used as a moving-scatterer credibility anchor. "
+                "Sanity-link summaries compare PSD-band / coherence / low-rank proxies against open real IQ; "
+                "contract checks verify bundle integrity and KA-friendly regime telemetry. "
+                "No performance claims are made from these comparisons."
+            ),
+        ),
+        ArtifactInfo(
             name="Paper build modes (paper vs supplement vs full)",
             paper_refs=["Build packaging (Phase 7)"],
             outputs=["stap_fus_paper.pdf", "stap_fus_supplement.pdf", "stap_fus_methodology.pdf"],
