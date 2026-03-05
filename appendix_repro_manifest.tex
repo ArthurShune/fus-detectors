@@ -7,10 +7,10 @@ The manifest lists the minimal set of commands/outputs needed to reproduce the m
 Run \path{PYTHONPATH=. conda run -n stap-fus python scripts/generate_repro_manifest.py} to refresh this manifest.
 
 \paragraph{Repository state.}
-Public repository: \path{git@github.com:ArthurShune/stap-for-fus.git}.
+Public repository: \path{https://github.com/ArthurShune/stap-for-fus.git}.
 Release tag: (not recorded; set \texttt{STAP\_FUS\_RELEASE\_TAG} or create a git tag).
-Commit: \texttt{ea3ef9c} (full: \texttt{ea3ef9caa5}\allowbreak\texttt{891a28a888}\allowbreak\texttt{a0156f0147}\allowbreak\texttt{c3f2d60538}); branch: \texttt{main}; dirty: \texttt{true}.
-Dirty details: non-ignored paths=2, ignored build products=3.
+Commit: \texttt{ed219c0} (full: \texttt{ed219c0965}\allowbreak\texttt{f252c5a7a6}\allowbreak\texttt{e99f13615d}\allowbreak\texttt{17aa788f8e}); branch: \texttt{main}; dirty: \texttt{true}.
+Dirty details: non-ignored paths=4, ignored build products=0.
 Note: dirty status ignores common LaTeX build products (e.g., \texttt{*.aux, *.log, *.out, *.fls, *.fdb\_latexmk, *.synctex.gz, *.pdf}).
 For archival reproducibility, generate this manifest from a clean, tagged release commit (\texttt{dirty=false}) and record the public repository URL and tag.
 
@@ -23,7 +23,7 @@ Runtime (conda env \texttt{stap-fus}):
 Python: \path{3.11.14 | packaged by conda-forge | (main, Jan 26 2026, 23:48:32) [GCC 14.3.0]}.
 Platform: \path{Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39}.
 Packages: \texttt{numpy}={2.2.6}, \texttt{scipy}={1.14.1}, \texttt{torch}={2.4.1}, \texttt{matplotlib}={3.10.0}, \texttt{cupy}={14.0.1}.
-Torch CUDA: available=\texttt{false}, cuda=\texttt{12.1}, device0=\path{}.
+Torch CUDA: available=\texttt{true}, cuda=\texttt{12.1}, device0=\path{NVIDIA GeForce RTX 4080 SUPER}.
 
 \paragraph{Datasets.}
 Paths below are the expected on-disk locations used by the scripts in this repository. Large outputs under \path{runs/} and \path{reports/} are not tracked.
