@@ -1878,12 +1878,17 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "reports/physdoppler_sanity_link/simus_micro_paper_seed0_vs_shin_gammex_table.json",
                 "reports/physdoppler_sanity_link/simus_alias_paper_seed0_vs_shin_gammex_summary.json",
                 "reports/physdoppler_sanity_link/simus_alias_paper_seed0_vs_shin_gammex_table.json",
+                # Baseline-vs-STAP comparison (tracked).
+                "reports/simus_baseline_compare/simus_pymust_paper_seed0_compare.csv",
+                "reports/simus_baseline_compare/simus_pymust_paper_seed0_compare.json",
                 # Contract check logs (tracked).
                 "reports/simus_contract/simus_pymust_paper_micro_seed0_hab_contract.txt",
                 "reports/simus_contract/simus_pymust_paper_alias_seed0_hab_contract.txt",
                 # Derived acceptance bundles (not tracked; runs/ is ignored).
                 "runs/sim/simus_pymust_paper_micro_seed0/bundle/simus_pymust_paper_micro_seed0/",
                 "runs/sim/simus_pymust_paper_alias_seed0/bundle/simus_pymust_paper_alias_seed0/",
+                # Bundle-sweep dirs for baseline comparisons (not tracked; runs/ is ignored).
+                "runs/sim_eval/simus_baseline_compare_r1/",
             ],
             commands=[
                 # Canonical SIMUS datasets (not tracked; deterministic given seed).
@@ -1925,6 +1930,15 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --gammex-mask-mode bmode_tube --gammex-mask-ref-frames 0:6 \\",
                 "  --pf 30 250 --pg 250 400 --pa-lo 400 --tile-hw 8 8 --tile-stride 3 \\",
                 "  --tag simus_alias_paper_seed0_vs_shin_gammex",
+                "",
+                # Baseline vs STAP comparison (paper-style baselines; uses sim ground-truth masks).
+                "PYTHONPATH=. conda run -n stap-fus python scripts/icube_baseline_compare.py \\",
+                "  --run runs/sim/simus_pymust_paper_micro_seed0 \\",
+                "  --run runs/sim/simus_pymust_paper_alias_seed0 \\",
+                "  --out-root runs/sim_eval/simus_baseline_compare_r1 \\",
+                "  --out-csv reports/simus_baseline_compare/simus_pymust_paper_seed0_compare.csv \\",
+                "  --out-json reports/simus_baseline_compare/simus_pymust_paper_seed0_compare.json \\",
+                "  --tag clinical_like --stap-device cpu",
             ],
             notes=(
                 "SIMUS/PyMUST runs are used as a moving-scatterer credibility anchor. "
