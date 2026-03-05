@@ -80,11 +80,44 @@ Phase 2: Paper-Scale Presets (Microvascular + Alias Stress) (Done)
     - expected_fd_hz.npy
     - mask_alias_expected.npy
 
-Phase 3: Validation + Paper Hook (Non-Performance Claims)
+Phase 3: Validation + Paper Hook (Non-Performance Claims) (Done)
   Objective:
   - Run sanity-link telemetry on SIMUS runs and compare to at least one real IQ dataset
     already supported by scripts/physical_doppler_sanity_link.py (Shin, Gammex).
 
   Deliverables:
-  - reports/physdoppler_sanity_link/*simus*.json
+  - reports/physdoppler_sanity_link/simus_*_summary.json
+  - reports/physdoppler_sanity_link/simus_*_table.json
   - optional: one figure/table row in methods/supp describing this backend as a "credibility anchor"
+
+  Paper-tier SIMUS runs used (not tracked in git; runs/ is ignored):
+  - runs/sim/simus_pymust_paper_micro_seed0
+  - runs/sim/simus_pymust_paper_alias_seed0
+
+  Commands (deterministic given inputs):
+  - Microvascular:
+      PYTHONPATH=. conda run -n stap-fus python scripts/physical_doppler_sanity_link.py \
+        --sim-run runs/sim/simus_pymust_paper_micro_seed0 \
+        --shin-root data/shin_zenodo_10711806/ratbrain_fig3_raw --shin-iq-file IQData001.dat \
+        --shin-frames 0:128 --shin-prf-hz 1000 \
+        --gammex-seq-root "data/twinkling_artifact/Flow in Gammex phantom" \
+        --gammex-frames-along 0 --gammex-frames-across 0 --gammex-prf-hz 2500 \
+        --gammex-mask-mode bmode_tube --gammex-mask-ref-frames 0:6 \
+        --pf 30 250 --pg 250 400 --pa-lo 400 --tile-hw 8 8 --tile-stride 3 \
+        --tag simus_micro_paper_seed0_vs_shin_gammex
+  - Alias stress:
+      PYTHONPATH=. conda run -n stap-fus python scripts/physical_doppler_sanity_link.py \
+        --sim-run runs/sim/simus_pymust_paper_alias_seed0 \
+        --shin-root data/shin_zenodo_10711806/ratbrain_fig3_raw --shin-iq-file IQData001.dat \
+        --shin-frames 0:128 --shin-prf-hz 1000 \
+        --gammex-seq-root "data/twinkling_artifact/Flow in Gammex phantom" \
+        --gammex-frames-along 0 --gammex-frames-across 0 --gammex-prf-hz 2500 \
+        --gammex-mask-mode bmode_tube --gammex-mask-ref-frames 0:6 \
+        --pf 30 250 --pg 250 400 --pa-lo 400 --tile-hw 8 8 --tile-stride 3 \
+        --tag simus_alias_paper_seed0_vs_shin_gammex
+
+  Outputs (tracked in git; whitelisted in .gitignore):
+  - reports/physdoppler_sanity_link/simus_micro_paper_seed0_vs_shin_gammex_summary.json
+  - reports/physdoppler_sanity_link/simus_micro_paper_seed0_vs_shin_gammex_table.json
+  - reports/physdoppler_sanity_link/simus_alias_paper_seed0_vs_shin_gammex_summary.json
+  - reports/physdoppler_sanity_link/simus_alias_paper_seed0_vs_shin_gammex_table.json

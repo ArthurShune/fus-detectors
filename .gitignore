@@ -44,3 +44,7 @@ reports/**
 !reports/latency/
 !reports/latency/4080super_latency_summary.csv
 !reports/latency/4080super_latency_summary.json
+
+# Physical Doppler sanity-link (SIMUS/PyMUST) Phase 3 artifacts.
+!reports/physdoppler_sanity_link/
+!reports/physdoppler_sanity_link/simus_*.json
