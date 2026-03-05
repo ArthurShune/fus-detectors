@@ -4,8 +4,8 @@
     "release_tag": null
   },
   "git": {
-    "commit": "0a31b007a40a98e5666a805ae75105cb54a3287e",
-    "commit_short": "0a31b00",
+    "commit": "4984f45b47319dfee37cd4d94b7f184a21f5094e",
+    "commit_short": "4984f45",
     "branch": "main",
     "dirty": false,
     "dirty_paths_count": 0,
@@ -1407,10 +1407,13 @@
         "reports/physdoppler_sanity_link/simus_micro_paper_seed0_vs_shin_gammex_table.json",
         "reports/physdoppler_sanity_link/simus_alias_paper_seed0_vs_shin_gammex_summary.json",
         "reports/physdoppler_sanity_link/simus_alias_paper_seed0_vs_shin_gammex_table.json",
+        "reports/simus_baseline_compare/simus_pymust_paper_seed0_compare.csv",
+        "reports/simus_baseline_compare/simus_pymust_paper_seed0_compare.json",
         "reports/simus_contract/simus_pymust_paper_micro_seed0_hab_contract.txt",
         "reports/simus_contract/simus_pymust_paper_alias_seed0_hab_contract.txt",
         "runs/sim/simus_pymust_paper_micro_seed0/bundle/simus_pymust_paper_micro_seed0/",
-        "runs/sim/simus_pymust_paper_alias_seed0/bundle/simus_pymust_paper_alias_seed0/"
+        "runs/sim/simus_pymust_paper_alias_seed0/bundle/simus_pymust_paper_alias_seed0/",
+        "runs/sim_eval/simus_baseline_compare_r1/"
       ],
       "commands": [
         "PYTHONPATH=. conda run -n stap-fus python sim/simus/pilot_pymust_simus.py \\",
@@ -1447,7 +1450,15 @@
         "  --gammex-frames-along 0 --gammex-frames-across 0 --gammex-prf-hz 2500 \\",
         "  --gammex-mask-mode bmode_tube --gammex-mask-ref-frames 0:6 \\",
         "  --pf 30 250 --pg 250 400 --pa-lo 400 --tile-hw 8 8 --tile-stride 3 \\",
-        "  --tag simus_alias_paper_seed0_vs_shin_gammex"
+        "  --tag simus_alias_paper_seed0_vs_shin_gammex",
+        "",
+        "PYTHONPATH=. conda run -n stap-fus python scripts/icube_baseline_compare.py \\",
+        "  --run runs/sim/simus_pymust_paper_micro_seed0 \\",
+        "  --run runs/sim/simus_pymust_paper_alias_seed0 \\",
+        "  --out-root runs/sim_eval/simus_baseline_compare_r1 \\",
+        "  --out-csv reports/simus_baseline_compare/simus_pymust_paper_seed0_compare.csv \\",
+        "  --out-json reports/simus_baseline_compare/simus_pymust_paper_seed0_compare.json \\",
+        "  --tag clinical_like --stap-device cpu"
       ],
       "notes": "SIMUS/PyMUST runs are used as a moving-scatterer credibility anchor. Sanity-link summaries compare PSD-band / coherence / low-rank proxies against open real IQ; contract checks verify bundle integrity and KA-friendly regime telemetry. No performance claims are made from these comparisons."
     },
