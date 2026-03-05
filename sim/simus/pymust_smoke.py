@@ -1,11 +1,20 @@
 from __future__ import annotations
 
-import dataclasses
 import math
-from dataclasses import dataclass
 from typing import Any, Literal
 
 import numpy as np
+
+from sim.simus.config import (
+    SimusConfig,
+    SimusPreset,
+    SimusProfile,
+    dataset_meta,
+    default_config,
+    default_profile_config,
+    resolve_vessels,
+)
+from sim.simus.labels import build_label_pack
 
 
 try:  # optional dependency
@@ -14,125 +23,7 @@ except Exception:  # pragma: no cover - optional
     pymust = None  # type: ignore
 
 
-@dataclass(frozen=True)
-class SimusConfig:
-    preset: Literal["microvascular_like", "alias_stress"] = "microvascular_like"
-    tier: Literal["smoke", "paper"] = "smoke"
-
-    # Randomness
-    seed: int = 0
-
-    # Acquisition / slow-time
-    prf_hz: float = 1500.0
-    T: int = 8
-
-    # Beamforming grid (output image)
-    H: int = 24  # depth
-    W: int = 24  # lateral
-    x_min_m: float = -0.020
-    x_max_m: float = 0.020
-    z_min_m: float = 0.010
-    z_max_m: float = 0.050
-
-    # PyMUST probe + medium
-    probe: str = "P4-2v"  # small element count for smoke
-    c_mps: float = 1540.0
-    fs_mult: float = 4.0  # must be >= 4 for SIMUS
-    tilt_deg: float = 0.0  # plane-wave tilt
-
-    # Scatterers
-    tissue_count: int = 400
-    blood_count: int = 200
-    tissue_rc_scale: float = 1.0
-    blood_rc_scale: float = 0.25
-
-    # Simple in-plane vessel: vertical strip (axis ~ +z)
-    vessel_center_x_m: float = 0.0
-    vessel_radius_m: float = 0.004
-
-    # Flow along +z (m/s); for poiseuille, this is vmax at the centerline.
-    blood_vmax_mps: float = 0.020
-    blood_profile: Literal["plug", "poiseuille"] = "poiseuille"
-
-    # Deterministic reinjection for blood (new scatterers enter at inflow z)
-    reservoir_scale: int = 4
-    reinject_depth_span_m: float = 0.003  # depth band near z_min used for reinjection
-
-
-SimusSmokeConfig = SimusConfig  # backward-compat alias (Phase 1 name)
-
-
-def default_config(
-    *,
-    preset: Literal["microvascular_like", "alias_stress"],
-    tier: Literal["smoke", "paper"],
-    seed: int,
-) -> SimusConfig:
-    # Paper tier aligns with "brainlike" acquisition scales: PRF=1500, T=64, L11-5v.
-    if tier == "paper":
-        base = SimusConfig(
-            preset=str(preset),  # type: ignore[arg-type]
-            tier=str(tier),  # type: ignore[arg-type]
-            seed=int(seed),
-            prf_hz=1500.0,
-            T=64,
-            H=128,
-            W=128,
-            # 19.2mm x 19.2mm ROI with z_min > 0.
-            x_min_m=-9.6e-3,
-            x_max_m=9.6e-3,
-            z_min_m=5.0e-3,
-            z_max_m=24.2e-3,
-            probe="L11-5v",
-            c_mps=1540.0,
-            fs_mult=4.0,
-            tissue_count=2000,
-            blood_count=1000,
-            tissue_rc_scale=1.0,
-            blood_rc_scale=0.25,
-            vessel_center_x_m=0.0,
-            vessel_radius_m=1.2e-3 if preset == "microvascular_like" else 1.8e-3,
-            blood_vmax_mps=0.015 if preset == "microvascular_like" else 0.090,
-            blood_profile="poiseuille",
-            reservoir_scale=4,
-            reinject_depth_span_m=1.5e-3,
-        )
-        return base
-
-    # Smoke tier: small grid/counts; uses P4-2v by default for speed.
-    if preset == "alias_stress":
-        vmax = 0.30  # large so alias occurs even for P4-2v (fc ~ 2.7MHz) at PRF=1500
-        radius = 4.0e-3
-    else:
-        vmax = 0.03
-        radius = 3.0e-3
-
-    return SimusConfig(
-        preset=str(preset),  # type: ignore[arg-type]
-        tier=str(tier),  # type: ignore[arg-type]
-        seed=int(seed),
-        prf_hz=1500.0,
-        T=8,
-        H=24,
-        W=24,
-        x_min_m=-0.020,
-        x_max_m=0.020,
-        z_min_m=0.010,
-        z_max_m=0.050,
-        probe="P4-2v",
-        c_mps=1540.0,
-        fs_mult=4.0,
-        tissue_count=400,
-        blood_count=200,
-        tissue_rc_scale=1.0,
-        blood_rc_scale=0.25,
-        vessel_center_x_m=0.0,
-        vessel_radius_m=radius,
-        blood_vmax_mps=vmax,
-        blood_profile="poiseuille",
-        reservoir_scale=4,
-        reinject_depth_span_m=3.0e-3,
-    )
+SimusSmokeConfig = SimusConfig
 
 
 def _require_pymust() -> Any:
@@ -144,8 +35,21 @@ def _require_pymust() -> Any:
     return pymust
 
 
-def _vessel_mask_strip(*, X: np.ndarray, Z: np.ndarray, cx: float, r: float) -> np.ndarray:
-    return (np.abs(X - float(cx)) <= float(r)) & np.isfinite(Z)
+def _vessel_mask_strip(
+    *,
+    X: np.ndarray,
+    Z: np.ndarray,
+    cx: float,
+    r: float,
+    z_min: float | None = None,
+    z_max: float | None = None,
+) -> np.ndarray:
+    mask = (np.abs(X - float(cx)) <= float(r)) & np.isfinite(Z)
+    if z_min is not None:
+        mask &= Z >= float(z_min)
+    if z_max is not None:
+        mask &= Z <= float(z_max)
+    return mask
 
 
 def _vz_profile_from_x(
@@ -233,41 +137,75 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
     tilt_rad = float(np.deg2rad(float(cfg.tilt_deg)))
     txdel = pm.txdelay(param, tilt_rad).astype(np.float32, copy=False)
 
+    vessels = resolve_vessels(cfg)
+
     # ---- Output grid + masks ----
     xg = np.linspace(float(cfg.x_min_m), float(cfg.x_max_m), int(cfg.W), dtype=np.float32)
     zg = np.linspace(float(cfg.z_min_m), float(cfg.z_max_m), int(cfg.H), dtype=np.float32)
     X, Z = np.meshgrid(xg, zg)  # (H,W)
 
-    mask_flow = _vessel_mask_strip(X=X, Z=Z, cx=float(cfg.vessel_center_x_m), r=float(cfg.vessel_radius_m))
-    # Conservative background mask: avoid top rows (near transducer) and flow region.
-    mask_bg = (~mask_flow).copy()
-    mask_bg[: max(1, int(round(0.1 * int(cfg.H)))), :] = False
-    if int(mask_bg.sum()) < 16:
-        mask_bg = ~mask_flow
-
     expected_vz_mps = np.zeros((int(cfg.H), int(cfg.W)), dtype=np.float32)
-    if np.any(mask_flow):
+    mask_microvascular = np.zeros((int(cfg.H), int(cfg.W)), dtype=bool)
+    mask_nuisance_pa = np.zeros((int(cfg.H), int(cfg.W)), dtype=bool)
+    vessel_role_map = np.zeros((int(cfg.H), int(cfg.W)), dtype=np.int16)
+    for vessel in vessels:
+        vessel_mask = _vessel_mask_strip(
+            X=X,
+            Z=Z,
+            cx=float(vessel.center_x_m),
+            r=float(vessel.radius_m),
+            z_min=vessel.z_min_m,
+            z_max=vessel.z_max_m,
+        )
+        if not np.any(vessel_mask):
+            continue
         vz = _vz_profile_from_x(
             X,
-            cx=float(cfg.vessel_center_x_m),
-            radius_m=float(cfg.vessel_radius_m),
-            vmax_mps=float(cfg.blood_vmax_mps),
-            profile=str(cfg.blood_profile),  # type: ignore[arg-type]
+            cx=float(vessel.center_x_m),
+            radius_m=float(vessel.radius_m),
+            vmax_mps=float(vessel.blood_vmax_mps),
+            profile=str(vessel.blood_profile),  # type: ignore[arg-type]
         )
-        expected_vz_mps[mask_flow] = vz[mask_flow]
-    expected_fd_hz = (
+        expected_vz_mps[vessel_mask] = np.maximum(expected_vz_mps[vessel_mask], vz[vessel_mask])
+        if vessel.role == "nuisance_pa":
+            mask_nuisance_pa |= vessel_mask
+            vessel_role_map[vessel_mask] = 2
+        else:
+            mask_microvascular |= vessel_mask
+            vessel_role_map[vessel_mask] = 1
+
+    base_bg = (~(mask_microvascular | mask_nuisance_pa)).copy()
+    base_bg[: max(1, int(round(float(cfg.bg_top_exclusion_frac) * int(cfg.H)))), :] = False
+    if int(base_bg.sum()) < 16:
+        base_bg = ~(mask_microvascular | mask_nuisance_pa)
+
+    expected_fd_true_hz = (
         (2.0 * float(param.fc) / max(float(param.c), 1e-9)) * expected_vz_mps
     ).astype(np.float32, copy=False)
-    mask_alias_expected = np.abs(expected_fd_hz) > (0.5 * float(cfg.prf_hz))
+    labels = build_label_pack(
+        mask_microvascular=mask_microvascular,
+        mask_nuisance_pa=mask_nuisance_pa,
+        base_bg_mask=base_bg,
+        expected_fd_true_hz=expected_fd_true_hz,
+        prf_hz=float(cfg.prf_hz),
+        bands=cfg.bands,
+        guard_px=int(cfg.label_guard_px),
+    )
 
     # ---- Scatterers ----
     x_min, x_max = float(cfg.x_min_m), float(cfg.x_max_m)
     z_min, z_max = float(cfg.z_min_m), float(cfg.z_max_m)
-    cx = float(cfg.vessel_center_x_m)
-    r = float(cfg.vessel_radius_m)
 
     def _in_vessel(x: np.ndarray, z: np.ndarray) -> np.ndarray:
-        return np.abs(x - cx) <= r
+        out = np.zeros_like(x, dtype=bool)
+        for vessel in vessels:
+            keep = np.abs(x - float(vessel.center_x_m)) <= float(vessel.radius_m)
+            if vessel.z_min_m is not None:
+                keep &= z >= float(vessel.z_min_m)
+            if vessel.z_max_m is not None:
+                keep &= z <= float(vessel.z_max_m)
+            out |= keep
+        return out
 
     # Tissue: uniform over ROI excluding the vessel strip.
     xs_tissue, zs_tissue = _sample_uniform_excluding_mask(
@@ -281,39 +219,72 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
     )
     rc_tissue = (float(cfg.tissue_rc_scale) * rng.standard_normal(int(cfg.tissue_count))).astype(np.float32)
 
-    # Blood: uniform in the vessel strip.
-    xs_blood = rng.uniform(cx - r, cx + r, size=int(cfg.blood_count)).astype(np.float32)
-    zs_blood = rng.uniform(z_min, z_max, size=int(cfg.blood_count)).astype(np.float32)
-    rc_blood = (float(cfg.blood_rc_scale) * rng.standard_normal(int(cfg.blood_count))).astype(np.float32)
-    vz_blood = _vz_profile_from_x(
-        xs_blood,
-        cx=float(cx),
-        radius_m=float(r),
-        vmax_mps=float(cfg.blood_vmax_mps),
-        profile=str(cfg.blood_profile),  # type: ignore[arg-type]
-    )
-    xs_blood_init = xs_blood.copy()
-    zs_blood_init = zs_blood.copy()
-    vz_blood_init = vz_blood.copy()
-
-    # Deterministic reinjection reservoir (positions near inflow).
+    blood_states: list[dict[str, Any]] = []
+    scatterers_init: dict[str, np.ndarray] = {
+        "xs_tissue": xs_tissue,
+        "zs_tissue": zs_tissue,
+        "rc_tissue": rc_tissue,
+    }
     res_scale = max(1, int(cfg.reservoir_scale))
-    res_n = int(res_scale * int(cfg.blood_count))
-    rng_res = np.random.default_rng(int(cfg.seed) + 1337)
-    res_x = rng_res.uniform(cx - r, cx + r, size=res_n).astype(np.float32)
     span = float(max(1e-6, float(cfg.reinject_depth_span_m)))
-    res_z = rng_res.uniform(z_min, min(z_min + span, z_max), size=res_n).astype(np.float32)
-    res_rc = (float(cfg.blood_rc_scale) * rng_res.standard_normal(res_n)).astype(np.float32)
-    res_ptr = 0
+    for vidx, vessel in enumerate(vessels):
+        x_lo = max(x_min, float(vessel.center_x_m) - float(vessel.radius_m))
+        x_hi = min(x_max, float(vessel.center_x_m) + float(vessel.radius_m))
+        z_lo = max(z_min, float(vessel.z_min_m) if vessel.z_min_m is not None else z_min)
+        z_hi = min(z_max, float(vessel.z_max_m) if vessel.z_max_m is not None else z_max)
+        n_blood = int(vessel.blood_count)
+        xs_blood = rng.uniform(x_lo, x_hi, size=n_blood).astype(np.float32)
+        zs_blood = rng.uniform(z_lo, z_hi, size=n_blood).astype(np.float32)
+        rc_blood = (float(vessel.blood_rc_scale) * rng.standard_normal(n_blood)).astype(np.float32)
+        vz_blood = _vz_profile_from_x(
+            xs_blood,
+            cx=float(vessel.center_x_m),
+            radius_m=float(vessel.radius_m),
+            vmax_mps=float(vessel.blood_vmax_mps),
+            profile=str(vessel.blood_profile),  # type: ignore[arg-type]
+        )
+
+        res_n = int(res_scale * max(1, n_blood))
+        rng_res = np.random.default_rng(int(cfg.seed) + 1337 + 17 * vidx)
+        res_x = rng_res.uniform(x_lo, x_hi, size=res_n).astype(np.float32)
+        res_z_hi = min(z_lo + span, z_hi)
+        res_z = rng_res.uniform(z_lo, res_z_hi, size=res_n).astype(np.float32)
+        res_rc = (float(vessel.blood_rc_scale) * rng_res.standard_normal(res_n)).astype(np.float32)
+
+        blood_states.append(
+            {
+                "vessel": vessel,
+                "xs": xs_blood,
+                "zs": zs_blood,
+                "rc": rc_blood,
+                "vz": vz_blood,
+                "res_x": res_x,
+                "res_z": res_z,
+                "res_rc": res_rc,
+                "res_n": res_n,
+                "res_ptr": 0,
+                "z_hi": np.float32(z_hi),
+            }
+        )
+        scatterers_init[f"xs_blood0_{vidx}"] = xs_blood.copy()
+        scatterers_init[f"zs_blood0_{vidx}"] = zs_blood.copy()
+        scatterers_init[f"vz_blood0_{vidx}"] = vz_blood.copy()
+        scatterers_init[f"rc_blood_{vidx}"] = rc_blood.copy()
+        scatterers_init[f"res_x_{vidx}"] = res_x
+        scatterers_init[f"res_z_{vidx}"] = res_z
+        scatterers_init[f"res_rc_{vidx}"] = res_rc
 
     # ---- Pulse loop: SIMUS -> RF -> IQch -> DAS -> IQimg ----
     Icube = np.empty((int(cfg.T), int(cfg.H), int(cfg.W)), dtype=np.complex64)
     M = None
 
     for t in range(int(cfg.T)):
-        xs = np.concatenate([xs_tissue, xs_blood]).astype(np.float32, copy=False)
-        zs = np.concatenate([zs_tissue, zs_blood]).astype(np.float32, copy=False)
-        rc = np.concatenate([rc_tissue, rc_blood]).astype(np.float32, copy=False)
+        blood_xs = [np.asarray(state["xs"], dtype=np.float32) for state in blood_states]
+        blood_zs = [np.asarray(state["zs"], dtype=np.float32) for state in blood_states]
+        blood_rc = [np.asarray(state["rc"], dtype=np.float32) for state in blood_states]
+        xs = np.concatenate([xs_tissue] + blood_xs).astype(np.float32, copy=False)
+        zs = np.concatenate([zs_tissue] + blood_zs).astype(np.float32, copy=False)
+        rc = np.concatenate([rc_tissue] + blood_rc).astype(np.float32, copy=False)
 
         rf, _rf_spec = pm.simus(xs, zs, rc, txdel, param)
         rf = np.asarray(rf, dtype=np.float32)
@@ -326,57 +297,62 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         img = (M @ iq_ch.flatten(order="F")).reshape(X.shape, order="F")
         Icube[t] = np.asarray(img, dtype=np.complex64)
 
-        # Update blood scatterers along +z.
-        zs_blood = (zs_blood + vz_blood * np.float32(dt_prp)).astype(np.float32, copy=False)
+        for state in blood_states:
+            vessel = state["vessel"]
+            zs_state = np.asarray(state["zs"], dtype=np.float32)
+            vz_state = np.asarray(state["vz"], dtype=np.float32)
+            zs_state = (zs_state + vz_state * np.float32(dt_prp)).astype(np.float32, copy=False)
 
-        # Reinjection when exiting the ROI depth range.
-        out = zs_blood > np.float32(z_max)
-        n_out = int(np.sum(out))
-        if n_out > 0:
-            idx = (np.arange(n_out, dtype=np.int64) + int(res_ptr)) % int(res_n)
-            res_ptr = int((res_ptr + n_out) % int(res_n))
-            xs_blood[out] = res_x[idx].astype(np.float32, copy=False)
-            zs_blood[out] = res_z[idx].astype(np.float32, copy=False)
-            rc_blood[out] = res_rc[idx].astype(np.float32, copy=False)
-            vz_blood[out] = _vz_profile_from_x(
-                xs_blood[out],
-                cx=float(cx),
-                radius_m=float(r),
-                vmax_mps=float(cfg.blood_vmax_mps),
-                profile=str(cfg.blood_profile),  # type: ignore[arg-type]
-            )
+            out = zs_state > np.float32(state["z_hi"])
+            n_out = int(np.sum(out))
+            if n_out > 0:
+                ptr = int(state["res_ptr"])
+                res_n = int(state["res_n"])
+                idx = (np.arange(n_out, dtype=np.int64) + ptr) % res_n
+                state["res_ptr"] = int((ptr + n_out) % res_n)
+                xs_state = np.asarray(state["xs"], dtype=np.float32)
+                rc_state = np.asarray(state["rc"], dtype=np.float32)
+                xs_state[out] = np.asarray(state["res_x"], dtype=np.float32)[idx]
+                zs_state[out] = np.asarray(state["res_z"], dtype=np.float32)[idx]
+                rc_state[out] = np.asarray(state["res_rc"], dtype=np.float32)[idx]
+                vz_state[out] = _vz_profile_from_x(
+                    xs_state[out],
+                    cx=float(vessel.center_x_m),
+                    radius_m=float(vessel.radius_m),
+                    vmax_mps=float(vessel.blood_vmax_mps),
+                    profile=str(vessel.blood_profile),  # type: ignore[arg-type]
+                )
+                state["xs"] = xs_state
+                state["rc"] = rc_state
+                state["vz"] = vz_state
+            state["zs"] = zs_state
 
     # Debug artifacts: initial scatterers + reservoir (small enough for smoke).
     debug = {
-        "expected_fd_hz": expected_fd_hz,
+        "expected_fd_hz": labels.expected_fd_true_hz,
+        "expected_fd_true_hz": labels.expected_fd_true_hz,
+        "expected_fd_sampled_hz": labels.expected_fd_sampled_hz,
         "expected_vz_mps": expected_vz_mps,
-        "scatterers_init": {
-            "xs_tissue": xs_tissue,
-            "zs_tissue": zs_tissue,
-            "rc_tissue": rc_tissue,
-            "xs_blood0": xs_blood_init,
-            "zs_blood0": zs_blood_init,
-            "vz_blood0": vz_blood_init,
-            "rc_blood": rc_blood,
-            "res_x": res_x,
-            "res_z": res_z,
-            "res_rc": res_rc,
-        },
+        "vessel_role_map": vessel_role_map,
+        "scatterers_init": scatterers_init,
         "txdel_s": txdel,
         "grid_x_m": xg,
         "grid_z_m": zg,
-        "fd_vmax_hz": float(2.0 * float(param.fc) * float(cfg.blood_vmax_mps) / max(float(param.c), 1e-9)),
+        "fd_vmax_hz": float(np.max(labels.expected_fd_true_hz)) if labels.expected_fd_true_hz.size else 0.0,
     }
 
     return {
         "Icube": Icube,
-        "mask_flow": mask_flow.astype(bool, copy=False),
-        "mask_bg": mask_bg.astype(bool, copy=False),
-        "mask_alias_expected": mask_alias_expected.astype(bool, copy=False),
+        "mask_flow": labels.mask_flow.astype(bool, copy=False),
+        "mask_bg": labels.mask_bg.astype(bool, copy=False),
+        "mask_alias_expected": labels.mask_alias_expected.astype(bool, copy=False),
+        "mask_microvascular": labels.mask_microvascular.astype(bool, copy=False),
+        "mask_nuisance_pa": labels.mask_nuisance_pa.astype(bool, copy=False),
+        "mask_guard": labels.mask_guard.astype(bool, copy=False),
+        "mask_h1_pf_main": labels.mask_h1_pf_main.astype(bool, copy=False),
+        "mask_h1_alias_qc": labels.mask_h1_alias_qc.astype(bool, copy=False),
+        "mask_h0_bg": labels.mask_h0_bg.astype(bool, copy=False),
+        "mask_h0_nuisance_pa": labels.mask_h0_nuisance_pa.astype(bool, copy=False),
         "debug": debug,
         "param": {"probe": str(cfg.probe), "fc_hz": float(param.fc), "fs_hz": float(param.fs), "c_mps": float(param.c)},
     }
-
-
-def dataset_meta(cfg: SimusConfig) -> dict[str, Any]:
-    return dataclasses.asdict(cfg)

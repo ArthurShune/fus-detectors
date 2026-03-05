@@ -52,3 +52,26 @@ def test_pymust_simus_alias_preset_produces_expected_alias_mask():
     assert int(mask_flow.sum()) > 0
     assert int(mask_alias.sum()) > 0
     assert int(mask_alias.sum()) < int(mask_flow.sum())
+
+
+def test_pymust_simus_clin_profile_emits_h1_h0_masks():
+    from sim.simus.config import default_profile_config
+    from sim.simus.pymust_smoke import generate_icube
+
+    cfg = default_profile_config(profile="ClinIntraOp-Pf-v1", tier="smoke", seed=0)
+    cfg = dataclasses.replace(cfg, T=2, tissue_count=120)
+    out = generate_icube(cfg)
+
+    mask_pf = np.asarray(out["mask_h1_pf_main"], dtype=bool)
+    mask_alias_qc = np.asarray(out["mask_h1_alias_qc"], dtype=bool)
+    mask_nuisance = np.asarray(out["mask_h0_nuisance_pa"], dtype=bool)
+    mask_bg = np.asarray(out["mask_h0_bg"], dtype=bool)
+    mask_guard = np.asarray(out["mask_guard"], dtype=bool)
+
+    assert int(mask_pf.sum()) > 0
+    assert int(mask_nuisance.sum()) > 0
+    assert int(mask_bg.sum()) > 0
+    assert not np.any(mask_pf & mask_nuisance)
+    assert not np.any(mask_pf & mask_guard)
+    assert not np.any(mask_bg & mask_guard)
+    assert int(mask_alias_qc.sum()) >= 0
