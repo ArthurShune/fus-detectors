@@ -1,24 +1,22 @@
 {
   "repo": {
-    "public_url": "git@github.com:ArthurShune/stap-for-fus.git",
+    "public_url": "https://github.com/ArthurShune/stap-for-fus.git",
     "release_tag": null
   },
   "git": {
-    "commit": "ea3ef9caa5891a28a888a0156f0147c3f2d60538",
-    "commit_short": "ea3ef9c",
+    "commit": "ed219c0965f252c5a7a6e99f13615d17aa788f8e",
+    "commit_short": "ed219c0",
     "branch": "main",
     "dirty": true,
-    "dirty_paths_count": 2,
-    "dirty_ignored_paths_count": 3,
+    "dirty_paths_count": 4,
+    "dirty_ignored_paths_count": 0,
     "dirty_paths": [
       "M reports/hw/4080super_env.txt",
-      "M reports/hw/4080super_nvidia_smi.txt"
+      "M reports/latency/4080super_latency_summary.csv",
+      "M reports/latency/4080super_latency_summary.json",
+      "M stap_fus_methodology.tex"
     ],
-    "dirty_ignored_paths": [
-      "M reports/refactor/4080super_refactor_full.log",
-      "M reports/refactor/4080super_refactor_phase.log",
-      "M reports/refactor/4080super_refactor_quick.log"
-    ]
+    "dirty_ignored_paths": []
   },
   "env": {
     "preferred_conda_env": "stap-fus",
@@ -35,10 +33,10 @@
         "cupy": "14.0.1"
       },
       "torch_cuda": {
-        "cuda_is_available": false,
+        "cuda_is_available": true,
         "cuda_version": "12.1",
-        "device_count": 0,
-        "device0_name": null
+        "device_count": 1,
+        "device0_name": "NVIDIA GeForce RTX 4080 SUPER"
       }
     },
     "current": {
@@ -54,10 +52,10 @@
         "cupy": "14.0.1"
       },
       "torch_cuda": {
-        "cuda_is_available": false,
+        "cuda_is_available": true,
         "cuda_version": "12.1",
-        "device_count": 0,
-        "device0_name": null
+        "device_count": 1,
+        "device0_name": "NVIDIA GeForce RTX 4080 SUPER"
       },
       "cwd": "/home/arthu/stap-for-fus"
     },
