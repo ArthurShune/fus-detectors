@@ -1,17 +1,24 @@
 {
   "repo": {
-    "public_url": "https://github.com/ArthurShune/stap-for-fus.git",
+    "public_url": "git@github.com:ArthurShune/stap-for-fus.git",
     "release_tag": null
   },
   "git": {
-    "commit": "f089301dc41bb123b8e9aae1312d7eb557498468",
-    "commit_short": "f089301",
+    "commit": "ea3ef9caa5891a28a888a0156f0147c3f2d60538",
+    "commit_short": "ea3ef9c",
     "branch": "main",
-    "dirty": false,
-    "dirty_paths_count": 0,
-    "dirty_ignored_paths_count": 0,
-    "dirty_paths": [],
-    "dirty_ignored_paths": []
+    "dirty": true,
+    "dirty_paths_count": 2,
+    "dirty_ignored_paths_count": 3,
+    "dirty_paths": [
+      "M reports/hw/4080super_env.txt",
+      "M reports/hw/4080super_nvidia_smi.txt"
+    ],
+    "dirty_ignored_paths": [
+      "M reports/refactor/4080super_refactor_full.log",
+      "M reports/refactor/4080super_refactor_phase.log",
+      "M reports/refactor/4080super_refactor_quick.log"
+    ]
   },
   "env": {
     "preferred_conda_env": "stap-fus",

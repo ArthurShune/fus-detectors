@@ -4,6 +4,10 @@ Makefile:856: warning: ignoring old recipe for target 'r4c-skull-generate'
 PYTHONPATH=. python scripts/verify_refactor.py --mode quick --execute
 ...........                                                              [100%]
 =============================== warnings summary ===============================
+tests/test_temporal_msd.py::test_msd_band_energy_highlights_inband_signal
+  /home/arthu/miniconda3/envs/stap-fus/lib/python3.11/site-packages/torch/cuda/__init__.py:128: UserWarning: CUDA initialization: Unexpected error from cudaGetDeviceCount(). Did you run some cuda functions before calling NumCudaDevices() that might have already set an error? Error 304: OS call failed or operation not supported on this OS (Triggered internally at /opt/conda/conda-bld/pytorch_1724789172399/work/c10/cuda/CUDAFunctions.cpp:108.)
+    return torch._C._cuda_getDeviceCount() > 0
+
 tests/test_stap_fastpath_batch_wrapper.py::test_stap_pd_tile_batch_fastpath_accepts_tensor_without_numpy_roundtrip
   /home/arthu/miniconda3/envs/stap-fus/lib/python3.11/site-packages/matplotlib/_fontconfig_pattern.py:64: PyparsingDeprecationWarning: 'oneOf' deprecated - use 'one_of'
     prop = Group((name + Suppress("=") + comma_separated(value)) | oneOf(_CONSTANTS))
@@ -31,10 +35,7 @@ tests/test_stap_fastpath_batch_wrapper.py::test_stap_pd_tile_batch_fastpath_acce
     ParserElement.enablePackrat()
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-11 passed, 14 warnings in 0.85s
-[generate] /home/arthu/miniconda3/envs/stap-fus/bin/python /home/arthu/stap-for-fus/scripts/replay_stap_from_run.py --src /home/arthu/stap-for-fus/runs/pilot/r4c_kwave_seed1 --out runs/pilot/fair_filter_matrix_phase1_quick/open_seed1_mcsvd_full --stap-profile clinical --profile Brain-OpenSkull --baseline mc_svd --stap-device cuda --stap-detector-variant msd_ratio --stap-cov-trim-q 0.0 --stap-debug-samples 0 --score-mode pd --flow-mask-mode default --time-window-length 64 --synth-amp-jitter 0.0 --synth-phase-jitter 0.0 --synth-noise-level 0.0 --synth-shift-max-px 0 --time-window-offset 0 --baseline-support window --svd-profile literature --svd-energy-frac 0.9 --reg-enable --reg-method phasecorr --reg-subpixel 4 --reg-reference median --flow-doppler-min-hz 60.0 --flow-doppler-max-hz 180.0 --bg-alias-hz 650.0 --bg-alias-fraction 0.3 --bg-alias-depth-min-frac 0.3 --bg-alias-depth-max-frac 0.7 --bg-alias-jitter-hz 50.0 --aperture-phase-std 0.8 --aperture-phase-corr-len 14.0 --aperture-phase-seed 111 --clutter-beta 1.0 --clutter-snr-db 20.0 --clutter-mode lowrank --clutter-rank 3 --clutter-depth-min-frac 0.2 --clutter-depth-max-frac 0.95 --stap-conditional-disable
-[replay_stap_from_run] (1/1) Processing window offset0_len64 (frames=64)...
-[replay_stap_from_run] Completed window offset0_len64 in 0.1 min (ETA 0.0 min)
+11 passed, 15 warnings in 0.78s
 [fair_filter_comparison] wrote 2 rows to reports/refactor/refactor_quick_fair_matrix.csv and reports/refactor/refactor_quick_fair_matrix.json
 
 [verify-refactor] mode=quick execute=True steps=2
