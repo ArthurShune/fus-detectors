@@ -121,3 +121,34 @@ Phase 3: Validation + Paper Hook (Non-Performance Claims) (Done)
   - reports/physdoppler_sanity_link/simus_micro_paper_seed0_vs_shin_gammex_table.json
   - reports/physdoppler_sanity_link/simus_alias_paper_seed0_vs_shin_gammex_summary.json
   - reports/physdoppler_sanity_link/simus_alias_paper_seed0_vs_shin_gammex_table.json
+
+Phase 4: Bundle Derivation + HAB Contract Check (Done)
+  Objective:
+  - Derive standard acceptance bundles from the canonical SIMUS datasets without rerunning the simulator.
+  - Run the existing HAB contract check (R-1/R-2/R-3) and save logs under reports/.
+
+  Implementation:
+  - scripts/icube_make_bundle.py (dataset -> bundle)
+  - scripts/hab_contract_check.py (bundle -> printed contract telemetry)
+
+  Commands:
+  - Derive bundles:
+      PYTHONPATH=. conda run -n stap-fus python scripts/icube_make_bundle.py \
+        --run runs/sim/simus_pymust_paper_micro_seed0 --stap-device cpu
+      PYTHONPATH=. conda run -n stap-fus python scripts/icube_make_bundle.py \
+        --run runs/sim/simus_pymust_paper_alias_seed0 --stap-device cpu
+    Output bundle dirs (not tracked in git):
+    - runs/sim/simus_pymust_paper_micro_seed0/bundle/simus_pymust_paper_micro_seed0/
+    - runs/sim/simus_pymust_paper_alias_seed0/bundle/simus_pymust_paper_alias_seed0/
+
+  - Contract check logs (tracked):
+      PYTHONPATH=. conda run -n stap-fus python scripts/hab_contract_check.py \
+        runs/sim/simus_pymust_paper_micro_seed0/bundle/simus_pymust_paper_micro_seed0 \
+        2>&1 | tee reports/simus_contract/simus_pymust_paper_micro_seed0_hab_contract.txt
+      PYTHONPATH=. conda run -n stap-fus python scripts/hab_contract_check.py \
+        runs/sim/simus_pymust_paper_alias_seed0/bundle/simus_pymust_paper_alias_seed0 \
+        2>&1 | tee reports/simus_contract/simus_pymust_paper_alias_seed0_hab_contract.txt
+
+  Outputs (tracked in git; whitelisted in .gitignore):
+  - reports/simus_contract/simus_pymust_paper_micro_seed0_hab_contract.txt
+  - reports/simus_contract/simus_pymust_paper_alias_seed0_hab_contract.txt
