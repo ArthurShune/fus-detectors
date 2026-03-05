@@ -210,6 +210,46 @@ Defaults are chosen to align with the Brain-* acquisition scale used throughout 
   - deterministic output for a fixed seed
   - nontrivial temporal variation within the flow region
 
+## Sanity-Link Telemetry (Phase 2)
+
+To support a defensible "physics-backed" story without in-vivo labels, we provide a
+sanity-link script that computes summary slow-time statistics on:
+
+- a generated physical-doppler `dataset/icube.npy` (with known flow/background masks), and
+- real IQ cubes (Shin RatBrain Fig3 and/or Twinkling/Gammex RawBCF phantom cubes).
+
+The script reports tile-level PSD band energies (Pf/Pg/Pa), non-DC peak frequency
+occupancy, lag-1 coherence, and a small deterministic SVD summary on selected
+tiles. Outputs are written under `reports/` and are deterministic given inputs.
+
+Script:
+
+- `scripts/physical_doppler_sanity_link.py`
+
+Example (sim only):
+
+```bash
+PYTHONPATH=. conda run -n stap-fus \
+  python scripts/physical_doppler_sanity_link.py \
+  --sim-run runs/sim/phys_smoke_bundle \
+  --out-dir reports/physdoppler_sanity_link \
+  --tag sim_smoke
+```
+
+Example (sim + Shin + Gammex):
+
+```bash
+PYTHONPATH=. conda run -n stap-fus \
+  python scripts/physical_doppler_sanity_link.py \
+  --sim-run runs/sim/phys_smoke_bundle \
+  --shin-root data/shin_zenodo_10711806/ratbrain_fig3_raw \
+  --shin-iq-file IQData001.dat --shin-frames 0:128 --shin-prf-hz 1000 \
+  --gammex-seq-root "data/twinkling_artifact/Flow in Gammex phantom" \
+  --gammex-frames-along 0 --gammex-frames-across 0 --gammex-prf-hz 2500 \
+  --out-dir reports/physdoppler_sanity_link \
+  --tag sim_real_sanity
+```
+
 ## Implementation notes
 
 The initial Phase 1 implementation lives in:
