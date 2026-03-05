@@ -99,20 +99,26 @@ class MethodSpec:
     key: str
     baseline_type: str
     run_stap: bool
-    score_kind: str  # "baseline_pd" | "stap_score"
+    role: str  # "baseline" | "stap"
 
 
-def _load_dataset(run_dir: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
+def _load_dataset(run_dir: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, dict[str, Any]]:
     ds = Path(run_dir) / "dataset"
     meta = _load_json(ds / "meta.json")
     Icube = np.load(ds / "icube.npy").astype(np.complex64, copy=False)
     mask_flow = np.load(ds / "mask_flow.npy").astype(bool, copy=False)
     mask_bg = np.load(ds / "mask_bg.npy").astype(bool, copy=False)
+    mask_alias = None
+    alias_path = ds / "mask_alias_expected.npy"
+    if alias_path.is_file():
+        mask_alias = np.load(alias_path).astype(bool, copy=False)
     if Icube.ndim != 3:
         raise ValueError(f"Icube must have shape (T,H,W), got {Icube.shape}")
     if mask_flow.shape != Icube.shape[1:] or mask_bg.shape != Icube.shape[1:]:
         raise ValueError("mask shape mismatch vs Icube")
-    return Icube, mask_flow, mask_bg, meta
+    if mask_alias is not None and mask_alias.shape != Icube.shape[1:]:
+        raise ValueError("mask_alias_expected shape mismatch vs Icube")
+    return Icube, mask_flow, mask_bg, mask_alias, meta
 
 
 def _derive_bundle(
@@ -176,7 +182,7 @@ def _derive_bundle(
         meta_extra={
             "icube_baseline_compare": True,
             "compare_method_key": str(method.key),
-            "compare_score_kind": str(method.score_kind),
+            "compare_role": str(method.role),
         },
     )
     # Bundle writer returns a dict of paths; meta.json path is under key "meta".
@@ -232,6 +238,17 @@ def parse_args() -> argparse.Namespace:
         help="Output JSON path (tracked) (default: %(default)s).",
     )
     ap.add_argument("--tag", type=str, default=None, help="Optional tag to include in dataset_name.")
+    ap.add_argument(
+        "--eval-score",
+        type=str,
+        default="pd",
+        choices=["pd", "vnext"],
+        help=(
+            "Which score map to evaluate (paper-style). "
+            "'pd' uses score_pd_{base,stap}.npy (PD after filtering); "
+            "'vnext' uses score_base.npy / score_stap_preka.npy (STAP detector score)."
+        ),
+    )
 
     ap.add_argument(
         "--baselines",
@@ -280,6 +297,7 @@ def main() -> None:
     stap_baseline = str(args.stap_baseline).strip()
     tag = str(args.tag).strip() if args.tag else ""
     fprs = [float(x) for x in _split_csv_list(str(args.fprs))]
+    eval_score = str(args.eval_score).strip()
 
     tile_hw = (int(args.tile_hw[0]), int(args.tile_hw[1]))
     tile_stride = int(args.tile_stride)
@@ -291,29 +309,38 @@ def main() -> None:
     methods: list[MethodSpec] = []
     for b in baselines:
         key = f"baseline_{b}"
-        methods.append(MethodSpec(key=key, baseline_type=b, run_stap=False, score_kind="baseline_pd"))
-    methods.append(MethodSpec(key="stap", baseline_type=stap_baseline, run_stap=True, score_kind="stap_score"))
+        methods.append(MethodSpec(key=key, baseline_type=b, run_stap=False, role="baseline"))
+    methods.append(MethodSpec(key="stap", baseline_type=stap_baseline, run_stap=True, role="stap"))
 
     rows: list[dict[str, Any]] = []
-    details: dict[str, Any] = {"schema_version": "icube_baseline_compare.v1", "runs": {}}
+    details: dict[str, Any] = {"schema_version": "icube_baseline_compare.v2", "runs": {}}
 
     # Keep CPU deterministic by default (no CUDA graph etc).
     os.environ.setdefault("STAP_FAST_CUDA_GRAPH", "0")
 
     for run_dir in runs:
-        Icube, mask_flow, mask_bg, meta = _load_dataset(run_dir)
+        Icube, mask_flow, mask_bg, mask_alias, meta = _load_dataset(run_dir)
         prf = float(meta.get("acquisition", {}).get("prf_hz", meta.get("config", {}).get("prf_hz", 0.0)))
         if prf <= 0.0:
             raise ValueError(f"{run_dir}: dataset meta missing prf_hz")
         seed = int(meta.get("config", {}).get("seed", meta.get("seed", 0)) or 0)
         run_key = str(run_dir.name)
+        alias_in_flow = int((mask_flow & mask_alias).sum()) if mask_alias is not None else 0
+        alias_frac_in_flow = float(alias_in_flow / max(1, int(mask_flow.sum()))) if mask_alias is not None else None
         details["runs"][run_key] = {
             "run_dir": str(run_dir),
             "dataset_meta_rel": "dataset/meta.json",
             "prf_hz": prf,
             "seed": seed,
             "shape": list(Icube.shape),
+            "alias_in_flow": alias_in_flow if mask_alias is not None else None,
+            "alias_frac_in_flow": alias_frac_in_flow,
         }
+
+        label_modes: list[tuple[str, np.ndarray]] = [("flow_all", mask_flow)]
+        if mask_alias is not None and bool((mask_flow & mask_alias).any()):
+            label_modes.append(("flow_unaliased", mask_flow & (~mask_alias)))
+            label_modes.append(("flow_aliased", mask_flow & mask_alias))
 
         for method in methods:
             name_parts = [run_dir.name]
@@ -338,44 +365,57 @@ def main() -> None:
                 diag_load=diag_load,
             )
 
-            if method.score_kind == "baseline_pd":
-                score_path = bundle_dir / "score_base.npy"
+            score_path: Path
+            if eval_score == "pd":
+                if method.role == "baseline":
+                    candidates = [bundle_dir / "score_pd_base.npy", bundle_dir / "score_base.npy"]
+                else:
+                    candidates = [bundle_dir / "score_pd_stap.npy", bundle_dir / "score_pd_base.npy"]
             else:
-                score_path = bundle_dir / "score_stap_preka.npy"
-                if not score_path.is_file():
-                    score_path = bundle_dir / "score_stap.npy"
+                if method.role == "baseline":
+                    candidates = [bundle_dir / "score_base.npy"]
+                else:
+                    candidates = [bundle_dir / "score_stap_preka.npy", bundle_dir / "score_stap.npy"]
+            score_path = next((p for p in candidates if p.is_file()), candidates[0])
+
             score = np.load(score_path).astype(np.float32, copy=False)
-            metrics = _eval_score_map(score, mask_flow, mask_bg, fprs=fprs)
+            for label_mode, pos_mask in label_modes:
+                metrics = _eval_score_map(score, pos_mask, mask_bg, fprs=fprs)
+                row = {
+                    "run": run_key,
+                    "method": method.key,
+                    "baseline_type": method.baseline_type,
+                    "run_stap": int(method.run_stap),
+                    "role": method.role,
+                    "eval_score": eval_score,
+                    "label_mode": label_mode,
+                    "bundle_dir": str(bundle_dir),
+                    "score_file": str(score_path.name),
+                    "T": int(Icube.shape[0]),
+                    "H": int(Icube.shape[1]),
+                    "W": int(Icube.shape[2]),
+                    "prf_hz": prf,
+                    "Lt": Lt,
+                    "tile_hw": f"{tile_hw[0]}x{tile_hw[1]}",
+                    "tile_stride": tile_stride,
+                    "diag_load": diag_load,
+                    "svd_energy_frac": svd_energy_frac,
+                    "alias_in_flow": alias_in_flow if mask_alias is not None else None,
+                    "alias_frac_in_flow": alias_frac_in_flow,
+                }
+                row.update(metrics)
+                rows.append(row)
 
-            row = {
-                "run": run_key,
-                "method": method.key,
-                "baseline_type": method.baseline_type,
-                "run_stap": int(method.run_stap),
-                "score_kind": method.score_kind,
-                "bundle_dir": str(bundle_dir),
-                "score_file": str(score_path.name),
-                "T": int(Icube.shape[0]),
-                "H": int(Icube.shape[1]),
-                "W": int(Icube.shape[2]),
-                "prf_hz": prf,
-                "Lt": Lt,
-                "tile_hw": f"{tile_hw[0]}x{tile_hw[1]}",
-                "tile_stride": tile_stride,
-                "diag_load": diag_load,
-                "svd_energy_frac": svd_energy_frac,
-            }
-            row.update(metrics)
-            rows.append(row)
-
-            details["runs"][run_key].setdefault("methods", {})[method.key] = {
-                "baseline_type": method.baseline_type,
-                "run_stap": bool(method.run_stap),
-                "score_kind": method.score_kind,
-                "bundle_dir": str(bundle_dir),
-                "score_file": str(score_path.name),
-                "metrics": metrics,
-            }
+                details["runs"][run_key].setdefault("methods", {}).setdefault(method.key, {})[label_mode] = {
+                    "baseline_type": method.baseline_type,
+                    "run_stap": bool(method.run_stap),
+                    "role": method.role,
+                    "eval_score": eval_score,
+                    "label_mode": label_mode,
+                    "bundle_dir": str(bundle_dir),
+                    "score_file": str(score_path.name),
+                    "metrics": metrics,
+                }
 
     _write_csv(out_csv, rows)
     _write_json(out_json, {"rows": rows, "details": details})
@@ -385,4 +425,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
