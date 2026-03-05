@@ -44,7 +44,7 @@ This is controllable and reproducible, but it is not a moving-scatterer forward 
   - Shin Fig3: `data/shin_zenodo_10711806/ratbrain_fig3_raw/IQData001.dat` (frames `0:128`, PRF `1000`)
   - Gammex: `data/twinkling_artifact/Flow in Gammex phantom` (frame `0`, PRF `2500`)
 
-## Phase 3: PSF Calibration Artifact (Pending)
+## Phase 3: PSF Calibration Artifact (Done)
 
 **Goal:** preempt “arbitrary PSF” critiques by offering an optional one-time calibration file used by Phase 1.
 
@@ -55,6 +55,12 @@ This is controllable and reproducible, but it is not a moving-scatterer forward 
 
 Notes:
 - This phase should not change defaults; calibration must be opt-in and hashed in dataset meta.
+
+Status:
+- Implemented calibration script:
+  - `scripts/psf_calib_point_target_kwave.py`
+- Dataset integration:
+  - `sim/kwave/pilot_physical_doppler.py` embeds any provided `--psf-calib-path` as `dataset/debug/psf_calib.json` and hashes it.
 
 ## Phase 4: Field II Moving-Scatterer Backend (Plumbing Done, Exporter Pending)
 
@@ -85,4 +91,3 @@ Notes:
   - keep them qualitative/coarse (bucketed) and resistant to overfitting.
 - Field II exchange contract:
   - exact coordinate conventions and metadata needed (dx/dz units, f0/c0, PRF, angle set if compounded).
-

@@ -266,7 +266,26 @@ It currently implements:
 
 Planned follow-ups:
 
-- add a one-time point-target PSF calibration generator script (k-Wave or Field II) that writes `psf_calib.json` for reuse
+- (done) one-time point-target PSF calibration generator script (k-Wave) that writes `psf_calib.json` for reuse:
+  - `scripts/psf_calib_point_target_kwave.py`
+- usage (generate calibration JSON):
+
+```bash
+PYTHONPATH=. conda run -n stap-fus \
+  python scripts/psf_calib_point_target_kwave.py \
+  --out configs/physdoppler/psf_calib_kwave_pointtarget_brainlike.json
+```
+
+- usage (apply calibration to a physical-doppler run; note that `pilot_physical_doppler.py` embeds + hashes the file into `dataset/debug/psf_calib.json`):
+
+```bash
+PYTHONPATH=. conda run -n stap-fus \
+  python sim/kwave/pilot_physical_doppler.py \
+  --out runs/sim/phys_paper_micro_psfcal \
+  --tier paper --preset microvascular_like --seed 1 \
+  --psf-calib-path configs/physdoppler/psf_calib_kwave_pointtarget_brainlike.json
+```
+
 - add a Field II backend (channel/RF-level moving scatterers) behind a backend interface, producing the same canonical `dataset/` layout
 
 ## External Backend Import (Field II Plumbing)
