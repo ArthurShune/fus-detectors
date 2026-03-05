@@ -538,16 +538,36 @@ def main() -> None:
     _write_json(dataset_dir / "hashes.json", hashes)
 
     repo_root = Path(__file__).resolve().parents[2]
+    prov: dict[str, Any] = {
+        "command": " ".join([_sanitize_name(x) if i == 0 else x for i, x in enumerate(sys.argv)]),
+        "cwd": str(Path.cwd()),
+        "git": _git_info(repo_root),
+        "python": sys.version.splitlines()[0],
+        "platform": platform.platform(),
+        "numpy": np.__version__,
+    }
+    # SciPy is used by the Phase 1 generator (map_coordinates, gaussian_filter).
+    try:
+        import scipy  # type: ignore
+
+        prov["scipy"] = getattr(scipy, "__version__", None)
+    except Exception:
+        prov["scipy"] = None
+    # Torch is used by the derived acceptance-bundle pipeline (baseline + STAP).
+    try:
+        import torch  # type: ignore
+
+        prov["torch"] = getattr(torch, "__version__", None)
+        prov["torch_cuda"] = getattr(getattr(torch, "version", None), "cuda", None)
+        prov["cuda_is_available"] = bool(torch.cuda.is_available())
+        prov["device0"] = torch.cuda.get_device_name(0) if torch.cuda.is_available() else None
+    except Exception:
+        prov["torch"] = None
     meta: dict[str, Any] = {
         "schema_version": "physdoppler.v1",
         "created_utc": _utc_now_iso(),
         "provenance": {
-            "command": " ".join([_sanitize_name(x) if i == 0 else x for i, x in enumerate(sys.argv)]),
-            "cwd": str(Path.cwd()),
-            "git": _git_info(repo_root),
-            "python": sys.version.splitlines()[0],
-            "platform": platform.platform(),
-            "numpy": np.__version__,
+            **prov,
         },
         "axes": {"order": ["t", "z", "x"], "units": {"x": "m", "z": "m", "t": "s"}},
         "sim_geom": dataclasses.asdict(cfg.sim_geom),
