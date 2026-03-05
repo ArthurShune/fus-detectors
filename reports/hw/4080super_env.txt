@@ -1,5 +1,5 @@
 # 4080 SUPER env audit (conda env: stap-fus)
-# Generated: 2026-03-05T03:18:58Z
+# Generated: 2026-03-05T03:55:03Z
 
 ## System
 Linux nexus 6.6.87.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun  5 18:30:46 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
@@ -11,20 +11,18 @@ conda 25.9.1
 python 3.11.14 | packaged by conda-forge | (main, Jan 26 2026, 23:48:32) [GCC 14.3.0]
 platform Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39
 
-/home/arthu/miniconda3/envs/stap-fus/lib/python3.11/site-packages/torch/cuda/__init__.py:128: UserWarning: CUDA initialization: Unexpected error from cudaGetDeviceCount(). Did you run some cuda functions before calling NumCudaDevices() that might have already set an error? Error 304: OS call failed or operation not supported on this OS (Triggered internally at /opt/conda/conda-bld/pytorch_1724789172399/work/c10/cuda/CUDAFunctions.cpp:108.)
-  return torch._C._cuda_getDeviceCount() > 0
-
 torch 2.4.1
 torch.version.cuda 12.1
 torch.backends.cudnn.version 90100
-cuda_is_available False
+cuda_is_available True
 cuda_device_count 1
+device0_name NVIDIA GeForce RTX 4080 SUPER
 
 
 ## CUDA driver/runtime smoke (ctypes)
-cuInit(0)= 304
+cuInit(0)= 0
 
-cudaGetDeviceCount err= 304 count= 0
+cudaGetDeviceCount err= 0 count= 1
 
 
 ## Key Packages
