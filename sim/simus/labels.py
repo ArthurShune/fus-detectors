@@ -1,0 +1,88 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+from scipy.ndimage import binary_dilation, binary_erosion
+
+from sim.simus.config import DopplerBandSpec
+
+
+@dataclass(frozen=True)
+class SimusLabelPack:
+    mask_flow: np.ndarray
+    mask_bg: np.ndarray
+    mask_alias_expected: np.ndarray
+    mask_microvascular: np.ndarray
+    mask_nuisance_pa: np.ndarray
+    mask_guard: np.ndarray
+    mask_h1_pf_main: np.ndarray
+    mask_h1_alias_qc: np.ndarray
+    mask_h0_bg: np.ndarray
+    mask_h0_nuisance_pa: np.ndarray
+    expected_fd_true_hz: np.ndarray
+    expected_fd_sampled_hz: np.ndarray
+
+
+def fold_to_nyquist(fd_hz: np.ndarray, prf_hz: float) -> np.ndarray:
+    prf = float(prf_hz)
+    nyq = 0.5 * prf
+    fd = np.asarray(fd_hz, dtype=np.float32)
+    return (((fd + nyq) % prf) - nyq).astype(np.float32, copy=False)
+
+
+def _in_band(abs_fd_hz: np.ndarray, lo_hz: float, hi_hz: float) -> np.ndarray:
+    return (abs_fd_hz >= float(lo_hz)) & (abs_fd_hz <= float(hi_hz))
+
+
+def _guard_ring(mask_flow: np.ndarray, guard_px: int) -> np.ndarray:
+    flow = np.asarray(mask_flow, dtype=bool)
+    if int(guard_px) <= 0 or not np.any(flow):
+        return np.zeros_like(flow, dtype=bool)
+    structure = np.ones((3, 3), dtype=bool)
+    outer = binary_dilation(flow, structure=structure, iterations=int(guard_px))
+    inner = binary_erosion(flow, structure=structure, iterations=int(guard_px), border_value=0)
+    return (outer & ~inner).astype(bool, copy=False)
+
+
+def build_label_pack(
+    *,
+    mask_microvascular: np.ndarray,
+    mask_nuisance_pa: np.ndarray,
+    base_bg_mask: np.ndarray,
+    expected_fd_true_hz: np.ndarray,
+    prf_hz: float,
+    bands: DopplerBandSpec,
+    guard_px: int,
+) -> SimusLabelPack:
+    mask_micro = np.asarray(mask_microvascular, dtype=bool)
+    mask_nuisance = np.asarray(mask_nuisance_pa, dtype=bool)
+    mask_flow = (mask_micro | mask_nuisance).astype(bool, copy=False)
+    bg = np.asarray(base_bg_mask, dtype=bool) & (~mask_flow)
+    fd_true = np.asarray(expected_fd_true_hz, dtype=np.float32)
+    fd_sampled = np.abs(fold_to_nyquist(fd_true, float(prf_hz))).astype(np.float32, copy=False)
+    mask_alias_expected = (mask_flow & (np.abs(fd_true) > (0.5 * float(prf_hz)))).astype(bool, copy=False)
+    guard = _guard_ring(mask_flow, int(guard_px))
+
+    pf_core = _in_band(fd_sampled, bands.pf_core_low_hz, bands.pf_core_high_hz)
+    pa_band = _in_band(fd_sampled, bands.pa_low_hz, bands.pa_high_hz)
+
+    mask_h1_pf_main = mask_micro & pf_core & (~mask_alias_expected) & (~guard)
+    mask_h1_alias_qc = mask_flow & (mask_alias_expected | pa_band) & (~guard)
+    mask_h0_nuisance = mask_nuisance & pa_band & (~guard)
+    mask_h0_bg = bg & (~guard)
+
+    return SimusLabelPack(
+        mask_flow=mask_flow.astype(bool, copy=False),
+        mask_bg=bg.astype(bool, copy=False),
+        mask_alias_expected=mask_alias_expected.astype(bool, copy=False),
+        mask_microvascular=mask_micro.astype(bool, copy=False),
+        mask_nuisance_pa=mask_nuisance.astype(bool, copy=False),
+        mask_guard=guard.astype(bool, copy=False),
+        mask_h1_pf_main=mask_h1_pf_main.astype(bool, copy=False),
+        mask_h1_alias_qc=mask_h1_alias_qc.astype(bool, copy=False),
+        mask_h0_bg=mask_h0_bg.astype(bool, copy=False),
+        mask_h0_nuisance_pa=mask_h0_nuisance.astype(bool, copy=False),
+        expected_fd_true_hz=fd_true.astype(np.float32, copy=False),
+        expected_fd_sampled_hz=fd_sampled.astype(np.float32, copy=False),
+    )

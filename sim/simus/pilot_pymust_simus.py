@@ -14,6 +14,7 @@ from typing import Any, Dict
 import numpy as np
 
 from sim.kwave.icube_bundle import write_acceptance_bundle_from_icube
+from sim.simus.config import default_profile_config
 from sim.simus.pymust_smoke import SimusConfig, default_config, dataset_meta, generate_icube
 
 
@@ -67,6 +68,13 @@ def parse_args() -> argparse.Namespace:
     )
     ap.add_argument("--out", type=Path, required=True, help="Output run directory (created).")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument(
+        "--profile",
+        type=str,
+        default=None,
+        choices=["ClinIntraOp-Pf-v1", "ClinMobile-Pf-v1"],
+        help="Clinically aligned SIMUS profile. When set, this overrides --preset defaults.",
+    )
     ap.add_argument(
         "--preset",
         type=str,
@@ -124,11 +132,18 @@ def main() -> None:
     debug_dir.mkdir(parents=True, exist_ok=True)
     bundle_root.mkdir(parents=True, exist_ok=True)
 
-    cfg = default_config(
-        preset=str(args.preset),  # type: ignore[arg-type]
-        tier=str(args.tier),  # type: ignore[arg-type]
-        seed=int(args.seed),
-    )
+    if args.profile:
+        cfg = default_profile_config(
+            profile=str(args.profile),  # type: ignore[arg-type]
+            tier=str(args.tier),  # type: ignore[arg-type]
+            seed=int(args.seed),
+        )
+    else:
+        cfg = default_config(
+            preset=str(args.preset),  # type: ignore[arg-type]
+            tier=str(args.tier),  # type: ignore[arg-type]
+            seed=int(args.seed),
+        )
     overrides: dict[str, object] = {}
     for k_cfg, k_arg in [
         ("probe", "probe"),
@@ -149,6 +164,17 @@ def main() -> None:
         v = getattr(args, k_arg)
         if v is not None:
             overrides[k_cfg] = v
+    if args.profile:
+        unsupported = [
+            key
+            for key in ("blood_vmax_mps", "blood_profile", "vessel_radius_m", "blood_count")
+            if key in overrides
+        ]
+        if unsupported:
+            names = ", ".join(f"--{name.replace('_', '-')}" for name in unsupported)
+            raise ValueError(
+                f"profile-driven runs manage per-vessel flow internally; unsupported override(s): {names}"
+            )
     if overrides:
         cfg = dataclasses.replace(cfg, **overrides)
 
@@ -157,6 +183,13 @@ def main() -> None:
     mask_flow = result["mask_flow"]
     mask_bg = result["mask_bg"]
     mask_alias = result["mask_alias_expected"]
+    mask_microvascular = result.get("mask_microvascular")
+    mask_nuisance_pa = result.get("mask_nuisance_pa")
+    mask_guard = result.get("mask_guard")
+    mask_h1_pf_main = result.get("mask_h1_pf_main")
+    mask_h1_alias_qc = result.get("mask_h1_alias_qc")
+    mask_h0_bg = result.get("mask_h0_bg")
+    mask_h0_nuisance_pa = result.get("mask_h0_nuisance_pa")
     debug = result["debug"]
     param = result["param"]
 
@@ -172,9 +205,29 @@ def main() -> None:
     _save(dataset_dir, "mask_flow", mask_flow.astype(bool))
     _save(dataset_dir, "mask_bg", mask_bg.astype(bool))
     _save(dataset_dir, "mask_alias_expected", mask_alias.astype(bool))
+    if mask_microvascular is not None:
+        _save(dataset_dir, "mask_microvascular", np.asarray(mask_microvascular, dtype=bool))
+    if mask_nuisance_pa is not None:
+        _save(dataset_dir, "mask_nuisance_pa", np.asarray(mask_nuisance_pa, dtype=bool))
+    if mask_guard is not None:
+        _save(dataset_dir, "mask_guard", np.asarray(mask_guard, dtype=bool))
+    if mask_h1_pf_main is not None:
+        _save(dataset_dir, "mask_h1_pf_main", np.asarray(mask_h1_pf_main, dtype=bool))
+    if mask_h1_alias_qc is not None:
+        _save(dataset_dir, "mask_h1_alias_qc", np.asarray(mask_h1_alias_qc, dtype=bool))
+    if mask_h0_bg is not None:
+        _save(dataset_dir, "mask_h0_bg", np.asarray(mask_h0_bg, dtype=bool))
+    if mask_h0_nuisance_pa is not None:
+        _save(dataset_dir, "mask_h0_nuisance_pa", np.asarray(mask_h0_nuisance_pa, dtype=bool))
 
     _save(debug_dir, "expected_fd_hz", np.asarray(debug.get("expected_fd_hz"), dtype=np.float32))
+    if debug.get("expected_fd_true_hz") is not None:
+        _save(debug_dir, "expected_fd_true_hz", np.asarray(debug.get("expected_fd_true_hz"), dtype=np.float32))
+    if debug.get("expected_fd_sampled_hz") is not None:
+        _save(debug_dir, "expected_fd_sampled_hz", np.asarray(debug.get("expected_fd_sampled_hz"), dtype=np.float32))
     _save(debug_dir, "expected_vz_mps", np.asarray(debug.get("expected_vz_mps"), dtype=np.float32))
+    if debug.get("vessel_role_map") is not None:
+        _save(debug_dir, "vessel_role_map", np.asarray(debug.get("vessel_role_map"), dtype=np.int16))
     np.savez_compressed(debug_dir / "scatterers_init.npz", **debug.get("scatterers_init", {}))
     paths["scatterers_init_npz"] = debug_dir / "scatterers_init.npz"
     _save(debug_dir, "txdel_s", np.asarray(debug.get("txdel_s"), dtype=np.float32))
@@ -210,7 +263,7 @@ def main() -> None:
         prov["pymust"] = None
 
     meta: dict[str, Any] = {
-        "schema_version": "simus_pymust.v1",
+        "schema_version": "simus_pymust.v2",
         "created_utc": _utc_now_iso(),
         "provenance": prov,
         "axes": {"order": ["t", "z", "x"], "units": {"x": "m", "z": "m", "t": "s"}},
@@ -232,8 +285,20 @@ def main() -> None:
             "fs_hz": float(param.get("fs_hz", 0.0)),
             "c0_mps": float(param.get("c_mps", 0.0)),
         },
-        "simus": {"probe": str(cfg.probe), "preset": str(cfg.preset), "tier": str(cfg.tier)},
+        "simus": {
+            "probe": str(cfg.probe),
+            "preset": str(cfg.preset),
+            "profile": str(cfg.profile) if cfg.profile else None,
+            "tier": str(cfg.tier),
+        },
+        "bands_hz": dataclasses.asdict(cfg.bands),
         "slow_time": {"T": int(cfg.T)},
+        "labels": {
+            "mask_h1_pf_main": "microvascular & sampled_fd in Pf_core & unaliased & ~guard",
+            "mask_h1_alias_qc": "flow & (expected alias or sampled_fd in Pa) & ~guard",
+            "mask_h0_bg": "background excluding flow and guard",
+            "mask_h0_nuisance_pa": "nuisance_vessel & sampled_fd in Pa & ~guard",
+        },
         "config": dataset_meta(cfg),
         "files": hashes,
     }
@@ -243,7 +308,11 @@ def main() -> None:
         print(f"[pilot_pymust_simus] wrote dataset -> {dataset_dir}", flush=True)
         return
 
-    dataset_name_default = f"simus_{cfg.preset}_{cfg.tier}_{cfg.probe}_{cfg.T}T_seed{cfg.seed}"
+    dataset_name_default = (
+        f"simus_{_sanitize_name(cfg.profile)}_{cfg.tier}_seed{cfg.seed}"
+        if cfg.profile
+        else f"simus_{cfg.preset}_{cfg.tier}_{cfg.probe}_{cfg.T}T_seed{cfg.seed}"
+    )
     dataset_name = _sanitize_name(args.dataset_name or dataset_name_default)
 
     write_acceptance_bundle_from_icube(
