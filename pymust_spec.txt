@@ -1,0 +1,91 @@
+PyMUST/SIMUS Moving-Scatterer Regime: Repo-Realistic Phased Plan
+================================================================
+
+Goal
+----
+Add a "physics-backed" moving-scatterer Doppler regime using PyMUST/SIMUS,
+wired into this repo's existing **canonical IQ cube** contract:
+
+  Icube(T,H,W) (complex64) + masks + meta + hashes  ->  acceptance bundle
+
+Core constraints (same as simulation_spec_plan.md)
+--------------------------------------------------
+- Do **not** modify detector math or frozen evaluation profiles.
+- Keep everything auditable and reproducible:
+  - fixed seeds, explicit config.json, meta.json with provenance, sha256 hashes
+  - deterministic boundary/reinjection policy (no periodic wrap by default)
+
+Repo reality we can reuse (no new plumbing needed)
+--------------------------------------------------
+- Canonical cube -> bundle writer already exists:
+  - sim/kwave/icube_bundle.py:write_acceptance_bundle_from_icube(...)
+- External-Icube importer already exists and can be reused for any backend:
+  - scripts/fieldii_import_icube.py
+- "Sanity link" telemetry already exists and is backend-agnostic:
+  - scripts/physical_doppler_sanity_link.py
+
+Phases
+------
+
+Phase 0: Canonical Dataset Contract (Done)
+  - Use the existing dataset/ layout:
+      dataset/
+        icube.npy                  (complex64, shape (T,H,W))
+        mask_flow.npy              (bool, shape (H,W))
+        mask_bg.npy                (bool, shape (H,W))
+        mask_alias_expected.npy    (optional)
+        config.json
+        meta.json
+        hashes.json
+        debug/...
+      bundle/<dataset_name>/...    (derived; optional)
+
+Phase 1: Minimal PyMUST "Smoke" Generator (Implement Now)
+  Objective:
+  - Prove the integration works end-to-end (PyMUST -> RF -> IQ -> beamformed IQ image -> Icube),
+    while keeping runtime tiny and outputs deterministic.
+
+  Deliverables:
+  - sim/simus/pymust_smoke.py:
+    - generate a tiny Icube with a single circular vessel region, static tissue scatterers,
+      and moving blood scatterers (plug flow) updated per PRP.
+    - output masks and an expected_fd_hz debug map.
+  - sim/simus/pilot_pymust_simus.py:
+    - CLI to write canonical dataset/ + optional derived bundle/ using the existing bundle writer.
+    - must record PyMUST version and full CLI in meta.json.
+  - tests/test_pymust_simus_smoke.py:
+    - very small run (T<=4, H=W<=24, few scatterers) asserting:
+      - deterministic output for fixed seed (hash or exact equality on Icube)
+      - nontrivial temporal variation in mask_flow region
+
+  Notes:
+  - Keep Phase 1 intentionally simple:
+    - 2-D simus call: simus(x, z, RC, txdel, param) -> (RF, RFspectrum)
+    - demod: rf2iq(RF, param)
+    - beamform: dasmtx(1j*np.array(IQ.shape), X, Z, txdel, param) -> sparse matrix
+  - Reinjection policy (deterministic):
+    - pre-generate a per-vessel reservoir of blood scatterer positions from the run seed
+    - when a blood scatterer exits the ROI, replace it from reservoir using a pointer walk
+
+Phase 2: Paper-Scale Presets (Microvascular + Alias Stress)
+  Objective:
+  - Add named presets aligned to the repo's band conventions and typical PRF.
+  - Add expected alias labeling (|fD| > PRF/2) from geometry/velocity (not PSD-derived).
+
+  Deliverables:
+  - Add presets to the pilot CLI:
+    - microvascular_like (Pf-dominant)
+    - alias_stress (natural aliasing)
+  - Save debug arrays:
+    - expected_fd_hz.npy
+    - mask_alias_expected.npy
+
+Phase 3: Validation + Paper Hook (Non-Performance Claims)
+  Objective:
+  - Run sanity-link telemetry on SIMUS runs and compare to at least one real IQ dataset
+    already supported by scripts/physical_doppler_sanity_link.py (Shin, Gammex).
+
+  Deliverables:
+  - reports/physdoppler_sanity_link/*simus*.json
+  - optional: one figure/table row in methods/supp describing this backend as a "credibility anchor"
+
