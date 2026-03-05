@@ -9,7 +9,7 @@ Run \path{PYTHONPATH=. conda run -n stap-fus python scripts/generate_repro_manif
 \paragraph{Repository state.}
 Public repository: \path{https://github.com/ArthurShune/stap-for-fus.git}.
 Release tag: (not recorded; set \texttt{STAP\_FUS\_RELEASE\_TAG} or create a git tag).
-Commit: \texttt{0a31b00} (full: \texttt{0a31b007a4}\allowbreak\texttt{0a98e5666a}\allowbreak\texttt{805ae75105}\allowbreak\texttt{cb54a3287e}); branch: \texttt{main}; dirty: \texttt{false}.
+Commit: \texttt{4984f45} (full: \texttt{4984f45b47}\allowbreak\texttt{319dfee37c}\allowbreak\texttt{d4d94b7f18}\allowbreak\texttt{4a21f5094e}); branch: \texttt{main}; dirty: \texttt{false}.
 Dirty details: non-ignored paths=0, ignored build products=0.
 Note: dirty status ignores common LaTeX build products (e.g., \texttt{*.aux, *.log, *.out, *.fls, *.fdb\_latexmk, *.synctex.gz, *.pdf}).
 For archival reproducibility, generate this manifest from a clean, tagged release commit (\texttt{dirty=false}) and record the public repository URL and tag.
@@ -1458,10 +1458,13 @@ PYTHONPATH=. python scripts/ulm_zenodo_7883227_motion_sweep.py \
       \item \path{reports/}\allowbreak\path{physdoppler_sanity_link/simus_micro_paper_}\allowbreak\path{seed0_vs_shin_gammex_table.json}
       \item \path{reports/}\allowbreak\path{physdoppler_sanity_link/simus_alias_paper_}\allowbreak\path{seed0_vs_shin_gammex_summary.json}
       \item \path{reports/}\allowbreak\path{physdoppler_sanity_link/simus_alias_paper_}\allowbreak\path{seed0_vs_shin_gammex_table.json}
+      \item \path{reports/}\allowbreak\path{simus_baseline_compare/simus_pymust_paper_}\allowbreak\path{seed0_compare.csv}
+      \item \path{reports/}\allowbreak\path{simus_baseline_compare/simus_pymust_paper_}\allowbreak\path{seed0_compare.json}
       \item \path{reports/}\allowbreak\path{simus_contract/simus_pymust_paper_micro_}\allowbreak\path{seed0_hab_contract.txt}
       \item \path{reports/}\allowbreak\path{simus_contract/simus_pymust_paper_alias_}\allowbreak\path{seed0_hab_contract.txt}
       \item \path{runs/sim/simus_pymust_paper_micro_}\allowbreak\path{seed0/bundle/simus_pymust_paper_micro_seed0/}
       \item \path{runs/sim/simus_pymust_paper_alias_}\allowbreak\path{seed0/bundle/simus_pymust_paper_alias_seed0/}
+      \item \path{runs/sim_eval/simus_baseline_compare_r1/}
     \end{itemize}
     \endgroup
     Notes: SIMUS/PyMUST runs are used as a moving-scatterer credibility anchor. Sanity-link summaries compare PSD-band / coherence / low-rank proxies against open real IQ; contract checks verify bundle integrity and KA-friendly regime telemetry. No performance claims are made from these comparisons.
@@ -1502,6 +1505,14 @@ PYTHONPATH=. conda run -n stap-fus python scripts/physical_doppler_sanity_link.p
   --gammex-mask-mode bmode_tube --gammex-mask-ref-frames 0:6 \
   --pf 30 250 --pg 250 400 --pa-lo 400 --tile-hw 8 8 --tile-stride 3 \
   --tag simus_alias_paper_seed0_vs_shin_gammex
+
+PYTHONPATH=. conda run -n stap-fus python scripts/icube_baseline_compare.py \
+  --run runs/sim/simus_pymust_paper_micro_seed0 \
+  --run runs/sim/simus_pymust_paper_alias_seed0 \
+  --out-root runs/sim_eval/simus_baseline_compare_r1 \
+  --out-csv reports/simus_baseline_compare/simus_pymust_paper_seed0_compare.csv \
+  --out-json reports/simus_baseline_compare/simus_pymust_paper_seed0_compare.json \
+  --tag clinical_like --stap-device cpu
 \end{verbatim}
 }
 
