@@ -14,7 +14,7 @@ from typing import Any, Dict
 import numpy as np
 
 from sim.kwave.icube_bundle import write_acceptance_bundle_from_icube
-from sim.simus.pymust_smoke import SimusSmokeConfig, dataset_meta, generate_icube
+from sim.simus.pymust_smoke import SimusConfig, default_config, dataset_meta, generate_icube
 
 
 def _utc_now_iso() -> str:
@@ -62,20 +62,41 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    ap = argparse.ArgumentParser(description="PyMUST/SIMUS smoke generator: write canonical dataset + optional bundle.")
+    ap = argparse.ArgumentParser(
+        description="PyMUST/SIMUS generator: write canonical dataset + optional bundle."
+    )
     ap.add_argument("--out", type=Path, required=True, help="Output run directory (created).")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--probe", type=str, default="P4-2v")
-    ap.add_argument("--prf-hz", type=float, default=1500.0)
-    ap.add_argument("--T", type=int, default=8)
-    ap.add_argument("--H", type=int, default=24)
-    ap.add_argument("--W", type=int, default=24)
-    ap.add_argument("--x-min-m", type=float, default=-0.020)
-    ap.add_argument("--x-max-m", type=float, default=0.020)
-    ap.add_argument("--z-min-m", type=float, default=0.010)
-    ap.add_argument("--z-max-m", type=float, default=0.050)
-    ap.add_argument("--blood-vz-mps", type=float, default=0.020)
-    ap.add_argument("--vessel-radius-m", type=float, default=0.004)
+    ap.add_argument(
+        "--preset",
+        type=str,
+        default="microvascular_like",
+        choices=["microvascular_like", "alias_stress"],
+        help="Named SIMUS regime (geometry + flow speed).",
+    )
+    ap.add_argument(
+        "--tier",
+        type=str,
+        default="smoke",
+        choices=["smoke", "paper"],
+        help="Runtime tier: small fast config vs moderate paper-scale cross-check.",
+    )
+
+    # Optional overrides (rarely needed; keep defaults preset-driven).
+    ap.add_argument("--probe", type=str, default=None)
+    ap.add_argument("--prf-hz", type=float, default=None)
+    ap.add_argument("--T", type=int, default=None)
+    ap.add_argument("--H", type=int, default=None)
+    ap.add_argument("--W", type=int, default=None)
+    ap.add_argument("--x-min-m", type=float, default=None)
+    ap.add_argument("--x-max-m", type=float, default=None)
+    ap.add_argument("--z-min-m", type=float, default=None)
+    ap.add_argument("--z-max-m", type=float, default=None)
+    ap.add_argument("--blood-vmax-mps", type=float, default=None)
+    ap.add_argument("--blood-profile", type=str, default=None, choices=["plug", "poiseuille"])
+    ap.add_argument("--vessel-radius-m", type=float, default=None)
+    ap.add_argument("--tissue-count", type=int, default=None)
+    ap.add_argument("--blood-count", type=int, default=None)
     ap.add_argument("--skip-bundle", action="store_true", help="Only write dataset/, skip derived bundle/.")
     ap.add_argument("--dataset-name", type=str, default=None, help="Bundle dataset name (default derived).")
     return ap.parse_args()
@@ -103,20 +124,33 @@ def main() -> None:
     debug_dir.mkdir(parents=True, exist_ok=True)
     bundle_root.mkdir(parents=True, exist_ok=True)
 
-    cfg = SimusSmokeConfig(
+    cfg = default_config(
+        preset=str(args.preset),  # type: ignore[arg-type]
+        tier=str(args.tier),  # type: ignore[arg-type]
         seed=int(args.seed),
-        probe=str(args.probe),
-        prf_hz=float(args.prf_hz),
-        T=int(args.T),
-        H=int(args.H),
-        W=int(args.W),
-        x_min_m=float(args.x_min_m),
-        x_max_m=float(args.x_max_m),
-        z_min_m=float(args.z_min_m),
-        z_max_m=float(args.z_max_m),
-        blood_vz_mps=float(args.blood_vz_mps),
-        vessel_radius_m=float(args.vessel_radius_m),
     )
+    overrides: dict[str, object] = {}
+    for k_cfg, k_arg in [
+        ("probe", "probe"),
+        ("prf_hz", "prf_hz"),
+        ("T", "T"),
+        ("H", "H"),
+        ("W", "W"),
+        ("x_min_m", "x_min_m"),
+        ("x_max_m", "x_max_m"),
+        ("z_min_m", "z_min_m"),
+        ("z_max_m", "z_max_m"),
+        ("blood_vmax_mps", "blood_vmax_mps"),
+        ("blood_profile", "blood_profile"),
+        ("vessel_radius_m", "vessel_radius_m"),
+        ("tissue_count", "tissue_count"),
+        ("blood_count", "blood_count"),
+    ]:
+        v = getattr(args, k_arg)
+        if v is not None:
+            overrides[k_cfg] = v
+    if overrides:
+        cfg = dataclasses.replace(cfg, **overrides)
 
     result = generate_icube(cfg)
     icube = result["Icube"]
@@ -140,6 +174,7 @@ def main() -> None:
     _save(dataset_dir, "mask_alias_expected", mask_alias.astype(bool))
 
     _save(debug_dir, "expected_fd_hz", np.asarray(debug.get("expected_fd_hz"), dtype=np.float32))
+    _save(debug_dir, "expected_vz_mps", np.asarray(debug.get("expected_vz_mps"), dtype=np.float32))
     np.savez_compressed(debug_dir / "scatterers_init.npz", **debug.get("scatterers_init", {}))
     paths["scatterers_init_npz"] = debug_dir / "scatterers_init.npz"
     _save(debug_dir, "txdel_s", np.asarray(debug.get("txdel_s"), dtype=np.float32))
@@ -186,6 +221,8 @@ def main() -> None:
             "x_max_m": float(cfg.x_max_m),
             "z_min_m": float(cfg.z_min_m),
             "z_max_m": float(cfg.z_max_m),
+            "dx_m": float((float(cfg.x_max_m) - float(cfg.x_min_m)) / max(int(cfg.W) - 1, 1)),
+            "dz_m": float((float(cfg.z_max_m) - float(cfg.z_min_m)) / max(int(cfg.H) - 1, 1)),
         },
         "acquisition": {
             "prf_hz": float(cfg.prf_hz),
@@ -195,7 +232,7 @@ def main() -> None:
             "fs_hz": float(param.get("fs_hz", 0.0)),
             "c0_mps": float(param.get("c_mps", 0.0)),
         },
-        "simus": {"probe": str(cfg.probe)},
+        "simus": {"probe": str(cfg.probe), "preset": str(cfg.preset), "tier": str(cfg.tier)},
         "slow_time": {"T": int(cfg.T)},
         "config": dataset_meta(cfg),
         "files": hashes,
@@ -206,7 +243,7 @@ def main() -> None:
         print(f"[pilot_pymust_simus] wrote dataset -> {dataset_dir}", flush=True)
         return
 
-    dataset_name_default = f"simus_smoke_{cfg.probe}_{cfg.T}T_seed{cfg.seed}"
+    dataset_name_default = f"simus_{cfg.preset}_{cfg.tier}_{cfg.probe}_{cfg.T}T_seed{cfg.seed}"
     dataset_name = _sanitize_name(args.dataset_name or dataset_name_default)
 
     write_acceptance_bundle_from_icube(
