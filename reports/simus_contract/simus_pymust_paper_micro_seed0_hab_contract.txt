@@ -1,0 +1,18 @@
+# HAB contract check for bundle: /home/arthu/stap-for-fus/runs/sim/simus_pymust_paper_micro_seed0/bundle/simus_pymust_paper_micro_seed0
+PRF: 1500.0 Hz, Lt=8, seed=0
+# Baseline: mc_svd, svd_rank_removed=1, svd_energy_removed_frac=0.976
+# Band-ratio bins: T=64, df≈23.4 Hz, flow_bins=9 (bin 1..9, nodc=9), alias_bins=11 (bin 12..22, nodc=11), overlap=False, peak_bin_p50=1, peak_bin_p90=2
+
+[R-2] Alias score separation (m_alias = log(E_a/E_f))
+  median(m_alias | H0) = -0.357, median(m_alias | H1) = 0.429, delta = -0.786
+
+[R-3] Baseline headroom and STAP shoulder at low FPR
+  score_mode = pd
+  fpr=0.0001: thr_base=5.503e+06, tpr_base=0.443, thr_stap=5.503e+06, tpr_stap=0.409
+  fpr=0.0003: thr_base=4.932e+06, tpr_base=0.480, thr_stap=4.932e+06, tpr_stap=0.446
+  fpr=0.001: thr_base=4.313e+06, tpr_base=0.528, thr_stap=4.313e+06, tpr_stap=0.491
+
+[R-1] Band occupancy separation (whitened PSD / band-ratio telemetry; rf_tensor path failed: rf_tensor.npy not found at any of: /home/arthu/stap-for-fus/runs/sim/simus_pymust_paper_micro_seed0/bundle/rf_tensor.npy)
+  Cf = [30.0, 220.0] Hz, Ca = [280.0, 520.0] Hz
+  P(f_peak∈Cf | H1) ≈ 0.105, P(f_peak∈Ca | H0) ≈ 0.000
+

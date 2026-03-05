@@ -48,3 +48,7 @@ reports/**
 # Physical Doppler sanity-link (SIMUS/PyMUST) Phase 3 artifacts.
 !reports/physdoppler_sanity_link/
 !reports/physdoppler_sanity_link/simus_*.json
+
+# SIMUS bundle/contract check logs (small, paper-critical reproducibility artifacts).
+!reports/simus_contract/
+!reports/simus_contract/*.txt
