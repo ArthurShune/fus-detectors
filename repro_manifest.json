@@ -4,18 +4,13 @@
     "release_tag": null
   },
   "git": {
-    "commit": "ed219c0965f252c5a7a6e99f13615d17aa788f8e",
-    "commit_short": "ed219c0",
+    "commit": "bfb2d7eb99b2a50eb432b12926373f217e87372f",
+    "commit_short": "bfb2d7e",
     "branch": "main",
-    "dirty": true,
-    "dirty_paths_count": 4,
+    "dirty": false,
+    "dirty_paths_count": 0,
     "dirty_ignored_paths_count": 0,
-    "dirty_paths": [
-      "M reports/hw/4080super_env.txt",
-      "M reports/latency/4080super_latency_summary.csv",
-      "M reports/latency/4080super_latency_summary.json",
-      "M stap_fus_methodology.tex"
-    ],
+    "dirty_paths": [],
     "dirty_ignored_paths": []
   },
   "env": {
