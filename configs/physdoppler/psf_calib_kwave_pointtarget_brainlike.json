@@ -1,0 +1,223 @@
+{
+  "alpha_x_per_m": 0.0,
+  "alpha_z_per_m": 0.0,
+  "angles_deg": [
+    -6.0,
+    -3.0,
+    0.0,
+    3.0,
+    6.0
+  ],
+  "created_utc": "2026-03-05T13:11:23Z",
+  "fit": {
+    "x": {
+      "alpha_px_per_m": 0.0,
+      "mode": "constant",
+      "n": 5,
+      "r2": null,
+      "rmse_px": null,
+      "sigma0_px": 10.252125006262814,
+      "z_m_max": 0.016200000000000003,
+      "z_m_min": 0.0054
+    },
+    "z": {
+      "alpha_px_per_m": 0.0,
+      "mode": "constant",
+      "n": 5,
+      "r2": null,
+      "rmse_px": null,
+      "sigma0_px": 1.4919820689190149,
+      "z_m_max": 0.016200000000000003,
+      "z_m_min": 0.0054
+    }
+  },
+  "fwhm_measurement": {
+    "baseline_q": 0.05,
+    "window_x_px": 20,
+    "window_z_px": 80
+  },
+  "measurements": [
+    {
+      "expected": {
+        "x_idx": 60,
+        "x_m": -0.0054,
+        "z_idx": 60,
+        "z_m": 0.0054
+      },
+      "peak": {
+        "amp": 0.00024287751875817776,
+        "x_idx": 65,
+        "z_idx": 60
+      },
+      "target_idx": 0,
+      "widths": {
+        "fwhm_x_px": 24.141909468910722,
+        "fwhm_z_px": 2.1376915457234418,
+        "sigma_x_px": 10.252125006262814,
+        "sigma_z_px": 0.9077940160371559
+      }
+    },
+    {
+      "expected": {
+        "x_idx": 90,
+        "x_m": -0.0027,
+        "z_idx": 90,
+        "z_m": 0.008100000000000001
+      },
+      "peak": {
+        "amp": 0.0002361533115617931,
+        "x_idx": 95,
+        "z_idx": 91
+      },
+      "target_idx": 1,
+      "widths": {
+        "fwhm_x_px": 29.355903446404366,
+        "fwhm_z_px": 3.5133492827172432,
+        "sigma_x_px": 12.46630438209071,
+        "sigma_z_px": 1.4919820689190149
+      }
+    },
+    {
+      "expected": {
+        "x_idx": 120,
+        "x_m": 0.0,
+        "z_idx": 120,
+        "z_m": 0.0108
+      },
+      "peak": {
+        "amp": 0.0002715260488912463,
+        "x_idx": 126,
+        "z_idx": 121
+      },
+      "target_idx": 2,
+      "widths": {
+        "fwhm_x_px": 19.837677390566405,
+        "fwhm_z_px": 5.016634253244405,
+        "sigma_x_px": 8.424285937444395,
+        "sigma_z_px": 2.1303684176760402
+      }
+    },
+    {
+      "expected": {
+        "x_idx": 150,
+        "x_m": 0.0027,
+        "z_idx": 150,
+        "z_m": 0.013500000000000002
+      },
+      "peak": {
+        "amp": 0.0001123230395023711,
+        "x_idx": 156,
+        "z_idx": 151
+      },
+      "target_idx": 3,
+      "widths": {
+        "fwhm_x_px": 27.330360900435842,
+        "fwhm_z_px": 2.2253864274545094,
+        "sigma_x_px": 11.606135661239728,
+        "sigma_z_px": 0.9450346034510936
+      }
+    },
+    {
+      "expected": {
+        "x_idx": 180,
+        "x_m": 0.0054,
+        "z_idx": 180,
+        "z_m": 0.016200000000000003
+      },
+      "peak": {
+        "amp": 4.5430726459017023e-05,
+        "x_idx": 174,
+        "z_idx": 180
+      },
+      "target_idx": 4,
+      "widths": {
+        "fwhm_x_px": 20.461001515929834,
+        "fwhm_z_px": 6.517004201791707,
+        "sigma_x_px": 8.688987321602706,
+        "sigma_z_px": 2.7675168705751587
+      }
+    }
+  ],
+  "provenance": {
+    "command": "scripts/psf_calib_point_target_kwave.py --out configs/physdoppler/psf_calib_kwave_pointtarget_brainlike.json",
+    "cuda_is_available": true,
+    "cwd": "/home/arthu/stap-for-fus",
+    "device0": "NVIDIA GeForce RTX 4080 SUPER",
+    "git": {
+      "commit": "ad27545ad2710b6f799accf2ee5c7b7fe73805d2",
+      "dirty": true
+    },
+    "kwave": null,
+    "numpy": "2.2.6",
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "python": "3.11.14 | packaged by conda-forge | (main, Jan 26 2026, 23:48:32) [GCC 14.3.0]",
+    "scipy": "1.14.1",
+    "torch": "2.4.1",
+    "torch_cuda": "12.1",
+    "use_gpu": true
+  },
+  "schema_version": "psf_calib.kwavetarget.v1",
+  "sha256": "4e5571e3bc1ea9db28a3269280579c955df1791f9457fb70438a3a9e5c391279",
+  "sigma_x0_px": 10.252125006262814,
+  "sigma_z0_px": 1.4919820689190149,
+  "sim_geom": {
+    "Nx": 240,
+    "Ny": 240,
+    "alpha_db_mhz_cm": 0.5,
+    "alpha_power": 1.5,
+    "c0": 1540.0,
+    "cfl": 0.3,
+    "dx": 9e-05,
+    "dy": 9e-05,
+    "f0": 7500000.0,
+    "ncycles": 3,
+    "pml_size": 16,
+    "rho0": 1000.0,
+    "rx_row_from_top": 3,
+    "t_end": 2.8451948051948052e-05,
+    "tx_row_from_top": 2
+  },
+  "target_injection": {
+    "delta_c_rel": 0.2,
+    "delta_rho_rel": 0.2,
+    "radius_px": 2,
+    "subtract_background": true
+  },
+  "targets": [
+    {
+      "idx": 0,
+      "x_idx": 60,
+      "x_m": -0.0054,
+      "z_idx": 60,
+      "z_m": 0.0054
+    },
+    {
+      "idx": 1,
+      "x_idx": 90,
+      "x_m": -0.0027,
+      "z_idx": 90,
+      "z_m": 0.008100000000000001
+    },
+    {
+      "idx": 2,
+      "x_idx": 120,
+      "x_m": 0.0,
+      "z_idx": 120,
+      "z_m": 0.0108
+    },
+    {
+      "idx": 3,
+      "x_idx": 150,
+      "x_m": 0.0027,
+      "z_idx": 150,
+      "z_m": 0.013500000000000002
+    },
+    {
+      "idx": 4,
+      "x_idx": 180,
+      "x_m": 0.0054,
+      "z_idx": 180,
+      "z_m": 0.016200000000000003
+    }
+  ]
+}
