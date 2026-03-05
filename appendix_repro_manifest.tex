@@ -9,13 +9,13 @@ Run \path{PYTHONPATH=. conda run -n stap-fus python scripts/generate_repro_manif
 \paragraph{Repository state.}
 Public repository: \path{https://github.com/ArthurShune/stap-for-fus.git}.
 Release tag: (not recorded; set \texttt{STAP\_FUS\_RELEASE\_TAG} or create a git tag).
-Commit: \texttt{bfb2d7e} (full: \texttt{bfb2d7eb99}\allowbreak\texttt{b2a50eb432}\allowbreak\texttt{b12926373f}\allowbreak\texttt{217e87372f}); branch: \texttt{main}; dirty: \texttt{false}.
+Commit: \texttt{0a31b00} (full: \texttt{0a31b007a4}\allowbreak\texttt{0a98e5666a}\allowbreak\texttt{805ae75105}\allowbreak\texttt{cb54a3287e}); branch: \texttt{main}; dirty: \texttt{false}.
 Dirty details: non-ignored paths=0, ignored build products=0.
 Note: dirty status ignores common LaTeX build products (e.g., \texttt{*.aux, *.log, *.out, *.fls, *.fdb\_latexmk, *.synctex.gz, *.pdf}).
 For archival reproducibility, generate this manifest from a clean, tagged release commit (\texttt{dirty=false}) and record the public repository URL and tag.
 
 \paragraph{Environment.}
-Conda spec: \path{environment.yml} (sha256: \texttt{a251307a0fc842f5}\allowbreak\texttt{b956cf64d9861321}\allowbreak\texttt{3f7e1519b0b0c2c2}\allowbreak\texttt{cb0e950edf64bd61}).
+Conda spec: \path{environment.yml} (sha256: \texttt{d2216d753643a3f6}\allowbreak\texttt{2e3f69be66bfff77}\allowbreak\texttt{bb7e4671a2668ecd}\allowbreak\texttt{4d5a16eba6f76c73}).
 Create env: \path{conda env create -f environment.yml}.
 Docker: \path{Dockerfile} (sha256: \texttt{1dbf3078785426b4}\allowbreak\texttt{5770b85f7b2f7794}\allowbreak\texttt{cd14435c20e1c587}\allowbreak\texttt{a3c38cf097128e16}).
 Build container: \path{docker build -t stap-fus -f Dockerfile .}.
@@ -1442,6 +1442,66 @@ PYTHONPATH=. python scripts/ulm_zenodo_7883227_motion_sweep.py \
   --out-csv reports/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_elastic_e975.csv \
   --out-json reports/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_elastic_e975.json \
   --out-png figs/paper/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_elastic_e975.png
+\end{verbatim}
+}
+
+  \item \textbf{SIMUS/PyMUST moving-scatterer sanity link + bundle contract (micro + alias; non-performance claims)}
+    Paper refs:
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item Simulation spec: moving-scatterer physical Doppler regime (SIMUS)
+      \item Appendix (QC): physical-doppler sanity-link telemetry
+    \end{itemize}
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{physdoppler_sanity_link/simus_micro_paper_}\allowbreak\path{seed0_vs_shin_gammex_summary.json}
+      \item \path{reports/}\allowbreak\path{physdoppler_sanity_link/simus_micro_paper_}\allowbreak\path{seed0_vs_shin_gammex_table.json}
+      \item \path{reports/}\allowbreak\path{physdoppler_sanity_link/simus_alias_paper_}\allowbreak\path{seed0_vs_shin_gammex_summary.json}
+      \item \path{reports/}\allowbreak\path{physdoppler_sanity_link/simus_alias_paper_}\allowbreak\path{seed0_vs_shin_gammex_table.json}
+      \item \path{reports/}\allowbreak\path{simus_contract/simus_pymust_paper_micro_}\allowbreak\path{seed0_hab_contract.txt}
+      \item \path{reports/}\allowbreak\path{simus_contract/simus_pymust_paper_alias_}\allowbreak\path{seed0_hab_contract.txt}
+      \item \path{runs/sim/simus_pymust_paper_micro_}\allowbreak\path{seed0/bundle/simus_pymust_paper_micro_seed0/}
+      \item \path{runs/sim/simus_pymust_paper_alias_}\allowbreak\path{seed0/bundle/simus_pymust_paper_alias_seed0/}
+    \end{itemize}
+    \endgroup
+    Notes: SIMUS/PyMUST runs are used as a moving-scatterer credibility anchor. Sanity-link summaries compare PSD-band / coherence / low-rank proxies against open real IQ; contract checks verify bundle integrity and KA-friendly regime telemetry. No performance claims are made from these comparisons.
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. conda run -n stap-fus python sim/simus/pilot_pymust_simus.py \
+  --out runs/sim/simus_pymust_paper_micro_seed0 --preset microvascular_like --tier paper --seed 0 --skip-bundle
+PYTHONPATH=. conda run -n stap-fus python sim/simus/pilot_pymust_simus.py \
+  --out runs/sim/simus_pymust_paper_alias_seed0 --preset alias_stress --tier paper --seed 0 --skip-bundle
+
+PYTHONPATH=. conda run -n stap-fus python scripts/icube_make_bundle.py \
+  --run runs/sim/simus_pymust_paper_micro_seed0 --stap-device cpu
+PYTHONPATH=. conda run -n stap-fus python scripts/icube_make_bundle.py \
+  --run runs/sim/simus_pymust_paper_alias_seed0 --stap-device cpu
+
+PYTHONPATH=. conda run -n stap-fus python scripts/hab_contract_check.py \
+  runs/sim/simus_pymust_paper_micro_seed0/bundle/simus_pymust_paper_micro_seed0 \
+  2>&1 | tee reports/simus_contract/simus_pymust_paper_micro_seed0_hab_contract.txt
+PYTHONPATH=. conda run -n stap-fus python scripts/hab_contract_check.py \
+  runs/sim/simus_pymust_paper_alias_seed0/bundle/simus_pymust_paper_alias_seed0 \
+  2>&1 | tee reports/simus_contract/simus_pymust_paper_alias_seed0_hab_contract.txt
+
+PYTHONPATH=. conda run -n stap-fus python scripts/physical_doppler_sanity_link.py \
+  --sim-run runs/sim/simus_pymust_paper_micro_seed0 \
+  --shin-root data/shin_zenodo_10711806/ratbrain_fig3_raw --shin-iq-file IQData001.dat \
+  --shin-frames 0:128 --shin-prf-hz 1000 \
+  --gammex-seq-root "data/twinkling_artifact/Flow in Gammex phantom" \
+  --gammex-frames-along 0 --gammex-frames-across 0 --gammex-prf-hz 2500 \
+  --gammex-mask-mode bmode_tube --gammex-mask-ref-frames 0:6 \
+  --pf 30 250 --pg 250 400 --pa-lo 400 --tile-hw 8 8 --tile-stride 3 \
+  --tag simus_micro_paper_seed0_vs_shin_gammex
+PYTHONPATH=. conda run -n stap-fus python scripts/physical_doppler_sanity_link.py \
+  --sim-run runs/sim/simus_pymust_paper_alias_seed0 \
+  --shin-root data/shin_zenodo_10711806/ratbrain_fig3_raw --shin-iq-file IQData001.dat \
+  --shin-frames 0:128 --shin-prf-hz 1000 \
+  --gammex-seq-root "data/twinkling_artifact/Flow in Gammex phantom" \
+  --gammex-frames-along 0 --gammex-frames-across 0 --gammex-prf-hz 2500 \
+  --gammex-mask-mode bmode_tube --gammex-mask-ref-frames 0:6 \
+  --pf 30 250 --pg 250 400 --pa-lo 400 --tile-hw 8 8 --tile-stride 3 \
+  --tag simus_alias_paper_seed0_vs_shin_gammex
 \end{verbatim}
 }
 

@@ -4,8 +4,8 @@
     "release_tag": null
   },
   "git": {
-    "commit": "bfb2d7eb99b2a50eb432b12926373f217e87372f",
-    "commit_short": "bfb2d7e",
+    "commit": "0a31b007a40a98e5666a805ae75105cb54a3287e",
+    "commit_short": "0a31b00",
     "branch": "main",
     "dirty": false,
     "dirty_paths_count": 0,
@@ -56,7 +56,7 @@
     },
     "environment_yml": {
       "path": "environment.yml",
-      "sha256": "a251307a0fc842f5b956cf64d98613213f7e1519b0b0c2c2cb0e950edf64bd61"
+      "sha256": "d2216d753643a3f62e3f69be66bfff77bb7e4671a2668ecd4d5a16eba6f76c73"
     },
     "dockerfile": {
       "path": "Dockerfile",
@@ -1395,6 +1395,61 @@
         "  --out-png figs/paper/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_elastic_e975.png"
       ],
       "notes": null
+    },
+    {
+      "name": "SIMUS/PyMUST moving-scatterer sanity link + bundle contract (micro + alias; non-performance claims)",
+      "paper_refs": [
+        "Simulation spec: moving-scatterer physical Doppler regime (SIMUS)",
+        "Appendix (QC): physical-doppler sanity-link telemetry"
+      ],
+      "outputs": [
+        "reports/physdoppler_sanity_link/simus_micro_paper_seed0_vs_shin_gammex_summary.json",
+        "reports/physdoppler_sanity_link/simus_micro_paper_seed0_vs_shin_gammex_table.json",
+        "reports/physdoppler_sanity_link/simus_alias_paper_seed0_vs_shin_gammex_summary.json",
+        "reports/physdoppler_sanity_link/simus_alias_paper_seed0_vs_shin_gammex_table.json",
+        "reports/simus_contract/simus_pymust_paper_micro_seed0_hab_contract.txt",
+        "reports/simus_contract/simus_pymust_paper_alias_seed0_hab_contract.txt",
+        "runs/sim/simus_pymust_paper_micro_seed0/bundle/simus_pymust_paper_micro_seed0/",
+        "runs/sim/simus_pymust_paper_alias_seed0/bundle/simus_pymust_paper_alias_seed0/"
+      ],
+      "commands": [
+        "PYTHONPATH=. conda run -n stap-fus python sim/simus/pilot_pymust_simus.py \\",
+        "  --out runs/sim/simus_pymust_paper_micro_seed0 --preset microvascular_like --tier paper --seed 0 --skip-bundle",
+        "PYTHONPATH=. conda run -n stap-fus python sim/simus/pilot_pymust_simus.py \\",
+        "  --out runs/sim/simus_pymust_paper_alias_seed0 --preset alias_stress --tier paper --seed 0 --skip-bundle",
+        "",
+        "PYTHONPATH=. conda run -n stap-fus python scripts/icube_make_bundle.py \\",
+        "  --run runs/sim/simus_pymust_paper_micro_seed0 --stap-device cpu",
+        "PYTHONPATH=. conda run -n stap-fus python scripts/icube_make_bundle.py \\",
+        "  --run runs/sim/simus_pymust_paper_alias_seed0 --stap-device cpu",
+        "",
+        "PYTHONPATH=. conda run -n stap-fus python scripts/hab_contract_check.py \\",
+        "  runs/sim/simus_pymust_paper_micro_seed0/bundle/simus_pymust_paper_micro_seed0 \\",
+        "  2>&1 | tee reports/simus_contract/simus_pymust_paper_micro_seed0_hab_contract.txt",
+        "PYTHONPATH=. conda run -n stap-fus python scripts/hab_contract_check.py \\",
+        "  runs/sim/simus_pymust_paper_alias_seed0/bundle/simus_pymust_paper_alias_seed0 \\",
+        "  2>&1 | tee reports/simus_contract/simus_pymust_paper_alias_seed0_hab_contract.txt",
+        "",
+        "PYTHONPATH=. conda run -n stap-fus python scripts/physical_doppler_sanity_link.py \\",
+        "  --sim-run runs/sim/simus_pymust_paper_micro_seed0 \\",
+        "  --shin-root data/shin_zenodo_10711806/ratbrain_fig3_raw --shin-iq-file IQData001.dat \\",
+        "  --shin-frames 0:128 --shin-prf-hz 1000 \\",
+        "  --gammex-seq-root \"data/twinkling_artifact/Flow in Gammex phantom\" \\",
+        "  --gammex-frames-along 0 --gammex-frames-across 0 --gammex-prf-hz 2500 \\",
+        "  --gammex-mask-mode bmode_tube --gammex-mask-ref-frames 0:6 \\",
+        "  --pf 30 250 --pg 250 400 --pa-lo 400 --tile-hw 8 8 --tile-stride 3 \\",
+        "  --tag simus_micro_paper_seed0_vs_shin_gammex",
+        "PYTHONPATH=. conda run -n stap-fus python scripts/physical_doppler_sanity_link.py \\",
+        "  --sim-run runs/sim/simus_pymust_paper_alias_seed0 \\",
+        "  --shin-root data/shin_zenodo_10711806/ratbrain_fig3_raw --shin-iq-file IQData001.dat \\",
+        "  --shin-frames 0:128 --shin-prf-hz 1000 \\",
+        "  --gammex-seq-root \"data/twinkling_artifact/Flow in Gammex phantom\" \\",
+        "  --gammex-frames-along 0 --gammex-frames-across 0 --gammex-prf-hz 2500 \\",
+        "  --gammex-mask-mode bmode_tube --gammex-mask-ref-frames 0:6 \\",
+        "  --pf 30 250 --pg 250 400 --pa-lo 400 --tile-hw 8 8 --tile-stride 3 \\",
+        "  --tag simus_alias_paper_seed0_vs_shin_gammex"
+      ],
+      "notes": "SIMUS/PyMUST runs are used as a moving-scatterer credibility anchor. Sanity-link summaries compare PSD-band / coherence / low-rank proxies against open real IQ; contract checks verify bundle integrity and KA-friendly regime telemetry. No performance claims are made from these comparisons."
     },
     {
       "name": "Paper build modes (paper vs supplement vs full)",
