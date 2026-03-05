@@ -268,3 +268,29 @@ Planned follow-ups:
 
 - add a one-time point-target PSF calibration generator script (k-Wave or Field II) that writes `psf_calib.json` for reuse
 - add a Field II backend (channel/RF-level moving scatterers) behind a backend interface, producing the same canonical `dataset/` layout
+
+## External Backend Import (Field II Plumbing)
+
+Field II (or any external simulator) can be integrated without touching detector code by producing an IQ cube
+`Icube(T,H,W)` externally and importing it into the canonical `dataset/` layout, then deriving a standard
+acceptance bundle from that cube.
+
+Importer script:
+
+- `scripts/fieldii_import_icube.py`
+
+Example (import `.npy` Icube and write bundle):
+
+```bash
+PYTHONPATH=. conda run -n stap-fus \
+  python scripts/fieldii_import_icube.py \
+  --out runs/sim/fieldii_import_example \
+  --dataset-name fieldii_example \
+  --icube-npy /abs/path/to/icube.npy \
+  --prf-hz 1500 \
+  --tile-hw 8 8 --tile-stride 3 --Lt 64 \
+  --stap-device cuda
+```
+
+This writes `runs/sim/fieldii_import_example/dataset/` (canonical artifacts + hashes + meta) and
+`runs/sim/fieldii_import_example/bundle/fieldii_example/` (derived acceptance bundle).
