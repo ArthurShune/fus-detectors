@@ -172,7 +172,9 @@ Outputs:
 - `reports/simus_motion/simus_stap_rule_eval_seed2122_partial.{csv,json}`
 - `reports/simus_motion/simus_stap_compromise_search_seed2122_full.{csv,json}`
 - `reports/simus_motion/simus_stap_rule_eval_seed2122_full.{csv,json}`
+- `reports/simus_motion/simus_motion_policy_headline_seed2122_full.{csv,json}`
 - `reports/simus_sanity_link/phase4_motion_ladders_seed21_{summary,table,deltas}.{json,csv}`
+- `reports/simus_sanity_link/simus_motion_policy_bucket_check_seed21.{csv,json}`
 
 Notes:
 - structural reporting now labels the chained pipeline explicitly as `MC-SVD -> STAP`
@@ -190,6 +192,10 @@ Notes:
 - a frozen two-way rule on `motion_disp_rms_px` is nearly oracle on the full two-seed held-out set:
   - `MotionShort-v0 -> MotionMidRobust-v0` above `~2.03-2.08 px` reaches `100%` oracle recovery on held-out seed 21 and `98.2%` on held-out seed 22
   - `MotionRobust-v0 -> MotionMidRobust-v0` above `~2.03-2.08 px` reaches `97.8%` oracle recovery on held-out seed 21 and `99.8%` on held-out seed 22
+- the motion-policy headline summary confirms that freezing `MotionRobust-v0` below the threshold and `MotionMidRobust-v0` above it improves the current clinical profile at both motion scales on the full two-seed set:
+  - at `motion=0.25`, mean `auc_main_vs_nuisance` improves by `+0.093` and mean nuisance FPR at matched TPR 0.5 drops by `-0.127`
+  - at `motion=1.0`, mean `auc_main_vs_nuisance` improves by `+0.092` and mean nuisance FPR at matched TPR 0.5 drops by `-0.120`
+- the real-data bucket check is a limitation, not a confirmation: all nonzero-motion seed21 SIMUS policy cases still land nearest the Gammex phantom telemetry bucket, so the policy is currently validated as a better SIMUS regime split, not yet as a clinically grounded Shin-vs-Gammex separator
 - current evidence therefore does not justify a detector-level algorithmic redesign yet; the next move is to freeze either a single compromise profile (`MotionRobust-v0`) or the `motion_disp_rms_px`-driven profile rule and validate that policy on additional seeds/real-data telemetry before touching STAP math
 
 Status:
