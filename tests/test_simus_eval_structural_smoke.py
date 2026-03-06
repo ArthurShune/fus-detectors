@@ -48,6 +48,7 @@ def test_simus_structural_metrics_report_nuisance_fpr_and_alias_qc():
         mask_h0_nuisance_pa=mask_h0_nuisance_pa,
         mask_h1_alias_qc=mask_h1_alias_qc,
         fprs=[0.5],
+        match_tprs=[0.5],
     )
 
     assert out["n_h1_pf_main"] == 2
@@ -59,3 +60,6 @@ def test_simus_structural_metrics_report_nuisance_fpr_and_alias_qc():
     assert out["tpr_main@5e-01"] >= 0.5
     assert out["fpr_nuisance@5e-01"] >= 0.0
     assert out["tpr_alias_qc@5e-01"] >= 0.0
+    assert out["thr_match_tpr@0p5"] is not None
+    assert out["tpr_main_match@0p5"] >= 0.5
+    assert out["fpr_nuisance_match@0p5"] >= 0.0
