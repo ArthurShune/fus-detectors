@@ -22,10 +22,6 @@ Already implemented:
 
 Not implemented yet:
 
-- named clinical profiles from `pymust_specv2.md`
-- explicit `H1/H0` structural label contract
-- nuisance-vessel negatives separated from parenchymal positives
-- motion and phase-screen layers
 - multi-clip clinical evaluation CLIs
 - functional extension
 
@@ -73,6 +69,9 @@ Implementation files:
 Deliverable:
 - one clinically aligned single-clip structural generator with reproducible labels and hashes
 
+Status:
+- done
+
 ### Phase 2: Motion and residual-mismatch layer
 
 Goal:
@@ -94,6 +93,9 @@ Recommended files:
 
 Deliverable:
 - motion-enabled `ClinMobile-Pf-v1` clips that remain deterministic
+
+Status:
+- done
 
 ### Phase 3: Structural evaluation and bundle-facing CLIs
 

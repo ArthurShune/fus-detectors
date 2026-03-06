@@ -15,6 +15,12 @@ from sim.simus.config import (
     resolve_vessels,
 )
 from sim.simus.labels import build_label_pack
+from sim.simus.motion import (
+    apply_phase_screen,
+    build_motion_artifacts,
+    build_phase_screen_series,
+    sample_motion_displacements_m,
+)
 
 
 try:  # optional dependency
@@ -111,6 +117,19 @@ def _sample_uniform_excluding_mask(
     return xs, zs
 
 
+def _match_iq_shape(iq_ch: np.ndarray, ref_shape: tuple[int, int]) -> np.ndarray:
+    arr = np.asarray(iq_ch)
+    if arr.ndim != 2:
+        return arr
+    if tuple(arr.shape) == tuple(ref_shape):
+        return arr
+    out = np.zeros(ref_shape, dtype=arr.dtype)
+    h = min(int(ref_shape[0]), int(arr.shape[0]))
+    w = min(int(ref_shape[1]), int(arr.shape[1]))
+    out[:h, :w] = arr[:h, :w]
+    return out
+
+
 def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
     pm = _require_pymust()
     if int(cfg.T) <= 0:
@@ -191,6 +210,8 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         bands=cfg.bands,
         guard_px=int(cfg.label_guard_px),
     )
+
+    motion_art = build_motion_artifacts(cfg=cfg, seed=int(cfg.seed) + 2001)
 
     # ---- Scatterers ----
     x_min, x_max = float(cfg.x_min_m), float(cfg.x_max_m)
@@ -277,18 +298,55 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
     # ---- Pulse loop: SIMUS -> RF -> IQch -> DAS -> IQimg ----
     Icube = np.empty((int(cfg.T), int(cfg.H), int(cfg.W)), dtype=np.complex64)
     M = None
+    iq_shape_ref: tuple[int, int] | None = None
+    phase_series = None
+    phase_telemetry: dict[str, Any] = {"enabled": False, "phase_rms_rad": 0.0}
 
     for t in range(int(cfg.T)):
-        blood_xs = [np.asarray(state["xs"], dtype=np.float32) for state in blood_states]
-        blood_zs = [np.asarray(state["zs"], dtype=np.float32) for state in blood_states]
+        dx_tissue_m, dz_tissue_m = sample_motion_displacements_m(
+            field_dx_px=motion_art.dx_px[t],
+            field_dz_px=motion_art.dz_px[t],
+            x_m=xs_tissue,
+            z_m=zs_tissue,
+            cfg=cfg,
+        )
+        xs_tissue_t = (xs_tissue + dx_tissue_m).astype(np.float32, copy=False)
+        zs_tissue_t = (zs_tissue + dz_tissue_m).astype(np.float32, copy=False)
+
+        blood_xs = []
+        blood_zs = []
         blood_rc = [np.asarray(state["rc"], dtype=np.float32) for state in blood_states]
-        xs = np.concatenate([xs_tissue] + blood_xs).astype(np.float32, copy=False)
-        zs = np.concatenate([zs_tissue] + blood_zs).astype(np.float32, copy=False)
+        for state in blood_states:
+            dx_blood_m, dz_blood_m = sample_motion_displacements_m(
+                field_dx_px=motion_art.dx_px[t],
+                field_dz_px=motion_art.dz_px[t],
+                x_m=np.asarray(state["xs"], dtype=np.float32),
+                z_m=np.asarray(state["zs"], dtype=np.float32),
+                cfg=cfg,
+            )
+            blood_xs.append((np.asarray(state["xs"], dtype=np.float32) + dx_blood_m).astype(np.float32, copy=False))
+            blood_zs.append((np.asarray(state["zs"], dtype=np.float32) + dz_blood_m).astype(np.float32, copy=False))
+        xs = np.concatenate([xs_tissue_t] + blood_xs).astype(np.float32, copy=False)
+        zs = np.concatenate([zs_tissue_t] + blood_zs).astype(np.float32, copy=False)
         rc = np.concatenate([rc_tissue] + blood_rc).astype(np.float32, copy=False)
 
         rf, _rf_spec = pm.simus(xs, zs, rc, txdel, param)
         rf = np.asarray(rf, dtype=np.float32)
         iq_ch = pm.rf2iq(rf, param)
+        if phase_series is None:
+            n_elem = int(min(iq_ch.shape)) if getattr(iq_ch, "ndim", 0) == 2 else 0
+            phase_series, phase_telemetry = build_phase_screen_series(
+                T=int(cfg.T),
+                n_elem=n_elem,
+                spec=cfg.phase_screen,
+                seed=int(cfg.seed) + 7001,
+            )
+        if phase_series is not None:
+            iq_ch = apply_phase_screen(iq_ch, phase_series[t])
+        if iq_shape_ref is None and getattr(iq_ch, "ndim", 0) == 2:
+            iq_shape_ref = (int(iq_ch.shape[0]), int(iq_ch.shape[1]))
+        if iq_shape_ref is not None:
+            iq_ch = _match_iq_shape(iq_ch, iq_shape_ref)
 
         if M is None:
             # Complex DAS matrix for I/Q data; SIG.shape convention is MATLAB-like.
@@ -335,6 +393,17 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         "expected_vz_mps": expected_vz_mps,
         "vessel_role_map": vessel_role_map,
         "scatterers_init": scatterers_init,
+        "motion_dx_px": motion_art.dx_px,
+        "motion_dz_px": motion_art.dz_px,
+        "motion_rigid_dx_px": motion_art.rigid_dx_px,
+        "motion_rigid_dz_px": motion_art.rigid_dz_px,
+        "motion_elastic_base_dx_px": motion_art.elastic_base_dx_px,
+        "motion_elastic_base_dz_px": motion_art.elastic_base_dz_px,
+        "motion_elastic_coef_x": motion_art.elastic_coef_x,
+        "motion_elastic_coef_z": motion_art.elastic_coef_z,
+        "motion_telemetry": motion_art.telemetry,
+        "phase_screen_rad": np.asarray(phase_series, dtype=np.float32) if phase_series is not None else np.zeros((int(cfg.T), 0), dtype=np.float32),
+        "phase_screen_telemetry": phase_telemetry,
         "txdel_s": txdel,
         "grid_x_m": xg,
         "grid_z_m": zg,

@@ -228,6 +228,24 @@ def main() -> None:
     _save(debug_dir, "expected_vz_mps", np.asarray(debug.get("expected_vz_mps"), dtype=np.float32))
     if debug.get("vessel_role_map") is not None:
         _save(debug_dir, "vessel_role_map", np.asarray(debug.get("vessel_role_map"), dtype=np.int16))
+    if debug.get("motion_dx_px") is not None:
+        _save(debug_dir, "motion_dx_px", np.asarray(debug.get("motion_dx_px"), dtype=np.float32))
+    if debug.get("motion_dz_px") is not None:
+        _save(debug_dir, "motion_dz_px", np.asarray(debug.get("motion_dz_px"), dtype=np.float32))
+    if debug.get("motion_rigid_dx_px") is not None:
+        _save(debug_dir, "motion_rigid_dx_px", np.asarray(debug.get("motion_rigid_dx_px"), dtype=np.float32))
+    if debug.get("motion_rigid_dz_px") is not None:
+        _save(debug_dir, "motion_rigid_dz_px", np.asarray(debug.get("motion_rigid_dz_px"), dtype=np.float32))
+    if debug.get("motion_elastic_base_dx_px") is not None:
+        _save(debug_dir, "motion_elastic_base_dx_px", np.asarray(debug.get("motion_elastic_base_dx_px"), dtype=np.float32))
+    if debug.get("motion_elastic_base_dz_px") is not None:
+        _save(debug_dir, "motion_elastic_base_dz_px", np.asarray(debug.get("motion_elastic_base_dz_px"), dtype=np.float32))
+    if debug.get("motion_elastic_coef_x") is not None:
+        _save(debug_dir, "motion_elastic_coef_x", np.asarray(debug.get("motion_elastic_coef_x"), dtype=np.float32))
+    if debug.get("motion_elastic_coef_z") is not None:
+        _save(debug_dir, "motion_elastic_coef_z", np.asarray(debug.get("motion_elastic_coef_z"), dtype=np.float32))
+    if debug.get("phase_screen_rad") is not None:
+        _save(debug_dir, "phase_screen_rad", np.asarray(debug.get("phase_screen_rad"), dtype=np.float32))
     np.savez_compressed(debug_dir / "scatterers_init.npz", **debug.get("scatterers_init", {}))
     paths["scatterers_init_npz"] = debug_dir / "scatterers_init.npz"
     _save(debug_dir, "txdel_s", np.asarray(debug.get("txdel_s"), dtype=np.float32))
@@ -263,7 +281,7 @@ def main() -> None:
         prov["pymust"] = None
 
     meta: dict[str, Any] = {
-        "schema_version": "simus_pymust.v2",
+        "schema_version": "simus_pymust.v3",
         "created_utc": _utc_now_iso(),
         "provenance": prov,
         "axes": {"order": ["t", "z", "x"], "units": {"x": "m", "z": "m", "t": "s"}},
@@ -292,6 +310,14 @@ def main() -> None:
             "tier": str(cfg.tier),
         },
         "bands_hz": dataclasses.asdict(cfg.bands),
+        "motion": {
+            "config": dataclasses.asdict(cfg.motion),
+            "telemetry": dict(debug.get("motion_telemetry", {})),
+        },
+        "phase_screen": {
+            "config": dataclasses.asdict(cfg.phase_screen),
+            "telemetry": dict(debug.get("phase_screen_telemetry", {})),
+        },
         "slow_time": {"T": int(cfg.T)},
         "labels": {
             "mask_h1_pf_main": "microvascular & sampled_fd in Pf_core & unaliased & ~guard",
