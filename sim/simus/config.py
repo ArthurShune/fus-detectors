@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 
 SimusPreset = Literal["microvascular_like", "alias_stress"]
-SimusProfile = Literal["ClinIntraOp-Pf-v1", "ClinMobile-Pf-v1"]
+SimusProfile = Literal["ClinIntraOp-Pf-v1", "ClinMobile-Pf-v1", "ClinIntraOp-Pf-Struct-v2"]
 SimusTier = Literal["smoke", "paper"]
 VesselRole = Literal["microvascular", "nuisance_pa"]
 
@@ -216,14 +216,19 @@ def default_config(*, preset: SimusPreset, tier: SimusTier, seed: int) -> SimusC
 
 def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int) -> SimusConfig:
     grid = _default_grid(tier)
+    structural_profile = profile == "ClinIntraOp-Pf-Struct-v2"
     if tier == "paper":
         tissue_count = 2600
         guard_px = 2
         reservoir_span = 1.5e-3
         micro_blood_count = 280
         nuisance_blood_count = 520
-        nuisance_vmax = 0.065 if profile == "ClinIntraOp-Pf-v1" else 0.090
-        if profile == "ClinIntraOp-Pf-v1":
+        nuisance_vmax = 0.065 if profile in ("ClinIntraOp-Pf-v1", "ClinIntraOp-Pf-Struct-v2") else 0.090
+        if structural_profile:
+            motion = MotionSpec(enabled=False)
+            phase_screen = PhaseScreenSpec(enabled=False)
+            micro_blood_rc_scale = 0.35
+        elif profile == "ClinIntraOp-Pf-v1":
             motion = MotionSpec(
                 enabled=True,
                 breathing_hz=0.25,
@@ -241,6 +246,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 elastic_axial_scale=0.65,
             )
             phase_screen = PhaseScreenSpec(enabled=True, std_rad=0.60, corr_len_elem=12.0, drift_rho=1.0, drift_sigma_rad=0.0)
+            micro_blood_rc_scale = 0.18
         else:
             motion = MotionSpec(
                 enabled=True,
@@ -267,6 +273,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 drift_rho=0.995,
                 drift_sigma_rad=0.015,
             )
+            micro_blood_rc_scale = 0.18
         micro_vessels = (
             _legacy_vessel(
                 name="micro_left",
@@ -276,7 +283,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 z_min_m=9.0e-3,
                 z_max_m=18.0e-3,
                 blood_count=micro_blood_count,
-                blood_rc_scale=0.18,
+                blood_rc_scale=micro_blood_rc_scale,
                 blood_vmax_mps=0.012,
                 blood_profile="poiseuille",
             ),
@@ -288,7 +295,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 z_min_m=11.0e-3,
                 z_max_m=21.5e-3,
                 blood_count=micro_blood_count,
-                blood_rc_scale=0.18,
+                blood_rc_scale=micro_blood_rc_scale,
                 blood_vmax_mps=0.015,
                 blood_profile="poiseuille",
             ),
@@ -300,7 +307,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 z_min_m=13.0e-3,
                 z_max_m=22.5e-3,
                 blood_count=micro_blood_count,
-                blood_rc_scale=0.18,
+                blood_rc_scale=micro_blood_rc_scale,
                 blood_vmax_mps=0.011,
                 blood_profile="poiseuille",
             ),
@@ -325,8 +332,12 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
         reservoir_span = 2.0e-3
         micro_blood_count = 90
         nuisance_blood_count = 180
-        nuisance_vmax = 0.17 if profile == "ClinIntraOp-Pf-v1" else 0.22
-        if profile == "ClinIntraOp-Pf-v1":
+        nuisance_vmax = 0.17 if profile in ("ClinIntraOp-Pf-v1", "ClinIntraOp-Pf-Struct-v2") else 0.22
+        if structural_profile:
+            motion = MotionSpec(enabled=False)
+            phase_screen = PhaseScreenSpec(enabled=False)
+            micro_blood_rc_scale = 0.35
+        elif profile == "ClinIntraOp-Pf-v1":
             motion = MotionSpec(
                 enabled=True,
                 breathing_hz=0.25,
@@ -344,6 +355,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 elastic_axial_scale=0.65,
             )
             phase_screen = PhaseScreenSpec(enabled=True, std_rad=0.45, corr_len_elem=6.0, drift_rho=1.0, drift_sigma_rad=0.0)
+            micro_blood_rc_scale = 0.18
         else:
             motion = MotionSpec(
                 enabled=True,
@@ -370,6 +382,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 drift_rho=0.992,
                 drift_sigma_rad=0.012,
             )
+            micro_blood_rc_scale = 0.18
         micro_vessels = (
             _legacy_vessel(
                 name="micro_left",
@@ -379,7 +392,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 z_min_m=9.0e-3,
                 z_max_m=18.0e-3,
                 blood_count=micro_blood_count,
-                blood_rc_scale=0.18,
+                blood_rc_scale=micro_blood_rc_scale,
                 blood_vmax_mps=0.020,
                 blood_profile="poiseuille",
             ),
@@ -391,7 +404,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 z_min_m=11.0e-3,
                 z_max_m=21.0e-3,
                 blood_count=micro_blood_count,
-                blood_rc_scale=0.18,
+                blood_rc_scale=micro_blood_rc_scale,
                 blood_vmax_mps=0.026,
                 blood_profile="poiseuille",
             ),

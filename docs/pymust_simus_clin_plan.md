@@ -51,6 +51,7 @@ Scope:
 - add named profiles:
   - `ClinIntraOp-Pf-v1`
   - `ClinMobile-Pf-v1`
+  - `ClinIntraOp-Pf-Struct-v2`
 - support multiple vessel roles in one clip:
   - `microvascular`
   - `nuisance_pa`
@@ -74,6 +75,10 @@ Implementation files:
 
 Deliverable:
 - one clinically aligned single-clip structural generator with reproducible labels and hashes
+
+Notes:
+- `ClinIntraOp-Pf-v1` remains the motion-stress profile used during diagnosis.
+- `ClinIntraOp-Pf-Struct-v2` is the lighter structural benchmark profile with motion/phase disabled and stronger microvascular contrast.
 
 Status:
 - done
