@@ -38,6 +38,35 @@ class VesselSpec:
 
 
 @dataclass(frozen=True)
+class MotionSpec:
+    enabled: bool = False
+    breathing_hz: float = 0.0
+    breathing_amp_x_px: float = 0.0
+    breathing_amp_z_px: float = 0.0
+    cardiac_hz: float = 0.0
+    cardiac_amp_x_px: float = 0.0
+    cardiac_amp_z_px: float = 0.0
+    random_walk_sigma_px: float = 0.0
+    drift_x_px: float = 0.0
+    drift_z_px: float = 0.0
+    elastic_amp_px: float = 0.0
+    elastic_sigma_px: float = 12.0
+    elastic_depth_decay_frac: float = 0.35
+    elastic_temporal_rho: float = 0.98
+    elastic_lateral_scale: float = 1.0
+    elastic_axial_scale: float = 0.6
+
+
+@dataclass(frozen=True)
+class PhaseScreenSpec:
+    enabled: bool = False
+    std_rad: float = 0.0
+    corr_len_elem: float = 12.0
+    drift_rho: float = 1.0
+    drift_sigma_rad: float = 0.0
+
+
+@dataclass(frozen=True)
 class SimusConfig:
     preset: SimusPreset = "microvascular_like"
     tier: SimusTier = "smoke"
@@ -74,6 +103,8 @@ class SimusConfig:
     bands: DopplerBandSpec = DopplerBandSpec()
     label_guard_px: int = 2
     bg_top_exclusion_frac: float = 0.10
+    motion: MotionSpec = MotionSpec()
+    phase_screen: PhaseScreenSpec = PhaseScreenSpec()
 
     reservoir_scale: int = 4
     reinject_depth_span_m: float = 0.003
@@ -175,6 +206,8 @@ def default_config(*, preset: SimusPreset, tier: SimusTier, seed: int) -> SimusC
         blood_vmax_mps=float(blood_vmax_mps),
         blood_profile="poiseuille",
         vessels=(vessel,),
+        motion=MotionSpec(enabled=False),
+        phase_screen=PhaseScreenSpec(enabled=False),
         reservoir_scale=4,
         reinject_depth_span_m=float(reinject_depth_span_m),
         **grid,
@@ -190,6 +223,50 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
         micro_blood_count = 280
         nuisance_blood_count = 520
         nuisance_vmax = 0.065 if profile == "ClinIntraOp-Pf-v1" else 0.090
+        if profile == "ClinIntraOp-Pf-v1":
+            motion = MotionSpec(
+                enabled=True,
+                breathing_hz=0.25,
+                breathing_amp_x_px=0.8,
+                breathing_amp_z_px=0.35,
+                cardiac_hz=1.2,
+                cardiac_amp_x_px=0.28,
+                cardiac_amp_z_px=0.14,
+                random_walk_sigma_px=0.04,
+                elastic_amp_px=0.40,
+                elastic_sigma_px=20.0,
+                elastic_depth_decay_frac=0.35,
+                elastic_temporal_rho=0.985,
+                elastic_lateral_scale=1.0,
+                elastic_axial_scale=0.65,
+            )
+            phase_screen = PhaseScreenSpec(enabled=True, std_rad=0.60, corr_len_elem=12.0, drift_rho=1.0, drift_sigma_rad=0.0)
+        else:
+            motion = MotionSpec(
+                enabled=True,
+                breathing_hz=1.8,
+                breathing_amp_x_px=1.8,
+                breathing_amp_z_px=0.9,
+                cardiac_hz=0.4,
+                cardiac_amp_x_px=0.35,
+                cardiac_amp_z_px=0.18,
+                random_walk_sigma_px=0.05,
+                drift_x_px=0.8,
+                drift_z_px=0.4,
+                elastic_amp_px=0.80,
+                elastic_sigma_px=24.0,
+                elastic_depth_decay_frac=0.45,
+                elastic_temporal_rho=0.992,
+                elastic_lateral_scale=1.0,
+                elastic_axial_scale=0.70,
+            )
+            phase_screen = PhaseScreenSpec(
+                enabled=True,
+                std_rad=0.60,
+                corr_len_elem=12.0,
+                drift_rho=0.995,
+                drift_sigma_rad=0.015,
+            )
         micro_vessels = (
             _legacy_vessel(
                 name="micro_left",
@@ -249,6 +326,50 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
         micro_blood_count = 90
         nuisance_blood_count = 180
         nuisance_vmax = 0.17 if profile == "ClinIntraOp-Pf-v1" else 0.22
+        if profile == "ClinIntraOp-Pf-v1":
+            motion = MotionSpec(
+                enabled=True,
+                breathing_hz=0.25,
+                breathing_amp_x_px=0.6,
+                breathing_amp_z_px=0.25,
+                cardiac_hz=1.2,
+                cardiac_amp_x_px=0.20,
+                cardiac_amp_z_px=0.10,
+                random_walk_sigma_px=0.03,
+                elastic_amp_px=0.25,
+                elastic_sigma_px=6.0,
+                elastic_depth_decay_frac=0.35,
+                elastic_temporal_rho=0.98,
+                elastic_lateral_scale=1.0,
+                elastic_axial_scale=0.65,
+            )
+            phase_screen = PhaseScreenSpec(enabled=True, std_rad=0.45, corr_len_elem=6.0, drift_rho=1.0, drift_sigma_rad=0.0)
+        else:
+            motion = MotionSpec(
+                enabled=True,
+                breathing_hz=1.8,
+                breathing_amp_x_px=1.25,
+                breathing_amp_z_px=0.60,
+                cardiac_hz=0.4,
+                cardiac_amp_x_px=0.25,
+                cardiac_amp_z_px=0.12,
+                random_walk_sigma_px=0.05,
+                drift_x_px=0.6,
+                drift_z_px=0.25,
+                elastic_amp_px=0.50,
+                elastic_sigma_px=8.0,
+                elastic_depth_decay_frac=0.45,
+                elastic_temporal_rho=0.99,
+                elastic_lateral_scale=1.0,
+                elastic_axial_scale=0.70,
+            )
+            phase_screen = PhaseScreenSpec(
+                enabled=True,
+                std_rad=0.45,
+                corr_len_elem=6.0,
+                drift_rho=0.992,
+                drift_sigma_rad=0.012,
+            )
         micro_vessels = (
             _legacy_vessel(
                 name="micro_left",
@@ -309,6 +430,8 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
         bands=DopplerBandSpec(),
         label_guard_px=int(guard_px),
         bg_top_exclusion_frac=0.10,
+        motion=motion,
+        phase_screen=phase_screen,
         reservoir_scale=4,
         reinject_depth_span_m=float(reservoir_span),
         **grid,
