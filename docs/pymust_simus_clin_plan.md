@@ -162,6 +162,8 @@ Outputs:
 - `reports/simus_motion/simus_phase4_calibration_summary.{csv,json}`
 - `reports/simus_motion/simus_phase4_failure_decomposition_seed21.{csv,json}`
 - `reports/simus_motion/simus_phase4_pd_readout_audit_seed21.{csv,json}`
+- `reports/simus_motion/simus_fusion_readout_bench_seed21.{csv,json}`
+- `reports/simus_motion/simus_fusion_readout_summary_seed21.{csv,json}`
 - `reports/simus_sanity_link/phase4_motion_ladders_seed21_{summary,table,deltas}.{json,csv}`
 
 Notes:
@@ -172,6 +174,7 @@ Notes:
 - the readout audit makes the mechanism explicit: `pd_stap` is constructed as `pd_base * band_fraction`, with background pixels forced back to `pd_base`; on the audited SIMUS runs `mask_h0_bg` lies entirely inside that invariant background mask, so `pd_stap` cannot improve H0-bg tail behavior and becomes nearly decorrelated from `score_stap_preka` once motion is introduced
 - candidate monotone transforms of the band-fraction suppression (`-log band_fraction`, `1 / band_fraction`) recover some nuisance separation, but the strongest audited right-tail score remains `score_stap_preka`; any PD-style replacement should be introduced as a new named readout/profile rather than silently changing the existing paper path
 - structural and motion report rows now carry explicit score semantics (`PD-after-STAP` vs `STAP detector`), and the evaluation CLIs can rescore existing bundles via `--reuse-bundles` so changing `eval_score` does not trigger unnecessary recomputation
+- readout-only fusion benchmarks show that symmetric and asymmetric baseline+STAP score combinations can recover some `H1/bg` ordering, but on motion-heavy cases they do not beat the raw `STAP detector` on nuisance rejection and do not produce a clean Pareto improvement over `MC-SVD`; the remaining issue is motion robustness of the detector/profile, not just headline readout
 
 Status:
 - done
