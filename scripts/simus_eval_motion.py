@@ -15,11 +15,14 @@ import numpy as np
 from scripts.simus_eval_structural import (
     MethodSpec,
     _baseline_label,
+    _headline_label,
     _pipeline_label,
+    _score_label,
+    _score_semantics,
     _split_csv_list,
     evaluate_structural_metrics,
 )
-from sim.simus.bundle import derive_bundle_from_run, load_canonical_run
+from sim.simus.bundle import derive_bundle_from_run, load_canonical_run, slugify
 from sim.simus.config import MotionSpec, PhaseScreenSpec, SimusConfig, default_profile_config
 from sim.simus.pilot_pymust_simus import SUPPORTED_SIMUS_PROFILES, write_simus_run
 
@@ -174,6 +177,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--fprs", type=str, default="1e-4,1e-3")
     ap.add_argument("--match-tprs", type=str, default="0.25,0.5,0.75")
     ap.add_argument("--reuse-existing", action=argparse.BooleanOptionalAction, default=True)
+    ap.add_argument("--reuse-bundles", action=argparse.BooleanOptionalAction, default=True)
     return ap.parse_args()
 
 
@@ -246,22 +250,25 @@ def main() -> None:
 
         for method in methods:
             dataset_name = f"{run_slug}_{method.key}"
-            bundle_dir = derive_bundle_from_run(
-                run_dir=run_dir,
-                out_root=eval_root / run_slug,
-                dataset_name=dataset_name,
-                stap_profile=str(args.stap_profile),
-                baseline_type=str(method.baseline_type),
-                run_stap=bool(method.run_stap),
-                stap_device=str(args.stap_device),
-                meta_extra={
-                    "simus_motion_ladder": True,
-                    "motion_scale": float(motion_scale),
-                    "phase_scale": float(phase_scale),
-                    "compare_method_key": str(method.key),
-                    "compare_role": str(method.role),
-                },
-            )
+            bundle_root = eval_root / run_slug
+            bundle_dir = bundle_root / slugify(dataset_name)
+            if not bool(args.reuse_bundles) or not (bundle_dir / "meta.json").is_file():
+                bundle_dir = derive_bundle_from_run(
+                    run_dir=run_dir,
+                    out_root=bundle_root,
+                    dataset_name=dataset_name,
+                    stap_profile=str(args.stap_profile),
+                    baseline_type=str(method.baseline_type),
+                    run_stap=bool(method.run_stap),
+                    stap_device=str(args.stap_device),
+                    meta_extra={
+                        "simus_motion_ladder": True,
+                        "motion_scale": float(motion_scale),
+                        "phase_scale": float(phase_scale),
+                        "compare_method_key": str(method.key),
+                        "compare_role": str(method.role),
+                    },
+                )
             score_path = _score_path(bundle_dir, eval_score=str(args.eval_score), role=str(method.role))
             score = np.load(score_path).astype(np.float32, copy=False)
             metrics = evaluate_structural_metrics(
@@ -283,11 +290,14 @@ def main() -> None:
                 "method": method.key,
                 "method_label": _pipeline_label(method),
                 "pipeline_label": _pipeline_label(method),
+                "headline_label": _headline_label(str(args.eval_score), method),
                 "upstream_baseline_label": _baseline_label(method.baseline_type),
                 "baseline_type": method.baseline_type,
                 "role": method.role,
                 "run_stap": int(method.run_stap),
                 "eval_score": str(args.eval_score),
+                "score_label": _score_label(str(args.eval_score), method),
+                "score_semantics": _score_semantics(str(args.eval_score), method),
                 "bundle_dir": str(bundle_dir),
                 "score_file": score_path.name,
                 "T": int(icube.shape[0]),
@@ -301,6 +311,9 @@ def main() -> None:
             rows.append(row)
             details["runs"][run_slug]["methods"][method.key] = {
                 "pipeline_label": _pipeline_label(method),
+                "headline_label": _headline_label(str(args.eval_score), method),
+                "score_label": _score_label(str(args.eval_score), method),
+                "score_semantics": _score_semantics(str(args.eval_score), method),
                 "bundle_dir": str(bundle_dir),
                 "score_file": score_path.name,
                 "metrics": metrics,

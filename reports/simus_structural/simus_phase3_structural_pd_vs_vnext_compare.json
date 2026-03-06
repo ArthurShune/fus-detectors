@@ -1,0 +1,72 @@
+{
+  "rows": [
+    {
+      "profile": "ClinIntraOp-Pf-Struct-v2",
+      "method": "baseline_mc_svd",
+      "pd_headline_label": "MC-SVD",
+      "vnext_headline_label": "MC-SVD (Baseline score)",
+      "pd_score_file": "score_pd_base.npy",
+      "vnext_score_file": "score_base.npy",
+      "pd_auc_main_vs_bg": 0.9823596791329637,
+      "vnext_auc_main_vs_bg": 0.9823596791329637,
+      "delta_auc_main_vs_bg": 0.0,
+      "pd_auc_main_vs_nuisance": 0.6176299174356483,
+      "vnext_auc_main_vs_nuisance": 0.6176299174356483,
+      "delta_auc_main_vs_nuisance": 0.0,
+      "pd_fpr_nuisance_match@0p5": 0.2482758620689655,
+      "vnext_fpr_nuisance_match@0p5": 0.2482758620689655,
+      "delta_fpr_nuisance_match@0p5": 0.0
+    },
+    {
+      "profile": "ClinIntraOp-Pf-Struct-v2",
+      "method": "stap",
+      "pd_headline_label": "MC-SVD -> STAP",
+      "vnext_headline_label": "MC-SVD -> STAP (STAP detector)",
+      "pd_score_file": "score_pd_stap.npy",
+      "vnext_score_file": "score_stap_preka.npy",
+      "pd_auc_main_vs_bg": 0.9808108432542234,
+      "vnext_auc_main_vs_bg": 0.9425679652100438,
+      "delta_auc_main_vs_bg": -0.038242878044179585,
+      "pd_auc_main_vs_nuisance": 0.8272624251254654,
+      "vnext_auc_main_vs_nuisance": 1.0,
+      "delta_auc_main_vs_nuisance": 0.17273757487453456,
+      "pd_fpr_nuisance_match@0p5": 0.013793103448275862,
+      "vnext_fpr_nuisance_match@0p5": 0.0,
+      "delta_fpr_nuisance_match@0p5": -0.013793103448275862
+    },
+    {
+      "profile": "ClinIntraOp-Pf-v1",
+      "method": "baseline_mc_svd",
+      "pd_headline_label": "MC-SVD",
+      "vnext_headline_label": "MC-SVD (Baseline score)",
+      "pd_score_file": "score_pd_base.npy",
+      "vnext_score_file": "score_base.npy",
+      "pd_auc_main_vs_bg": 0.5903763663390493,
+      "vnext_auc_main_vs_bg": 0.5903763663390493,
+      "delta_auc_main_vs_bg": 0.0,
+      "pd_auc_main_vs_nuisance": 0.03568075117370892,
+      "vnext_auc_main_vs_nuisance": 0.03568075117370892,
+      "delta_auc_main_vs_nuisance": 0.0,
+      "pd_fpr_nuisance_match@0p5": 1.0,
+      "vnext_fpr_nuisance_match@0p5": 1.0,
+      "delta_fpr_nuisance_match@0p5": 0.0
+    },
+    {
+      "profile": "ClinIntraOp-Pf-v1",
+      "method": "stap",
+      "pd_headline_label": "MC-SVD -> STAP",
+      "vnext_headline_label": "MC-SVD -> STAP (STAP detector)",
+      "pd_score_file": "score_pd_stap.npy",
+      "vnext_score_file": "score_stap_preka.npy",
+      "pd_auc_main_vs_bg": 0.3640004006550788,
+      "vnext_auc_main_vs_bg": 0.46022475268902696,
+      "delta_auc_main_vs_bg": 0.09622435203394814,
+      "pd_auc_main_vs_nuisance": 0.03329286061194755,
+      "vnext_auc_main_vs_nuisance": 0.34398575360207223,
+      "delta_auc_main_vs_nuisance": 0.3106928929901247,
+      "pd_fpr_nuisance_match@0p5": 1.0,
+      "vnext_fpr_nuisance_match@0p5": 0.7137931034482758,
+      "delta_fpr_nuisance_match@0p5": -0.28620689655172415
+    }
+  ]
+}
