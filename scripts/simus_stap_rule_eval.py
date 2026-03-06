@@ -68,6 +68,7 @@ def _load_cases(path: Path) -> list[Case]:
             "reg_shift_rms": _safe_float(baseline.get("reg_shift_rms")),
             "reg_shift_p90": _safe_float(baseline.get("reg_shift_p90")),
             "reg_psr_median": _safe_float(baseline.get("reg_psr_median")),
+            "motion_disp_rms_px": _safe_float(baseline.get("motion_disp_rms_px")),
         }
         cases.append(
             Case(
@@ -245,6 +246,11 @@ def _apply_rule(rule: dict[str, Any], case: Case) -> str:
     raise ValueError(f"unknown rule type {rule['type']!r}")
 
 
+def _profiles_available(profiles: list[str], *needed: str) -> bool:
+    profile_set = set(profiles)
+    return all(p in profile_set for p in needed)
+
+
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Evaluate frozen telemetry-based STAP profile rules with leave-one-seed-out validation.")
     ap.add_argument(
@@ -281,53 +287,104 @@ def main() -> None:
         candidate_rules: list[tuple[str, dict[str, Any], dict[str, Any]]] = [
             ("fixed_best", {"type": "fixed", "profile": fixed_profile}, fixed_train),
         ]
-        candidate_rules.append(
-            (
-                "reg_shift_rms_short_long",
-                *_best_threshold_rule(
-                    train_cases,
-                    feature="reg_shift_rms",
-                    low_profile="Brain-SIMUS-Clin-MotionShort-v0",
-                    high_profile="Brain-SIMUS-Clin-MotionLong-v0",
-                ),
+        if _profiles_available(profiles, "Brain-SIMUS-Clin-MotionShort-v0", "Brain-SIMUS-Clin-MotionLong-v0"):
+            candidate_rules.append(
+                (
+                    "reg_shift_rms_short_long",
+                    *_best_threshold_rule(
+                        train_cases,
+                        feature="reg_shift_rms",
+                        low_profile="Brain-SIMUS-Clin-MotionShort-v0",
+                        high_profile="Brain-SIMUS-Clin-MotionLong-v0",
+                    ),
+                )
             )
-        )
-        candidate_rules.append(
-            (
-                "reg_shift_rms_short_mid_long",
-                *_best_three_way_rule(
-                    train_cases,
-                    feature="reg_shift_rms",
-                    low_profile="Brain-SIMUS-Clin-MotionShort-v0",
-                    mid_profile="Brain-SIMUS-Clin-MotionMid-v0",
-                    high_profile="Brain-SIMUS-Clin-MotionLong-v0",
-                ),
+        if _profiles_available(
+            profiles,
+            "Brain-SIMUS-Clin-MotionShort-v0",
+            "Brain-SIMUS-Clin-MotionMid-v0",
+            "Brain-SIMUS-Clin-MotionLong-v0",
+        ):
+            candidate_rules.append(
+                (
+                    "reg_shift_rms_short_mid_long",
+                    *_best_three_way_rule(
+                        train_cases,
+                        feature="reg_shift_rms",
+                        low_profile="Brain-SIMUS-Clin-MotionShort-v0",
+                        mid_profile="Brain-SIMUS-Clin-MotionMid-v0",
+                        high_profile="Brain-SIMUS-Clin-MotionLong-v0",
+                    ),
+                )
             )
-        )
-        candidate_rules.append(
-            (
-                "reg_shift_rms_short_robust_long",
-                *_best_three_way_rule(
-                    train_cases,
-                    feature="reg_shift_rms",
-                    low_profile="Brain-SIMUS-Clin-MotionShort-v0",
-                    mid_profile="Brain-SIMUS-Clin-MotionRobust-v0",
-                    high_profile="Brain-SIMUS-Clin-MotionLong-v0",
-                ),
+        if _profiles_available(
+            profiles,
+            "Brain-SIMUS-Clin-MotionShort-v0",
+            "Brain-SIMUS-Clin-MotionRobust-v0",
+            "Brain-SIMUS-Clin-MotionLong-v0",
+        ):
+            candidate_rules.append(
+                (
+                    "reg_shift_rms_short_robust_long",
+                    *_best_three_way_rule(
+                        train_cases,
+                        feature="reg_shift_rms",
+                        low_profile="Brain-SIMUS-Clin-MotionShort-v0",
+                        mid_profile="Brain-SIMUS-Clin-MotionRobust-v0",
+                        high_profile="Brain-SIMUS-Clin-MotionLong-v0",
+                    ),
+                )
             )
-        )
-        candidate_rules.append(
-            (
-                "reg_shift_p90_short_mid_long",
-                *_best_three_way_rule(
-                    train_cases,
-                    feature="reg_shift_p90",
-                    low_profile="Brain-SIMUS-Clin-MotionShort-v0",
-                    mid_profile="Brain-SIMUS-Clin-MotionMid-v0",
-                    high_profile="Brain-SIMUS-Clin-MotionLong-v0",
-                ),
+        if _profiles_available(
+            profiles,
+            "Brain-SIMUS-Clin-MotionShort-v0",
+            "Brain-SIMUS-Clin-MotionMid-v0",
+            "Brain-SIMUS-Clin-MotionLong-v0",
+        ):
+            candidate_rules.append(
+                (
+                    "reg_shift_p90_short_mid_long",
+                    *_best_three_way_rule(
+                        train_cases,
+                        feature="reg_shift_p90",
+                        low_profile="Brain-SIMUS-Clin-MotionShort-v0",
+                        mid_profile="Brain-SIMUS-Clin-MotionMid-v0",
+                        high_profile="Brain-SIMUS-Clin-MotionLong-v0",
+                    ),
+                )
             )
-        )
+        if _profiles_available(
+            profiles,
+            "Brain-SIMUS-Clin-MotionShort-v0",
+            "Brain-SIMUS-Clin-MotionMidRobust-v0",
+        ):
+            candidate_rules.append(
+                (
+                    "motion_disp_rms_short_midrobust",
+                    *_best_threshold_rule(
+                        train_cases,
+                        feature="motion_disp_rms_px",
+                        low_profile="Brain-SIMUS-Clin-MotionShort-v0",
+                        high_profile="Brain-SIMUS-Clin-MotionMidRobust-v0",
+                    ),
+                )
+            )
+        if _profiles_available(
+            profiles,
+            "Brain-SIMUS-Clin-MotionRobust-v0",
+            "Brain-SIMUS-Clin-MotionMidRobust-v0",
+        ):
+            candidate_rules.append(
+                (
+                    "motion_disp_rms_robust_midrobust",
+                    *_best_threshold_rule(
+                        train_cases,
+                        feature="motion_disp_rms_px",
+                        low_profile="Brain-SIMUS-Clin-MotionRobust-v0",
+                        high_profile="Brain-SIMUS-Clin-MotionMidRobust-v0",
+                    ),
+                )
+            )
 
         for rule_name, rule, train_eval in candidate_rules:
             test_eval = _evaluate_selection(test_cases, lambda case, rr=rule: _apply_rule(rr, case))

@@ -170,6 +170,8 @@ Outputs:
 - `reports/simus_motion/simus_stap_profile_sweep_summary_seed21.{csv,json}`
 - `reports/simus_motion/simus_stap_compromise_search_seed2122_partial.{csv,json}`
 - `reports/simus_motion/simus_stap_rule_eval_seed2122_partial.{csv,json}`
+- `reports/simus_motion/simus_stap_compromise_search_seed2122_full.{csv,json}`
+- `reports/simus_motion/simus_stap_rule_eval_seed2122_full.{csv,json}`
 - `reports/simus_sanity_link/phase4_motion_ladders_seed21_{summary,table,deltas}.{json,csv}`
 
 Notes:
@@ -183,8 +185,12 @@ Notes:
 - readout-only fusion benchmarks show that symmetric and asymmetric baseline+STAP score combinations can recover some `H1/bg` ordering, but on motion-heavy cases they do not beat the raw `STAP detector` on nuisance rejection and do not produce a clean Pareto improvement over `MC-SVD`; the remaining issue is motion robustness of the detector/profile, not just headline readout
 - named SIMUS STAP profile sweeps show that the dominant lever is temporal aperture `Lt`, not `motion_half_span_rel` alone: widening only the motion half-span (`Brain-SIMUS-Clin-MotionWide-v0`) leaves metrics unchanged, while `Lt=6` materially improves both `H1/bg` and nuisance rejection on the intra-op and moderate-motion mobile cases; the high-motion mobile case prefers a longer `Lt=12`, which means a single frozen clinical-motion profile may need to be mobile-specific or selected by a documented regime rule
 - the partial two-seed compromise search indicates that a single fixed compromise profile is already plausible: `Brain-SIMUS-Clin-MotionRobust-v0` and `Brain-SIMUS-Clin-MotionShort-v0` are effectively tied on mean utility and both materially outperform the current frozen clinical profile across the completed endpoint set
-- the leave-one-seed-out telemetry-rule study does not currently justify a regime-selection rule: simple rules on `reg_shift_rms` or `reg_shift_p90` are not consistently better than just freezing one of the compromise profiles, especially on the harder held-out seed
-- current evidence therefore does not yet force an algorithmic redesign; the next bar is to finish the missing held-out high-motion mobile endpoint and then validate whether one fixed compromise profile remains stable across more seeds before escalating to a detector-level change
+- the full eight-case two-seed compromise search keeps the same result: `Brain-SIMUS-Clin-MotionRobust-v0` and `Brain-SIMUS-Clin-MotionShort-v0` remain effectively tied as fixed compromise profiles, while the two high-motion mobile cases consistently prefer `Brain-SIMUS-Clin-MotionMidRobust-v0`
+- simple rules on `reg_shift_rms` or `reg_shift_p90` are still not compelling enough to justify regime selection on their own, but adding `motion_disp_rms_px` changes that materially
+- a frozen two-way rule on `motion_disp_rms_px` is nearly oracle on the full two-seed held-out set:
+  - `MotionShort-v0 -> MotionMidRobust-v0` above `~2.03-2.08 px` reaches `100%` oracle recovery on held-out seed 21 and `98.2%` on held-out seed 22
+  - `MotionRobust-v0 -> MotionMidRobust-v0` above `~2.03-2.08 px` reaches `97.8%` oracle recovery on held-out seed 21 and `99.8%` on held-out seed 22
+- current evidence therefore does not justify a detector-level algorithmic redesign yet; the next move is to freeze either a single compromise profile (`MotionRobust-v0`) or the `motion_disp_rms_px`-driven profile rule and validate that policy on additional seeds/real-data telemetry before touching STAP math
 
 Status:
 - done
