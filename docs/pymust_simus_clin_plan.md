@@ -13,16 +13,22 @@ Already implemented:
 - `sim/simus/pilot_pymust_simus.py`
   - dataset writer with hashes and provenance
   - optional acceptance-bundle derivation through `write_acceptance_bundle_from_icube(...)`
+- `sim/simus/cli_generate.py`
+  - multi-clip canonical run generation for named clinical profiles
+- `sim/simus/cli_bundle.py`
+  - frozen bundle derivation for canonical SIMUS runs
+- `scripts/simus_eval_structural.py`
+  - structural benchmark evaluation against explicit `H1/H0` masks
 - downstream reuse already works:
   - `scripts/icube_make_bundle.py`
   - `scripts/physical_doppler_sanity_link.py`
   - `scripts/icube_baseline_compare.py`
   - `scripts/hab_contract_check.py`
 - smoke coverage already exists in [tests/test_pymust_simus_smoke.py](/home/arthu/stap-for-fus/tests/test_pymust_simus_smoke.py)
+- structural-eval smoke coverage exists in [tests/test_simus_eval_structural_smoke.py](/home/arthu/stap-for-fus/tests/test_simus_eval_structural_smoke.py)
 
 Not implemented yet:
 
-- multi-clip clinical evaluation CLIs
 - functional extension
 
 ## Phases
@@ -117,6 +123,9 @@ Recommended files:
 
 Deliverable:
 - reproducible structural benchmark reports under `reports/`
+
+Status:
+- done
 
 ### Phase 4: Motion benchmark and sanity-link
 

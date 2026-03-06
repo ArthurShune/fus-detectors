@@ -17,6 +17,8 @@ from sim.kwave.icube_bundle import write_acceptance_bundle_from_icube
 from sim.simus.config import default_profile_config
 from sim.simus.pymust_smoke import SimusConfig, default_config, dataset_meta, generate_icube
 
+SUPPORTED_SIMUS_PROFILES = ("ClinIntraOp-Pf-v1", "ClinMobile-Pf-v1")
+
 
 def _utc_now_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -72,7 +74,7 @@ def parse_args() -> argparse.Namespace:
         "--profile",
         type=str,
         default=None,
-        choices=["ClinIntraOp-Pf-v1", "ClinMobile-Pf-v1"],
+        choices=list(SUPPORTED_SIMUS_PROFILES),
         help="Clinically aligned SIMUS profile. When set, this overrides --preset defaults.",
     )
     ap.add_argument(
@@ -121,17 +123,7 @@ def _sanitize_name(s: str) -> str:
     return out or "run"
 
 
-def main() -> None:
-    args = parse_args()
-    out_root = Path(args.out)
-    out_root.mkdir(parents=True, exist_ok=True)
-    dataset_dir = out_root / "dataset"
-    debug_dir = dataset_dir / "debug"
-    bundle_root = out_root / "bundle"
-    dataset_dir.mkdir(parents=True, exist_ok=True)
-    debug_dir.mkdir(parents=True, exist_ok=True)
-    bundle_root.mkdir(parents=True, exist_ok=True)
-
+def resolve_config_from_args(args: argparse.Namespace) -> SimusConfig:
     if args.profile:
         cfg = default_profile_config(
             profile=str(args.profile),  # type: ignore[arg-type]
@@ -177,6 +169,24 @@ def main() -> None:
             )
     if overrides:
         cfg = dataclasses.replace(cfg, **overrides)
+    return cfg
+
+
+def write_simus_run(
+    *,
+    out_root: Path,
+    cfg: SimusConfig,
+    skip_bundle: bool = False,
+    dataset_name: str | None = None,
+) -> dict[str, Path]:
+    out_root = Path(out_root)
+    out_root.mkdir(parents=True, exist_ok=True)
+    dataset_dir = out_root / "dataset"
+    debug_dir = dataset_dir / "debug"
+    bundle_root = out_root / "bundle"
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    debug_dir.mkdir(parents=True, exist_ok=True)
+    bundle_root.mkdir(parents=True, exist_ok=True)
 
     result = generate_icube(cfg)
     icube = result["Icube"]
@@ -193,7 +203,6 @@ def main() -> None:
     debug = result["debug"]
     param = result["param"]
 
-    # ---- Write canonical dataset artifacts ----
     paths: Dict[str, Path] = {}
 
     def _save(dst_dir: Path, name: str, arr: np.ndarray) -> None:
@@ -274,7 +283,7 @@ def main() -> None:
         "numpy": np.__version__,
     }
     try:
-        import importlib.metadata as md  # py311
+        import importlib.metadata as md
 
         prov["pymust"] = md.version("PyMUST")
     except Exception:
@@ -330,56 +339,72 @@ def main() -> None:
     }
     _write_json(dataset_dir / "meta.json", meta)
 
-    if args.skip_bundle:
-        print(f"[pilot_pymust_simus] wrote dataset -> {dataset_dir}", flush=True)
-        return
+    bundle_dir = None
+    if not skip_bundle:
+        dataset_name_default = (
+            f"simus_{_sanitize_name(cfg.profile)}_{cfg.tier}_seed{cfg.seed}"
+            if cfg.profile
+            else f"simus_{cfg.preset}_{cfg.tier}_{cfg.probe}_{cfg.T}T_seed{cfg.seed}"
+        )
+        dataset_slug = _sanitize_name(dataset_name or dataset_name_default)
+        write_acceptance_bundle_from_icube(
+            out_root=bundle_root,
+            dataset_name=dataset_slug,
+            Icube=icube,
+            prf_hz=float(cfg.prf_hz),
+            seed=int(cfg.seed),
+            tile_hw=(8, 8),
+            tile_stride=3,
+            Lt=int(min(8, max(2, int(cfg.T) - 1))),
+            diag_load=1e-2,
+            cov_estimator="tyler_pca",
+            huber_c=5.0,
+            mvdr_load_mode="auto",
+            mvdr_auto_kappa=30.0,
+            constraint_ridge=0.15,
+            msd_lambda=0.05,
+            msd_ridge=0.06,
+            msd_agg_mode="median",
+            msd_ratio_rho=0.05,
+            motion_half_span_rel=0.25,
+            msd_contrast_alpha=0.8,
+            baseline_type="mc_svd",
+            reg_enable=True,
+            reg_method="phasecorr",
+            reg_subpixel=4,
+            reg_reference="median",
+            svd_energy_frac=0.90,
+            mask_flow_override=mask_flow.astype(bool),
+            mask_bg_override=mask_bg.astype(bool),
+            stap_conditional_enable=False,
+            feasibility_mode="updated",
+            meta_extra={
+                "simus_pymust_dataset": True,
+                "dataset_rel": str(dataset_dir.relative_to(out_root)),
+            },
+        )
+        bundle_dir = bundle_root / dataset_slug
 
-    dataset_name_default = (
-        f"simus_{_sanitize_name(cfg.profile)}_{cfg.tier}_seed{cfg.seed}"
-        if cfg.profile
-        else f"simus_{cfg.preset}_{cfg.tier}_{cfg.probe}_{cfg.T}T_seed{cfg.seed}"
+    return {
+        "run_root": out_root,
+        "dataset_dir": dataset_dir,
+        "bundle_root": bundle_root,
+        "bundle_dir": bundle_dir,
+    }
+
+
+def main() -> None:
+    args = parse_args()
+    cfg = resolve_config_from_args(args)
+    outputs = write_simus_run(
+        out_root=Path(args.out),
+        cfg=cfg,
+        skip_bundle=bool(args.skip_bundle),
+        dataset_name=args.dataset_name,
     )
-    dataset_name = _sanitize_name(args.dataset_name or dataset_name_default)
-
-    write_acceptance_bundle_from_icube(
-        out_root=bundle_root,
-        dataset_name=dataset_name,
-        Icube=icube,
-        prf_hz=float(cfg.prf_hz),
-        seed=int(cfg.seed),
-        tile_hw=(8, 8),
-        tile_stride=3,
-        Lt=int(min(8, max(2, int(cfg.T) - 1))),
-        diag_load=1e-2,
-        cov_estimator="tyler_pca",
-        huber_c=5.0,
-        mvdr_load_mode="auto",
-        mvdr_auto_kappa=30.0,
-        constraint_ridge=0.15,
-        msd_lambda=0.05,
-        msd_ridge=0.06,
-        msd_agg_mode="median",
-        msd_ratio_rho=0.05,
-        motion_half_span_rel=0.25,
-        msd_contrast_alpha=0.8,
-        baseline_type="mc_svd",
-        reg_enable=True,
-        reg_method="phasecorr",
-        reg_subpixel=4,
-        reg_reference="median",
-        svd_energy_frac=0.90,
-        mask_flow_override=mask_flow.astype(bool),
-        mask_bg_override=mask_bg.astype(bool),
-        stap_conditional_enable=False,
-        feasibility_mode="updated",
-        meta_extra={
-            "simus_pymust_dataset": True,
-            "dataset_rel": str(dataset_dir.relative_to(out_root)),
-        },
-    )
-
-    print(f"[pilot_pymust_simus] wrote dataset -> {dataset_dir}", flush=True)
-    print(f"[pilot_pymust_simus] wrote bundle -> {bundle_root / dataset_name}", flush=True)
+    print(f"[pilot_pymust_simus] wrote dataset -> {outputs['dataset_dir']}", flush=True)
+    if outputs["bundle_dir"] is not None:
+        print(f"[pilot_pymust_simus] wrote bundle -> {outputs['bundle_dir']}", flush=True)
 
 
 if __name__ == "__main__":
