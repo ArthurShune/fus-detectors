@@ -9,6 +9,14 @@ import numpy as np
 
 from sim.kwave.icube_bundle import write_acceptance_bundle_from_icube
 
+SUPPORTED_SIMUS_STAP_PROFILES = (
+    "Brain-SIMUS-Clin",
+    "Brain-SIMUS-Clin-MotionWide-v0",
+    "Brain-SIMUS-Clin-MotionShort-v0",
+    "Brain-SIMUS-Clin-MotionLong-v0",
+    "Brain-SIMUS-Clin-MotionRobust-v0",
+)
+
 
 def slugify(text: str) -> str:
     s = re.sub(r"[\s/]+", "_", str(text).strip())
@@ -56,13 +64,14 @@ def _seed_from_meta(meta: dict[str, Any]) -> int:
 
 def bundle_profile_kwargs(profile: str, *, T: int, baseline_type: str) -> dict[str, Any]:
     name = str(profile).strip()
-    if name != "Brain-SIMUS-Clin":
+    if name not in SUPPORTED_SIMUS_STAP_PROFILES:
         raise ValueError(f"Unsupported STAP profile {profile!r}")
-    return {
+    base = {
         "tile_hw": (8, 8),
         "tile_stride": 3,
         "Lt": int(min(8, max(2, int(T) - 1))),
         "diag_load": 0.07,
+        "stap_cov_train_trim_q": 0.0,
         "cov_estimator": "tyler_pca",
         "huber_c": 5.0,
         "mvdr_load_mode": "auto",
@@ -90,6 +99,38 @@ def bundle_profile_kwargs(profile: str, *, T: int, baseline_type: str) -> dict[s
         "stap_conditional_enable": False,
         "feasibility_mode": "updated",
     }
+    if name == "Brain-SIMUS-Clin":
+        return base
+    if name == "Brain-SIMUS-Clin-MotionWide-v0":
+        out = dict(base)
+        out["motion_half_span_rel"] = 0.50
+        return out
+    if name == "Brain-SIMUS-Clin-MotionShort-v0":
+        out = dict(base)
+        out["Lt"] = int(min(6, max(2, int(T) - 1)))
+        out["motion_half_span_rel"] = 0.50
+        return out
+    if name == "Brain-SIMUS-Clin-MotionLong-v0":
+        out = dict(base)
+        out["Lt"] = int(min(12, max(2, int(T) - 1)))
+        out["motion_half_span_rel"] = 0.50
+        return out
+    if name == "Brain-SIMUS-Clin-MotionRobust-v0":
+        out = dict(base)
+        out.update(
+            {
+                "Lt": int(min(6, max(2, int(T) - 1))),
+                "diag_load": 0.10,
+                "stap_cov_train_trim_q": 0.05,
+                "mvdr_auto_kappa": 200.0,
+                "constraint_ridge": 0.25,
+                "msd_lambda": 0.08,
+                "motion_half_span_rel": 0.50,
+                "msd_contrast_alpha": 0.8,
+            }
+        )
+        return out
+    raise ValueError(f"Unsupported STAP profile {profile!r}")
 
 
 def derive_bundle_from_run(
