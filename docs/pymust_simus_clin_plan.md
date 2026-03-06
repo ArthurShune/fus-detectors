@@ -156,11 +156,15 @@ Outputs:
 - `reports/simus_motion/simus_motion_ladder_intraop_paper_seed21.{csv,json}`
 - `reports/simus_motion/simus_motion_ladder_mobile_paper_seed21.{csv,json}`
 - `reports/simus_motion/simus_phase4_motion_summary.{csv,json}`
+- `reports/simus_motion/simus_phase4_calibration_summary.{csv,json}`
+- `reports/simus_motion/simus_phase4_failure_decomposition_seed21.{csv,json}`
 - `reports/simus_sanity_link/phase4_motion_ladders_seed21_{summary,table,deltas}.{json,csv}`
 
 Notes:
 - structural reporting now labels the chained pipeline explicitly as `MC-SVD -> STAP`
 - the paper-tier motion ladders show that the frozen STAP chain only helps at the zero-motion anchor; once clinically meaningful motion is introduced, the advantage disappears quickly
+- calibration against the current Shin/Gammex telemetry indicates the zero-motion anchor is still the closest match to Shin, while nonzero-motion clips only move toward the Gammex phantom regime
+- failure decomposition indicates the dominant collapse is in `pd_stap` rather than `score_stap_preka`; registration and the MC-SVD upstream stage are secondary in the first nonzero-motion regime
 
 Status:
 - done
