@@ -23,7 +23,7 @@ from typing import Any
 
 import numpy as np
 
-from sim.simus.bundle import derive_bundle_from_run, load_canonical_run
+from sim.simus.bundle import derive_bundle_from_run, load_canonical_run, slugify
 
 
 @dataclass(frozen=True)
@@ -51,6 +51,32 @@ def _pipeline_label(method: MethodSpec) -> str:
     if method.role == "stap":
         return f"{base} -> STAP"
     return base
+
+
+def _score_semantics(eval_score: str, method: MethodSpec) -> str:
+    mode = str(eval_score).strip().lower()
+    if method.role == "stap":
+        if mode == "vnext":
+            return "stap_detector_score_pre_ka"
+        return "pd_after_stap"
+    if mode == "vnext":
+        return "baseline_score"
+    return "baseline_pd"
+
+
+def _score_label(eval_score: str, method: MethodSpec) -> str:
+    mode = str(eval_score).strip().lower()
+    if method.role == "stap":
+        if mode == "vnext":
+            return "STAP detector"
+        return "PD-after-STAP"
+    if mode == "vnext":
+        return "Baseline score"
+    return "Baseline PD"
+
+
+def _headline_label(eval_score: str, method: MethodSpec) -> str:
+    return f"{_pipeline_label(method)} ({_score_label(eval_score, method)})"
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -215,6 +241,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--stap-device", type=str, default="cpu")
     ap.add_argument("--fprs", type=str, default="1e-4,3e-4,1e-3")
     ap.add_argument("--match-tprs", type=str, default="0.25,0.5,0.75")
+    ap.add_argument("--reuse-bundles", action=argparse.BooleanOptionalAction, default=True)
     return ap.parse_args()
 
 
@@ -274,20 +301,23 @@ def main() -> None:
                 parts.append(tag)
             parts.append(method.key)
             dataset_name = "_".join(parts)
-            bundle_dir = derive_bundle_from_run(
-                run_dir=run_dir,
-                out_root=Path(args.out_root) / run_key,
-                dataset_name=dataset_name,
-                stap_profile=str(args.stap_profile),
-                baseline_type=str(method.baseline_type),
-                run_stap=bool(method.run_stap),
-                stap_device=str(args.stap_device),
-                meta_extra={
-                    "simus_structural_eval": True,
-                    "compare_method_key": str(method.key),
-                    "compare_role": str(method.role),
-                },
-            )
+            bundle_root = Path(args.out_root) / run_key
+            bundle_dir = bundle_root / slugify(dataset_name)
+            if not bool(args.reuse_bundles) or not (bundle_dir / "meta.json").is_file():
+                bundle_dir = derive_bundle_from_run(
+                    run_dir=run_dir,
+                    out_root=bundle_root,
+                    dataset_name=dataset_name,
+                    stap_profile=str(args.stap_profile),
+                    baseline_type=str(method.baseline_type),
+                    run_stap=bool(method.run_stap),
+                    stap_device=str(args.stap_device),
+                    meta_extra={
+                        "simus_structural_eval": True,
+                        "compare_method_key": str(method.key),
+                        "compare_role": str(method.role),
+                    },
+                )
 
             if eval_score == "pd":
                 candidates = [bundle_dir / "score_pd_base.npy"] if method.role == "baseline" else [bundle_dir / "score_pd_stap.npy"]
@@ -311,11 +341,14 @@ def main() -> None:
                 "method": method.key,
                 "method_label": _pipeline_label(method),
                 "pipeline_label": _pipeline_label(method),
+                "headline_label": _headline_label(eval_score, method),
                 "upstream_baseline_label": _baseline_label(method.baseline_type),
                 "baseline_type": method.baseline_type,
                 "role": method.role,
                 "run_stap": int(method.run_stap),
                 "eval_score": eval_score,
+                "score_label": _score_label(eval_score, method),
+                "score_semantics": _score_semantics(eval_score, method),
                 "stap_profile": str(args.stap_profile),
                 "bundle_dir": str(bundle_dir),
                 "score_file": score_path.name,
@@ -334,6 +367,9 @@ def main() -> None:
                 "bundle_dir": str(bundle_dir),
                 "score_file": score_path.name,
                 "pipeline_label": _pipeline_label(method),
+                "headline_label": _headline_label(eval_score, method),
+                "score_label": _score_label(eval_score, method),
+                "score_semantics": _score_semantics(eval_score, method),
                 "upstream_baseline_label": _baseline_label(method.baseline_type),
                 "metrics": metrics,
             }
