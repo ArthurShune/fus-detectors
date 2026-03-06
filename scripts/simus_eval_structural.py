@@ -34,6 +34,25 @@ class MethodSpec:
     role: str
 
 
+def _baseline_label(baseline_type: str) -> str:
+    raw = str(baseline_type).strip().lower()
+    mapping = {
+        "mc_svd": "MC-SVD",
+        "svd_similarity": "Adaptive Local SVD",
+        "local_svd": "Local SVD",
+        "rpca": "RPCA",
+        "hosvd": "HOSVD",
+    }
+    return mapping.get(raw, raw.replace("_", " ").upper())
+
+
+def _pipeline_label(method: MethodSpec) -> str:
+    base = _baseline_label(method.baseline_type)
+    if method.role == "stap":
+        return f"{base} -> STAP"
+    return base
+
+
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
@@ -290,6 +309,9 @@ def main() -> None:
             row = {
                 "run": run_key,
                 "method": method.key,
+                "method_label": _pipeline_label(method),
+                "pipeline_label": _pipeline_label(method),
+                "upstream_baseline_label": _baseline_label(method.baseline_type),
                 "baseline_type": method.baseline_type,
                 "role": method.role,
                 "run_stap": int(method.run_stap),
@@ -311,6 +333,8 @@ def main() -> None:
             details["runs"][run_key].setdefault("methods", {})[method.key] = {
                 "bundle_dir": str(bundle_dir),
                 "score_file": score_path.name,
+                "pipeline_label": _pipeline_label(method),
+                "upstream_baseline_label": _baseline_label(method.baseline_type),
                 "metrics": metrics,
             }
 

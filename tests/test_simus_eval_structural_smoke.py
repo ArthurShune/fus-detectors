@@ -63,3 +63,15 @@ def test_simus_structural_metrics_report_nuisance_fpr_and_alias_qc():
     assert out["thr_match_tpr@0p5"] is not None
     assert out["tpr_main_match@0p5"] >= 0.5
     assert out["fpr_nuisance_match@0p5"] >= 0.0
+
+
+def test_simus_structural_pipeline_labels_reflect_baseline_chain():
+    from scripts.simus_eval_structural import MethodSpec, _baseline_label, _pipeline_label
+
+    baseline = MethodSpec(key="baseline_mc_svd", baseline_type="mc_svd", run_stap=False, role="baseline")
+    stap = MethodSpec(key="stap", baseline_type="mc_svd", run_stap=True, role="stap")
+
+    assert _baseline_label("mc_svd") == "MC-SVD"
+    assert _baseline_label("svd_similarity") == "Adaptive Local SVD"
+    assert _pipeline_label(baseline) == "MC-SVD"
+    assert _pipeline_label(stap) == "MC-SVD -> STAP"
