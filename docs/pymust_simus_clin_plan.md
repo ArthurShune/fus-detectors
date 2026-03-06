@@ -192,11 +192,16 @@ Notes:
 - a frozen two-way rule on `motion_disp_rms_px` is nearly oracle on the full two-seed held-out set:
   - `MotionShort-v0 -> MotionMidRobust-v0` above `~2.03-2.08 px` reaches `100%` oracle recovery on held-out seed 21 and `98.2%` on held-out seed 22
   - `MotionRobust-v0 -> MotionMidRobust-v0` above `~2.03-2.08 px` reaches `97.8%` oracle recovery on held-out seed 21 and `99.8%` on held-out seed 22
+- among bundle-side features that could plausibly exist on real data, `reg_shift_p90` is the strongest current proxy for the motion-dispersion rule:
+  - `reg_shift_p90: MotionRobust-v0 -> MotionMidRobust-v0` above `~2.194 px` reaches `97.8%` oracle recovery on held-out seed 21 and `95.7%` on held-out seed 22
+  - `reg_shift_rms` is weaker and `reg_psr_median` is clearly weaker, so `reg_shift_p90` is the only current real-data-compatible selector worth carrying forward
 - the motion-policy headline summary confirms that freezing `MotionRobust-v0` below the threshold and `MotionMidRobust-v0` above it improves the current clinical profile at both motion scales on the full two-seed set:
   - at `motion=0.25`, mean `auc_main_vs_nuisance` improves by `+0.093` and mean nuisance FPR at matched TPR 0.5 drops by `-0.127`
   - at `motion=1.0`, mean `auc_main_vs_nuisance` improves by `+0.092` and mean nuisance FPR at matched TPR 0.5 drops by `-0.120`
 - the real-data bucket check is a limitation, not a confirmation: all nonzero-motion seed21 SIMUS policy cases still land nearest the Gammex phantom telemetry bucket, so the policy is currently validated as a better SIMUS regime split, not yet as a clinically grounded Shin-vs-Gammex separator
-- current evidence therefore does not justify a detector-level algorithmic redesign yet; the next move is to freeze either a single compromise profile (`MotionRobust-v0`) or the `motion_disp_rms_px`-driven profile rule and validate that policy on additional seeds/real-data telemetry before touching STAP math
+- current evidence therefore does not justify a detector-level algorithmic redesign yet; the next move is to freeze either a single compromise profile (`MotionRobust-v0`) or, more usefully, a two-stage policy:
+  - SIMUS analysis policy: `motion_disp_rms_px` threshold for near-oracle benchmarking
+  - deployable/real-data proxy policy: `reg_shift_p90` threshold as the measurable approximation to that benchmark rule
 
 Status:
 - done

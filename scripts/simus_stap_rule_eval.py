@@ -385,6 +385,39 @@ def main() -> None:
                     ),
                 )
             )
+            candidate_rules.append(
+                (
+                    "reg_shift_rms_robust_midrobust",
+                    *_best_threshold_rule(
+                        train_cases,
+                        feature="reg_shift_rms",
+                        low_profile="Brain-SIMUS-Clin-MotionRobust-v0",
+                        high_profile="Brain-SIMUS-Clin-MotionMidRobust-v0",
+                    ),
+                )
+            )
+            candidate_rules.append(
+                (
+                    "reg_shift_p90_robust_midrobust",
+                    *_best_threshold_rule(
+                        train_cases,
+                        feature="reg_shift_p90",
+                        low_profile="Brain-SIMUS-Clin-MotionRobust-v0",
+                        high_profile="Brain-SIMUS-Clin-MotionMidRobust-v0",
+                    ),
+                )
+            )
+            candidate_rules.append(
+                (
+                    "reg_psr_median_midrobust_robust",
+                    *_best_threshold_rule(
+                        train_cases,
+                        feature="reg_psr_median",
+                        low_profile="Brain-SIMUS-Clin-MotionMidRobust-v0",
+                        high_profile="Brain-SIMUS-Clin-MotionRobust-v0",
+                    ),
+                )
+            )
 
         for rule_name, rule, train_eval in candidate_rules:
             test_eval = _evaluate_selection(test_cases, lambda case, rr=rule: _apply_rule(rr, case))
