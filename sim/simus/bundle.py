@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 
+from sim.kwave import common as kw
 from sim.kwave.icube_bundle import write_acceptance_bundle_from_icube
 
 SUPPORTED_SIMUS_STAP_PROFILES = (
@@ -21,6 +22,7 @@ SUPPORTED_SIMUS_STAP_PROFILES = (
 
 SUPPORTED_SIMUS_STAP_POLICIES = (
     "Brain-SIMUS-Clin-MotionDisp-v0",
+    "Brain-SIMUS-Clin-RegShiftP90-v0",
 )
 
 SIMUS_STAP_POLICY_THRESHOLDS = {
@@ -29,7 +31,13 @@ SIMUS_STAP_POLICY_THRESHOLDS = {
         "threshold": 2.05,
         "low_profile": "Brain-SIMUS-Clin-MotionRobust-v0",
         "high_profile": "Brain-SIMUS-Clin-MotionMidRobust-v0",
-    }
+    },
+    "Brain-SIMUS-Clin-RegShiftP90-v0": {
+        "feature": "reg_shift_p90",
+        "threshold": 2.194,
+        "low_profile": "Brain-SIMUS-Clin-MotionRobust-v0",
+        "high_profile": "Brain-SIMUS-Clin-MotionMidRobust-v0",
+    },
 }
 
 
@@ -172,6 +180,7 @@ def select_simus_stap_profile(
     *,
     requested_profile: str,
     policy: str | None = None,
+    feature_values: dict[str, float | None] | None = None,
     motion_disp_rms_px: float | None = None,
 ) -> tuple[str, dict[str, Any]]:
     if not policy:
@@ -184,20 +193,47 @@ def select_simus_stap_profile(
     if name not in SUPPORTED_SIMUS_STAP_POLICIES:
         raise ValueError(f"Unsupported STAP policy {policy!r}")
     cfg = SIMUS_STAP_POLICY_THRESHOLDS[name]
-    motion_disp = float(motion_disp_rms_px) if motion_disp_rms_px is not None else float("nan")
+    features = dict(feature_values or {})
+    if motion_disp_rms_px is not None and "motion_disp_rms_px" not in features:
+        features["motion_disp_rms_px"] = float(motion_disp_rms_px)
+    feat_name = str(cfg["feature"])
+    feat_val = features.get(feat_name, None)
+    motion_disp = float(feat_val) if feat_val is not None else float("nan")
     applied = str(cfg["low_profile"])
     if np.isfinite(motion_disp) and motion_disp > float(cfg["threshold"]):
         applied = str(cfg["high_profile"])
     return applied, {
         "mode": "policy",
         "policy": name,
-        "feature": str(cfg["feature"]),
+        "feature": feat_name,
         "threshold": float(cfg["threshold"]),
         "feature_value": motion_disp if np.isfinite(motion_disp) else None,
         "requested_profile": str(requested_profile),
         "applied_profile": applied,
         "low_profile": str(cfg["low_profile"]),
         "high_profile": str(cfg["high_profile"]),
+    }
+
+
+def estimate_simus_policy_features(
+    icube: np.ndarray,
+    *,
+    reg_subpixel: int = 4,
+    reg_reference: str = "median",
+) -> dict[str, Any]:
+    _, tele = kw._register_stack_phasecorr(
+        np.asarray(icube, dtype=np.complex64, copy=False),
+        reg_enable=True,
+        upsample=max(1, int(reg_subpixel)),
+        ref_strategy=str(reg_reference),
+    )
+    return {
+        "reg_shift_rms": tele.get("reg_shift_rms"),
+        "reg_shift_p90": tele.get("reg_shift_p90"),
+        "reg_psr_median": tele.get("reg_psr_median"),
+        "reg_psr_p10": tele.get("reg_psr_p10"),
+        "reg_psr_p90": tele.get("reg_psr_p90"),
+        "reg_ms_prepass": tele.get("reg_ms"),
     }
 
 

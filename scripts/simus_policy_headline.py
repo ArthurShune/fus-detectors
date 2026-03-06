@@ -69,9 +69,16 @@ def main() -> None:
         baseline = next(r for r in items if r["role"] == "baseline")
         candidates = {str(r["stap_profile"]): r for r in items if r["role"] == "stap"}
         motion_disp = _safe_float(baseline.get("motion_disp_rms_px"))
+        feature_values = {
+            "motion_disp_rms_px": motion_disp,
+            "reg_shift_rms": _safe_float(baseline.get("reg_shift_rms")),
+            "reg_shift_p90": _safe_float(baseline.get("reg_shift_p90")),
+            "reg_psr_median": _safe_float(baseline.get("reg_psr_median")),
+        }
         applied_profile, policy_info = select_simus_stap_profile(
             requested_profile=str(args.requested_profile),
             policy=str(args.policy),
+            feature_values=feature_values,
             motion_disp_rms_px=motion_disp,
         )
         current = candidates[str(args.current_profile)]
