@@ -26,6 +26,7 @@ from sim.simus.bundle import (
     SUPPORTED_SIMUS_STAP_POLICIES,
     SUPPORTED_SIMUS_STAP_PROFILES,
     derive_bundle_from_run,
+    estimate_simus_policy_features,
     load_canonical_run,
     select_simus_stap_profile,
     slugify,
@@ -265,11 +266,24 @@ def main() -> None:
             "phase_rms_rad": meta.get("phase_screen", {}).get("telemetry", {}).get("phase_rms_rad"),
             "methods": {},
         }
+        policy_features = {
+            "motion_disp_rms_px": meta.get("motion", {}).get("telemetry", {}).get("disp_rms_px"),
+        }
+        if args.stap_policy == "Brain-SIMUS-Clin-RegShiftP90-v0":
+            policy_features.update(
+                estimate_simus_policy_features(
+                    icube,
+                    reg_subpixel=4,
+                    reg_reference="median",
+                )
+            )
         applied_stap_profile, stap_policy_info = select_simus_stap_profile(
             requested_profile=str(args.stap_profile),
             policy=args.stap_policy,
+            feature_values=policy_features,
             motion_disp_rms_px=meta.get("motion", {}).get("telemetry", {}).get("disp_rms_px"),
         )
+        details["runs"][run_slug]["stap_policy_features"] = policy_features
         details["runs"][run_slug]["stap_policy"] = stap_policy_info
 
         for method in methods:

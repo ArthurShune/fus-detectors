@@ -159,7 +159,7 @@ Outputs:
 - `reports/simus_motion/simus_motion_ladder_intraop_paper_seed21.{csv,json}`
 - `reports/simus_motion/simus_motion_ladder_mobile_paper_seed21.{csv,json}`
 - `reports/simus_motion/simus_motion_ladder_intraop_paper_seed22.{csv,json}`
-- `reports/simus_motion/simus_motion_ladder_mobile_paper_seed22.{csv,json}` (partial: `motionx0.25` completed; `motionx1.0` pending isolated rerun if needed)
+- `reports/simus_motion/simus_motion_ladder_mobile_paper_seed22.{csv,json}`
 - `reports/simus_motion/simus_phase4_motion_summary.{csv,json}`
 - `reports/simus_motion/simus_phase4_calibration_summary.{csv,json}`
 - `reports/simus_motion/simus_phase4_failure_decomposition_seed21.{csv,json}`
@@ -173,8 +173,12 @@ Outputs:
 - `reports/simus_motion/simus_stap_compromise_search_seed2122_full.{csv,json}`
 - `reports/simus_motion/simus_stap_rule_eval_seed2122_full.{csv,json}`
 - `reports/simus_motion/simus_motion_policy_headline_seed2122_full.{csv,json}`
+- `reports/simus_motion/simus_motion_policy_headline_regshift_seed2122_full.{csv,json}`
+- `reports/simus_motion/simus_motion_ladder_intraop_paper_seed21_regshift_policy.{csv,json}`
+- `reports/simus_motion/simus_motion_ladder_mobile_paper_seed21_regshift_policy.{csv,json}`
 - `reports/simus_sanity_link/phase4_motion_ladders_seed21_{summary,table,deltas}.{json,csv}`
 - `reports/simus_sanity_link/simus_motion_policy_bucket_check_seed21.{csv,json}`
+- `reports/simus_sanity_link/simus_motion_policy_bucket_check_regshift_seed21.{csv,json}`
 
 Notes:
 - structural reporting now labels the chained pipeline explicitly as `MC-SVD -> STAP`
@@ -198,6 +202,12 @@ Notes:
 - the motion-policy headline summary confirms that freezing `MotionRobust-v0` below the threshold and `MotionMidRobust-v0` above it improves the current clinical profile at both motion scales on the full two-seed set:
   - at `motion=0.25`, mean `auc_main_vs_nuisance` improves by `+0.093` and mean nuisance FPR at matched TPR 0.5 drops by `-0.127`
   - at `motion=1.0`, mean `auc_main_vs_nuisance` improves by `+0.092` and mean nuisance FPR at matched TPR 0.5 drops by `-0.120`
+- the deployable/measurable proxy policy is now wired into the actual motion evaluation path as `Brain-SIMUS-Clin-RegShiftP90-v0` and validated end-to-end on reused paper-tier seed21 runs:
+  - intra-op `motion=0.25` and `motion=1.0` both stay below the `reg_shift_p90=2.194` threshold and correctly select `MotionRobust-v0`
+  - mobile `motion=0.25` stays below threshold and selects `MotionRobust-v0`, while mobile `motion=1.0` crosses threshold (`reg_shift_p90=2.253`) and selects `MotionMidRobust-v0`
+- the measurable `reg_shift_p90` proxy remains weaker than the SIMUS-only motion-dispersion rule at moderate motion:
+  - at `motion=0.25`, the reg-shift policy improves mean `auc_main_vs_nuisance` by `+0.074` and reduces mean nuisance FPR at matched TPR 0.5 by `-0.101`, versus `+0.093` / `-0.127` for the motion-dispersion selector
+  - at `motion=1.0`, the reg-shift policy is slightly stronger on `auc_main_vs_bg` but slightly weaker on nuisance separation and nuisance FPR than the motion-dispersion selector
 - the real-data bucket check is a limitation, not a confirmation: all nonzero-motion seed21 SIMUS policy cases still land nearest the Gammex phantom telemetry bucket, so the policy is currently validated as a better SIMUS regime split, not yet as a clinically grounded Shin-vs-Gammex separator
 - current evidence therefore does not justify a detector-level algorithmic redesign yet; the next move is to freeze either a single compromise profile (`MotionRobust-v0`) or, more usefully, a two-stage policy:
   - SIMUS analysis policy: `motion_disp_rms_px` threshold for near-oracle benchmarking
