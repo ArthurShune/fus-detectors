@@ -158,6 +158,8 @@ Deliverable:
 Outputs:
 - `reports/simus_motion/simus_motion_ladder_intraop_paper_seed21.{csv,json}`
 - `reports/simus_motion/simus_motion_ladder_mobile_paper_seed21.{csv,json}`
+- `reports/simus_motion/simus_motion_ladder_intraop_paper_seed22.{csv,json}`
+- `reports/simus_motion/simus_motion_ladder_mobile_paper_seed22.{csv,json}` (partial: `motionx0.25` completed; `motionx1.0` pending isolated rerun if needed)
 - `reports/simus_motion/simus_phase4_motion_summary.{csv,json}`
 - `reports/simus_motion/simus_phase4_calibration_summary.{csv,json}`
 - `reports/simus_motion/simus_phase4_failure_decomposition_seed21.{csv,json}`
@@ -166,6 +168,8 @@ Outputs:
 - `reports/simus_motion/simus_fusion_readout_summary_seed21.{csv,json}`
 - `reports/simus_motion/simus_stap_profile_sweep_seed21.{csv,json}`
 - `reports/simus_motion/simus_stap_profile_sweep_summary_seed21.{csv,json}`
+- `reports/simus_motion/simus_stap_compromise_search_seed2122_partial.{csv,json}`
+- `reports/simus_motion/simus_stap_rule_eval_seed2122_partial.{csv,json}`
 - `reports/simus_sanity_link/phase4_motion_ladders_seed21_{summary,table,deltas}.{json,csv}`
 
 Notes:
@@ -178,6 +182,9 @@ Notes:
 - structural and motion report rows now carry explicit score semantics (`PD-after-STAP` vs `STAP detector`), and the evaluation CLIs can rescore existing bundles via `--reuse-bundles` so changing `eval_score` does not trigger unnecessary recomputation
 - readout-only fusion benchmarks show that symmetric and asymmetric baseline+STAP score combinations can recover some `H1/bg` ordering, but on motion-heavy cases they do not beat the raw `STAP detector` on nuisance rejection and do not produce a clean Pareto improvement over `MC-SVD`; the remaining issue is motion robustness of the detector/profile, not just headline readout
 - named SIMUS STAP profile sweeps show that the dominant lever is temporal aperture `Lt`, not `motion_half_span_rel` alone: widening only the motion half-span (`Brain-SIMUS-Clin-MotionWide-v0`) leaves metrics unchanged, while `Lt=6` materially improves both `H1/bg` and nuisance rejection on the intra-op and moderate-motion mobile cases; the high-motion mobile case prefers a longer `Lt=12`, which means a single frozen clinical-motion profile may need to be mobile-specific or selected by a documented regime rule
+- the partial two-seed compromise search indicates that a single fixed compromise profile is already plausible: `Brain-SIMUS-Clin-MotionRobust-v0` and `Brain-SIMUS-Clin-MotionShort-v0` are effectively tied on mean utility and both materially outperform the current frozen clinical profile across the completed endpoint set
+- the leave-one-seed-out telemetry-rule study does not currently justify a regime-selection rule: simple rules on `reg_shift_rms` or `reg_shift_p90` are not consistently better than just freezing one of the compromise profiles, especially on the harder held-out seed
+- current evidence therefore does not yet force an algorithmic redesign; the next bar is to finish the missing held-out high-motion mobile endpoint and then validate whether one fixed compromise profile remains stable across more seeds before escalating to a detector-level change
 
 Status:
 - done
