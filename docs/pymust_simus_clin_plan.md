@@ -148,6 +148,9 @@ Scope:
 Recommended files:
 - `scripts/simus_eval_motion.py`
 - `scripts/simus_sanity_link.py`
+- `scripts/simus_motion_calibration.py`
+- `scripts/simus_failure_decomposition.py`
+- `scripts/simus_pd_readout_audit.py`
 
 Deliverable:
 - motion benchmark report plus real-IQ sanity-link report
@@ -158,6 +161,7 @@ Outputs:
 - `reports/simus_motion/simus_phase4_motion_summary.{csv,json}`
 - `reports/simus_motion/simus_phase4_calibration_summary.{csv,json}`
 - `reports/simus_motion/simus_phase4_failure_decomposition_seed21.{csv,json}`
+- `reports/simus_motion/simus_phase4_pd_readout_audit_seed21.{csv,json}`
 - `reports/simus_sanity_link/phase4_motion_ladders_seed21_{summary,table,deltas}.{json,csv}`
 
 Notes:
@@ -165,6 +169,8 @@ Notes:
 - the paper-tier motion ladders show that the frozen STAP chain only helps at the zero-motion anchor; once clinically meaningful motion is introduced, the advantage disappears quickly
 - calibration against the current Shin/Gammex telemetry indicates the zero-motion anchor is still the closest match to Shin, while nonzero-motion clips only move toward the Gammex phantom regime
 - failure decomposition indicates the dominant collapse is in `pd_stap` rather than `score_stap_preka`; registration and the MC-SVD upstream stage are secondary in the first nonzero-motion regime
+- the readout audit makes the mechanism explicit: `pd_stap` is constructed as `pd_base * band_fraction`, with background pixels forced back to `pd_base`; on the audited SIMUS runs `mask_h0_bg` lies entirely inside that invariant background mask, so `pd_stap` cannot improve H0-bg tail behavior and becomes nearly decorrelated from `score_stap_preka` once motion is introduced
+- candidate monotone transforms of the band-fraction suppression (`-log band_fraction`, `1 / band_fraction`) recover some nuisance separation, but the strongest audited right-tail score remains `score_stap_preka`; any PD-style replacement should be introduced as a new named readout/profile rather than silently changing the existing paper path
 
 Status:
 - done
