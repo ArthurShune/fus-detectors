@@ -19,6 +19,19 @@ SUPPORTED_SIMUS_STAP_PROFILES = (
     "Brain-SIMUS-Clin-MotionMidRobust-v0",
 )
 
+SUPPORTED_SIMUS_STAP_POLICIES = (
+    "Brain-SIMUS-Clin-MotionDisp-v0",
+)
+
+SIMUS_STAP_POLICY_THRESHOLDS = {
+    "Brain-SIMUS-Clin-MotionDisp-v0": {
+        "feature": "motion_disp_rms_px",
+        "threshold": 2.05,
+        "low_profile": "Brain-SIMUS-Clin-MotionRobust-v0",
+        "high_profile": "Brain-SIMUS-Clin-MotionMidRobust-v0",
+    }
+}
+
 
 def slugify(text: str) -> str:
     s = re.sub(r"[\s/]+", "_", str(text).strip())
@@ -153,6 +166,39 @@ def bundle_profile_kwargs(profile: str, *, T: int, baseline_type: str) -> dict[s
         )
         return out
     raise ValueError(f"Unsupported STAP profile {profile!r}")
+
+
+def select_simus_stap_profile(
+    *,
+    requested_profile: str,
+    policy: str | None = None,
+    motion_disp_rms_px: float | None = None,
+) -> tuple[str, dict[str, Any]]:
+    if not policy:
+        return str(requested_profile), {
+            "mode": "fixed_profile",
+            "requested_profile": str(requested_profile),
+            "applied_profile": str(requested_profile),
+        }
+    name = str(policy).strip()
+    if name not in SUPPORTED_SIMUS_STAP_POLICIES:
+        raise ValueError(f"Unsupported STAP policy {policy!r}")
+    cfg = SIMUS_STAP_POLICY_THRESHOLDS[name]
+    motion_disp = float(motion_disp_rms_px) if motion_disp_rms_px is not None else float("nan")
+    applied = str(cfg["low_profile"])
+    if np.isfinite(motion_disp) and motion_disp > float(cfg["threshold"]):
+        applied = str(cfg["high_profile"])
+    return applied, {
+        "mode": "policy",
+        "policy": name,
+        "feature": str(cfg["feature"]),
+        "threshold": float(cfg["threshold"]),
+        "feature_value": motion_disp if np.isfinite(motion_disp) else None,
+        "requested_profile": str(requested_profile),
+        "applied_profile": applied,
+        "low_profile": str(cfg["low_profile"]),
+        "high_profile": str(cfg["high_profile"]),
+    }
 
 
 def derive_bundle_from_run(

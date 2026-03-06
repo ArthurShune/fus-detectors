@@ -23,9 +23,11 @@ from scripts.simus_eval_structural import (
     evaluate_structural_metrics,
 )
 from sim.simus.bundle import (
+    SUPPORTED_SIMUS_STAP_POLICIES,
     SUPPORTED_SIMUS_STAP_PROFILES,
     derive_bundle_from_run,
     load_canonical_run,
+    select_simus_stap_profile,
     slugify,
 )
 from sim.simus.config import MotionSpec, PhaseScreenSpec, SimusConfig, default_profile_config
@@ -180,6 +182,12 @@ def parse_args() -> argparse.Namespace:
         default="Brain-SIMUS-Clin",
         choices=list(SUPPORTED_SIMUS_STAP_PROFILES),
     )
+    ap.add_argument(
+        "--stap-policy",
+        type=str,
+        default=None,
+        choices=[None, *SUPPORTED_SIMUS_STAP_POLICIES],
+    )
     ap.add_argument("--eval-score", type=str, default="pd", choices=["pd", "vnext"])
     ap.add_argument("--baselines", type=str, default="mc_svd,svd_similarity,local_svd,rpca,hosvd")
     ap.add_argument("--stap-baseline", type=str, default="mc_svd")
@@ -257,6 +265,12 @@ def main() -> None:
             "phase_rms_rad": meta.get("phase_screen", {}).get("telemetry", {}).get("phase_rms_rad"),
             "methods": {},
         }
+        applied_stap_profile, stap_policy_info = select_simus_stap_profile(
+            requested_profile=str(args.stap_profile),
+            policy=args.stap_policy,
+            motion_disp_rms_px=meta.get("motion", {}).get("telemetry", {}).get("disp_rms_px"),
+        )
+        details["runs"][run_slug]["stap_policy"] = stap_policy_info
 
         for method in methods:
             dataset_name = f"{run_slug}_{method.key}"
@@ -267,7 +281,7 @@ def main() -> None:
                     run_dir=run_dir,
                     out_root=bundle_root,
                     dataset_name=dataset_name,
-                    stap_profile=str(args.stap_profile),
+                    stap_profile=applied_stap_profile,
                     baseline_type=str(method.baseline_type),
                     run_stap=bool(method.run_stap),
                     stap_device=str(args.stap_device),
@@ -277,6 +291,7 @@ def main() -> None:
                         "phase_scale": float(phase_scale),
                         "compare_method_key": str(method.key),
                         "compare_role": str(method.role),
+                        "stap_policy": stap_policy_info,
                     },
                 )
             score_path = _score_path(bundle_dir, eval_score=str(args.eval_score), role=str(method.role))
@@ -310,6 +325,9 @@ def main() -> None:
                 "score_semantics": _score_semantics(str(args.eval_score), method),
                 "bundle_dir": str(bundle_dir),
                 "score_file": score_path.name,
+                "stap_profile_requested": str(args.stap_profile),
+                "stap_profile_applied": applied_stap_profile if method.run_stap else None,
+                "stap_policy": str(args.stap_policy) if args.stap_policy else None,
                 "T": int(icube.shape[0]),
                 "H": int(icube.shape[1]),
                 "W": int(icube.shape[2]),
