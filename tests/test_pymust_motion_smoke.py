@@ -36,3 +36,20 @@ def test_pymust_motion_profiles_are_deterministic_and_mobile_is_harder():
     assert float(intra_phase["phase_rms_rad"]) > 0.0
     assert float(mobile_phase["phase_rms_rad"]) > 0.0
     assert float(mobile_phase["drift_sigma_rad"]) > float(intra_phase["drift_sigma_rad"])
+
+
+def test_pymust_structural_profile_disables_motion_and_phase():
+    from sim.simus.config import default_profile_config
+    from sim.simus.pymust_smoke import generate_icube
+
+    structural = default_profile_config(profile="ClinIntraOp-Pf-Struct-v2", tier="smoke", seed=0)
+    structural = dataclasses.replace(structural, T=3, tissue_count=96)
+    out = generate_icube(structural)
+
+    motion = dict(out["debug"]["motion_telemetry"])
+    phase = dict(out["debug"]["phase_screen_telemetry"])
+
+    assert motion["enabled"] is False
+    assert float(motion["disp_rms_px"]) == 0.0
+    assert phase["enabled"] is False
+    assert float(phase["phase_rms_rad"]) == 0.0

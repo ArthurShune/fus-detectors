@@ -75,3 +75,19 @@ def test_pymust_simus_clin_profile_emits_h1_h0_masks():
     assert not np.any(mask_pf & mask_guard)
     assert not np.any(mask_bg & mask_guard)
     assert int(mask_alias_qc.sum()) >= 0
+
+
+def test_pymust_simus_structural_profile_is_masked_and_deterministic():
+    from sim.simus.config import default_profile_config
+    from sim.simus.pymust_smoke import generate_icube
+
+    cfg = default_profile_config(profile="ClinIntraOp-Pf-Struct-v2", tier="smoke", seed=0)
+    cfg = dataclasses.replace(cfg, T=2, tissue_count=120)
+    out_a = generate_icube(cfg)
+    out_b = generate_icube(cfg)
+
+    assert np.allclose(np.asarray(out_a["Icube"]), np.asarray(out_b["Icube"]), atol=0.0, rtol=0.0)
+    assert int(np.asarray(out_a["mask_h1_pf_main"], dtype=bool).sum()) > 0
+    assert int(np.asarray(out_a["mask_h0_nuisance_pa"], dtype=bool).sum()) > 0
+    assert bool(out_a["debug"]["motion_telemetry"]["enabled"]) is False
+    assert bool(out_a["debug"]["phase_screen_telemetry"]["enabled"]) is False
