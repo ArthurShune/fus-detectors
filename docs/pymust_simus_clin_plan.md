@@ -164,6 +164,8 @@ Outputs:
 - `reports/simus_motion/simus_phase4_pd_readout_audit_seed21.{csv,json}`
 - `reports/simus_motion/simus_fusion_readout_bench_seed21.{csv,json}`
 - `reports/simus_motion/simus_fusion_readout_summary_seed21.{csv,json}`
+- `reports/simus_motion/simus_stap_profile_sweep_seed21.{csv,json}`
+- `reports/simus_motion/simus_stap_profile_sweep_summary_seed21.{csv,json}`
 - `reports/simus_sanity_link/phase4_motion_ladders_seed21_{summary,table,deltas}.{json,csv}`
 
 Notes:
@@ -175,6 +177,7 @@ Notes:
 - candidate monotone transforms of the band-fraction suppression (`-log band_fraction`, `1 / band_fraction`) recover some nuisance separation, but the strongest audited right-tail score remains `score_stap_preka`; any PD-style replacement should be introduced as a new named readout/profile rather than silently changing the existing paper path
 - structural and motion report rows now carry explicit score semantics (`PD-after-STAP` vs `STAP detector`), and the evaluation CLIs can rescore existing bundles via `--reuse-bundles` so changing `eval_score` does not trigger unnecessary recomputation
 - readout-only fusion benchmarks show that symmetric and asymmetric baseline+STAP score combinations can recover some `H1/bg` ordering, but on motion-heavy cases they do not beat the raw `STAP detector` on nuisance rejection and do not produce a clean Pareto improvement over `MC-SVD`; the remaining issue is motion robustness of the detector/profile, not just headline readout
+- named SIMUS STAP profile sweeps show that the dominant lever is temporal aperture `Lt`, not `motion_half_span_rel` alone: widening only the motion half-span (`Brain-SIMUS-Clin-MotionWide-v0`) leaves metrics unchanged, while `Lt=6` materially improves both `H1/bg` and nuisance rejection on the intra-op and moderate-motion mobile cases; the high-motion mobile case prefers a longer `Lt=12`, which means a single frozen clinical-motion profile may need to be mobile-specific or selected by a documented regime rule
 
 Status:
 - done

@@ -23,7 +23,12 @@ from typing import Any
 
 import numpy as np
 
-from sim.simus.bundle import derive_bundle_from_run, load_canonical_run, slugify
+from sim.simus.bundle import (
+    SUPPORTED_SIMUS_STAP_PROFILES,
+    derive_bundle_from_run,
+    load_canonical_run,
+    slugify,
+)
 
 
 @dataclass(frozen=True)
@@ -234,7 +239,12 @@ def parse_args() -> argparse.Namespace:
         default=Path("reports/simus_structural/simus_structural_eval.json"),
     )
     ap.add_argument("--tag", type=str, default=None)
-    ap.add_argument("--stap-profile", type=str, default="Brain-SIMUS-Clin", choices=["Brain-SIMUS-Clin"])
+    ap.add_argument(
+        "--stap-profile",
+        type=str,
+        default="Brain-SIMUS-Clin",
+        choices=list(SUPPORTED_SIMUS_STAP_PROFILES),
+    )
     ap.add_argument("--eval-score", type=str, default="pd", choices=["pd", "vnext"])
     ap.add_argument("--baselines", type=str, default="mc_svd,svd_similarity,local_svd,rpca,hosvd")
     ap.add_argument("--stap-baseline", type=str, default="mc_svd")

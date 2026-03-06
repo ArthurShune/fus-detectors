@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from sim.simus.bundle import derive_bundle_from_run
+from sim.simus.bundle import SUPPORTED_SIMUS_STAP_PROFILES, derive_bundle_from_run
 
 
 def _discover_runs(sim_root: Path) -> list[Path]:
@@ -21,7 +21,12 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--sim-root", type=Path, default=None, help="Root containing per-run subdirectories.")
     ap.add_argument("--run", type=Path, action="append", default=None, help="Explicit run directory (repeatable).")
     ap.add_argument("--out-root", type=Path, default=None, help="Optional output root for derived bundles.")
-    ap.add_argument("--stap-profile", type=str, default="Brain-SIMUS-Clin", choices=["Brain-SIMUS-Clin"])
+    ap.add_argument(
+        "--stap-profile",
+        type=str,
+        default="Brain-SIMUS-Clin",
+        choices=list(SUPPORTED_SIMUS_STAP_PROFILES),
+    )
     ap.add_argument("--stap-device", type=str, default="cpu")
     ap.add_argument("--baseline-type", type=str, default="mc_svd")
     ap.add_argument("--no-run-stap", action="store_true", help="Only derive baseline bundle (run_stap=False).")

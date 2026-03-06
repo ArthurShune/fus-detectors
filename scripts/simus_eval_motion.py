@@ -22,7 +22,12 @@ from scripts.simus_eval_structural import (
     _split_csv_list,
     evaluate_structural_metrics,
 )
-from sim.simus.bundle import derive_bundle_from_run, load_canonical_run, slugify
+from sim.simus.bundle import (
+    SUPPORTED_SIMUS_STAP_PROFILES,
+    derive_bundle_from_run,
+    load_canonical_run,
+    slugify,
+)
 from sim.simus.config import MotionSpec, PhaseScreenSpec, SimusConfig, default_profile_config
 from sim.simus.pilot_pymust_simus import SUPPORTED_SIMUS_PROFILES, write_simus_run
 
@@ -169,7 +174,12 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--out-root", type=Path, default=Path("runs/sim_eval/simus_motion_ladder"))
     ap.add_argument("--out-csv", type=Path, default=Path("reports/simus_motion/simus_motion_ladder.csv"))
     ap.add_argument("--out-json", type=Path, default=Path("reports/simus_motion/simus_motion_ladder.json"))
-    ap.add_argument("--stap-profile", type=str, default="Brain-SIMUS-Clin", choices=["Brain-SIMUS-Clin"])
+    ap.add_argument(
+        "--stap-profile",
+        type=str,
+        default="Brain-SIMUS-Clin",
+        choices=list(SUPPORTED_SIMUS_STAP_PROFILES),
+    )
     ap.add_argument("--eval-score", type=str, default="pd", choices=["pd", "vnext"])
     ap.add_argument("--baselines", type=str, default="mc_svd,svd_similarity,local_svd,rpca,hosvd")
     ap.add_argument("--stap-baseline", type=str, default="mc_svd")
