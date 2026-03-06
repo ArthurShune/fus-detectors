@@ -152,6 +152,19 @@ Recommended files:
 Deliverable:
 - motion benchmark report plus real-IQ sanity-link report
 
+Outputs:
+- `reports/simus_motion/simus_motion_ladder_intraop_paper_seed21.{csv,json}`
+- `reports/simus_motion/simus_motion_ladder_mobile_paper_seed21.{csv,json}`
+- `reports/simus_motion/simus_phase4_motion_summary.{csv,json}`
+- `reports/simus_sanity_link/phase4_motion_ladders_seed21_{summary,table,deltas}.{json,csv}`
+
+Notes:
+- structural reporting now labels the chained pipeline explicitly as `MC-SVD -> STAP`
+- the paper-tier motion ladders show that the frozen STAP chain only helps at the zero-motion anchor; once clinically meaningful motion is introduced, the advantage disappears quickly
+
+Status:
+- done
+
 ### Phase 5: Functional ensemble extension
 
 Goal:
