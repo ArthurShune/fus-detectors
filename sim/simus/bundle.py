@@ -13,8 +13,10 @@ SUPPORTED_SIMUS_STAP_PROFILES = (
     "Brain-SIMUS-Clin",
     "Brain-SIMUS-Clin-MotionWide-v0",
     "Brain-SIMUS-Clin-MotionShort-v0",
+    "Brain-SIMUS-Clin-MotionMid-v0",
     "Brain-SIMUS-Clin-MotionLong-v0",
     "Brain-SIMUS-Clin-MotionRobust-v0",
+    "Brain-SIMUS-Clin-MotionMidRobust-v0",
 )
 
 
@@ -110,6 +112,11 @@ def bundle_profile_kwargs(profile: str, *, T: int, baseline_type: str) -> dict[s
         out["Lt"] = int(min(6, max(2, int(T) - 1)))
         out["motion_half_span_rel"] = 0.50
         return out
+    if name == "Brain-SIMUS-Clin-MotionMid-v0":
+        out = dict(base)
+        out["Lt"] = int(min(10, max(2, int(T) - 1)))
+        out["motion_half_span_rel"] = 0.50
+        return out
     if name == "Brain-SIMUS-Clin-MotionLong-v0":
         out = dict(base)
         out["Lt"] = int(min(12, max(2, int(T) - 1)))
@@ -120,6 +127,21 @@ def bundle_profile_kwargs(profile: str, *, T: int, baseline_type: str) -> dict[s
         out.update(
             {
                 "Lt": int(min(6, max(2, int(T) - 1))),
+                "diag_load": 0.10,
+                "stap_cov_train_trim_q": 0.05,
+                "mvdr_auto_kappa": 200.0,
+                "constraint_ridge": 0.25,
+                "msd_lambda": 0.08,
+                "motion_half_span_rel": 0.50,
+                "msd_contrast_alpha": 0.8,
+            }
+        )
+        return out
+    if name == "Brain-SIMUS-Clin-MotionMidRobust-v0":
+        out = dict(base)
+        out.update(
+            {
+                "Lt": int(min(10, max(2, int(T) - 1))),
                 "diag_load": 0.10,
                 "stap_cov_train_trim_q": 0.05,
                 "mvdr_auto_kappa": 200.0,
