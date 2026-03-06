@@ -83,6 +83,20 @@ def _threshold_from_neg(neg: np.ndarray, fpr: float) -> tuple[float | None, floa
     return thr, fpr_emp
 
 
+def _threshold_from_pos(pos: np.ndarray, tpr: float) -> tuple[float | None, float | None]:
+    pos = _finite(pos)
+    if pos.size == 0:
+        return None, None
+    q = float(np.clip(1.0 - float(tpr), 0.0, 1.0))
+    thr = float(np.quantile(pos, q))
+    tpr_emp = float(np.mean(pos >= thr))
+    return thr, tpr_emp
+
+
+def _rate_tag(rate: float) -> str:
+    return f"{float(rate):.3f}".rstrip("0").rstrip(".").replace(".", "p")
+
+
 def evaluate_structural_metrics(
     *,
     score: np.ndarray,
@@ -91,6 +105,7 @@ def evaluate_structural_metrics(
     mask_h0_nuisance_pa: np.ndarray | None,
     mask_h1_alias_qc: np.ndarray | None,
     fprs: list[float],
+    match_tprs: list[float] | None = None,
 ) -> dict[str, Any]:
     score = np.asarray(score, dtype=np.float64)
     pos_main = score[np.asarray(mask_h1_pf_main, dtype=bool)]
@@ -126,6 +141,21 @@ def evaluate_structural_metrics(
         out[f"fpr_bg@{tag}"] = bg_emp
         out[f"fpr_nuisance@{tag}"] = float(np.mean(neg_nuisance >= thr)) if neg_nuisance.size else None
         out[f"tpr_alias_qc@{tag}"] = float(np.mean(pos_alias >= thr)) if pos_alias.size else None
+    for tpr in match_tprs or []:
+        tag = _rate_tag(tpr)
+        thr, tpr_emp = _threshold_from_pos(pos_main, tpr)
+        if thr is None:
+            out[f"thr_match_tpr@{tag}"] = None
+            out[f"tpr_main_match@{tag}"] = None
+            out[f"fpr_bg_match@{tag}"] = None
+            out[f"fpr_nuisance_match@{tag}"] = None
+            out[f"tpr_alias_qc_match@{tag}"] = None
+            continue
+        out[f"thr_match_tpr@{tag}"] = thr
+        out[f"tpr_main_match@{tag}"] = tpr_emp
+        out[f"fpr_bg_match@{tag}"] = float(np.mean(neg_bg >= thr)) if neg_bg.size else None
+        out[f"fpr_nuisance_match@{tag}"] = float(np.mean(neg_nuisance >= thr)) if neg_nuisance.size else None
+        out[f"tpr_alias_qc_match@{tag}"] = float(np.mean(pos_alias >= thr)) if pos_alias.size else None
     return out
 
 
@@ -165,6 +195,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--stap-baseline", type=str, default="mc_svd")
     ap.add_argument("--stap-device", type=str, default="cpu")
     ap.add_argument("--fprs", type=str, default="1e-4,3e-4,1e-3")
+    ap.add_argument("--match-tprs", type=str, default="0.25,0.5,0.75")
     return ap.parse_args()
 
 
@@ -182,11 +213,12 @@ def main() -> None:
     methods = [MethodSpec(key=f"baseline_{b}", baseline_type=b, run_stap=False, role="baseline") for b in baselines]
     methods.append(MethodSpec(key="stap", baseline_type=str(args.stap_baseline), run_stap=True, role="stap"))
     fprs = [float(x) for x in _split_csv_list(str(args.fprs))]
+    match_tprs = [float(x) for x in _split_csv_list(str(args.match_tprs))]
     eval_score = str(args.eval_score)
     tag = str(args.tag).strip() if args.tag else ""
 
     rows: list[dict[str, Any]] = []
-    details: dict[str, Any] = {"schema_version": "simus_structural_eval.v1", "runs": {}}
+    details: dict[str, Any] = {"schema_version": "simus_structural_eval.v2", "runs": {}, "match_tprs": match_tprs}
 
     os.environ.setdefault("STAP_FAST_CUDA_GRAPH", "0")
 
@@ -253,6 +285,7 @@ def main() -> None:
                 mask_h0_nuisance_pa=mask_h0_nuisance_pa,
                 mask_h1_alias_qc=mask_h1_alias_qc,
                 fprs=fprs,
+                match_tprs=match_tprs,
             )
             row = {
                 "run": run_key,
