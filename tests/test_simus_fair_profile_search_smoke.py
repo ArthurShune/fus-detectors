@@ -55,13 +55,22 @@ def test_simus_fair_profile_search_selects_frozen_configs(tmp_path, monkeypatch)
             else:
                 pos, pos2, bg, bg2, nuis = 1.15, 1.05, 1.1, 1.0, 0.5
         elif baseline_type == "mc_svd":
-            ef = float(overrides.get("svd_energy_frac", 0.90))
-            if ef >= 0.95:
-                pos, pos2, bg, bg2, nuis = 4.0, 3.5, 1.2, 1.1, 0.7
-            elif ef <= 0.85:
-                pos, pos2, bg, bg2, nuis = 2.5, 1.7, 1.5, 1.4, 1.0
+            rank = overrides.get("svd_rank", None)
+            if rank is not None:
+                if int(rank) <= 2:
+                    pos, pos2, bg, bg2, nuis = 3.6, 3.0, 1.25, 1.15, 0.75
+                elif int(rank) <= 4:
+                    pos, pos2, bg, bg2, nuis = 3.8, 3.2, 1.22, 1.12, 0.72
+                else:
+                    pos, pos2, bg, bg2, nuis = 3.4, 2.9, 1.28, 1.18, 0.78
             else:
-                pos, pos2, bg, bg2, nuis = 3.0, 2.0, 1.4, 1.3, 0.9
+                ef = float(overrides.get("svd_energy_frac", 0.90))
+                if ef >= 0.95:
+                    pos, pos2, bg, bg2, nuis = 4.0, 3.5, 1.2, 1.1, 0.7
+                elif ef <= 0.85:
+                    pos, pos2, bg, bg2, nuis = 2.5, 1.7, 1.5, 1.4, 1.0
+                else:
+                    pos, pos2, bg, bg2, nuis = 3.0, 2.0, 1.4, 1.3, 0.9
         elif baseline_type == "svd_similarity":
             kappa = float(overrides.get("svd_sim_kappa", 2.5))
             if kappa >= 3.0:
