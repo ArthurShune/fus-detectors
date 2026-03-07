@@ -87,6 +87,16 @@ def test_simus_fair_profile_search_selects_frozen_configs(tmp_path, monkeypatch)
                 pos, pos2, bg, bg2, nuis = 3.0, 1.9, 1.5, 1.4, 1.1
             else:
                 pos, pos2, bg, bg2, nuis = 3.2, 2.1, 1.4, 1.3, 1.0
+        elif baseline_type == "adaptive_local_svd":
+            tile_hw = tuple(overrides.get("tile_hw", (8, 8)))
+            kappa = float(overrides.get("svd_sim_kappa", 2.5))
+            rmax = int(overrides.get("svd_rank", 8))
+            if tile_hw == (16, 16) and kappa >= 3.0:
+                pos, pos2, bg, bg2, nuis = 4.3, 3.7, 1.1, 1.0, 0.35
+            elif tile_hw == (12, 12) and rmax >= 10:
+                pos, pos2, bg, bg2, nuis = 4.1, 3.3, 1.15, 1.05, 0.45
+            else:
+                pos, pos2, bg, bg2, nuis = 3.7, 2.9, 1.2, 1.1, 0.55
         elif baseline_type == "rpca":
             lam = float(overrides.get("rpca_lambda", 0.01))
             if lam > 0.01:
@@ -146,5 +156,6 @@ def test_simus_fair_profile_search_selects_frozen_configs(tmp_path, monkeypatch)
     }
     assert "mc_svd" in selected
     assert "svd_similarity" in selected
+    assert "adaptive_local_svd" in selected
     eval_rows = [row for row in payload["rows"] if row["split"] == "eval"]
     assert all(row["config_name"] == selected[row["method_family"]]["config_name"] for row in eval_rows)

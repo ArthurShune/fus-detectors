@@ -233,6 +233,35 @@ def write_acceptance_bundle_from_icube(
         except Exception:
             baseline_telemetry = dict(baseline_telemetry or {})
         baseline_telemetry = {**dict(tele_reg or {}), **dict(baseline_telemetry or {})}
+    elif baseline_type_norm in {"adaptive_local_svd", "local_svd_similarity", "adaptive_local"}:
+        if reg_method != "phasecorr":
+            raise ValueError("Only phasecorr registration is supported for SVD baselines.")
+        reg_cube, tele_reg = kw._register_stack_phasecorr(
+            Icube,
+            reg_enable=reg_enable,
+            upsample=max(1, int(reg_subpixel)),
+            ref_strategy=reg_reference,
+        )
+        pd_base, baseline_telemetry, baseline_filtered_cube = kw._baseline_pd_adaptive_local_svd(
+            reg_cube,
+            tile_hw=tile_hw,
+            stride=int(tile_stride),
+            svd_sim_smooth=int(svd_sim_smooth),
+            svd_sim_kappa=float(svd_sim_kappa),
+            svd_sim_r_min=int(svd_sim_r_min),
+            svd_sim_r_max=svd_rank,
+            hann=True,
+            device=baseline_device,
+            return_filtered_cube=True,
+        )
+        try:
+            baseline_ms = float((baseline_telemetry or {}).get("baseline_ms", 0.0) or 0.0)
+            reg_ms = float((tele_reg or {}).get("reg_ms", 0.0) or 0.0)
+            baseline_telemetry = dict(baseline_telemetry or {})
+            baseline_telemetry["baseline_ms"] = baseline_ms + reg_ms
+        except Exception:
+            baseline_telemetry = dict(baseline_telemetry or {})
+        baseline_telemetry = {**dict(tele_reg or {}), **dict(baseline_telemetry or {})}
     elif baseline_type_norm in {"raw", "none", "identity"}:
         # STAP-only / no baseline clutter suppression: keep the (optionally registered) IQ cube
         # and use PD as a simple magnitude-squared average.
@@ -301,7 +330,7 @@ def write_acceptance_bundle_from_icube(
     else:
         raise ValueError(
             f"Unsupported baseline_type={baseline_type_norm!r} for IQ bundle writer. "
-            "Use mc_svd, svd_similarity, local_svd, raw/none, svd_bandpass, rpca, or hosvd."
+            "Use mc_svd, svd_similarity, local_svd, adaptive_local_svd, raw/none, svd_bandpass, rpca, or hosvd."
         )
 
     H, W = pd_base.shape

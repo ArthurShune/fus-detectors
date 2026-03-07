@@ -3294,6 +3294,154 @@ def _baseline_pd_local_svd(
     return pd, telemetry
 
 
+def _baseline_pd_adaptive_local_svd(
+    Icube: np.ndarray,
+    *,
+    tile_hw: tuple[int, int] = (8, 8),
+    stride: int = 3,
+    svd_sim_smooth: int = 7,
+    svd_sim_kappa: float = 2.5,
+    svd_sim_r_min: int = 1,
+    svd_sim_r_max: Optional[int] = None,
+    hann: bool = True,
+    device: str = "cpu",
+    return_filtered_cube: bool = False,
+) -> tuple:
+    """Block-wise local SVD clutter filter with adaptive tile-wise rank selection.
+
+    Each tile chooses its removed clutter rank using the same spatial singular-vector
+    similarity-drop heuristic as the global SVD-similarity baseline, but applies that
+    rule independently per tile before overlap-add reconstruction.
+    """
+    _ = device  # reserved for a future CUDA implementation
+    t_start = time.perf_counter()
+    if Icube.ndim != 3:
+        raise ValueError(f"Icube must have shape (T,H,W), got {Icube.shape}")
+    if not np.iscomplexobj(Icube):
+        raise ValueError("Icube must be complex-valued IQ")
+    Icube = np.asarray(Icube, dtype=np.complex64)
+    T, H, W = (int(x) for x in Icube.shape)
+    th, tw = (int(tile_hw[0]), int(tile_hw[1]))
+    if th <= 0 or tw <= 0:
+        raise ValueError("tile_hw must be positive")
+    if th > H or tw > W:
+        raise ValueError(f"tile_hw={tile_hw} exceeds frame size {(H, W)}")
+    stride = int(max(1, stride))
+    smooth = int(max(1, svd_sim_smooth))
+    kappa = float(svd_sim_kappa)
+    r_max_eff = int(svd_sim_r_max) if svd_sim_r_max is not None else min(32, T - 1)
+    r_max_eff = int(max(0, min(r_max_eff, T - 1)))
+    r_min_eff = int(max(0, min(int(svd_sim_r_min), r_max_eff)))
+
+    def _median_smooth_1d(x: np.ndarray, width: int) -> np.ndarray:
+        x = np.asarray(x, dtype=np.float32).ravel()
+        width = int(width)
+        if x.size == 0 or width <= 1:
+            return x.copy()
+        if width % 2 == 0:
+            width += 1
+        half = width // 2
+        out = np.empty_like(x, dtype=np.float32)
+        for i in range(x.size):
+            lo = max(0, i - half)
+            hi = min(x.size, i + half + 1)
+            out[i] = float(np.median(x[lo:hi]))
+        return out
+
+    if hann:
+        wy = np.hanning(th).astype(np.float32) if th > 1 else np.ones((th,), dtype=np.float32)
+        wx = np.hanning(tw).astype(np.float32) if tw > 1 else np.ones((tw,), dtype=np.float32)
+        w_tile = (wy[:, None] * wx[None, :]).astype(np.float32, copy=False)
+    else:
+        w_tile = np.ones((th, tw), dtype=np.float32)
+
+    y_starts = list(range(0, H - th + 1, stride))
+    x_starts = list(range(0, W - tw + 1, stride))
+    if not y_starts:
+        y_starts = [0]
+    if not x_starts:
+        x_starts = [0]
+    if y_starts[-1] != H - th:
+        y_starts.append(H - th)
+    if x_starts[-1] != W - tw:
+        x_starts.append(W - tw)
+
+    out = np.zeros((T, H, W), dtype=np.complex64)
+    wsum = np.zeros((H, W), dtype=np.float32)
+    ranks: list[int] = []
+    taus: list[float] = []
+
+    for y0 in y_starts:
+        for x0 in x_starts:
+            tile = Icube[:, y0 : y0 + th, x0 : x0 + tw]
+            A = tile.reshape(T, -1)
+            C = A @ A.conj().T
+            s2, U = np.linalg.eigh(C)
+            idx = np.argsort(s2)[::-1]
+            s2 = np.clip(s2[idx].real, 0.0, None)
+            U = U[:, idx]
+
+            r_tile = int(r_min_eff)
+            tau_tile = float("nan")
+            if r_max_eff >= 1:
+                cols = int(min(r_max_eff + 1, T))
+                U_r = U[:, :cols]
+                s = np.sqrt(np.clip(s2[:cols], 0.0, None) + 1e-12)
+                V_r = (A.conj().T @ U_r) / s[None, :]
+                mags = np.abs(V_r).astype(np.float32, copy=False)
+                mags /= (np.linalg.norm(mags, axis=0) + 1e-12)
+                sims = np.sum(mags[:, :-1] * mags[:, 1:], axis=0).astype(np.float32, copy=False)
+                sims_sm = _median_smooth_1d(sims, smooth)
+                if sims_sm.size:
+                    med = float(np.median(sims_sm))
+                    mad = float(np.median(np.abs(sims_sm - med)) + 1e-12)
+                    tau_tile = float(med - kappa * mad)
+                    idx_cross = np.nonzero(sims_sm < tau_tile)[0]
+                    if idx_cross.size:
+                        r_tile = int(idx_cross[0] + 1)
+                    else:
+                        r_tile = int(min(r_max_eff, T - 1))
+                else:
+                    r_tile = int(r_min_eff)
+            r_tile = int(max(r_min_eff, min(r_tile, r_max_eff)))
+            ranks.append(r_tile)
+            if np.isfinite(tau_tile):
+                taus.append(float(tau_tile))
+            U_k = U[:, :r_tile]
+            A_f = (A - U_k @ (U_k.conj().T @ A)).astype(np.complex64, copy=False)
+            tile_f = A_f.reshape(T, th, tw)
+            out[:, y0 : y0 + th, x0 : x0 + tw] += tile_f * w_tile[None, :, :]
+            wsum[y0 : y0 + th, x0 : x0 + tw] += w_tile
+
+    out /= (wsum[None, :, :] + 1e-12)
+    pd = np.mean((np.abs(out) ** 2).astype(np.float32), axis=0).astype(np.float32, copy=False)
+    r_arr = np.asarray(ranks, dtype=np.int32) if ranks else np.zeros((0,), dtype=np.int32)
+    tau_arr = np.asarray(taus, dtype=np.float32) if taus else np.zeros((0,), dtype=np.float32)
+    telemetry = {
+        "baseline_type": "adaptive_local_svd",
+        "adaptive_local_svd_tile_hw": [int(th), int(tw)],
+        "adaptive_local_svd_stride": int(stride),
+        "adaptive_local_svd_hann": bool(hann),
+        "adaptive_local_svd_smooth": int(smooth),
+        "adaptive_local_svd_kappa": float(kappa),
+        "adaptive_local_svd_r_min": int(r_min_eff),
+        "adaptive_local_svd_r_max": int(r_max_eff),
+        "adaptive_local_svd_rank_removed_mean": float(r_arr.mean()) if r_arr.size else 0.0,
+        "adaptive_local_svd_rank_removed_median": float(np.median(r_arr)) if r_arr.size else 0.0,
+        "adaptive_local_svd_rank_removed_p10": float(np.quantile(r_arr, 0.10)) if r_arr.size else 0.0,
+        "adaptive_local_svd_rank_removed_p90": float(np.quantile(r_arr, 0.90)) if r_arr.size else 0.0,
+        "adaptive_local_svd_rank_removed_min": int(r_arr.min()) if r_arr.size else 0,
+        "adaptive_local_svd_rank_removed_max": int(r_arr.max()) if r_arr.size else 0,
+        "adaptive_local_svd_tau_median": float(np.median(tau_arr)) if tau_arr.size else None,
+        "adaptive_local_svd_tau_p10": float(np.quantile(tau_arr, 0.10)) if tau_arr.size else None,
+        "adaptive_local_svd_tau_p90": float(np.quantile(tau_arr, 0.90)) if tau_arr.size else None,
+        "baseline_ms": float(1000.0 * (time.perf_counter() - t_start)),
+    }
+    if return_filtered_cube:
+        return pd, telemetry, out.astype(np.complex64, copy=False)
+    return pd, telemetry
+
+
 def _baseline_pd_rpca(
     Icube: np.ndarray,
     *,
@@ -11398,6 +11546,21 @@ def write_acceptance_bundle(
             tile_hw=tile_hw,
             stride=tile_stride,
             svd_energy_frac=float(svd_energy_frac) if svd_energy_frac is not None else 0.90,
+            hann=True,
+            device=baseline_device,
+            return_filtered_cube=True,
+        )
+    elif baseline_type_norm in {"adaptive_local_svd", "local_svd_similarity", "adaptive_local"}:
+        if use_whitened_ratio:
+            raise ValueError("Whitened band-ratio scoring requires mc_svd baseline.")
+        pd_base, baseline_telemetry, baseline_filtered_cube = _baseline_pd_adaptive_local_svd(
+            Icube,
+            tile_hw=tile_hw,
+            stride=tile_stride,
+            svd_sim_smooth=int(svd_sim_smooth),
+            svd_sim_kappa=float(svd_sim_kappa),
+            svd_sim_r_min=int(svd_sim_r_min),
+            svd_sim_r_max=svd_rank,
             hann=True,
             device=baseline_device,
             return_filtered_cube=True,

@@ -190,7 +190,7 @@ def parse_args() -> argparse.Namespace:
         choices=[None, *SUPPORTED_SIMUS_STAP_POLICIES],
     )
     ap.add_argument("--eval-score", type=str, default="pd", choices=["pd", "vnext"])
-    ap.add_argument("--baselines", type=str, default="mc_svd,svd_similarity,local_svd,rpca,hosvd")
+    ap.add_argument("--baselines", type=str, default="mc_svd,svd_similarity,local_svd,adaptive_local_svd,rpca,hosvd")
     ap.add_argument("--stap-baseline", type=str, default="mc_svd")
     ap.add_argument("--stap-device", type=str, default="cpu")
     ap.add_argument("--fprs", type=str, default="1e-4,1e-3")

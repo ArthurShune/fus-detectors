@@ -177,6 +177,12 @@ Outputs:
 - `reports/simus_motion/simus_motion_ladder_intraop_paper_seed21_regshift_policy.{csv,json}`
 - `reports/simus_motion/simus_motion_ladder_mobile_paper_seed21_regshift_policy.{csv,json}`
 - `reports/simus_motion/simus_real_envelope_check_seed2122.{csv,json}`
+- `reports/simus_motion/simus_fair_profile_search_seed2122to2324.{csv,json}`
+- `reports/simus_motion/simus_fair_profile_search_seed2122to2324_headline.{csv,json}`
+- `reports/simus_motion/simus_fair_profile_search_seed2122to2324_adaptivelocal.{csv,json}`
+- `reports/simus_motion/simus_fair_profile_search_seed2122to2324_adaptivelocal_headline.{csv,json}`
+- `reports/simus_motion/simus_frozen_benchmark_v1_eval_cases.{csv,json}`
+- `reports/simus_motion/simus_frozen_benchmark_v1p1_eval_cases.{csv,json}`
 - `reports/simus_sanity_link/phase4_motion_ladders_seed21_{summary,table,deltas}.{json,csv}`
 - `reports/simus_sanity_link/simus_motion_policy_bucket_check_seed21.{csv,json}`
 - `reports/simus_sanity_link/simus_motion_policy_bucket_check_regshift_seed21.{csv,json}`
@@ -211,6 +217,19 @@ Notes:
     - all frozen baselines remain at nuisance `FPR@TPR0.5 >= 0.652`
   - the earlier `seed21 -> seed22` fair-search artifacts remain useful as the narrower intermediate checkpoint:
     - `reports/simus_motion/simus_fair_profile_search_seed21to22_broad.{csv,json}`
+- the baseline labels are now intentionally narrower and more honest:
+  - `svd_similarity` is reported as `Adaptive Global SVD`, because the implementation is a global similarity-cutoff SVD rule rather than a block-wise local method
+  - `local_svd` is reported as `Local SVD (Fixed Energy)`, because the implementation uses a frozen per-tile energy-fraction rule
+- a stronger explicit `adaptive_local_svd` baseline family is now included in the frozen-profile search:
+  - it performs block-wise SVD with tile-wise rank selection from the same spatial singular-vector similarity-drop heuristic used by the global adaptive SVD baseline
+  - its broadened `seed21+22 -> seed23+24` search artifacts are:
+    - `reports/simus_motion/simus_fair_profile_search_seed2122to2324_adaptivelocal.{csv,json}`
+    - `reports/simus_motion/simus_fair_profile_search_seed2122to2324_adaptivelocal_headline.{csv,json}`
+  - the selected adaptive-local profile is `tile12_s4_bal_r8`
+  - on held-out corrected `seed23+24`, that stronger adaptive-local baseline still does not close the gap to STAP:
+    - `Adaptive Local SVD`: mean `auc_main_vs_bg = 0.6883`, mean `auc_main_vs_nuisance = 0.0582`, mean nuisance `FPR@TPR0.5 = 0.9996`
+    - `STAP`: mean `auc_main_vs_bg = 0.9357`, mean `auc_main_vs_nuisance = 0.9972`, mean nuisance `FPR@TPR0.5 = 0.0`
+  - this does not prove the literature family is exhausted, but it does remove the earlier label mismatch and adds a materially stronger local-adaptive baseline than the previous fixed-energy local SVD surrogate
 - direct real-IQ proxy telemetry still matters for realism checks:
   - Shin Fig3 (`frames 0:128`) remains effectively motion-free on this proxy: `reg_shift_p90 = 0.0038 px`
   - Gammex along-linear17 (`frames 0:5`) reaches `reg_shift_p90 = 1.33-1.93 px`

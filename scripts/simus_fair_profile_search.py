@@ -301,6 +301,97 @@ def _candidate_specs() -> list[CandidateSpec]:
     )
 
     add(
+        method_family="adaptive_local_svd",
+        config_name="tile8_s3_bal_r8",
+        baseline_type="adaptive_local_svd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "tile_hw": (8, 8),
+            "tile_stride": 3,
+            "svd_sim_smooth": 7,
+            "svd_sim_kappa": 2.5,
+            "svd_sim_r_min": 1,
+            "svd_rank": 8,
+        },
+    )
+    add(
+        method_family="adaptive_local_svd",
+        config_name="tile8_s2_sens_r8",
+        baseline_type="adaptive_local_svd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "tile_hw": (8, 8),
+            "tile_stride": 2,
+            "svd_sim_smooth": 5,
+            "svd_sim_kappa": 2.0,
+            "svd_sim_r_min": 1,
+            "svd_rank": 8,
+        },
+    )
+    add(
+        method_family="adaptive_local_svd",
+        config_name="tile12_s4_bal_r8",
+        baseline_type="adaptive_local_svd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "tile_hw": (12, 12),
+            "tile_stride": 4,
+            "svd_sim_smooth": 7,
+            "svd_sim_kappa": 2.5,
+            "svd_sim_r_min": 1,
+            "svd_rank": 8,
+        },
+    )
+    add(
+        method_family="adaptive_local_svd",
+        config_name="tile12_s3_cons_r10",
+        baseline_type="adaptive_local_svd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "tile_hw": (12, 12),
+            "tile_stride": 3,
+            "svd_sim_smooth": 9,
+            "svd_sim_kappa": 3.0,
+            "svd_sim_r_min": 1,
+            "svd_rank": 10,
+        },
+    )
+    add(
+        method_family="adaptive_local_svd",
+        config_name="tile16_s4_cons_r10",
+        baseline_type="adaptive_local_svd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "tile_hw": (16, 16),
+            "tile_stride": 4,
+            "svd_sim_smooth": 9,
+            "svd_sim_kappa": 3.0,
+            "svd_sim_r_min": 1,
+            "svd_rank": 10,
+        },
+    )
+    add(
+        method_family="adaptive_local_svd",
+        config_name="tile16_s4_bal_r8",
+        baseline_type="adaptive_local_svd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "tile_hw": (16, 16),
+            "tile_stride": 4,
+            "svd_sim_smooth": 7,
+            "svd_sim_kappa": 2.5,
+            "svd_sim_r_min": 1,
+            "svd_rank": 8,
+        },
+    )
+
+    add(
         method_family="rpca",
         config_name="lam1_it250",
         baseline_type="rpca",

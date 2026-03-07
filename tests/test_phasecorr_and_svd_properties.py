@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from sim.kwave.common import (
+    _baseline_pd_adaptive_local_svd,
     _baseline_pd_mcsvd,
     _baseline_pd_rpca,
     _fft_shift_apply,
@@ -224,3 +225,49 @@ def test_rpca_lowrank_energy_fraction_reasonable() -> None:
     cube = tissue + flow
     _, tele = _baseline_pd_rpca(cube, lambda_=None, max_iters=60)
     assert tele["rpca_energy_lowrank_frac"] > 0.85
+
+
+def test_adaptive_local_svd_returns_finite_pd_and_tile_rank_stats() -> None:
+    rng = np.random.default_rng(13)
+    T, H, W = 32, 24, 24
+    cube = np.zeros((T, H, W), dtype=np.complex64)
+
+    # Top-left tile: highly coherent clutter plus weak flow.
+    clutter_t = rng.standard_normal((T, 2)).astype(np.float32)
+    clutter_v = rng.standard_normal((2, 12 * 12)).astype(np.float32)
+    tile_coherent = (clutter_t @ clutter_v).reshape(T, 12, 12).astype(np.complex64)
+    tile_coherent += 0.03 * (
+        rng.standard_normal((T, 12, 12)) + 1j * rng.standard_normal((T, 12, 12))
+    ).astype(np.complex64)
+
+    # Bottom-right tile: less coherent, more mixed temporal content.
+    tile_mixed = 0.25 * (
+        rng.standard_normal((T, 12, 12)) + 1j * rng.standard_normal((T, 12, 12))
+    ).astype(np.complex64)
+    for k in range(4):
+        amp = 0.15 * rng.standard_normal((12, 12)).astype(np.float32)
+        phase = np.exp(1j * (0.3 * k + np.pi * np.arange(T, dtype=np.float32) / max(1, T - 1)))
+        tile_mixed += phase[:, None, None].astype(np.complex64) * amp[None, :, :]
+
+    cube[:, :12, :12] = tile_coherent
+    cube[:, 12:, 12:] = tile_mixed
+    cube += 0.01 * (
+        rng.standard_normal((T, H, W)) + 1j * rng.standard_normal((T, H, W))
+    ).astype(np.complex64)
+
+    pd_map, tele = _baseline_pd_adaptive_local_svd(
+        cube,
+        tile_hw=(12, 12),
+        stride=12,
+        svd_sim_smooth=5,
+        svd_sim_kappa=2.0,
+        svd_sim_r_min=1,
+        svd_sim_r_max=8,
+    )
+
+    assert pd_map.shape == (H, W)
+    assert np.isfinite(pd_map).all()
+    assert tele["baseline_type"] == "adaptive_local_svd"
+    assert 1 <= tele["adaptive_local_svd_rank_removed_min"] <= 8
+    assert 1 <= tele["adaptive_local_svd_rank_removed_max"] <= 8
+    assert tele["adaptive_local_svd_rank_removed_max"] >= tele["adaptive_local_svd_rank_removed_min"]
