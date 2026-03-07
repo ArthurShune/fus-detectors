@@ -175,7 +175,7 @@ From the baseline-filtered cube we define a conventional power Doppler (PD) brig
 \[
   \mathrm{PD}^{\uparrow}(y,x)=\frac{1}{T}\sum_{t=0}^{T-1}\left|X_{\mathrm{base}}(t,y,x)\right|^2.
 \]
-For quantitative evaluation and thresholding we use \emph{flow-evidence} score maps where higher values indicate stronger evidence of flow, and we calibrate thresholds on the right tail of these score distributions. We denote the baseline ROC score map as $S_{\mathrm{base}}(y,x)$ (power Doppler on $X_{\mathrm{base}}$). For short-ensemble regimes we additionally report auxiliary, conventional baseline comparators (e.g.\ log-power Doppler and Kasai lag-1 magnitude) to avoid baseline-score idiosyncrasies dominating conclusions (Notation).
+For quantitative evaluation and thresholding we use \emph{flow-evidence} score maps where higher values indicate stronger evidence of flow, and we calibrate thresholds on the right tail of these score distributions. We denote the baseline ROC score map as $S_{\mathrm{base}}(y,x)$ (power Doppler on $X_{\mathrm{base}}$). For short-ensemble regimes we additionally report auxiliary, conventional baseline comparators (e.g.\ log-power Doppler and Kasai lag-1 magnitude \cite{KasaiAutocorrelation1985}) to avoid baseline-score idiosyncrasies dominating conclusions (Notation).
 \noindent Note: $\mathrm{PD}^{\uparrow}$ and $S_{\mathrm{base}}$ use the same underlying power statistic (up to fixed scaling); we keep separate names to make it explicit when PD is used only as a display/proxy map (masks/visuals) versus as a ROC score map.
 
 \subsection{Score taxonomy}
@@ -889,6 +889,12 @@ Song, P., et al.
 \newblock Ultrasound small vessel imaging with block-wise adaptive local clutter filtering.
 \newblock \emph{IEEE Transactions on Medical Imaging} (2017).
 \newblock DOI: \url{https://doi.org/10.1109/TMI.2016.2605819}.
+
+\bibitem{KasaiAutocorrelation1985}
+Kasai, C., Namekawa, K., Koyano, A., and Omoto, R.
+\newblock Real-time two-dimensional blood flow imaging using an autocorrelation technique.
+\newblock \emph{IEEE Transactions on Sonics and Ultrasonics} 32(3), 458--464 (1985).
+\newblock DOI: \url{https://doi.org/10.1109/T-SU.1985.31615}.
 
 \bibitem{CheeGPUEigen2017}
 Chee, A. J. Y., Yiu, B. Y. S., and Yu, A. C. H.
