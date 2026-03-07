@@ -12,11 +12,11 @@ to the proxy-separation uplift (e.g., ΔAUC for STAP vs MC--SVD).
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 
 def _load_meta(bundle_dir: Path) -> dict:
@@ -46,26 +46,38 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    df = pd.read_csv(Path(args.in_csv))
-    if df.empty:
+    in_csv = Path(args.in_csv)
+    with in_csv.open("r", newline="") as f:
+        rows = list(csv.DictReader(f))
+    if not rows:
         raise SystemExit(f"Empty CSV: {args.in_csv}")
 
     req = {"iq_file", "frame_tag", "frames_spec", "bundle_dir_stap", "method_key", "auc_flow_vs_bg"}
-    missing = sorted([c for c in req if c not in df.columns])
+    missing = sorted([c for c in req if c not in rows[0].keys()])
     if missing:
         raise SystemExit(f"Missing required columns in {args.in_csv}: {missing}")
 
     # One row per scenario (clip + window). bundle_dir_stap is shared across method rows.
-    scen = (
-        df.drop_duplicates(subset=["iq_file", "frame_tag"])
-        .loc[:, ["iq_file", "frame_tag", "frames_spec", "bundle_dir_stap"]]
-        .copy()
-    )
+    scen_keys: set[tuple[str, str]] = set()
+    scen_rows: list[dict[str, str | float]] = []
+    for row in rows:
+        key = (str(row["iq_file"]), str(row["frame_tag"]))
+        if key in scen_keys:
+            continue
+        scen_keys.add(key)
+        scen_rows.append(
+            {
+                "iq_file": str(row["iq_file"]),
+                "frame_tag": str(row["frame_tag"]),
+                "frames_spec": str(row["frames_spec"]),
+                "bundle_dir_stap": str(row["bundle_dir_stap"]),
+            }
+        )
     shifts_rms: list[float] = []
     shifts_p90: list[float] = []
     failures: list[float] = []
     psr_med: list[float] = []
-    for _, row in scen.iterrows():
+    for row in scen_rows:
         bdir = Path(str(row["bundle_dir_stap"]))
         meta = _load_meta(bdir)
         bs = meta.get("baseline_stats") or {}
@@ -73,22 +85,43 @@ def main() -> None:
         shifts_p90.append(float(bs.get("reg_shift_p90") or 0.0))
         failures.append(float(bs.get("reg_failed_fraction") or 0.0))
         psr_med.append(float(bs.get("reg_psr_median")) if bs.get("reg_psr_median") is not None else float("nan"))
-    scen["reg_shift_rms_px"] = shifts_rms
-    scen["reg_shift_p90_px"] = shifts_p90
-    scen["reg_failed_fraction"] = failures
-    scen["reg_psr_median"] = psr_med
+    for row, shift_rms, shift_p90, failure, psr in zip(
+        scen_rows, shifts_rms, shifts_p90, failures, psr_med, strict=True
+    ):
+        row["reg_shift_rms_px"] = shift_rms
+        row["reg_shift_p90_px"] = shift_p90
+        row["reg_failed_fraction"] = failure
+        row["reg_psr_median"] = psr
 
     # Proxy-separation uplift: ΔAUC (STAP - MC--SVD) per scenario.
-    auc = (
-        df.loc[df["method_key"].isin(["mc_svd", "stap"]), ["iq_file", "frame_tag", "method_key", "auc_flow_vs_bg"]]
-        .copy()
-        .pivot(index=["iq_file", "frame_tag"], columns="method_key", values="auc_flow_vs_bg")
-    )
-    auc = auc.rename(columns={"mc_svd": "auc_mc_svd", "stap": "auc_stap"})
-    auc["delta_auc_stap_minus_mcsvd"] = auc["auc_stap"] - auc["auc_mc_svd"]
+    auc_by_scenario: dict[tuple[str, str], dict[str, float]] = {}
+    for row in rows:
+        method_key = str(row["method_key"])
+        if method_key not in {"mc_svd", "stap"}:
+            continue
+        key = (str(row["iq_file"]), str(row["frame_tag"]))
+        auc_by_scenario.setdefault(key, {})
+        try:
+            auc_by_scenario[key][method_key] = float(row["auc_flow_vs_bg"])
+        except (TypeError, ValueError):
+            continue
 
-    scen = scen.merge(auc.reset_index(), on=["iq_file", "frame_tag"], how="left")
-    scen.to_csv(Path(args.out_csv), index=False)
+    for row in scen_rows:
+        key = (str(row["iq_file"]), str(row["frame_tag"]))
+        auc_pair = auc_by_scenario.get(key, {})
+        auc_mc = auc_pair.get("mc_svd", float("nan"))
+        auc_stap = auc_pair.get("stap", float("nan"))
+        row["auc_mc_svd"] = auc_mc
+        row["auc_stap"] = auc_stap
+        row["delta_auc_stap_minus_mcsvd"] = auc_stap - auc_mc if np.isfinite(auc_mc) and np.isfinite(auc_stap) else float("nan")
+
+    out_csv = Path(args.out_csv)
+    out_csv.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = list(scen_rows[0].keys()) if scen_rows else []
+    with out_csv.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(scen_rows)
 
     try:
         import matplotlib.pyplot as plt
@@ -111,8 +144,8 @@ def main() -> None:
     fig, axes = plt.subplots(1, 2, figsize=(12.8, 3.8), constrained_layout=True)
     ax0, ax1 = axes
 
-    x = pd.to_numeric(scen["reg_shift_rms_px"], errors="coerce").to_numpy(dtype=np.float64, copy=False)
-    x = x[np.isfinite(x)]
+    x_all = np.asarray([float(row["reg_shift_rms_px"]) for row in scen_rows], dtype=np.float64)
+    x = x_all[np.isfinite(x_all)]
     ax0.hist(x, bins=12, color="#666666", alpha=0.75, edgecolor="#444444", linewidth=0.6)
     ax0.set_xlabel("Estimated rigid shift RMS (px)")
     ax0.set_ylabel("Scenario count")
@@ -130,10 +163,10 @@ def main() -> None:
             color="#333333",
         )
 
-    y = pd.to_numeric(scen["delta_auc_stap_minus_mcsvd"], errors="coerce").to_numpy(dtype=np.float64, copy=False)
-    m = np.isfinite(x) & np.isfinite(y)
+    y = np.asarray([float(row["delta_auc_stap_minus_mcsvd"]) for row in scen_rows], dtype=np.float64)
+    m = np.isfinite(x_all) & np.isfinite(y)
     if m.any():
-        ax1.scatter(x[m], y[m], s=22, color="#1f77b4", alpha=0.85, edgecolor="none")
+        ax1.scatter(x_all[m], y[m], s=22, color="#1f77b4", alpha=0.85, edgecolor="none")
         ax1.axhline(float(np.median(y[m])), color="#1f77b4", alpha=0.35, linewidth=1.2)
     ax1.set_xlabel("Estimated rigid shift RMS (px)")
     ax1.set_ylabel(r"$\Delta$AUC (STAP $-$ MC--SVD)")
@@ -152,4 +185,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

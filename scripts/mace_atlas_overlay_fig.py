@@ -23,7 +23,7 @@ By default the ROIs match the offline Macé H1/H0 shorthand used elsewhere:
 Usage
 -----
     PYTHONPATH=. python scripts/mace_atlas_overlay_fig.py \
-      --scan-name scan1 \
+      --scan-name scan_anatomy \
       --plane-indices 5 10 15 \
       --out-png figs/paper/mace_atlas_overlay.png
 """
@@ -40,6 +40,7 @@ from pipeline.realdata import mace_data_root
 from pipeline.realdata.mace_wholebrain import (
     build_mace_transform_matrix,
     load_all_mace_scans,
+    load_mace_anatomy_scan,
     load_mace_atlas,
     load_mace_region_info,
     load_mace_transform,
@@ -101,8 +102,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument(
         "--scan-name",
         type=str,
-        default="scan1",
-        help="Scan name to visualize (e.g., scan1, scan3, scan4).",
+        default="scan_anatomy",
+        help="Scan name to visualize (e.g., scan_anatomy, scan1, scan3, scan4).",
     )
     ap.add_argument(
         "--plane-indices",
@@ -166,11 +167,15 @@ def main() -> None:
     out_png.parent.mkdir(parents=True, exist_ok=True)
 
     # Load scan + atlas + transform.
-    scans = load_all_mace_scans(data_root)
-    scan = next((s for s in scans if str(s.name) == str(args.scan_name)), None)
-    if scan is None:
-        avail = ", ".join([s.name for s in scans])
-        raise SystemExit(f"Scan '{args.scan_name}' not found. Available: {avail}")
+    scan_name = str(args.scan_name)
+    if scan_name in {"scan_anatomy", "anatomy"}:
+        scan = load_mace_anatomy_scan(data_root)
+    else:
+        scans = load_all_mace_scans(data_root)
+        scan = next((s for s in scans if str(s.name) == scan_name), None)
+        if scan is None:
+            avail = ", ".join([s.name for s in scans] + ["scan_anatomy"])
+            raise SystemExit(f"Scan '{args.scan_name}' not found. Available: {avail}")
 
     atlas = load_mace_atlas(data_root)
     region_info = load_mace_region_info(data_root)
@@ -326,4 +331,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

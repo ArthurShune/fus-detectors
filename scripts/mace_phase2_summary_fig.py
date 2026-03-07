@@ -12,10 +12,10 @@ and writes a publication-ready figure:
 from __future__ import annotations
 
 import argparse
+import csv
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 
 def main() -> None:
@@ -57,27 +57,28 @@ def main() -> None:
     out_png = Path(args.out_png)
     out_png.parent.mkdir(parents=True, exist_ok=True)
 
-    df = pd.read_csv(in_csv)
-    if df.empty:
+    with in_csv.open("r", newline="") as f:
+        rows = list(csv.DictReader(f))
+    if not rows:
         raise SystemExit(f"Empty CSV: {in_csv}")
 
     required = ["scan_name", "plane_idx", "frac_pf_peak_pos", "frac_pf_peak_neg", "delta_log_alias"]
-    missing = [c for c in required if c not in df.columns]
+    missing = [c for c in required if c not in rows[0].keys()]
     if missing:
         raise SystemExit(f"Missing required columns in {in_csv}: {missing}")
 
-    x = pd.to_numeric(df["frac_pf_peak_pos"], errors="coerce").astype(float)
-    y = pd.to_numeric(df["frac_pf_peak_neg"], errors="coerce").astype(float)
-    c = pd.to_numeric(df["delta_log_alias"], errors="coerce").astype(float)
+    x = np.asarray([float(row["frac_pf_peak_pos"]) for row in rows], dtype=np.float64)
+    y = np.asarray([float(row["frac_pf_peak_neg"]) for row in rows], dtype=np.float64)
+    c = np.asarray([float(row["delta_log_alias"]) for row in rows], dtype=np.float64)
     ok = np.isfinite(x) & np.isfinite(y) & np.isfinite(c)
     if not bool(ok.any()):
         raise SystemExit(f"No finite rows found in {in_csv} for required columns.")
 
-    x_ok = x[ok].to_numpy()
-    y_ok = y[ok].to_numpy()
-    c_ok = c[ok].to_numpy()
-    scan_ok = df.loc[ok, "scan_name"].astype(str).to_numpy()
-    plane_ok = pd.to_numeric(df.loc[ok, "plane_idx"], errors="coerce").fillna(-1).astype(int).to_numpy()
+    x_ok = x[ok]
+    y_ok = y[ok]
+    c_ok = c[ok]
+    scan_ok = np.asarray([str(row["scan_name"]) for row, keep in zip(rows, ok, strict=True) if keep], dtype=object)
+    plane_ok = np.asarray([int(float(row["plane_idx"])) for row, keep in zip(rows, ok, strict=True) if keep], dtype=np.int32)
 
     x_thr = float(args.offline_thresh_h1)
     y_thr = float(args.offline_thresh_h0)
@@ -162,4 +163,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
