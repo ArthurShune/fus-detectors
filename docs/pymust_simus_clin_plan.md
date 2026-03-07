@@ -206,8 +206,9 @@ Notes:
   - selected frozen profiles are:
     - `STAP`: `Brain-SIMUS-Clin-MotionMidRobust-v0`
     - `MC-SVD`: `ef95`
-    - `Adaptive Local SVD`: `conservative_r8`
+    - `Adaptive Global SVD`: `conservative_r8`
     - `Local SVD`: `tile16_s4_ef95`
+    - `Adaptive Local SVD`: `tile12_s4_bal_r8`
     - `RPCA`: `lam0p5_it250`
     - `HOSVD`: `ef95_ds2_t32`
   - the compact summary artifacts are:
@@ -254,6 +255,16 @@ Notes:
     - `RPCA`: `lam1_it250_ds2_t32_r4`
   - only RPCA changes meaningfully under the broader search (`auc_main_vs_bg +0.0607` on held-out `seed23+24`), but it still remains far behind STAP and does not alter the ranking
   - STAP remains unchanged at mean `auc_main_vs_bg = 0.9357`, mean `auc_main_vs_nuisance = 0.9972`, mean nuisance `FPR@TPR0.5 = 0.0`
+- a stricter stage-symmetric detector-head comparison is now also in place:
+  - fixed the best residualizer config in each family from the expanded frozen-profile search
+  - then compared detector heads on the same residual: `PD`, `Kasai`, and a single frozen `STAP` head (`Brain-SIMUS-Clin-MotionMidRobust-v0`)
+  - artifacts:
+    - `reports/simus_motion/simus_symmetric_pipeline_compare_seed2122to2324.{csv,json}`
+    - `reports/simus_motion/simus_symmetric_pipeline_compare_seed2122to2324_headline.{csv,json}`
+  - on held-out corrected `seed23+24`, `Kasai` is the strongest native simple detector for every residualizer family, but the same frozen STAP head still dominates those native stacks:
+    - best native simple stack: `Local SVD (Fixed Energy) -> Kasai` with mean `auc_main_vs_bg = 0.7879`, mean `auc_main_vs_nuisance = 0.6113`, mean nuisance `FPR@TPR0.5 = 0.3075`
+    - best overall symmetric stack: `MC-SVD -> STAP` with mean `auc_main_vs_bg = 0.9381`, mean `auc_main_vs_nuisance = 0.9973`, mean nuisance `FPR@TPR0.5 = 0.00036`
+  - this is the current fairest deployment-style comparison because it keeps the residualizer fixed and swaps only detector heads on the same residual cube
 - direct real-IQ proxy telemetry still matters for realism checks:
   - Shin Fig3 (`frames 0:128`) remains effectively motion-free on this proxy: `reg_shift_p90 = 0.0038 px`
   - Gammex along-linear17 (`frames 0:5`) reaches `reg_shift_p90 = 1.33-1.93 px`
