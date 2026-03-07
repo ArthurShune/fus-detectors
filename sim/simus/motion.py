@@ -28,8 +28,8 @@ def _normalized_random_walk(T: int, *, rng: np.random.Generator, step_sigma: flo
     steps = rng.normal(scale=float(step_sigma), size=T).astype(np.float32)
     walk = np.cumsum(steps).astype(np.float32)
     walk -= float(np.mean(walk))
-    rms = float(np.sqrt(np.mean(walk * walk))) + 1e-12
-    return (walk / rms).astype(np.float32, copy=False)
+    # Keep the physical "px per pulse" scale encoded in `step_sigma`.
+    return walk.astype(np.float32, copy=False)
 
 
 def _ar1_series(T: int, *, rho: float, rng: np.random.Generator) -> np.ndarray:
