@@ -248,6 +248,7 @@ def derive_bundle_from_run(
     stap_device: str | None = None,
     mask_flow_override: np.ndarray | None = None,
     mask_bg_override: np.ndarray | None = None,
+    bundle_overrides: dict[str, Any] | None = None,
     meta_extra: dict[str, Any] | None = None,
 ) -> Path:
     icube, masks, meta = load_canonical_run(run_dir)
@@ -257,6 +258,9 @@ def derive_bundle_from_run(
     dataset_slug = slugify(dataset_name or Path(run_dir).name)
     out_root = Path(out_root)
     out_root.mkdir(parents=True, exist_ok=True)
+    bundle_kwargs = dict(profile_kwargs)
+    if bundle_overrides:
+        bundle_kwargs.update(dict(bundle_overrides))
     paths = write_acceptance_bundle_from_icube(
         out_root=out_root,
         dataset_name=dataset_slug,
@@ -271,8 +275,9 @@ def derive_bundle_from_run(
             "simus_bundle_from_dataset": True,
             "simus_stap_profile": str(stap_profile),
             "dataset_rel": "dataset",
+            "bundle_overrides": dict(bundle_overrides or {}),
             **(meta_extra or {}),
         },
-        **profile_kwargs,
+        **bundle_kwargs,
     )
     return Path(paths["meta"]).parent
