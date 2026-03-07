@@ -12,15 +12,66 @@ Typical usage:
 from __future__ import annotations
 
 import argparse
+import csv
 from pathlib import Path
+from typing import Iterable
 
-import pandas as pd
+
+def _is_truthy(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "t"}
 
 
-def _truthy_mask(series: pd.Series) -> pd.Series:
-    if series.dtype == bool:
-        return series
-    return series.astype(str).str.lower().isin(["1", "true", "yes", "y", "t"])
+def _load_rows(in_csv: Path) -> list[dict[str, object]]:
+    with in_csv.open(newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def _value_counts(rows: Iterable[dict[str, object]], key: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        value = str(row.get(key, "NA") or "NA")
+        counts[value] = counts.get(value, 0) + 1
+    return counts
+
+
+def _value_counts_pair(rows: Iterable[dict[str, object]], key_a: str, key_b: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        a = str(row.get(key_a, "NA") or "NA")
+        b = str(row.get(key_b, "NA") or "NA")
+        pair = f"{a}/{b}"
+        counts[pair] = counts.get(pair, 0) + 1
+    return counts
+
+
+def _safe_float(value: object) -> float | None:
+    try:
+        if value is None:
+            return None
+        text = str(value).strip()
+        if text == "" or text.lower() == "none":
+            return None
+        out = float(text)
+    except Exception:
+        return None
+    if out != out:
+        return None
+    return out
+
+
+def _median(values: list[float]) -> float | None:
+    if not values:
+        return None
+    values = sorted(values)
+    n = len(values)
+    mid = n // 2
+    if n % 2:
+        return float(values[mid])
+    return float(0.5 * (values[mid - 1] + values[mid]))
 
 
 def _format_float(value: float | None, digits: int = 3) -> str:
@@ -51,8 +102,8 @@ def main() -> None:
     out_png = Path(args.out_png)
     out_png.parent.mkdir(parents=True, exist_ok=True)
 
-    df = pd.read_csv(in_csv)
-    if df.empty:
+    rows = _load_rows(in_csv)
+    if not rows:
         raise SystemExit(f"Empty CSV: {in_csv}")
 
     state_col = "ka_contract_v2_state"
@@ -60,12 +111,8 @@ def main() -> None:
     applied_col = "score_ka_v2_applied"
 
     for col in [state_col, reason_col, applied_col]:
-        if col not in df.columns:
+        if col not in rows[0]:
             raise SystemExit(f"Missing required column '{col}' in {in_csv}")
-
-    df["state"] = df[state_col].fillna("NA").astype(str)
-    df["reason"] = df[reason_col].fillna("NA").astype(str)
-    df["state_reason"] = df["state"] + "/" + df["reason"]
 
     state_order = ["C0_OFF", "C1_SAFETY", "C2_UPLIFT"]
     state_colors = {
@@ -79,44 +126,42 @@ def main() -> None:
         "C2_UPLIFT": r"$\mathcal{R}_2$",
     }
 
-    state_counts = df["state"].value_counts().reindex(state_order).fillna(0).astype(int)
-    state_counts = state_counts[state_counts > 0]
+    state_counts_raw = _value_counts(rows, state_col)
+    state_counts = {k: state_counts_raw.get(k, 0) for k in state_order if state_counts_raw.get(k, 0) > 0}
 
-    sr_counts = df["state_reason"].value_counts()
-    sr_counts = sr_counts.sort_values(ascending=False).head(max(1, int(args.max_reasons)))
+    sr_counts = _value_counts_pair(rows, state_col, reason_col)
+    sr_items = sorted(sr_counts.items(), key=lambda kv: (-kv[1], kv[0]))[: max(1, int(args.max_reasons))]
 
-    applied_mask = _truthy_mask(df[applied_col])
-    df_applied = df[applied_mask].copy()
+    applied_rows = [row for row in rows if _is_truthy(row.get(applied_col))]
 
-    n_bundles = int(len(df))
-    n_applied = int(len(df_applied))
+    n_bundles = int(len(rows))
+    n_applied = int(len(applied_rows))
 
-    def _median(col: str) -> float | None:
-        if col not in df_applied.columns or df_applied.empty:
-            return None
-        val = df_applied[col].median()
-        try:
-            if pd.isna(val):
-                return None
-        except Exception:
-            pass
-        return float(val)
+    p_shrink_vals = [
+        val
+        for val in (_safe_float(row.get("ka_contract_v2_p_shrink")) for row in applied_rows)
+        if val is not None
+    ]
+    scaled_frac_vals = [
+        val
+        for val in (_safe_float(row.get("score_ka_v2_scaled_pixel_fraction")) for row in applied_rows)
+        if val is not None
+    ]
+    scale_p90_vals = [
+        val
+        for val in (_safe_float(row.get("score_ka_v2_scale_p90")) for row in applied_rows)
+        if val is not None
+    ]
+    scale_max_vals = [
+        val
+        for val in (_safe_float(row.get("score_ka_v2_scale_max")) for row in applied_rows)
+        if val is not None
+    ]
 
-    def _max(col: str) -> float | None:
-        if col not in df_applied.columns or df_applied.empty:
-            return None
-        val = df_applied[col].max()
-        try:
-            if pd.isna(val):
-                return None
-        except Exception:
-            pass
-        return float(val)
-
-    p_shrink_p50 = _median("ka_contract_v2_p_shrink")
-    scaled_frac_p50 = _median("score_ka_v2_scaled_pixel_fraction")
-    scale_p90_p50 = _median("score_ka_v2_scale_p90")
-    scale_max = _max("score_ka_v2_scale_max")
+    p_shrink_p50 = _median(p_shrink_vals)
+    scaled_frac_p50 = _median(scaled_frac_vals)
+    scale_p90_p50 = _median(scale_p90_vals)
+    scale_max = max(scale_max_vals) if scale_max_vals else None
 
     # Deferred imports (matplotlib can be slow; keep CLI help snappy).
     import matplotlib.pyplot as plt
@@ -138,9 +183,9 @@ def main() -> None:
 
     # Panel A: prior regime histogram.
     ax = axes[0]
-    xs_state = list(state_counts.index)
+    xs_state = list(state_counts.keys())
     xs = [state_short.get(x, x) for x in xs_state]
-    ys = state_counts.values
+    ys = [state_counts[x] for x in xs_state]
     colors = [state_colors.get(x, "#cccccc") for x in xs_state]
     bars = ax.bar(xs, ys, color=colors)
     ax.set_title("KA prior regime")
@@ -162,8 +207,8 @@ def main() -> None:
         rsn = rsn.replace("_", " ")
         return f"{st}/{rsn}"
 
-    ylabels = [_pretty_state_reason(x) for x in list(sr_counts.index)[::-1]]
-    yvals = list(sr_counts.values)[::-1]
+    ylabels = [_pretty_state_reason(x) for x, _ in sr_items[::-1]]
+    yvals = [count for _, count in sr_items[::-1]]
     bars = ax.barh(ylabels, yvals, color="#4c78a8")
     ax.set_xlabel("Bundle count")
     ax.set_xlim(0, max(yvals) + 1)
@@ -174,14 +219,14 @@ def main() -> None:
     ax = axes[2]
     ax.axis("off")
 
-    state_counts_all = df["state"].value_counts().to_dict()
+    state_counts_all = state_counts_raw
     c0 = int(state_counts_all.get("C0_OFF", 0))
     c1 = int(state_counts_all.get("C1_SAFETY", 0))
     c2 = int(state_counts_all.get("C2_UPLIFT", 0))
 
     risk_modes = {}
-    if n_applied > 0 and "score_ka_v2_risk_mode" in df_applied.columns:
-        risk_modes = df_applied["score_ka_v2_risk_mode"].fillna("NA").astype(str).value_counts().to_dict()
+    if n_applied > 0:
+        risk_modes = _value_counts(applied_rows, "score_ka_v2_risk_mode")
 
     lines = [
         f"Bundles: {n_bundles}",

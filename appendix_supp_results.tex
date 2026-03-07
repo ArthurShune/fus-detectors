@@ -21,6 +21,7 @@ When KA is enabled, it is shrink-only and preserves a protected do-not-penalize 
   \item Conditional-execution leakage ablation (Brain-OpenSkull): Table~\ref{tab:condstap_leakage_ablation}.
   \item Fixed-profile sensitivity sweep (Brain-OpenSkull; $\lambda$, tile size, $L_t$): Figure~\ref{fig:brain_openskull_profile_sensitivity}.
   \item Shin proxy-metric comparisons, runtime, and measured rigid-motion telemetry: Figure~\ref{fig:shin_baseline_matrix_proxy_metrics} and Figure~\ref{fig:shin_motion_telemetry}.
+  \item Corrected SIMUS/PyMUST moving-scatterer frozen-benchmark comparison: Table~\ref{tab:simus_frozen_benchmark_v1p2}.
 \end{itemize}
 
 \subsection{Full ROC curves for labeled regimes}
@@ -496,3 +497,27 @@ The Shin RatBrain Fig3 analysis is intended as an end-to-end \emph{real-IQ viabi
 Because there are no task labels and no ground-truth vessel segmentation, quantitative endpoints reported here are label-free proxies: baseline comparisons use deterministic flow/background proxy masks and report both threshold-free proxy separation (AUC) and tail-calibrated flow-proxy hit rates, while motion-sweep endpoints measure within-method consistency relative to each method's own no-motion reference and persistence of a fixed flow proxy under a matched background-proxy tail operating point.
 In addition, the ``brain-like'' motion stress test is an image-domain warp applied to beamformed IQ (rigid + depth-decaying elastic components) rather than a scatterer-level forward model; it is designed to mimic the specific high-rank, spatially varying residual-motion mismatch represented in Brain-SkullOR, not to reproduce full ultrasound physics.
 Accordingly, we interpret Shin results as evidence of (i) deterministic real-IQ ingestion and band-energy summaries, (ii) KA prior auditability and invariants (shrink-only; protected tiles unchanged), and (iii) self-consistency under controlled residual-motion corruption, while leaving ROC uplift claims to labeled regimes (Brain-* simulations) and to future raw-IQ datasets with task/landmark structure.
+
+\subsection{Corrected SIMUS/PyMUST moving-scatterer benchmark (frozen v1)}
+\label{app:simus-frozen-benchmark}
+To complement the deterministic Brain-* k-Wave pilots with a moving-scatterer forward model, we freeze a corrected SIMUS/PyMUST benchmark after fixing the SIMUS motion-scaling bug uncovered during the motion-ladder audit. The frozen protocol is intentionally symmetric across methods: using corrected actual SIMUS cases from seeds 21--22 as a development split, we select one frozen configuration per method family over the repository's exposed tuning surface, then evaluate those fixed choices on held-out corrected actual cases from seeds 23--24. STAP is scored with its pre-KA matched-subspace detector (\texttt{score\_stap\_preka}); baselines are scored with their native baseline score maps. This benchmark is intended as a moving-scatterer realism and fairness checkpoint, not a replacement for the paper's primary labeled Brain-* and Gammex claims.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{l l c c c}
+\hline
+Method & Frozen config & AUC$_{\mathrm{main/bg}}$ & AUC$_{\mathrm{main/nuis}}$ & FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$ \\
+\hline
+MC--SVD $\rightarrow$ STAP & \texttt{Brain-SIMUS-Clin-MotionMidRobust-v0} & 0.936 & 0.997 & 0.000 \\
+MC--SVD & \texttt{ef95} & 0.807 & 0.076 & 0.992 \\
+HOSVD & \texttt{ef95\_ds2\_t32} & 0.753 & 0.097 & 0.973 \\
+RPCA & \texttt{lam1\_it250\_ds2\_t32\_r4} & 0.736 & 0.064 & 0.992 \\
+Local SVD (Fixed Energy) & \texttt{tile16\_s4\_ef95} & 0.717 & 0.426 & 0.652 \\
+Adaptive Local SVD & \texttt{tile12\_s4\_bal\_r8} & 0.688 & 0.058 & 1.000 \\
+Adaptive Global SVD & \texttt{conservative\_r8} & 0.651 & 0.054 & 0.998 \\
+\hline
+\end{tabular}
+\caption{Corrected SIMUS/PyMUST moving-scatterer frozen-benchmark summary on held-out corrected actual cases (seeds 23--24). Each method family is given one frozen configuration chosen on the corrected development split (seeds 21--22) using the same selection protocol; labels match the implementation taxonomy used in the benchmark scripts. STAP is reported as the chained pipeline MC--SVD $\rightarrow$ STAP using the pre-KA matched-subspace detector score, while the non-STAP rows report the corresponding baseline score. The selected configurations and exact held-out aggregates are taken from \path{reports/simus_motion/simus_fair_profile_search_seed2122to2324_expanded_headline.csv}; per-case held-out outputs are in \path{reports/simus_motion/simus_frozen_benchmark_v1p2_eval_cases.csv}.}
+\label{tab:simus_frozen_benchmark_v1p2}
+\end{table}
