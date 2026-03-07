@@ -72,6 +72,8 @@ def test_simus_structural_pipeline_labels_reflect_baseline_chain():
     stap = MethodSpec(key="stap", baseline_type="mc_svd", run_stap=True, role="stap")
 
     assert _baseline_label("mc_svd") == "MC-SVD"
-    assert _baseline_label("svd_similarity") == "Adaptive Local SVD"
+    assert _baseline_label("svd_similarity") == "Adaptive Global SVD"
+    assert _baseline_label("local_svd") == "Local SVD (Fixed Energy)"
+    assert _baseline_label("adaptive_local_svd") == "Adaptive Local SVD"
     assert _pipeline_label(baseline) == "MC-SVD"
     assert _pipeline_label(stap) == "MC-SVD -> STAP"
