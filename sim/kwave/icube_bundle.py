@@ -70,6 +70,9 @@ def write_acceptance_bundle_from_icube(
     svd_energy_frac: float | None = 0.95,
     svd_keep_min: int | None = None,
     svd_keep_max: int | None = None,
+    svd_sim_smooth: int = 7,
+    svd_sim_kappa: float = 2.5,
+    svd_sim_r_min: int = 1,
     # Baseline RPCA parameters (used only when baseline_type=rpca).
     rpca_lambda: float | None = None,
     rpca_max_iters: int = 250,
@@ -189,6 +192,9 @@ def write_acceptance_bundle_from_icube(
         )
         pd_base, baseline_telemetry, baseline_filtered_cube = kw._baseline_pd_svd_similarity(
             reg_cube,
+            svd_sim_smooth=int(svd_sim_smooth),
+            svd_sim_kappa=float(svd_sim_kappa),
+            svd_sim_r_min=int(svd_sim_r_min),
             svd_sim_r_max=svd_rank,
             device=baseline_device,
             return_filtered_cube=True,

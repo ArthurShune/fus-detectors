@@ -184,40 +184,33 @@ Outputs:
 
 Notes:
 - structural reporting now labels the chained pipeline explicitly as `MC-SVD -> STAP`
-- the paper-tier motion ladders show that the frozen STAP chain only helps at the zero-motion anchor; once clinically meaningful motion is introduced, the advantage disappears quickly
-- calibration against the current Shin/Gammex telemetry indicates the zero-motion anchor is still the closest match to Shin, while nonzero-motion clips only move toward the Gammex phantom regime
-- failure decomposition indicates the dominant collapse is in `pd_stap` rather than `score_stap_preka`; registration and the MC-SVD upstream stage are secondary in the first nonzero-motion regime
-- the readout audit makes the mechanism explicit: `pd_stap` is constructed as `pd_base * band_fraction`, with background pixels forced back to `pd_base`; on the audited SIMUS runs `mask_h0_bg` lies entirely inside that invariant background mask, so `pd_stap` cannot improve H0-bg tail behavior and becomes nearly decorrelated from `score_stap_preka` once motion is introduced
+- the earlier motion-collapse story was driven in large part by a SIMUS random-walk scaling bug; after fixing that bug, corrected motion telemetry falls back inside the audited real-data proxy envelope and the full corrected paper-tier runs no longer show STAP collapse under motion
+- failure decomposition and the readout audit still matter: `pd_stap` is not the right headline detector score for SIMUS motion benchmarking; `score_stap_preka` / `eval_score=vnext` remains the correct STAP detection score, while `pd_stap` should be treated as a post-filter PD product
 - candidate monotone transforms of the band-fraction suppression (`-log band_fraction`, `1 / band_fraction`) recover some nuisance separation, but the strongest audited right-tail score remains `score_stap_preka`; any PD-style replacement should be introduced as a new named readout/profile rather than silently changing the existing paper path
 - structural and motion report rows now carry explicit score semantics (`PD-after-STAP` vs `STAP detector`), and the evaluation CLIs can rescore existing bundles via `--reuse-bundles` so changing `eval_score` does not trigger unnecessary recomputation
-- readout-only fusion benchmarks show that symmetric and asymmetric baseline+STAP score combinations can recover some `H1/bg` ordering, but on motion-heavy cases they do not beat the raw `STAP detector` on nuisance rejection and do not produce a clean Pareto improvement over `MC-SVD`; the remaining issue is motion robustness of the detector/profile, not just headline readout
-- named SIMUS STAP profile sweeps show that the dominant lever is temporal aperture `Lt`, not `motion_half_span_rel` alone: widening only the motion half-span (`Brain-SIMUS-Clin-MotionWide-v0`) leaves metrics unchanged, while `Lt=6` materially improves both `H1/bg` and nuisance rejection on the intra-op and moderate-motion mobile cases; the high-motion mobile case prefers a longer `Lt=12`, which means a single frozen clinical-motion profile may need to be mobile-specific or selected by a documented regime rule
-- the partial two-seed compromise search indicates that a single fixed compromise profile is already plausible: `Brain-SIMUS-Clin-MotionRobust-v0` and `Brain-SIMUS-Clin-MotionShort-v0` are effectively tied on mean utility and both materially outperform the current frozen clinical profile across the completed endpoint set
-- the full eight-case two-seed compromise search keeps the same result: `Brain-SIMUS-Clin-MotionRobust-v0` and `Brain-SIMUS-Clin-MotionShort-v0` remain effectively tied as fixed compromise profiles, while the two high-motion mobile cases consistently prefer `Brain-SIMUS-Clin-MotionMidRobust-v0`
-- simple rules on `reg_shift_rms` or `reg_shift_p90` are still not compelling enough to justify regime selection on their own, but adding `motion_disp_rms_px` changes that materially
-- a frozen two-way rule on `motion_disp_rms_px` is nearly oracle on the full two-seed held-out set:
-  - `MotionShort-v0 -> MotionMidRobust-v0` above `~2.03-2.08 px` reaches `100%` oracle recovery on held-out seed 21 and `98.2%` on held-out seed 22
-  - `MotionRobust-v0 -> MotionMidRobust-v0` above `~2.03-2.08 px` reaches `97.8%` oracle recovery on held-out seed 21 and `99.8%` on held-out seed 22
-- among bundle-side features that could plausibly exist on real data, `reg_shift_p90` is the strongest current proxy for the motion-dispersion rule:
-  - `reg_shift_p90: MotionRobust-v0 -> MotionMidRobust-v0` above `~2.194 px` reaches `97.8%` oracle recovery on held-out seed 21 and `95.7%` on held-out seed 22
-  - `reg_shift_rms` is weaker and `reg_psr_median` is clearly weaker, so `reg_shift_p90` is the only current real-data-compatible selector worth carrying forward
-- the motion-policy headline summary confirms that freezing `MotionRobust-v0` below the threshold and `MotionMidRobust-v0` above it improves the current clinical profile at both motion scales on the full two-seed set:
-  - at `motion=0.25`, mean `auc_main_vs_nuisance` improves by `+0.093` and mean nuisance FPR at matched TPR 0.5 drops by `-0.127`
-  - at `motion=1.0`, mean `auc_main_vs_nuisance` improves by `+0.092` and mean nuisance FPR at matched TPR 0.5 drops by `-0.120`
-- the deployable/measurable proxy policy is now wired into the actual motion evaluation path as `Brain-SIMUS-Clin-RegShiftP90-v0` and validated end-to-end on reused paper-tier seed21 runs:
-  - intra-op `motion=0.25` and `motion=1.0` both stay below the `reg_shift_p90=2.194` threshold and correctly select `MotionRobust-v0`
-  - mobile `motion=0.25` stays below threshold and selects `MotionRobust-v0`, while mobile `motion=1.0` crosses threshold (`reg_shift_p90=2.253`) and selects `MotionMidRobust-v0`
-- the measurable `reg_shift_p90` proxy remains weaker than the SIMUS-only motion-dispersion rule at moderate motion:
-  - at `motion=0.25`, the reg-shift policy improves mean `auc_main_vs_nuisance` by `+0.074` and reduces mean nuisance FPR at matched TPR 0.5 by `-0.101`, versus `+0.093` / `-0.127` for the motion-dispersion selector
-  - at `motion=1.0`, the reg-shift policy is slightly stronger on `auc_main_vs_bg` but slightly weaker on nuisance separation and nuisance FPR than the motion-dispersion selector
-- direct real-IQ proxy telemetry shows the current `reg_shift_p90` split is not yet clinically anchored:
-  - Shin Fig3 (`frames 0:128`) is effectively motion-free on this proxy: `reg_shift_p90 = 0.0038 px`
+- readout-only fusion benchmarks still do not produce a clean Pareto improvement over the raw STAP detector on motion cases; the best audited STAP score remains the detector output itself, not a simple baseline+STAP fusion map
+- named SIMUS STAP profile sweeps still indicate that temporal aperture `Lt` is the dominant lever, but after the corrected motion reruns the profile dependence is much narrower than first thought
+- the corrected actual paper-tier endpoint runs (`seed21` and `seed22`) show a single fixed STAP profile is plausible again: `Brain-SIMUS-Clin-MotionRobust-v0` beats the original profile on average across the eight corrected actual cases
+- the strongest fairness result comes from the explicit frozen-profile search:
+  - tune one frozen profile per method family on corrected `seed21`
+  - hold those profiles fixed on corrected `seed22`
+  - selected frozen profiles are:
+    - `STAP`: `Brain-SIMUS-Clin-MotionMidRobust-v0`
+    - `MC-SVD`: `ef95`
+    - `Adaptive Local SVD`: `conservative_r8`
+    - `Local SVD`: `tile12_s4_ef95`
+    - `RPCA`: `lam0p5_it250`
+    - `HOSVD`: `ef99_ds2_t32`
+  - on held-out corrected `seed22`, the single frozen STAP profile leads all frozen baselines:
+    - `STAP`: mean `auc_main_vs_bg = 0.9265`, mean `auc_main_vs_nuisance = 0.9986`, mean nuisance `FPR@TPR0.5 = 0.0`
+    - next-best baseline on `auc_main_vs_bg`: `HOSVD = 0.8388`
+    - next-best baseline on `auc_main_vs_nuisance`: `Local SVD = 0.2900`
+    - all frozen baselines remain at nuisance `FPR@TPR0.5 >= 0.930`
+- direct real-IQ proxy telemetry still matters for realism checks:
+  - Shin Fig3 (`frames 0:128`) remains effectively motion-free on this proxy: `reg_shift_p90 = 0.0038 px`
   - Gammex along-linear17 (`frames 0:5`) reaches `reg_shift_p90 = 1.33-1.93 px`
-  - Gammex across-linear17 (`frames 0:5`) remains much lower: `reg_shift_p90 = 0.30-0.44 px`
-  - therefore the measured real-data envelope in the audited clips is `reg_shift_p90_max = 1.9301 px`, well below the current SIMUS proxy threshold `2.194 px`
-- the corresponding SIMUS envelope check on the full seed21/22 motion-search cases shows that none of the existing clinically labeled motion endpoints are actually inside that measured real-data envelope:
-  - `8 / 8` current search cases are outside the envelope (`reg_shift_p90 = 2.008-2.253 px`)
-  - even the mildest current cases (`motion=0.25`) sit `0.091-0.265 px` above the measured real-data maximum
+  - Gammex across-linear17 (`frames 0:5`) remains lower: `reg_shift_p90 = 0.30-0.44 px`
+  - the corrected actual SIMUS endpoints used in the fair search now lie inside that measured real-data motion envelope, which is why they are the current benchmark anchor rather than the earlier over-aggressive motion ladder
   - this means further profile or policy tuning on the current motion ladder would still be tuning against an over-aggressive simulator regime rather than a clinically anchored one
 - a simulator correctness bug explained a large part of that mismatch: the slow random-walk motion term was being RMS-normalized inside `_normalized_random_walk`, so any nonzero `random_walk_sigma_px` produced nearly the same displacement magnitude regardless of the configured scale
   - this is now fixed in `sim/simus/motion.py`, and `tests/test_pymust_motion_random_walk.py` guards that larger `random_walk_sigma_px` values produce proportionally larger rigid-motion telemetry
