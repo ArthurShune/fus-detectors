@@ -87,8 +87,6 @@ def main() -> None:
         "ka_contract_v2_reason",
         "scan_group",
         "plane_idx",
-        "ka_contract_v2_p_shrink",
-        "ka_contract_v2_iqr_logw_gated",
     ]
     missing = [c for c in required if c not in rows[0].keys()]
     if missing:
@@ -172,11 +170,26 @@ def main() -> None:
     for rect, y in zip(bars, yvals):
         ax.text(y + 0.1, rect.get_y() + rect.get_height() / 2.0, f"{int(y)}", va="center")
 
-    # Panel C: coverage vs strength (runtime / label-free).
+    # Panel C: runtime label-free telemetry.
     ax = axes[1, 0]
-    ax.set_title("Coverage vs Strength (Runtime, Label-Free)")
-    x = np.asarray([_maybe_float(row.get("ka_contract_v2_p_shrink")) for row in rows], dtype=np.float64)
-    y = np.asarray([_maybe_float(row.get("ka_contract_v2_iqr_logw_gated")) for row in rows], dtype=np.float64)
+    has_shrink_panel = (
+        "ka_contract_v2_p_shrink" in rows[0]
+        and "ka_contract_v2_iqr_logw_gated" in rows[0]
+        and np.any(np.isfinite(np.asarray([_maybe_float(row.get("ka_contract_v2_p_shrink")) for row in rows], dtype=np.float64)))
+        and np.any(np.isfinite(np.asarray([_maybe_float(row.get("ka_contract_v2_iqr_logw_gated")) for row in rows], dtype=np.float64)))
+    )
+    if has_shrink_panel:
+        ax.set_title("Coverage vs Strength (Runtime, Label-Free)")
+        x = np.asarray([_maybe_float(row.get("ka_contract_v2_p_shrink")) for row in rows], dtype=np.float64)
+        y = np.asarray([_maybe_float(row.get("ka_contract_v2_iqr_logw_gated")) for row in rows], dtype=np.float64)
+        x_label = r"$p_{\mathrm{shrink}}$ (candidate gated fraction)"
+        y_label = r"$\mathrm{IQR}(\log w)\ \mathrm{on\ gated}$"
+    else:
+        ax.set_title("Runtime Telemetry (Pf Occupancy vs Alias Spread)")
+        x = np.asarray([_maybe_float(row.get("ka_contract_v2_pf_peak_flow")) for row in rows], dtype=np.float64)
+        y = np.asarray([_maybe_float(row.get("ka_contract_v2_iqr_alias_bg")) for row in rows], dtype=np.float64)
+        x_label = r"Pf peak frac on flow-proxy tiles"
+        y_label = r"$\mathrm{IQR}(m_{\mathrm{alias}})$ on bg proxy"
     # Color by state, alpha by "ok" vs other.
     for state in ["C0_OFF", "C1_SAFETY", "C2_UPLIFT"]:
         m_state = np.asarray([row["state"] == state for row in rows], dtype=bool)
@@ -196,29 +209,67 @@ def main() -> None:
             label=state_short.get(state, state),
             edgecolors="none",
         )
-    # Invariance threshold (from config; plot median if present).
-    if "ka_contract_v2_cfg_iqr_logw_min" in rows[0]:
+    # Plot the relevant threshold for the active telemetry view.
+    if has_shrink_panel and "ka_contract_v2_cfg_iqr_logw_min" in rows[0]:
         thr_vals = np.asarray([_maybe_float(row.get("ka_contract_v2_cfg_iqr_logw_min")) for row in rows], dtype=np.float64)
         thr = float(np.median(thr_vals[np.isfinite(thr_vals)])) if np.any(np.isfinite(thr_vals)) else float("nan")
         if np.isfinite(thr):
             ax.axhline(thr, color="k", linestyle="--", linewidth=1.0, alpha=0.7)
-            ax.text(0.99, thr + 0.002, f"iqr_logw_min={thr:.3f}", ha="right", va="bottom", transform=ax.get_yaxis_transform())
-    ax.set_xlabel(r"$p_{\mathrm{shrink}}$ (candidate gated fraction)")
-    ax.set_ylabel(r"$\mathrm{IQR}(\log w)\ \mathrm{on\ gated}$")
+            ax.text(
+                0.99,
+                thr + 0.002,
+                f"iqr_logw_min={thr:.3f}",
+                ha="right",
+                va="bottom",
+                transform=ax.get_yaxis_transform(),
+            )
+    elif (not has_shrink_panel) and "ka_contract_v2_cfg_alias_iqr_min" in rows[0]:
+        thr_vals = np.asarray([_maybe_float(row.get("ka_contract_v2_cfg_alias_iqr_min")) for row in rows], dtype=np.float64)
+        thr = float(np.median(thr_vals[np.isfinite(thr_vals)])) if np.any(np.isfinite(thr_vals)) else float("nan")
+        if np.isfinite(thr):
+            ax.axhline(thr, color="k", linestyle="--", linewidth=1.0, alpha=0.7)
+            ax.text(
+                0.99,
+                thr + 0.002,
+                f"alias_iqr_min={thr:.3f}",
+                ha="right",
+                va="bottom",
+                transform=ax.get_yaxis_transform(),
+            )
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
     ax.grid(True, alpha=0.25)
     ax.legend(loc="upper right", frameon=False)
 
     # Add a small text box summarizing "active penalty" stats.
     n_total = int(len(rows))
     n_enabled = int(len(rows_enabled))
-    p50_p = float(np.nanmedian(np.asarray([_maybe_float(row.get("ka_contract_v2_p_shrink")) for row in rows_enabled], dtype=np.float64))) if n_enabled else float("nan")
-    p50_iqr = float(np.nanmedian(np.asarray([_maybe_float(row.get("ka_contract_v2_iqr_logw_gated")) for row in rows_enabled], dtype=np.float64))) if n_enabled else float("nan")
-    lines = [
-        f"planes={n_total}",
-        f"penalty active (R1/R2; ok)={n_enabled}",
-        f"p_shrink p50={_format_float(p50_p)}",
-        f"iqr_logw p50={_format_float(p50_iqr)}",
-    ]
+    if has_shrink_panel:
+        p50_p = (
+            float(np.nanmedian(np.asarray([_maybe_float(row.get("ka_contract_v2_p_shrink")) for row in rows_enabled], dtype=np.float64)))
+            if n_enabled
+            else float("nan")
+        )
+        p50_iqr = (
+            float(np.nanmedian(np.asarray([_maybe_float(row.get("ka_contract_v2_iqr_logw_gated")) for row in rows_enabled], dtype=np.float64)))
+            if n_enabled
+            else float("nan")
+        )
+        lines = [
+            f"planes={n_total}",
+            f"penalty active (R1/R2; ok)={n_enabled}",
+            f"p_shrink p50={_format_float(p50_p)}",
+            f"iqr_logw p50={_format_float(p50_iqr)}",
+        ]
+    else:
+        p50_pf = float(np.nanmedian(np.asarray([_maybe_float(row.get("ka_contract_v2_pf_peak_flow")) for row in rows], dtype=np.float64)))
+        p50_alias = float(np.nanmedian(np.asarray([_maybe_float(row.get("ka_contract_v2_iqr_alias_bg")) for row in rows], dtype=np.float64)))
+        lines = [
+            f"planes={n_total}",
+            f"penalty active (R1/R2; ok)={n_enabled}",
+            f"PfPeak_flow p50={_format_float(p50_pf)}",
+            f"alias_iqr p50={_format_float(p50_alias)}",
+        ]
     ax.text(
         0.02,
         0.98,
