@@ -219,6 +219,10 @@ Notes:
   - `8 / 8` current search cases are outside the envelope (`reg_shift_p90 = 2.008-2.253 px`)
   - even the mildest current cases (`motion=0.25`) sit `0.091-0.265 px` above the measured real-data maximum
   - this means further profile or policy tuning on the current motion ladder would still be tuning against an over-aggressive simulator regime rather than a clinically anchored one
+- a simulator correctness bug explained a large part of that mismatch: the slow random-walk motion term was being RMS-normalized inside `_normalized_random_walk`, so any nonzero `random_walk_sigma_px` produced nearly the same displacement magnitude regardless of the configured scale
+  - this is now fixed in `sim/simus/motion.py`, and `tests/test_pymust_motion_random_walk.py` guards that larger `random_walk_sigma_px` values produce proportionally larger rigid-motion telemetry
+  - a cheap post-fix warp audit on existing no-motion beamformed cubes (`reports/simus_motion/simus_motion_proxy_warp_check_seed21.{csv,json}`) now puts the corrected motion ladder back inside the measured real-data `reg_shift_p90` envelope at the audited scales (`ClinIntraOp: 0.009-0.101 px`, `ClinMobile: 0.099-0.854 px`)
+  - that warp audit is only a calibration bridge because it warps beamformed IQ rather than regenerating RF, but it is strong enough to justify rerunning the key paper-tier motion endpoints on fresh post-fix datasets before considering any detector-level changes
 - the real-data bucket check is a limitation, not a confirmation: all nonzero-motion seed21 SIMUS policy cases still land nearest the Gammex phantom telemetry bucket, so the policy is currently validated as a better SIMUS regime split, not yet as a clinically grounded Shin-vs-Gammex separator
 - current evidence therefore still does not justify a detector-level algorithmic redesign; the next non-algorithmic move is to recalibrate the SIMUS motion ladder downward so that the audited cases actually populate the measured real-data envelope, and only then revisit fixed-profile vs proxy-policy comparisons:
   - SIMUS analysis policy: `motion_disp_rms_px` threshold for near-oracle benchmarking
