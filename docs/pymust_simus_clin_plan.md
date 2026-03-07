@@ -176,9 +176,11 @@ Outputs:
 - `reports/simus_motion/simus_motion_policy_headline_regshift_seed2122_full.{csv,json}`
 - `reports/simus_motion/simus_motion_ladder_intraop_paper_seed21_regshift_policy.{csv,json}`
 - `reports/simus_motion/simus_motion_ladder_mobile_paper_seed21_regshift_policy.{csv,json}`
+- `reports/simus_motion/simus_real_envelope_check_seed2122.{csv,json}`
 - `reports/simus_sanity_link/phase4_motion_ladders_seed21_{summary,table,deltas}.{json,csv}`
 - `reports/simus_sanity_link/simus_motion_policy_bucket_check_seed21.{csv,json}`
 - `reports/simus_sanity_link/simus_motion_policy_bucket_check_regshift_seed21.{csv,json}`
+- `reports/simus_sanity_link/real_motion_proxy_telemetry.{csv,json}`
 
 Notes:
 - structural reporting now labels the chained pipeline explicitly as `MC-SVD -> STAP`
@@ -208,8 +210,17 @@ Notes:
 - the measurable `reg_shift_p90` proxy remains weaker than the SIMUS-only motion-dispersion rule at moderate motion:
   - at `motion=0.25`, the reg-shift policy improves mean `auc_main_vs_nuisance` by `+0.074` and reduces mean nuisance FPR at matched TPR 0.5 by `-0.101`, versus `+0.093` / `-0.127` for the motion-dispersion selector
   - at `motion=1.0`, the reg-shift policy is slightly stronger on `auc_main_vs_bg` but slightly weaker on nuisance separation and nuisance FPR than the motion-dispersion selector
+- direct real-IQ proxy telemetry shows the current `reg_shift_p90` split is not yet clinically anchored:
+  - Shin Fig3 (`frames 0:128`) is effectively motion-free on this proxy: `reg_shift_p90 = 0.0038 px`
+  - Gammex along-linear17 (`frames 0:5`) reaches `reg_shift_p90 = 1.33-1.93 px`
+  - Gammex across-linear17 (`frames 0:5`) remains much lower: `reg_shift_p90 = 0.30-0.44 px`
+  - therefore the measured real-data envelope in the audited clips is `reg_shift_p90_max = 1.9301 px`, well below the current SIMUS proxy threshold `2.194 px`
+- the corresponding SIMUS envelope check on the full seed21/22 motion-search cases shows that none of the existing clinically labeled motion endpoints are actually inside that measured real-data envelope:
+  - `8 / 8` current search cases are outside the envelope (`reg_shift_p90 = 2.008-2.253 px`)
+  - even the mildest current cases (`motion=0.25`) sit `0.091-0.265 px` above the measured real-data maximum
+  - this means further profile or policy tuning on the current motion ladder would still be tuning against an over-aggressive simulator regime rather than a clinically anchored one
 - the real-data bucket check is a limitation, not a confirmation: all nonzero-motion seed21 SIMUS policy cases still land nearest the Gammex phantom telemetry bucket, so the policy is currently validated as a better SIMUS regime split, not yet as a clinically grounded Shin-vs-Gammex separator
-- current evidence therefore does not justify a detector-level algorithmic redesign yet; the next move is to freeze either a single compromise profile (`MotionRobust-v0`) or, more usefully, a two-stage policy:
+- current evidence therefore still does not justify a detector-level algorithmic redesign; the next non-algorithmic move is to recalibrate the SIMUS motion ladder downward so that the audited cases actually populate the measured real-data envelope, and only then revisit fixed-profile vs proxy-policy comparisons:
   - SIMUS analysis policy: `motion_disp_rms_px` threshold for near-oracle benchmarking
   - deployable/real-data proxy policy: `reg_shift_p90` threshold as the measurable approximation to that benchmark rule
 
