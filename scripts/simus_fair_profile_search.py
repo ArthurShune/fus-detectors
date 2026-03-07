@@ -113,12 +113,7 @@ def _candidate_specs() -> list[CandidateSpec]:
             )
         )
 
-    for profile in (
-        "Brain-SIMUS-Clin",
-        "Brain-SIMUS-Clin-MotionShort-v0",
-        "Brain-SIMUS-Clin-MotionRobust-v0",
-        "Brain-SIMUS-Clin-MotionMidRobust-v0",
-    ):
+    for profile in SUPPORTED_SIMUS_STAP_PROFILES:
         add(
             method_family="stap",
             config_name=profile,
@@ -128,7 +123,7 @@ def _candidate_specs() -> list[CandidateSpec]:
             stap_profile=profile,
         )
 
-    for energy in (0.85, 0.90, 0.95):
+    for energy in (0.80, 0.85, 0.90, 0.95):
         add(
             method_family="mc_svd",
             config_name=f"ef{int(round(100 * energy))}",
@@ -136,6 +131,15 @@ def _candidate_specs() -> list[CandidateSpec]:
             run_stap=False,
             role="baseline",
             override_builder=lambda shape, energy=energy: {"svd_energy_frac": float(energy)},
+        )
+    for rank in (2, 4, 6):
+        add(
+            method_family="mc_svd",
+            config_name=f"rank{rank}",
+            baseline_type="mc_svd",
+            run_stap=False,
+            role="baseline",
+            override_builder=lambda shape, rank=rank: {"svd_rank": int(rank), "svd_energy_frac": None},
         )
 
     add(
@@ -160,6 +164,19 @@ def _candidate_specs() -> list[CandidateSpec]:
     )
     add(
         method_family="svd_similarity",
+        config_name="sensitive_r8",
+        baseline_type="svd_similarity",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "svd_sim_smooth": 5,
+            "svd_sim_kappa": 2.0,
+            "svd_sim_r_min": 1,
+            "svd_rank": 8,
+        },
+    )
+    add(
+        method_family="svd_similarity",
         config_name="conservative_r8",
         baseline_type="svd_similarity",
         run_stap=False,
@@ -167,6 +184,32 @@ def _candidate_specs() -> list[CandidateSpec]:
         override_builder=lambda shape: {
             "svd_sim_smooth": 9,
             "svd_sim_kappa": 3.0,
+            "svd_sim_r_min": 1,
+            "svd_rank": 8,
+        },
+    )
+    add(
+        method_family="svd_similarity",
+        config_name="conservative_r10",
+        baseline_type="svd_similarity",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "svd_sim_smooth": 9,
+            "svd_sim_kappa": 3.0,
+            "svd_sim_r_min": 1,
+            "svd_rank": 10,
+        },
+    )
+    add(
+        method_family="svd_similarity",
+        config_name="balanced_r8",
+        baseline_type="svd_similarity",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "svd_sim_smooth": 7,
+            "svd_sim_kappa": 2.5,
             "svd_sim_r_min": 1,
             "svd_rank": 8,
         },
@@ -198,12 +241,60 @@ def _candidate_specs() -> list[CandidateSpec]:
     )
     add(
         method_family="local_svd",
+        config_name="tile8_s2_ef90",
+        baseline_type="local_svd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "tile_hw": (8, 8),
+            "tile_stride": 2,
+            "svd_energy_frac": 0.90,
+        },
+    )
+    add(
+        method_family="local_svd",
+        config_name="tile8_s3_ef95",
+        baseline_type="local_svd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "tile_hw": (8, 8),
+            "tile_stride": 3,
+            "svd_energy_frac": 0.95,
+        },
+    )
+    add(
+        method_family="local_svd",
         config_name="tile12_s4_ef95",
         baseline_type="local_svd",
         run_stap=False,
         role="baseline",
         override_builder=lambda shape: {
             "tile_hw": (12, 12),
+            "tile_stride": 4,
+            "svd_energy_frac": 0.95,
+        },
+    )
+    add(
+        method_family="local_svd",
+        config_name="tile12_s3_ef95",
+        baseline_type="local_svd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "tile_hw": (12, 12),
+            "tile_stride": 3,
+            "svd_energy_frac": 0.95,
+        },
+    )
+    add(
+        method_family="local_svd",
+        config_name="tile16_s4_ef95",
+        baseline_type="local_svd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "tile_hw": (16, 16),
             "tile_stride": 4,
             "svd_energy_frac": 0.95,
         },
@@ -217,6 +308,17 @@ def _candidate_specs() -> list[CandidateSpec]:
         role="baseline",
         override_builder=lambda shape: {
             "rpca_lambda": _rpca_default_lambda(shape),
+            "rpca_max_iters": 250,
+        },
+    )
+    add(
+        method_family="rpca",
+        config_name="lam0p25_it250",
+        baseline_type="rpca",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "rpca_lambda": 0.25 * _rpca_default_lambda(shape),
             "rpca_max_iters": 250,
         },
     )
@@ -275,6 +377,42 @@ def _candidate_specs() -> list[CandidateSpec]:
         role="baseline",
         override_builder=lambda shape: {
             "hosvd_energy_fracs": (0.99, 0.99, 0.99),
+            "hosvd_spatial_downsample": 2,
+            "hosvd_t_sub": min(32, int(shape[0])),
+        },
+    )
+    add(
+        method_family="hosvd",
+        config_name="ef99_ds2_t64",
+        baseline_type="hosvd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "hosvd_energy_fracs": (0.99, 0.99, 0.99),
+            "hosvd_spatial_downsample": 2,
+            "hosvd_t_sub": min(64, int(shape[0])),
+        },
+    )
+    add(
+        method_family="hosvd",
+        config_name="ef99_ds1_full",
+        baseline_type="hosvd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "hosvd_energy_fracs": (0.99, 0.99, 0.99),
+            "hosvd_spatial_downsample": 1,
+            "hosvd_t_sub": None,
+        },
+    )
+    add(
+        method_family="hosvd",
+        config_name="ef95_ds2_t32",
+        baseline_type="hosvd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "hosvd_energy_fracs": (0.95, 0.95, 0.95),
             "hosvd_spatial_downsample": 2,
             "hosvd_t_sub": min(32, int(shape[0])),
         },
