@@ -191,21 +191,26 @@ Notes:
 - readout-only fusion benchmarks still do not produce a clean Pareto improvement over the raw STAP detector on motion cases; the best audited STAP score remains the detector output itself, not a simple baseline+STAP fusion map
 - named SIMUS STAP profile sweeps still indicate that temporal aperture `Lt` is the dominant lever, but after the corrected motion reruns the profile dependence is much narrower than first thought
 - the corrected actual paper-tier endpoint runs (`seed21` and `seed22`) show a single fixed STAP profile is plausible again: `Brain-SIMUS-Clin-MotionRobust-v0` beats the original profile on average across the eight corrected actual cases
-- the strongest fairness result comes from the explicit frozen-profile search:
-  - tune one frozen profile per method family on corrected `seed21`
-  - hold those profiles fixed on corrected `seed22`
+- the strongest fairness result now comes from the broader explicit frozen-profile search:
+  - tune one frozen profile per method family on corrected `seed21+22`
+  - hold those profiles fixed on corrected `seed23+24`
   - selected frozen profiles are:
     - `STAP`: `Brain-SIMUS-Clin-MotionMidRobust-v0`
     - `MC-SVD`: `ef95`
     - `Adaptive Local SVD`: `conservative_r8`
-    - `Local SVD`: `tile12_s4_ef95`
+    - `Local SVD`: `tile16_s4_ef95`
     - `RPCA`: `lam0p5_it250`
-    - `HOSVD`: `ef99_ds2_t32`
-  - on held-out corrected `seed22`, the single frozen STAP profile leads all frozen baselines:
-    - `STAP`: mean `auc_main_vs_bg = 0.9265`, mean `auc_main_vs_nuisance = 0.9986`, mean nuisance `FPR@TPR0.5 = 0.0`
-    - next-best baseline on `auc_main_vs_bg`: `HOSVD = 0.8388`
-    - next-best baseline on `auc_main_vs_nuisance`: `Local SVD = 0.2900`
-    - all frozen baselines remain at nuisance `FPR@TPR0.5 >= 0.930`
+    - `HOSVD`: `ef95_ds2_t32`
+  - the compact summary artifacts are:
+    - `reports/simus_motion/simus_fair_profile_search_seed2122to2324_headline.{csv,json}`
+    - `reports/simus_motion/simus_frozen_benchmark_v1_eval_cases.{csv,json}`
+  - on held-out corrected `seed23+24`, the single frozen STAP profile still leads all frozen baselines:
+    - `STAP`: mean `auc_main_vs_bg = 0.9357`, mean `auc_main_vs_nuisance = 0.9972`, mean nuisance `FPR@TPR0.5 = 0.0`
+    - next-best baseline on `auc_main_vs_bg`: `MC-SVD = 0.8065`
+    - next-best baseline on `auc_main_vs_nuisance`: `Local SVD = 0.4259`
+    - all frozen baselines remain at nuisance `FPR@TPR0.5 >= 0.652`
+  - the earlier `seed21 -> seed22` fair-search artifacts remain useful as the narrower intermediate checkpoint:
+    - `reports/simus_motion/simus_fair_profile_search_seed21to22_broad.{csv,json}`
 - direct real-IQ proxy telemetry still matters for realism checks:
   - Shin Fig3 (`frames 0:128`) remains effectively motion-free on this proxy: `reg_shift_p90 = 0.0038 px`
   - Gammex along-linear17 (`frames 0:5`) reaches `reg_shift_p90 = 1.33-1.93 px`
