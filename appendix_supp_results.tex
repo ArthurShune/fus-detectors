@@ -21,7 +21,7 @@ When KA is enabled, it is shrink-only and preserves a protected do-not-penalize 
   \item Conditional-execution leakage ablation (Brain-OpenSkull): Table~\ref{tab:condstap_leakage_ablation}.
   \item Fixed-profile sensitivity sweep (Brain-OpenSkull; $\lambda$, tile size, $L_t$): Figure~\ref{fig:brain_openskull_profile_sensitivity}.
   \item Shin proxy-metric comparisons, runtime, and measured rigid-motion telemetry: Figure~\ref{fig:shin_baseline_matrix_proxy_metrics} and Figure~\ref{fig:shin_motion_telemetry}.
-  \item Corrected SIMUS/PyMUST moving-scatterer frozen-benchmark comparison: Table~\ref{tab:simus_frozen_benchmark_v1p2}.
+  \item Corrected SIMUS/PyMUST moving-scatterer frozen-benchmark comparison and stage-symmetric detector-head audit: Tables~\ref{tab:simus_frozen_benchmark_v1p2} and \ref{tab:simus_symmetric_pipeline_v1p2}.
 \end{itemize}
 
 \subsection{Full ROC curves for labeled regimes}
@@ -502,6 +502,8 @@ Accordingly, we interpret Shin results as evidence of (i) deterministic real-IQ 
 \label{app:simus-frozen-benchmark}
 To complement the deterministic Brain-* k-Wave pilots with a moving-scatterer forward model, we freeze a corrected SIMUS/PyMUST benchmark after fixing the SIMUS motion-scaling bug uncovered during the motion-ladder audit. The frozen protocol is intentionally symmetric across methods: using corrected actual SIMUS cases from seeds 21--22 as a development split, we select one frozen configuration per method family over the repository's exposed tuning surface, then evaluate those fixed choices on held-out corrected actual cases from seeds 23--24. STAP is scored with its pre-KA matched-subspace detector (\texttt{score\_stap\_preka}); baselines are scored with their native baseline score maps. This benchmark is intended as a moving-scatterer realism and fairness checkpoint, not a replacement for the paper's primary labeled Brain-* and Gammex claims.
 
+For a broader neuroscience audience, it is helpful to separate the pipeline into two roles. First, each \emph{residualizer} suppresses tissue/clutter and passes a residual slow-time cube to a detector head. In our benchmark these residualizers are the conventional global SVD family (MC--SVD and the adaptive-global Baranger-style similarity cutoff \cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018}), Song-style local SVD with overlap-add reconstruction \cite{SongBlockwiseLocal2017}, the stricter adaptive-local hybrid that combines Song-style localization with Baranger-style tilewise rank selection \cite{SongBlockwiseLocal2017,BarangerAdaptiveSVD2018}, RPCA/PCP \cite{CandesRPCA}, and tensor HOSVD clutter suppression \cite{OzgunByramApertureHOSVD2021,HuangAdaptiveHOSVD2024}. Second, a \emph{detector head} scores that residual cube. The native simple detector heads are power Doppler and Kasai lag-1 autocorrelation magnitude \cite{KasaiAutocorrelation1985}; the proposed detector head is the matched-subspace STAP score \cite{GuerciSTAPBook2003,WardSTAPTutorial}. Table~\ref{tab:simus_frozen_benchmark_v1p2} freezes one full pipeline per method family. Table~\ref{tab:simus_symmetric_pipeline_v1p2} then asks the stricter fairness question: if we hold the residualizer fixed and swap only the detector head on the \emph{same} residual cube, does STAP still help?
+
 \begin{table}[t]
 \centering
 \small
@@ -520,4 +522,26 @@ Adaptive Global SVD & \texttt{conservative\_r8} & 0.651 & 0.054 & 0.998 \\
 \end{tabular}
 \caption{Corrected SIMUS/PyMUST moving-scatterer frozen-benchmark summary on held-out corrected actual cases (seeds 23--24). Each method family is given one frozen configuration chosen on the corrected development split (seeds 21--22) using the same selection protocol; labels match the implementation taxonomy used in the benchmark scripts. STAP is reported as the chained pipeline MC--SVD $\rightarrow$ STAP using the pre-KA matched-subspace detector score, while the non-STAP rows report the corresponding baseline score. The selected configurations and exact held-out aggregates are taken from \path{reports/simus_motion/simus_fair_profile_search_seed2122to2324_expanded_headline.csv}; per-case held-out outputs are in \path{reports/simus_motion/simus_frozen_benchmark_v1p2_eval_cases.csv}.}
 \label{tab:simus_frozen_benchmark_v1p2}
+\end{table}
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{3pt}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{l l l c c c l c c c}
+\hline
+Residualizer & Frozen config & Native head & AUC$_{\mathrm{main/bg}}$ & AUC$_{\mathrm{main/nuis}}$ & FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$ & STAP head & AUC$_{\mathrm{main/bg}}$ & AUC$_{\mathrm{main/nuis}}$ & FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$ \\
+\hline
+MC--SVD & \texttt{ef95} & Kasai & 0.865 & 0.126 & 0.950 & \texttt{MotionMidRobust-v0} & 0.938 & 0.997 & 0.000 \\
+Adaptive Global SVD & \texttt{conservative\_r8} & Kasai & 0.694 & 0.172 & 0.896 & \texttt{MotionMidRobust-v0} & 0.829 & 0.991 & 0.000 \\
+Local SVD (Fixed Energy) & \texttt{tile16\_s4\_ef95} & Kasai & 0.788 & 0.611 & 0.308 & \texttt{MotionMidRobust-v0} & 0.764 & 0.997 & 0.000 \\
+Adaptive Local SVD & \texttt{tile12\_s4\_bal\_r8} & Kasai & 0.732 & 0.148 & 0.959 & \texttt{MotionMidRobust-v0} & 0.803 & 0.993 & 0.001 \\
+RPCA & \texttt{lam1\_it250\_ds2\_t32\_r4} & Kasai & 0.777 & 0.163 & 0.916 & \texttt{MotionMidRobust-v0} & 0.898 & 1.000 & 0.000 \\
+HOSVD & \texttt{ef95\_ds2\_t32} & Kasai & 0.800 & 0.342 & 0.729 & \texttt{MotionMidRobust-v0} & 0.891 & 1.000 & 0.000 \\
+\hline
+\end{tabular}%
+}
+\caption{Stage-symmetric detector-head audit on the same corrected SIMUS/PyMUST held-out cases (seeds 23--24). Each residualizer is frozen to the configuration selected on the corrected development split (seeds 21--22). The ``native head'' is the better of PD and Kasai, chosen on that same development split; in this benchmark Kasai is selected for every residualizer family. The STAP column applies the \emph{same single frozen STAP detector head} (\texttt{Brain-SIMUS-Clin-MotionMidRobust-v0}) to the same residual cube, rather than changing the upstream residualizer. This is the strict detector-head fairness audit: it gives conventional clutter filters their strongest simple Doppler head while asking whether the matched-subspace STAP detector still improves separation on the identical residual. In five of six residualizer families STAP improves both AUC measures and essentially eliminates nuisance-tail activation; for the fixed-energy local SVD residual, the native Kasai head retains slightly higher AUC$_{\mathrm{main/bg}}$, but STAP still sharply improves nuisance separation (AUC$_{\mathrm{main/nuis}}$ 0.611$\rightarrow$0.997, nuisance FPR 0.308$\rightarrow$0.000). Source artifacts are \path{reports/simus_motion/simus_symmetric_pipeline_compare_seed2122to2324_headline.csv} and \path{reports/simus_motion/simus_symmetric_pipeline_compare_seed2122to2324.csv}.}
+\label{tab:simus_symmetric_pipeline_v1p2}
 \end{table}
