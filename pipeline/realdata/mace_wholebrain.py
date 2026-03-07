@@ -107,6 +107,40 @@ def load_mace_scan(scan_path: Path) -> MaceScan:
     )
 
 
+def load_mace_anatomy_scan(root: Path | None = None) -> MaceScan:
+    """
+    Load the anatomical reference volume (`scan_anatomy.mat`) as a pseudo-scan.
+
+    The anatomy file is a 3-D structural volume rather than a time series, so we
+    expose it through the same `MaceScan` surface with a singleton time axis.
+    This is sufficient for alignment sanity figures that only need scan-space
+    imagery and plane geometry.
+    """
+
+    base = mace_data_root() if root is None else root
+    path = base / "scan_anatomy.mat"
+    mat = sio.loadmat(path, squeeze_me=True, struct_as_record=False)
+    if "anatomic" not in mat:
+        raise KeyError(f"Expected 'anatomic' in {path.name}, found keys={list(mat.keys())}")
+    anatomic = mat["anatomic"]
+    data = np.asarray(anatomic.Data)
+    if data.ndim != 3:
+        raise ValueError(f"Expected 3-D anatomy Data in {path.name}, got shape {data.shape}")
+    voxel_size = np.asarray(anatomic.VoxelSize, dtype=np.float64)
+    planes = np.asarray(anatomic.Planes, dtype=np.float64)
+    if voxel_size.shape != (3,):
+        raise ValueError(f"Unexpected voxel_size shape {voxel_size.shape} in {path.name}")
+    dy, dx, dz = voxel_size.tolist()
+    pd_T_H_W_Z = np.expand_dims(data.astype(np.float32, copy=False), axis=0)
+    return MaceScan(
+        name=path.stem,
+        pd=pd_T_H_W_Z,
+        dt=0.0,
+        voxel_size_um=(float(dy), float(dx), float(dz)),
+        planes_mm=planes,
+    )
+
+
 def find_mace_scans(root: Path | None = None) -> List[Path]:
     """
     Enumerate all `scan*.mat` files under the Macé dataset root.

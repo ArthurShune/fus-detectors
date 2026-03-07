@@ -14,14 +14,31 @@ and writes a paper-ready 2-panel figure:
 from __future__ import annotations
 
 import argparse
+import csv
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 
-def _summarize(df: pd.DataFrame, col: str) -> tuple[float, float, float]:
-    vals = pd.to_numeric(df[col], errors="coerce").to_numpy(dtype=np.float64, copy=False)
+def _rows_for_method(rows: list[dict[str, str]], method_key: str) -> list[dict[str, str]]:
+    return [row for row in rows if str(row.get("method_key", "")).strip() == method_key]
+
+
+def _numeric_values(rows: list[dict[str, str]], col: str) -> np.ndarray:
+    vals: list[float] = []
+    for row in rows:
+        raw = row.get(col, "")
+        try:
+            vals.append(float(raw))
+        except (TypeError, ValueError):
+            continue
+    if not vals:
+        return np.asarray([], dtype=np.float64)
+    return np.asarray(vals, dtype=np.float64)
+
+
+def _summarize(rows: list[dict[str, str]], col: str) -> tuple[float, float, float]:
+    vals = _numeric_values(rows, col)
     vals = vals[np.isfinite(vals)]
     if vals.size == 0:
         return float("nan"), float("nan"), float("nan")
@@ -53,9 +70,11 @@ def main() -> None:
     out_pdf = Path(args.out_pdf)
     out_pdf.parent.mkdir(parents=True, exist_ok=True)
 
-    df = pd.read_csv(in_csv)
-    if df.empty:
+    with in_csv.open("r", newline="") as f:
+        rows = list(csv.DictReader(f))
+    if not rows:
         raise SystemExit(f"Empty CSV: {in_csv}")
+    columns = set(rows[0].keys())
 
     # Method order + labels (paper-facing).
     methods = [
@@ -74,9 +93,9 @@ def main() -> None:
     missing_cols: list[str] = []
     for tag in alpha_tags:
         col = f"hit_flow_{tag}"
-        if col not in df.columns:
+        if col not in columns:
             missing_cols.append(col)
-    if "auc_flow_vs_bg" not in df.columns:
+    if "auc_flow_vs_bg" not in columns:
         missing_cols.append("auc_flow_vs_bg")
     if missing_cols:
         raise SystemExit(f"Missing required columns in {in_csv}: {missing_cols}")
@@ -112,8 +131,8 @@ def main() -> None:
 
     # (A) hit_flow vs alpha
     for key, label in methods:
-        sub = df.loc[df["method_key"] == key].copy()
-        if sub.empty:
+        sub = _rows_for_method(rows, key)
+        if not sub:
             continue
         med: list[float] = []
         q25: list[float] = []
@@ -141,8 +160,8 @@ def main() -> None:
     auc_data: list[np.ndarray] = []
     auc_labels: list[str] = []
     for key, label in methods:
-        sub = df.loc[df["method_key"] == key]
-        vals = pd.to_numeric(sub["auc_flow_vs_bg"], errors="coerce").to_numpy(dtype=np.float64, copy=False)
+        sub = _rows_for_method(rows, key)
+        vals = _numeric_values(sub, "auc_flow_vs_bg")
         vals = vals[np.isfinite(vals)]
         if vals.size == 0:
             continue
@@ -169,18 +188,29 @@ def main() -> None:
     ax1.grid(True, axis="y", alpha=0.3)
 
     # (C) Runtime (total time per scenario for that method).
-    if "baseline_ms" in df.columns and "stap_total_ms" in df.columns:
+    if "baseline_ms" in columns and "stap_total_ms" in columns:
         rt_data: list[np.ndarray] = []
         rt_labels: list[str] = []
         for key, label in methods:
-            sub = df.loc[df["method_key"] == key].copy()
-            if sub.empty:
+            sub = _rows_for_method(rows, key)
+            if not sub:
                 continue
-            b = pd.to_numeric(sub["baseline_ms"], errors="coerce").to_numpy(dtype=np.float64, copy=False)
-            s = pd.to_numeric(sub["stap_total_ms"], errors="coerce").to_numpy(dtype=np.float64, copy=False)
-            b = np.where(np.isfinite(b), b, 0.0)
-            s = np.where(np.isfinite(s), s, 0.0)
-            tot_s = (b + s) / 1000.0
+            totals_ms: list[float] = []
+            for row in sub:
+                total_ms = 0.0
+                saw_value = False
+                for col in ("baseline_ms", "stap_total_ms"):
+                    raw = row.get(col, "")
+                    try:
+                        val = float(raw)
+                    except (TypeError, ValueError):
+                        continue
+                    if np.isfinite(val):
+                        total_ms += val
+                        saw_value = True
+                if saw_value:
+                    totals_ms.append(total_ms)
+            tot_s = np.asarray(totals_ms, dtype=np.float64) / 1000.0
             tot_s = tot_s[np.isfinite(tot_s)]
             if tot_s.size == 0:
                 continue
@@ -206,9 +236,10 @@ def main() -> None:
         ax2.grid(True, axis="y", alpha=0.3)
 
     # Small note: finite-sample tail quantization at strict alphas.
-    if "n_bg" in df.columns:
+    if "n_bg" in columns:
         try:
-            n_bg = pd.to_numeric(df.loc[df["method_key"] == methods[0][0], "n_bg"], errors="coerce").median()
+            n_bg_vals = _numeric_values(_rows_for_method(rows, methods[0][0]), "n_bg")
+            n_bg = float(np.median(n_bg_vals)) if n_bg_vals.size else float("nan")
             if np.isfinite(n_bg) and float(n_bg) > 0:
                 ax0.text(
                     0.98,

@@ -1405,11 +1405,11 @@ def _default_artifacts() -> list[ArtifactInfo]:
             outputs=["figs/paper/mace_atlas_overlay.png"],
             commands=[
                 "PYTHONPATH=. python scripts/mace_atlas_overlay_fig.py \\",
-                "  --scan-name scan1 \\",
+                "  --scan-name scan_anatomy \\",
                 "  --plane-indices 5 10 15 \\",
                 "  --out-png figs/paper/mace_atlas_overlay.png",
             ],
-            notes="Overlays atlas ROIs and atlas.Vascular contours on mean PD for representative planes (sanity check of Transformation.mat alignment).",
+            notes="Overlays atlas ROIs and atlas.Vascular contours on the anatomical reference volume for representative planes (sanity check of Transformation.mat alignment).",
         ),
         ArtifactInfo(
             name="Telemetry regime comparison (sim vs real; contract-v2 scalars)",

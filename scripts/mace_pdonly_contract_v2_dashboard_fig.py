@@ -16,21 +16,26 @@ The panel explicitly separates:
 from __future__ import annotations
 
 import argparse
+import csv
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 
 def _format_float(value: float | None, digits: int = 3) -> str:
     if value is None:
         return "NA"
-    try:
-        if pd.isna(value):
-            return "NA"
-    except Exception:
-        pass
+    if not np.isfinite(float(value)):
+        return "NA"
     return f"{float(value):.{digits}f}"
+
+
+def _maybe_float(value: str | None) -> float:
+    try:
+        return float(value) if value is not None else float("nan")
+    except (TypeError, ValueError):
+        return float("nan")
 
 
 def main() -> None:
@@ -72,8 +77,9 @@ def main() -> None:
     out_png = Path(args.out_png)
     out_png.parent.mkdir(parents=True, exist_ok=True)
 
-    df = pd.read_csv(in_csv)
-    if df.empty:
+    with in_csv.open("r", newline="") as f:
+        rows = list(csv.DictReader(f))
+    if not rows:
         raise SystemExit(f"Empty CSV: {in_csv}")
 
     required = [
@@ -84,13 +90,14 @@ def main() -> None:
         "ka_contract_v2_p_shrink",
         "ka_contract_v2_iqr_logw_gated",
     ]
-    missing = [c for c in required if c not in df.columns]
+    missing = [c for c in required if c not in rows[0].keys()]
     if missing:
         raise SystemExit(f"Missing required columns in {in_csv}: {missing}")
 
-    df["state"] = df["ka_contract_v2_state"].fillna("NA").astype(str)
-    df["reason"] = df["ka_contract_v2_reason"].fillna("NA").astype(str)
-    df["state_reason"] = df["state"] + "/" + df["reason"]
+    for row in rows:
+        row["state"] = str(row.get("ka_contract_v2_state") or "NA")
+        row["reason"] = str(row.get("ka_contract_v2_reason") or "NA")
+        row["state_reason"] = row["state"] + "/" + row["reason"]
 
     state_order = ["C0_OFF", "C1_SAFETY", "C2_UPLIFT"]
     state_colors = {
@@ -104,15 +111,14 @@ def main() -> None:
         "C2_UPLIFT": r"$\mathcal{R}_2$",
     }
 
-    state_counts = df["state"].value_counts().reindex(state_order).fillna(0).astype(int)
-    state_counts = state_counts[state_counts > 0]
+    state_counter = Counter(row["state"] for row in rows)
+    state_counts = [(state, int(state_counter.get(state, 0))) for state in state_order if int(state_counter.get(state, 0)) > 0]
 
-    sr_counts = df["state_reason"].value_counts()
-    sr_counts = sr_counts.sort_values(ascending=False).head(max(1, int(args.max_reasons)))
+    sr_counts = Counter(row["state_reason"] for row in rows)
+    sr_counts_sorted = sorted(sr_counts.items(), key=lambda kv: (-kv[1], kv[0]))[: max(1, int(args.max_reasons))]
 
     # "Enabled" here means contract state ok (C1 or C2). Phase 2 is telemetry-only.
-    enabled_mask = df["state"].isin(["C1_SAFETY", "C2_UPLIFT"]) & (df["reason"] == "ok")
-    df_enabled = df[enabled_mask].copy()
+    rows_enabled = [row for row in rows if row["state"] in {"C1_SAFETY", "C2_UPLIFT"} and row["reason"] == "ok"]
 
     # Deferred imports (matplotlib can be slow).
     import matplotlib.pyplot as plt
@@ -134,9 +140,9 @@ def main() -> None:
 
     # Panel A: prior regime histogram (runtime / label-free).
     ax = axes[0, 0]
-    xs_state = list(state_counts.index)
+    xs_state = [state for state, _ in state_counts]
     xs = [state_short.get(x, x) for x in xs_state]
-    ys = state_counts.values
+    ys = [count for _, count in state_counts]
     colors = [state_colors.get(x, "#cccccc") for x in xs_state]
     bars = ax.bar(xs, ys, color=colors)
     ax.set_title("PD-only prior regime (Runtime, Label-Free)")
@@ -158,8 +164,8 @@ def main() -> None:
         rsn = rsn.replace("_", " ")
         return f"{st}/{rsn}"
 
-    ylabels = [_pretty_state_reason(x) for x in list(sr_counts.index)[::-1]]
-    yvals = list(sr_counts.values)[::-1]
+    ylabels = [_pretty_state_reason(x) for x, _ in sr_counts_sorted[::-1]]
+    yvals = [y for _, y in sr_counts_sorted[::-1]]
     bars = ax.barh(ylabels, yvals, color="#4c78a8")
     ax.set_xlabel("Plane count")
     ax.set_xlim(0, max(yvals) + 2)
@@ -169,14 +175,18 @@ def main() -> None:
     # Panel C: coverage vs strength (runtime / label-free).
     ax = axes[1, 0]
     ax.set_title("Coverage vs Strength (Runtime, Label-Free)")
-    x = df["ka_contract_v2_p_shrink"].astype(float)
-    y = df["ka_contract_v2_iqr_logw_gated"].astype(float)
+    x = np.asarray([_maybe_float(row.get("ka_contract_v2_p_shrink")) for row in rows], dtype=np.float64)
+    y = np.asarray([_maybe_float(row.get("ka_contract_v2_iqr_logw_gated")) for row in rows], dtype=np.float64)
     # Color by state, alpha by "ok" vs other.
     for state in ["C0_OFF", "C1_SAFETY", "C2_UPLIFT"]:
-        m_state = df["state"] == state
-        if not m_state.any():
+        m_state = np.asarray([row["state"] == state for row in rows], dtype=bool)
+        if not np.any(m_state):
             continue
-        alpha = np.where(df.loc[m_state, "reason"].astype(str).values == "ok", 0.8, 0.4)
+        alpha = np.where(
+            np.asarray([rows[i]["reason"] == "ok" for i in np.where(m_state)[0]], dtype=bool),
+            0.8,
+            0.4,
+        )
         ax.scatter(
             x[m_state],
             y[m_state],
@@ -187,8 +197,9 @@ def main() -> None:
             edgecolors="none",
         )
     # Invariance threshold (from config; plot median if present).
-    if "ka_contract_v2_cfg_iqr_logw_min" in df.columns:
-        thr = float(pd.to_numeric(df["ka_contract_v2_cfg_iqr_logw_min"], errors="coerce").median())
+    if "ka_contract_v2_cfg_iqr_logw_min" in rows[0]:
+        thr_vals = np.asarray([_maybe_float(row.get("ka_contract_v2_cfg_iqr_logw_min")) for row in rows], dtype=np.float64)
+        thr = float(np.median(thr_vals[np.isfinite(thr_vals)])) if np.any(np.isfinite(thr_vals)) else float("nan")
         if np.isfinite(thr):
             ax.axhline(thr, color="k", linestyle="--", linewidth=1.0, alpha=0.7)
             ax.text(0.99, thr + 0.002, f"iqr_logw_min={thr:.3f}", ha="right", va="bottom", transform=ax.get_yaxis_transform())
@@ -198,10 +209,10 @@ def main() -> None:
     ax.legend(loc="upper right", frameon=False)
 
     # Add a small text box summarizing "active penalty" stats.
-    n_total = int(len(df))
-    n_enabled = int(len(df_enabled))
-    p50_p = float(np.nanmedian(df_enabled["ka_contract_v2_p_shrink"])) if n_enabled else float("nan")
-    p50_iqr = float(np.nanmedian(df_enabled["ka_contract_v2_iqr_logw_gated"])) if n_enabled else float("nan")
+    n_total = int(len(rows))
+    n_enabled = int(len(rows_enabled))
+    p50_p = float(np.nanmedian(np.asarray([_maybe_float(row.get("ka_contract_v2_p_shrink")) for row in rows_enabled], dtype=np.float64))) if n_enabled else float("nan")
+    p50_iqr = float(np.nanmedian(np.asarray([_maybe_float(row.get("ka_contract_v2_iqr_logw_gated")) for row in rows_enabled], dtype=np.float64))) if n_enabled else float("nan")
     lines = [
         f"planes={n_total}",
         f"penalty active (R1/R2; ok)={n_enabled}",
@@ -224,10 +235,10 @@ def main() -> None:
     ax = axes[1, 1]
     ax.set_title("Offline (Atlas-Labeled, Descriptive Only)")
     required_off = ["offline_pf_peak_frac_H1", "offline_pf_peak_frac_H0", "offline_delta_logEaEf"]
-    if all(c in df.columns for c in required_off):
-        xh1 = pd.to_numeric(df["offline_pf_peak_frac_H1"], errors="coerce")
-        xh0 = pd.to_numeric(df["offline_pf_peak_frac_H0"], errors="coerce")
-        cval = pd.to_numeric(df["offline_delta_logEaEf"], errors="coerce")
+    if all(c in rows[0] for c in required_off):
+        xh1 = np.asarray([_maybe_float(row.get("offline_pf_peak_frac_H1")) for row in rows], dtype=np.float64)
+        xh0 = np.asarray([_maybe_float(row.get("offline_pf_peak_frac_H0")) for row in rows], dtype=np.float64)
+        cval = np.asarray([_maybe_float(row.get("offline_delta_logEaEf")) for row in rows], dtype=np.float64)
         ok = np.isfinite(xh1) & np.isfinite(xh0) & np.isfinite(cval)
         if ok.any():
             sc = ax.scatter(
