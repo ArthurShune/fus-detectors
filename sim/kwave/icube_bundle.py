@@ -34,6 +34,7 @@ def write_acceptance_bundle_from_icube(
     seed: int = 0,
     tile_hw: tuple[int, int] = (8, 8),
     tile_stride: int = 3,
+    local_svd_hann: bool = True,
     Lt: int = 8,
     diag_load: float = 0.07,
     stap_cov_train_trim_q: float = 0.0,
@@ -76,6 +77,10 @@ def write_acceptance_bundle_from_icube(
     # Baseline RPCA parameters (used only when baseline_type=rpca).
     rpca_lambda: float | None = None,
     rpca_max_iters: int = 250,
+    rpca_spatial_downsample: int | None = None,
+    rpca_t_sub: int | None = None,
+    rpca_tol: float = 1e-4,
+    rpca_rank_k_max: int = 8,
     # Baseline HOSVD parameters (used only when baseline_type=hosvd).
     hosvd_ranks: tuple[int, int, int] | None = None,
     hosvd_energy_fracs: tuple[float, float, float] | None = (0.99, 0.99, 0.99),
@@ -221,7 +226,7 @@ def write_acceptance_bundle_from_icube(
             tile_hw=tile_hw,
             stride=int(tile_stride),
             svd_energy_frac=float(svd_energy_frac) if svd_energy_frac is not None else 0.90,
-            hann=True,
+            hann=bool(local_svd_hann),
             device=baseline_device,
             return_filtered_cube=True,
         )
@@ -250,7 +255,7 @@ def write_acceptance_bundle_from_icube(
             svd_sim_kappa=float(svd_sim_kappa),
             svd_sim_r_min=int(svd_sim_r_min),
             svd_sim_r_max=svd_rank,
-            hann=True,
+            hann=bool(local_svd_hann),
             device=baseline_device,
             return_filtered_cube=True,
         )
@@ -307,6 +312,10 @@ def write_acceptance_bundle_from_icube(
                 reg_cube,
                 lambda_=rpca_lambda,
                 max_iters=int(rpca_max_iters),
+                spatial_downsample=rpca_spatial_downsample,
+                t_sub=rpca_t_sub,
+                tol=float(rpca_tol),
+                rank_k_max=int(rpca_rank_k_max),
                 return_filtered_cube=True,
             )
         else:

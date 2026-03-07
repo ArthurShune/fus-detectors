@@ -299,6 +299,45 @@ def _candidate_specs() -> list[CandidateSpec]:
             "svd_energy_frac": 0.95,
         },
     )
+    add(
+        method_family="local_svd",
+        config_name="tile8_s3_ef90_rect",
+        baseline_type="local_svd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "tile_hw": (8, 8),
+            "tile_stride": 3,
+            "svd_energy_frac": 0.90,
+            "local_svd_hann": False,
+        },
+    )
+    add(
+        method_family="local_svd",
+        config_name="tile12_s4_ef95_rect",
+        baseline_type="local_svd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "tile_hw": (12, 12),
+            "tile_stride": 4,
+            "svd_energy_frac": 0.95,
+            "local_svd_hann": False,
+        },
+    )
+    add(
+        method_family="local_svd",
+        config_name="tile16_s4_ef95_rect",
+        baseline_type="local_svd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "tile_hw": (16, 16),
+            "tile_stride": 4,
+            "svd_energy_frac": 0.95,
+            "local_svd_hann": False,
+        },
+    )
 
     add(
         method_family="adaptive_local_svd",
@@ -390,6 +429,54 @@ def _candidate_specs() -> list[CandidateSpec]:
             "svd_rank": 8,
         },
     )
+    add(
+        method_family="adaptive_local_svd",
+        config_name="tile8_s2_sens_r8_rect",
+        baseline_type="adaptive_local_svd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "tile_hw": (8, 8),
+            "tile_stride": 2,
+            "svd_sim_smooth": 5,
+            "svd_sim_kappa": 2.0,
+            "svd_sim_r_min": 1,
+            "svd_rank": 8,
+            "local_svd_hann": False,
+        },
+    )
+    add(
+        method_family="adaptive_local_svd",
+        config_name="tile12_s4_bal_r8_rect",
+        baseline_type="adaptive_local_svd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "tile_hw": (12, 12),
+            "tile_stride": 4,
+            "svd_sim_smooth": 7,
+            "svd_sim_kappa": 2.5,
+            "svd_sim_r_min": 1,
+            "svd_rank": 8,
+            "local_svd_hann": False,
+        },
+    )
+    add(
+        method_family="adaptive_local_svd",
+        config_name="tile16_s4_cons_r10_rect",
+        baseline_type="adaptive_local_svd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "tile_hw": (16, 16),
+            "tile_stride": 4,
+            "svd_sim_smooth": 9,
+            "svd_sim_kappa": 3.0,
+            "svd_sim_r_min": 1,
+            "svd_rank": 10,
+            "local_svd_hann": False,
+        },
+    )
 
     add(
         method_family="rpca",
@@ -433,6 +520,81 @@ def _candidate_specs() -> list[CandidateSpec]:
         override_builder=lambda shape: {
             "rpca_lambda": 2.0 * _rpca_default_lambda(shape),
             "rpca_max_iters": 250,
+        },
+    )
+    add(
+        method_family="rpca",
+        config_name="lam0p5_it250_ds1_t32_r4",
+        baseline_type="rpca",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "rpca_lambda": 0.5 * _rpca_default_lambda(shape),
+            "rpca_max_iters": 250,
+            "rpca_spatial_downsample": 1,
+            "rpca_t_sub": min(32, int(shape[0])),
+            "rpca_rank_k_max": 4,
+            "rpca_tol": 1e-4,
+        },
+    )
+    add(
+        method_family="rpca",
+        config_name="lam0p5_it250_ds1_t64_r8",
+        baseline_type="rpca",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "rpca_lambda": 0.5 * _rpca_default_lambda(shape),
+            "rpca_max_iters": 250,
+            "rpca_spatial_downsample": 1,
+            "rpca_t_sub": min(64, int(shape[0])),
+            "rpca_rank_k_max": 8,
+            "rpca_tol": 1e-4,
+        },
+    )
+    add(
+        method_family="rpca",
+        config_name="lam0p5_it250_ds1_full_r12",
+        baseline_type="rpca",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "rpca_lambda": 0.5 * _rpca_default_lambda(shape),
+            "rpca_max_iters": 250,
+            "rpca_spatial_downsample": 1,
+            "rpca_t_sub": int(shape[0]),
+            "rpca_rank_k_max": 12,
+            "rpca_tol": 1e-4,
+        },
+    )
+    add(
+        method_family="rpca",
+        config_name="lam1_it250_ds1_t64_r8_tol1e3",
+        baseline_type="rpca",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "rpca_lambda": _rpca_default_lambda(shape),
+            "rpca_max_iters": 250,
+            "rpca_spatial_downsample": 1,
+            "rpca_t_sub": min(64, int(shape[0])),
+            "rpca_rank_k_max": 8,
+            "rpca_tol": 1e-3,
+        },
+    )
+    add(
+        method_family="rpca",
+        config_name="lam1_it250_ds2_t32_r4",
+        baseline_type="rpca",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "rpca_lambda": _rpca_default_lambda(shape),
+            "rpca_max_iters": 250,
+            "rpca_spatial_downsample": 2,
+            "rpca_t_sub": min(32, int(shape[0])),
+            "rpca_rank_k_max": 4,
+            "rpca_tol": 1e-4,
         },
     )
 
@@ -504,6 +666,57 @@ def _candidate_specs() -> list[CandidateSpec]:
         role="baseline",
         override_builder=lambda shape: {
             "hosvd_energy_fracs": (0.95, 0.95, 0.95),
+            "hosvd_spatial_downsample": 2,
+            "hosvd_t_sub": min(32, int(shape[0])),
+        },
+    )
+    add(
+        method_family="hosvd",
+        config_name="ef90_ds1_full",
+        baseline_type="hosvd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "hosvd_energy_fracs": (0.90, 0.90, 0.90),
+            "hosvd_spatial_downsample": 1,
+            "hosvd_t_sub": None,
+        },
+    )
+    add(
+        method_family="hosvd",
+        config_name="rank8_16_16_ds1_full",
+        baseline_type="hosvd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "hosvd_ranks": (min(8, int(shape[0])), 16, 16),
+            "hosvd_energy_fracs": None,
+            "hosvd_spatial_downsample": 1,
+            "hosvd_t_sub": None,
+        },
+    )
+    add(
+        method_family="hosvd",
+        config_name="rank12_24_24_ds1_full",
+        baseline_type="hosvd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "hosvd_ranks": (min(12, int(shape[0])), 24, 24),
+            "hosvd_energy_fracs": None,
+            "hosvd_spatial_downsample": 1,
+            "hosvd_t_sub": None,
+        },
+    )
+    add(
+        method_family="hosvd",
+        config_name="rank8_16_16_ds2_t32",
+        baseline_type="hosvd",
+        run_stap=False,
+        role="baseline",
+        override_builder=lambda shape: {
+            "hosvd_ranks": (min(8, int(shape[0])), 16, 16),
+            "hosvd_energy_fracs": None,
             "hosvd_spatial_downsample": 2,
             "hosvd_t_sub": min(32, int(shape[0])),
         },

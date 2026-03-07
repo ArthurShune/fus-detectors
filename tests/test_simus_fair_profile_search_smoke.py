@@ -104,8 +104,11 @@ def test_simus_fair_profile_search_selects_frozen_configs(tmp_path, monkeypatch)
             else:
                 pos, pos2, bg, bg2, nuis = 2.6, 1.8, 1.4, 1.3, 1.0
         elif baseline_type == "hosvd":
-            ef = tuple(overrides.get("hosvd_energy_fracs", (0.99, 0.99, 0.99)))
-            if ef[0] <= 0.95:
+            ef = overrides.get("hosvd_energy_fracs", (0.99, 0.99, 0.99))
+            ranks = overrides.get("hosvd_ranks", None)
+            if ranks is not None:
+                pos, pos2, bg, bg2, nuis = 3.5, 2.7, 1.15, 1.05, 0.8
+            elif tuple(ef)[0] <= 0.95:
                 pos, pos2, bg, bg2, nuis = 3.3, 2.5, 1.2, 1.1, 0.85
             else:
                 pos, pos2, bg, bg2, nuis = 3.1, 2.2, 1.3, 1.2, 0.95

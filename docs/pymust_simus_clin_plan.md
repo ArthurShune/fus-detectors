@@ -181,8 +181,11 @@ Outputs:
 - `reports/simus_motion/simus_fair_profile_search_seed2122to2324_headline.{csv,json}`
 - `reports/simus_motion/simus_fair_profile_search_seed2122to2324_adaptivelocal.{csv,json}`
 - `reports/simus_motion/simus_fair_profile_search_seed2122to2324_adaptivelocal_headline.{csv,json}`
+- `reports/simus_motion/simus_fair_profile_search_seed2122to2324_expanded.{csv,json}`
+- `reports/simus_motion/simus_fair_profile_search_seed2122to2324_expanded_headline.{csv,json}`
 - `reports/simus_motion/simus_frozen_benchmark_v1_eval_cases.{csv,json}`
 - `reports/simus_motion/simus_frozen_benchmark_v1p1_eval_cases.{csv,json}`
+- `reports/simus_motion/simus_frozen_benchmark_v1p2_eval_cases.{csv,json}`
 - `reports/simus_sanity_link/phase4_motion_ladders_seed21_{summary,table,deltas}.{json,csv}`
 - `reports/simus_sanity_link/simus_motion_policy_bucket_check_seed21.{csv,json}`
 - `reports/simus_sanity_link/simus_motion_policy_bucket_check_regshift_seed21.{csv,json}`
@@ -230,6 +233,27 @@ Notes:
     - `Adaptive Local SVD`: mean `auc_main_vs_bg = 0.6883`, mean `auc_main_vs_nuisance = 0.0582`, mean nuisance `FPR@TPR0.5 = 0.9996`
     - `STAP`: mean `auc_main_vs_bg = 0.9357`, mean `auc_main_vs_nuisance = 0.9972`, mean nuisance `FPR@TPR0.5 = 0.0`
   - this does not prove the literature family is exhausted, but it does remove the earlier label mismatch and adds a materially stronger local-adaptive baseline than the previous fixed-energy local SVD surrogate
+- the strictest exposed-knob rerun still does not change the headline conclusion:
+  - additional exposed knobs now include:
+    - `local_svd_hann`
+    - `rpca_spatial_downsample`
+    - `rpca_t_sub`
+    - `rpca_tol`
+    - `rpca_rank_k_max`
+    - extra HOSVD explicit-rank candidates in the frozen-profile search
+  - the fully expanded `seed21+22 -> seed23+24` artifacts are:
+    - `reports/simus_motion/simus_fair_profile_search_seed2122to2324_expanded.{csv,json}`
+    - `reports/simus_motion/simus_fair_profile_search_seed2122to2324_expanded_headline.{csv,json}`
+  - on held-out corrected `seed23+24`, the selected frozen configurations remain:
+    - `STAP`: `Brain-SIMUS-Clin-MotionMidRobust-v0`
+    - `MC-SVD`: `ef95`
+    - `Adaptive Global SVD`: `conservative_r8`
+    - `Local SVD (Fixed Energy)`: `tile16_s4_ef95`
+    - `Adaptive Local SVD`: `tile12_s4_bal_r8`
+    - `HOSVD`: `ef95_ds2_t32`
+    - `RPCA`: `lam1_it250_ds2_t32_r4`
+  - only RPCA changes meaningfully under the broader search (`auc_main_vs_bg +0.0607` on held-out `seed23+24`), but it still remains far behind STAP and does not alter the ranking
+  - STAP remains unchanged at mean `auc_main_vs_bg = 0.9357`, mean `auc_main_vs_nuisance = 0.9972`, mean nuisance `FPR@TPR0.5 = 0.0`
 - direct real-IQ proxy telemetry still matters for realism checks:
   - Shin Fig3 (`frames 0:128`) remains effectively motion-free on this proxy: `reg_shift_p90 = 0.0038 px`
   - Gammex along-linear17 (`frames 0:5`) reaches `reg_shift_p90 = 1.33-1.93 px`

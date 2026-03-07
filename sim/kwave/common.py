@@ -3447,6 +3447,10 @@ def _baseline_pd_rpca(
     *,
     lambda_: Optional[float] = None,
     max_iters: int = 250,
+    spatial_downsample: int | None = None,
+    t_sub: int | None = None,
+    tol: float = 1e-4,
+    rank_k_max: int = 8,
     return_filtered_cube: bool = False,
 ) -> tuple[np.ndarray, dict]:
     """Robust PCA baseline (low-rank + sparse) with dimensionality control.
@@ -3460,9 +3464,14 @@ def _baseline_pd_rpca(
 
     # Use windowed + downsampled + truncated SVD PCP.
     # Internal hyperparameters (tuned for k-Wave brain fUS–like regimes).
-    spatial_downsample = 2 if max(H, W) > 128 else 1
-    t_sub_default = 80
-    tol = 1e-4
+    spatial_downsample = (
+        int(spatial_downsample)
+        if spatial_downsample is not None
+        else (2 if max(H, W) > 128 else 1)
+    )
+    spatial_downsample = max(1, int(spatial_downsample))
+    tol = float(max(float(tol), 1e-8))
+    rank_k_max = max(1, int(rank_k_max))
     max_iters_inner = min(max_iters, 80)
 
     def _avg_pool2d_complex(cube: np.ndarray, d: int) -> np.ndarray:
@@ -3589,7 +3598,8 @@ def _baseline_pd_rpca(
     T_ds, H_ds, W_ds = I_ds.shape
 
     # Temporal windows.
-    t_sub = min(t_sub_default, T_ds)
+    t_sub_default = min(80, T_ds)
+    t_sub = t_sub_default if t_sub is None else max(1, min(int(t_sub), T_ds))
     windows: list[tuple[int, int]] = []
     t0 = 0
     while t0 < T_ds:
@@ -3615,7 +3625,7 @@ def _baseline_pd_rpca(
         T_w = w1 - w0
         X_win = I_win.reshape(T_w, -1).astype(np.complex64)
         # Rank heuristic per window.
-        rank_k = min(8, max(2, T_w // 10))
+        rank_k = min(rank_k_max, max(2, T_w // 10))
         S_flat, tele_win = _rpca_ialm_window(
             X_win,
             lambda_=lambda_,
@@ -3649,7 +3659,7 @@ def _baseline_pd_rpca(
             "mu_init_factor": 0.5,
             "t_sub": int(t_sub),
             "spatial_downsample": int(spatial_downsample),
-            "rank_k_max": 8,
+            "rank_k_max": int(rank_k_max),
             "max_iters_inner": int(max_iters_inner),
             "tol": float(tol),
             "n_windows": len(windows),
