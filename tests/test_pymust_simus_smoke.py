@@ -109,3 +109,24 @@ def test_pymust_simus_clin_v2_profile_emits_structured_clutter_diagnostics():
     assert int(mask_spec.sum()) > 0
     assert scene["n_structured_clutter"] >= 1
     assert float(scene["specular_struct_fraction"]) > 0.0
+
+
+def test_pymust_simus_mobile_v2_profile_emits_mobile_nuisance_scene():
+    from sim.simus.config import default_profile_config
+    from sim.simus.pymust_smoke import generate_icube
+
+    cfg = default_profile_config(profile="ClinMobile-Pf-v2", tier="smoke", seed=0)
+    cfg = dataclasses.replace(cfg, T=2, tissue_count=96)
+    out = generate_icube(cfg)
+
+    mask_pf = np.asarray(out["mask_h1_pf_main"], dtype=bool)
+    mask_nuis = np.asarray(out["mask_h0_nuisance_pa"], dtype=bool)
+    mask_spec = np.asarray(out["mask_h0_specular_struct"], dtype=bool)
+    scene = dict(out["debug"]["scene_telemetry"])
+
+    assert int(mask_pf.sum()) > 0
+    assert int(mask_nuis.sum()) > 0
+    assert int(mask_spec.sum()) > 0
+    assert scene["n_nuisance_vessels"] >= 2
+    assert scene["n_structured_clutter"] >= 3
+    assert scene["n_background_compartments"] >= 4

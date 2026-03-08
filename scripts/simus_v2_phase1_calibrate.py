@@ -20,6 +20,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
         "description": "Current frozen ClinIntraOp-Pf-v2 defaults.",
         "motion": {},
         "phase_screen": {},
+        "noise": {},
     },
     "calA": {
         "description": "Balanced residual-motion increase with moderate phase drift.",
@@ -37,6 +38,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_rho": 0.97,
             "drift_sigma_rad": 0.02,
         },
+        "noise": {},
     },
     "calB": {
         "description": "Stronger stochastic residual motion with faster elastic decorrelation.",
@@ -54,6 +56,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_rho": 0.95,
             "drift_sigma_rad": 0.025,
         },
+        "noise": {},
     },
     "calC": {
         "description": "Phase-heavy decorrelation with moderate residual motion.",
@@ -71,6 +74,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_rho": 0.92,
             "drift_sigma_rad": 0.04,
         },
+        "noise": {},
     },
     "calD": {
         "description": "High-motion candidate with moderate phase drift.",
@@ -89,6 +93,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_rho": 0.95,
             "drift_sigma_rad": 0.02,
         },
+        "noise": {},
     },
     "calJ1": {
         "description": "Balanced candidate with explicit pulse-to-pulse residual jitter.",
@@ -108,6 +113,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_rho": 0.95,
             "drift_sigma_rad": 0.02,
         },
+        "noise": {},
     },
     "calJ2": {
         "description": "Stronger jitter-led candidate for aggressive background decorrelation.",
@@ -127,6 +133,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_rho": 0.93,
             "drift_sigma_rad": 0.03,
         },
+        "noise": {},
     },
     "calM1": {
         "description": "Multi-mode elastic residual with moderate pulse jitter.",
@@ -146,6 +153,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_rho": 0.95,
             "drift_sigma_rad": 0.02,
         },
+        "noise": {},
     },
     "calM2": {
         "description": "Stronger multi-mode elastic residual with lighter jitter for coherence balance.",
@@ -165,6 +173,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_rho": 0.95,
             "drift_sigma_rad": 0.018,
         },
+        "noise": {},
     },
     "calM3": {
         "description": "Higher-mode residual field with moderate jitter to reduce background rank concentration.",
@@ -184,6 +193,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_rho": 0.95,
             "drift_sigma_rad": 0.016,
         },
+        "noise": {},
     },
     "calL1": {
         "description": "Localized multi-mode residual field tuned from the near-pass M2 candidate.",
@@ -202,6 +212,67 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "corr_len_elem": 8.0,
             "drift_rho": 0.95,
             "drift_sigma_rad": 0.018,
+        },
+        "noise": {},
+    },
+    "mobileA": {
+        "description": "Reduce additive noise and high-rate jitter while keeping mobile nuisance prevalence intact.",
+        "motion": {
+            "random_walk_sigma_px": 0.05,
+            "pulse_jitter_sigma_px": 0.08,
+            "drift_x_px": 0.40,
+            "drift_z_px": 0.17,
+            "elastic_amp_px": 0.60,
+            "elastic_temporal_rho": 0.70,
+        },
+        "phase_screen": {
+            "std_rad": 0.52,
+            "corr_len_elem": 7.0,
+            "drift_rho": 0.93,
+            "drift_sigma_rad": 0.022,
+        },
+        "noise": {
+            "iq_rms_frac": 0.22,
+        },
+    },
+    "mobileB": {
+        "description": "Stronger coherence recovery: less noise, less jitter, slightly slower phase drift.",
+        "motion": {
+            "random_walk_sigma_px": 0.045,
+            "pulse_jitter_sigma_px": 0.07,
+            "drift_x_px": 0.38,
+            "drift_z_px": 0.16,
+            "elastic_amp_px": 0.56,
+            "elastic_temporal_rho": 0.72,
+        },
+        "phase_screen": {
+            "std_rad": 0.48,
+            "corr_len_elem": 8.0,
+            "drift_rho": 0.94,
+            "drift_sigma_rad": 0.018,
+        },
+        "noise": {
+            "iq_rms_frac": 0.18,
+        },
+    },
+    "mobileC": {
+        "description": "Moderate coherence recovery with preserved motion spread and nuisance prevalence.",
+        "motion": {
+            "random_walk_sigma_px": 0.05,
+            "pulse_jitter_sigma_px": 0.08,
+            "drift_x_px": 0.42,
+            "drift_z_px": 0.18,
+            "elastic_amp_px": 0.58,
+            "elastic_temporal_rho": 0.74,
+        },
+        "phase_screen": {
+            "std_rad": 0.50,
+            "corr_len_elem": 7.0,
+            "drift_rho": 0.94,
+            "drift_sigma_rad": 0.020,
+        },
+        "noise": {
+            "iq_rms_frac": 0.20,
         },
     },
 }
@@ -233,7 +304,8 @@ def _candidate_cfg(profile: str, tier: str, seed: int, candidate_name: str):
     spec = CANDIDATES[candidate_name]
     motion = dataclasses.replace(cfg.motion, **spec["motion"])
     phase = dataclasses.replace(cfg.phase_screen, **spec["phase_screen"])
-    return dataclasses.replace(cfg, motion=motion, phase_screen=phase)
+    noise = dataclasses.replace(cfg.noise, **spec.get("noise", {}))
+    return dataclasses.replace(cfg, motion=motion, phase_screen=phase, noise=noise)
 
 
 def parse_args() -> argparse.Namespace:

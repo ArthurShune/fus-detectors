@@ -75,6 +75,66 @@ PROFILE_GATES: dict[str, dict[str, Any]] = {
             },
         ),
     },
+    "ClinMobile-Pf-v2": {
+        "hard_sections": (
+            {
+                "name": "mobile_background",
+                "anchor_preset": "pooled_iq",
+                "metrics": ("bg_fpeak_q50",),
+            },
+            {
+                "name": "pooled_background_subspace",
+                "anchor_preset": "pooled_iq",
+                "metrics": ("svd_bg_cum_r1", "svd_bg_cum_r2"),
+            },
+        ),
+        "hard_rules": (
+            {
+                "name": "scene.expected_fd_sampled_q50_hz",
+                "path": ("scene", "expected_fd_sampled_q50_hz"),
+                "lo": 60.0,
+                "hi": 180.0,
+            },
+            {
+                "name": "scene.h1_alias_qc_fraction",
+                "path": ("scene", "h1_alias_qc_fraction"),
+                "lo": 0.0,
+                "hi": 0.25,
+            },
+            {
+                "name": "scene.h0_nuisance_fraction",
+                "path": ("scene", "h0_nuisance_fraction"),
+                "lo": 0.03,
+                "hi": 0.15,
+            },
+        ),
+        "soft_sections": (
+            {
+                "name": "mobile_background_soft",
+                "anchor_preset": "pooled_iq",
+                "metrics": ("bg_coh1_q50",),
+            },
+            {
+                "name": "phantom_nuisance",
+                "anchor_preset": "phantom_nuisance",
+                "metrics": ("bg_malias_q50",),
+            },
+            {
+                "name": "mobile_flow_motion",
+                "anchor_preset": "pooled_iq",
+                "metrics": (
+                    "flow_fpeak_q50",
+                    "flow_coh1_q50",
+                    "flow_malias_q50",
+                    "svd_flow_cum_r1",
+                    "svd_flow_cum_r2",
+                    "reg_shift_rms",
+                    "reg_shift_p90",
+                    "reg_psr_median",
+                ),
+            },
+        ),
+    },
 }
 
 
