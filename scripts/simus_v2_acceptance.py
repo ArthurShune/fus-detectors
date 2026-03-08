@@ -13,6 +13,12 @@ from scripts.simus_v2_anchor_envelopes import DEFAULT_ACCEPTANCE_METRICS, flatte
 from scripts.physical_doppler_sanity_link import BandEdges, TileSpec, summarize_icube
 from sim.simus.bundle import estimate_simus_policy_features, load_canonical_run
 
+ANCHOR_PRESETS: dict[str, list[str]] = {
+    "pooled_iq": ["shin", "gammex_along", "gammex_across", "ulm_7883227"],
+    "intraop_brainlike": ["shin", "ulm_7883227"],
+    "phantom_nuisance": ["gammex_along", "gammex_across"],
+}
+
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -158,6 +164,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--run", type=Path, action="append", default=None)
     ap.add_argument("--sim-root", type=Path, action="append", default=None)
     ap.add_argument("--anchor-json", type=Path, default=Path("reports/simus_v2/anchors/simus_v2_anchor_envelopes.json"))
+    ap.add_argument("--anchor-preset", type=str, choices=sorted(ANCHOR_PRESETS.keys()), default=None)
     ap.add_argument("--anchor-kind", type=str, action="append", default=None)
     ap.add_argument("--metrics", type=str, default=",".join(DEFAULT_ACCEPTANCE_METRICS))
     ap.add_argument("--lower-q", type=float, default=0.10)
@@ -182,8 +189,12 @@ def main() -> None:
 
     payload = json.loads(Path(args.anchor_json).read_text(encoding="utf-8"))
     anchor_kinds = _parse_kinds(args.anchor_kind)
+    if args.anchor_preset:
+        if anchor_kinds:
+            raise SystemExit("--anchor-preset and --anchor-kind are mutually exclusive")
+        anchor_kinds = list(ANCHOR_PRESETS[str(args.anchor_preset)])
     if not anchor_kinds:
-        anchor_kinds = ["shin", "gammex_along", "gammex_across", "ulm_7883227"]
+        anchor_kinds = list(ANCHOR_PRESETS["pooled_iq"])
     metrics = [m.strip() for m in str(args.metrics).split(",") if m.strip()]
     acceptance_env = _combine_anchor_envelope(
         payload,
@@ -231,6 +242,7 @@ def main() -> None:
     out_payload = {
         "schema_version": "simus_v2_acceptance.v1",
         "anchor_json": str(Path(args.anchor_json)),
+        "anchor_preset": None if args.anchor_preset is None else str(args.anchor_preset),
         "anchor_kinds": anchor_kinds,
         "metrics": metrics,
         "lower_q": float(args.lower_q),
