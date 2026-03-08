@@ -238,6 +238,34 @@ Current smoke artifact:
 
 - `runs/sim/simus_clin_intraop_pf_v2_phase1_smoke_seed0/`
 
+Current paper-tier acceptance check:
+
+- run:
+  - `runs/sim/simus_clin_intraop_pf_v2_phase1_paper_seed0/`
+- acceptance:
+  - `reports/simus_v2/acceptance/simus_v2_acceptance_clin_intraop_pf_v2_paper_seed0.json`
+  - `reports/simus_v2/acceptance/simus_v2_acceptance_clin_intraop_pf_v2_paper_seed0.csv`
+
+Current result:
+
+- `ClinIntraOp-Pf-v2` improves the hard Phase 0 gate from `7/13` passed
+  (`ClinIntraOp-Pf-v1` and `ClinIntraOp-Pf-Struct-v2`) to `9/13` passed
+- remaining failed metrics are:
+  - `bg_malias_q50`
+  - `bg_coh1_q50`
+  - `svd_bg_cum_r1`
+  - `svd_bg_cum_r2`
+
+Interpretation:
+
+- Phase 1 moved the profile materially toward the frozen real-data envelope
+- the remaining mismatch is concentrated in background / nuisance structure,
+  not in the target Pf-positive microvascular field
+- the next calibration pass should therefore focus on:
+  - background alias energy
+  - background temporal coherence
+  - background low-rank clutter structure
+
 Current interpretation:
 
 - the profile now expresses the nuisance classes we want for `v2`
