@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 
 SimusPreset = Literal["microvascular_like", "alias_stress"]
-SimusProfile = Literal["ClinIntraOp-Pf-v1", "ClinMobile-Pf-v1", "ClinIntraOp-Pf-Struct-v2"]
+SimusProfile = Literal["ClinIntraOp-Pf-v1", "ClinMobile-Pf-v1", "ClinIntraOp-Pf-Struct-v2", "ClinIntraOp-Pf-v2"]
 SimusTier = Literal["smoke", "paper"]
 VesselRole = Literal["microvascular", "nuisance_pa"]
 
@@ -67,6 +67,18 @@ class PhaseScreenSpec:
 
 
 @dataclass(frozen=True)
+class StructuredClutterSpec:
+    name: str
+    x0_m: float
+    z0_m: float
+    x1_m: float
+    z1_m: float
+    thickness_m: float = 4.0e-4
+    scatterer_count: int = 200
+    rc_scale: float = 1.0
+
+
+@dataclass(frozen=True)
 class SimusConfig:
     preset: SimusPreset = "microvascular_like"
     tier: SimusTier = "smoke"
@@ -105,6 +117,7 @@ class SimusConfig:
     bg_top_exclusion_frac: float = 0.10
     motion: MotionSpec = MotionSpec()
     phase_screen: PhaseScreenSpec = PhaseScreenSpec()
+    structured_clutter: tuple[StructuredClutterSpec, ...] = ()
 
     reservoir_scale: int = 4
     reinject_depth_span_m: float = 0.003
@@ -217,17 +230,46 @@ def default_config(*, preset: SimusPreset, tier: SimusTier, seed: int) -> SimusC
 def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int) -> SimusConfig:
     grid = _default_grid(tier)
     structural_profile = profile == "ClinIntraOp-Pf-Struct-v2"
+    clin_v2 = profile == "ClinIntraOp-Pf-v2"
     if tier == "paper":
         tissue_count = 2600
         guard_px = 2
         reservoir_span = 1.5e-3
-        micro_blood_count = 280
-        nuisance_blood_count = 520
+        micro_blood_count = 280 if not clin_v2 else 320
+        nuisance_blood_count = 520 if not clin_v2 else 620
         nuisance_vmax = 0.065 if profile in ("ClinIntraOp-Pf-v1", "ClinIntraOp-Pf-Struct-v2") else 0.090
         if structural_profile:
             motion = MotionSpec(enabled=False)
             phase_screen = PhaseScreenSpec(enabled=False)
             micro_blood_rc_scale = 0.35
+        elif clin_v2:
+            motion = MotionSpec(
+                enabled=True,
+                breathing_hz=0.30,
+                breathing_amp_x_px=0.35,
+                breathing_amp_z_px=0.18,
+                cardiac_hz=1.10,
+                cardiac_amp_x_px=0.10,
+                cardiac_amp_z_px=0.05,
+                random_walk_sigma_px=0.01,
+                drift_x_px=0.10,
+                drift_z_px=0.04,
+                elastic_amp_px=0.12,
+                elastic_sigma_px=20.0,
+                elastic_depth_decay_frac=0.32,
+                elastic_temporal_rho=0.99,
+                elastic_lateral_scale=1.0,
+                elastic_axial_scale=0.60,
+            )
+            phase_screen = PhaseScreenSpec(
+                enabled=True,
+                std_rad=0.35,
+                corr_len_elem=14.0,
+                drift_rho=0.998,
+                drift_sigma_rad=0.004,
+            )
+            micro_blood_rc_scale = 0.22
+            nuisance_vmax = 0.085
         elif profile == "ClinIntraOp-Pf-v1":
             motion = MotionSpec(
                 enabled=True,
@@ -284,7 +326,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 z_max_m=18.0e-3,
                 blood_count=micro_blood_count,
                 blood_rc_scale=micro_blood_rc_scale,
-                blood_vmax_mps=0.012,
+                blood_vmax_mps=0.012 if not clin_v2 else 0.014,
                 blood_profile="poiseuille",
             ),
             _legacy_vessel(
@@ -296,7 +338,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 z_max_m=21.5e-3,
                 blood_count=micro_blood_count,
                 blood_rc_scale=micro_blood_rc_scale,
-                blood_vmax_mps=0.015,
+                blood_vmax_mps=0.015 if not clin_v2 else 0.018,
                 blood_profile="poiseuille",
             ),
             _legacy_vessel(
@@ -308,7 +350,19 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 z_max_m=22.5e-3,
                 blood_count=micro_blood_count,
                 blood_rc_scale=micro_blood_rc_scale,
-                blood_vmax_mps=0.011,
+                blood_vmax_mps=0.011 if not clin_v2 else 0.013,
+                blood_profile="poiseuille",
+            ),
+            _legacy_vessel(
+                name="micro_far_right",
+                role="microvascular",
+                center_x_m=5.4e-3,
+                radius_m=4.0e-4,
+                z_min_m=12.5e-3,
+                z_max_m=20.5e-3,
+                blood_count=micro_blood_count if clin_v2 else 0,
+                blood_rc_scale=micro_blood_rc_scale,
+                blood_vmax_mps=0.016,
                 blood_profile="poiseuille",
             ),
         )
@@ -326,17 +380,67 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 blood_profile="poiseuille",
             ),
         )
+        structured_clutter = (
+            StructuredClutterSpec(
+                name="superficial_sheet",
+                x0_m=-8.5e-3,
+                z0_m=6.4e-3,
+                x1_m=8.5e-3,
+                z1_m=6.8e-3,
+                thickness_m=3.8e-4,
+                scatterer_count=420,
+                rc_scale=1.4,
+            ),
+            StructuredClutterSpec(
+                name="oblique_boundary",
+                x0_m=-8.0e-3,
+                z0_m=7.2e-3,
+                x1_m=1.5e-3,
+                z1_m=17.8e-3,
+                thickness_m=5.5e-4,
+                scatterer_count=340,
+                rc_scale=1.2,
+            ),
+        ) if clin_v2 else ()
     else:
         tissue_count = 720
         guard_px = 1
         reservoir_span = 2.0e-3
-        micro_blood_count = 90
-        nuisance_blood_count = 180
+        micro_blood_count = 90 if not clin_v2 else 120
+        nuisance_blood_count = 180 if not clin_v2 else 220
         nuisance_vmax = 0.17 if profile in ("ClinIntraOp-Pf-v1", "ClinIntraOp-Pf-Struct-v2") else 0.22
         if structural_profile:
             motion = MotionSpec(enabled=False)
             phase_screen = PhaseScreenSpec(enabled=False)
             micro_blood_rc_scale = 0.35
+        elif clin_v2:
+            motion = MotionSpec(
+                enabled=True,
+                breathing_hz=0.30,
+                breathing_amp_x_px=0.22,
+                breathing_amp_z_px=0.10,
+                cardiac_hz=1.10,
+                cardiac_amp_x_px=0.05,
+                cardiac_amp_z_px=0.03,
+                random_walk_sigma_px=0.006,
+                drift_x_px=0.04,
+                drift_z_px=0.02,
+                elastic_amp_px=0.08,
+                elastic_sigma_px=7.0,
+                elastic_depth_decay_frac=0.30,
+                elastic_temporal_rho=0.99,
+                elastic_lateral_scale=1.0,
+                elastic_axial_scale=0.60,
+            )
+            phase_screen = PhaseScreenSpec(
+                enabled=True,
+                std_rad=0.28,
+                corr_len_elem=7.0,
+                drift_rho=0.998,
+                drift_sigma_rad=0.003,
+            )
+            micro_blood_rc_scale = 0.22
+            nuisance_vmax = 0.19
         elif profile == "ClinIntraOp-Pf-v1":
             motion = MotionSpec(
                 enabled=True,
@@ -393,7 +497,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 z_max_m=18.0e-3,
                 blood_count=micro_blood_count,
                 blood_rc_scale=micro_blood_rc_scale,
-                blood_vmax_mps=0.020,
+                blood_vmax_mps=0.020 if not clin_v2 else 0.016,
                 blood_profile="poiseuille",
             ),
             _legacy_vessel(
@@ -405,7 +509,19 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 z_max_m=21.0e-3,
                 blood_count=micro_blood_count,
                 blood_rc_scale=micro_blood_rc_scale,
-                blood_vmax_mps=0.026,
+                blood_vmax_mps=0.026 if not clin_v2 else 0.020,
+                blood_profile="poiseuille",
+            ),
+            _legacy_vessel(
+                name="micro_right",
+                role="microvascular",
+                center_x_m=4.2e-3,
+                radius_m=7.0e-4,
+                z_min_m=12.0e-3,
+                z_max_m=19.0e-3,
+                blood_count=micro_blood_count if clin_v2 else 0,
+                blood_rc_scale=micro_blood_rc_scale,
+                blood_vmax_mps=0.018,
                 blood_profile="poiseuille",
             ),
         )
@@ -423,8 +539,30 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 blood_profile="poiseuille",
             ),
         )
+        structured_clutter = (
+            StructuredClutterSpec(
+                name="superficial_sheet",
+                x0_m=-9.0e-3,
+                z0_m=6.2e-3,
+                x1_m=9.0e-3,
+                z1_m=6.6e-3,
+                thickness_m=4.0e-4,
+                scatterer_count=160,
+                rc_scale=1.35,
+            ),
+            StructuredClutterSpec(
+                name="oblique_boundary",
+                x0_m=-7.5e-3,
+                z0_m=7.0e-3,
+                x1_m=1.0e-3,
+                z1_m=16.0e-3,
+                thickness_m=5.0e-4,
+                scatterer_count=140,
+                rc_scale=1.15,
+            ),
+        ) if clin_v2 else ()
 
-    vessels = micro_vessels + nuisance_vessels
+    vessels = tuple(v for v in micro_vessels + nuisance_vessels if int(v.blood_count) > 0)
     main_micro = micro_vessels[0]
     return SimusConfig(
         preset="microvascular_like",
@@ -445,6 +583,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
         bg_top_exclusion_frac=0.10,
         motion=motion,
         phase_screen=phase_screen,
+        structured_clutter=structured_clutter,
         reservoir_scale=4,
         reinject_depth_span_m=float(reservoir_span),
         **grid,

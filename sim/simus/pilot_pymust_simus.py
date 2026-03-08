@@ -17,7 +17,7 @@ from sim.kwave.icube_bundle import write_acceptance_bundle_from_icube
 from sim.simus.config import default_profile_config
 from sim.simus.pymust_smoke import SimusConfig, default_config, dataset_meta, generate_icube
 
-SUPPORTED_SIMUS_PROFILES = ("ClinIntraOp-Pf-v1", "ClinMobile-Pf-v1", "ClinIntraOp-Pf-Struct-v2")
+SUPPORTED_SIMUS_PROFILES = ("ClinIntraOp-Pf-v1", "ClinMobile-Pf-v1", "ClinIntraOp-Pf-Struct-v2", "ClinIntraOp-Pf-v2")
 
 
 def _utc_now_iso() -> str:
@@ -228,6 +228,8 @@ def write_simus_run(
         _save(dataset_dir, "mask_h0_bg", np.asarray(mask_h0_bg, dtype=bool))
     if mask_h0_nuisance_pa is not None:
         _save(dataset_dir, "mask_h0_nuisance_pa", np.asarray(mask_h0_nuisance_pa, dtype=bool))
+    if result.get("mask_h0_specular_struct") is not None:
+        _save(dataset_dir, "mask_h0_specular_struct", np.asarray(result.get("mask_h0_specular_struct"), dtype=bool))
 
     _save(debug_dir, "expected_fd_hz", np.asarray(debug.get("expected_fd_hz"), dtype=np.float32))
     if debug.get("expected_fd_true_hz") is not None:
@@ -255,11 +257,16 @@ def write_simus_run(
         _save(debug_dir, "motion_elastic_coef_z", np.asarray(debug.get("motion_elastic_coef_z"), dtype=np.float32))
     if debug.get("phase_screen_rad") is not None:
         _save(debug_dir, "phase_screen_rad", np.asarray(debug.get("phase_screen_rad"), dtype=np.float32))
+    if debug.get("mask_h0_specular_struct") is not None:
+        _save(debug_dir, "mask_h0_specular_struct", np.asarray(debug.get("mask_h0_specular_struct"), dtype=bool))
     np.savez_compressed(debug_dir / "scatterers_init.npz", **debug.get("scatterers_init", {}))
     paths["scatterers_init_npz"] = debug_dir / "scatterers_init.npz"
     _save(debug_dir, "txdel_s", np.asarray(debug.get("txdel_s"), dtype=np.float32))
     _save(debug_dir, "grid_x_m", np.asarray(debug.get("grid_x_m"), dtype=np.float32))
     _save(debug_dir, "grid_z_m", np.asarray(debug.get("grid_z_m"), dtype=np.float32))
+    scene_path = debug_dir / "scene_telemetry.json"
+    _write_json(scene_path, dict(debug.get("scene_telemetry", {})))
+    paths["scene_telemetry_json"] = scene_path
 
     config_path = dataset_dir / "config.json"
     _write_json(config_path, dataset_meta(cfg))
@@ -333,7 +340,9 @@ def write_simus_run(
             "mask_h1_alias_qc": "flow & (expected alias or sampled_fd in Pa) & ~guard",
             "mask_h0_bg": "background excluding flow and guard",
             "mask_h0_nuisance_pa": "nuisance_vessel & sampled_fd in Pa & ~guard",
+            "mask_h0_specular_struct": "structured clutter / specular-support diagnostic negative",
         },
+        "scene": dict(debug.get("scene_telemetry", {})),
         "config": dataset_meta(cfg),
         "files": hashes,
     }

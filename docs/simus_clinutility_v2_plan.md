@@ -214,6 +214,36 @@ Acceptance gate:
 - the profile is not allowed into headline benchmarking until it passes the
   real-data envelope checks from Phase 0
 
+Status:
+- implemented for the first clinically grounded structural profile
+- acceptance calibration still pending on paper-tier runs
+
+Current implementation:
+
+- new named profile:
+  - `ClinIntraOp-Pf-v2`
+- new scene components:
+  - expanded parenchymal microvascular vessel field
+  - nuisance Pa-dominant superficial vessel
+  - structured clutter geometry:
+    - superficial sheet
+    - oblique boundary
+  - moderate residual motion / elastic mismatch
+  - channel-level phase drift
+- new diagnostics:
+  - `mask_h0_specular_struct.npy`
+  - `dataset/debug/scene_telemetry.json`
+
+Current smoke artifact:
+
+- `runs/sim/simus_clin_intraop_pf_v2_phase1_smoke_seed0/`
+
+Current interpretation:
+
+- the profile now expresses the nuisance classes we want for `v2`
+- it is not yet admitted into headline benchmarking until the paper-tier clip
+  is scored by `scripts/simus_v2_acceptance.py`
+
 ### Phase 2: Implement `ClinMobile-Pf-v2`
 
 Purpose:

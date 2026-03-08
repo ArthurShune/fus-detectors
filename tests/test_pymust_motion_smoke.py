@@ -53,3 +53,20 @@ def test_pymust_structural_profile_disables_motion_and_phase():
     assert float(motion["disp_rms_px"]) == 0.0
     assert phase["enabled"] is False
     assert float(phase["phase_rms_rad"]) == 0.0
+
+
+def test_pymust_clin_v2_profile_keeps_motion_and_phase_moderate():
+    from sim.simus.config import default_profile_config
+    from sim.simus.pymust_smoke import generate_icube
+
+    cfg = default_profile_config(profile="ClinIntraOp-Pf-v2", tier="smoke", seed=0)
+    cfg = dataclasses.replace(cfg, T=3, tissue_count=96)
+    out = generate_icube(cfg)
+
+    motion = dict(out["debug"]["motion_telemetry"])
+    phase = dict(out["debug"]["phase_screen_telemetry"])
+
+    assert motion["enabled"] is True
+    assert 0.0 < float(motion["disp_rms_px"]) < 1.0
+    assert phase["enabled"] is True
+    assert 0.0 < float(phase["phase_rms_rad"]) < 1.0
