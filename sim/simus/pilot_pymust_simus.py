@@ -334,6 +334,10 @@ def write_simus_run(
             "config": dataclasses.asdict(cfg.phase_screen),
             "telemetry": dict(debug.get("phase_screen_telemetry", {})),
         },
+        "noise": {
+            "config": dataclasses.asdict(cfg.noise),
+            "telemetry": dict(debug.get("noise_telemetry", {})),
+        },
         "slow_time": {"T": int(cfg.T)},
         "labels": {
             "mask_h1_pf_main": "microvascular & sampled_fd in Pf_core & unaliased & ~guard",

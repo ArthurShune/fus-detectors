@@ -253,6 +253,78 @@ def build_phase_screen_series(
     return phase.astype(np.float32, copy=False), tele
 
 
+def build_localized_motion_component(
+    *,
+    cfg: SimusConfig,
+    center_x_m: float,
+    center_z_m: float,
+    sigma_x_m: float,
+    sigma_z_m: float,
+    amp_px: float,
+    sigma_px: float,
+    rho: float,
+    jitter_sigma_px: float,
+    lateral_scale: float,
+    axial_scale: float,
+    seed: int,
+) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
+    T = int(cfg.T)
+    H = int(cfg.H)
+    W = int(cfg.W)
+    zeros = np.zeros((T, H, W), dtype=np.float32)
+    if T <= 0 or H <= 0 or W <= 0 or float(amp_px) <= 0.0:
+        return zeros, zeros, {"enabled": False, "disp_rms_px": 0.0, "disp_p90_px": 0.0}
+
+    rng = np.random.default_rng(int(seed))
+    base_dx = _smooth_unit_field(H, W, sigma_px=float(max(sigma_px, 0.5)), rng=rng)
+    base_dz = _smooth_unit_field(H, W, sigma_px=float(max(sigma_px, 0.5)), rng=rng)
+
+    x_axis = np.linspace(float(cfg.x_min_m), float(cfg.x_max_m), W, dtype=np.float32)
+    z_axis = np.linspace(float(cfg.z_min_m), float(cfg.z_max_m), H, dtype=np.float32)
+    xx, zz = np.meshgrid(x_axis, z_axis)
+    env = np.exp(
+        -0.5
+        * (
+            ((xx - np.float32(float(center_x_m))) / np.float32(max(float(sigma_x_m), 1e-6))) ** 2
+            + ((zz - np.float32(float(center_z_m))) / np.float32(max(float(sigma_z_m), 1e-6))) ** 2
+        )
+    ).astype(np.float32, copy=False)
+    env_rms = float(np.sqrt(np.mean(env * env))) + 1e-12
+    env = (env / env_rms).astype(np.float32, copy=False)
+
+    mode_dx = (float(lateral_scale) * base_dx * env).astype(np.float32, copy=False)
+    mode_dz = (float(axial_scale) * base_dz * env).astype(np.float32, copy=False)
+
+    coef_x = (float(amp_px) * _ar1_series(T, rho=float(rho), rng=rng)).astype(np.float32, copy=False)
+    coef_z = (float(amp_px) * _ar1_series(T, rho=float(rho), rng=rng)).astype(np.float32, copy=False)
+    dx = (coef_x[:, None, None] * mode_dx[None, :, :]).astype(np.float32, copy=False)
+    dz = (coef_z[:, None, None] * mode_dz[None, :, :]).astype(np.float32, copy=False)
+
+    if float(jitter_sigma_px) > 0.0:
+        jitter_x = rng.normal(scale=float(jitter_sigma_px), size=T).astype(np.float32)
+        jitter_z = rng.normal(scale=float(jitter_sigma_px), size=T).astype(np.float32)
+        jitter_x -= np.float32(np.mean(jitter_x))
+        jitter_z -= np.float32(np.mean(jitter_z))
+        dx += (jitter_x[:, None, None] * env[None, :, :]).astype(np.float32, copy=False)
+        dz += (jitter_z[:, None, None] * env[None, :, :]).astype(np.float32, copy=False)
+
+    disp = np.sqrt(dx * dx + dz * dz)
+    telemetry = {
+        "enabled": True,
+        "center_x_m": float(center_x_m),
+        "center_z_m": float(center_z_m),
+        "sigma_x_m": float(sigma_x_m),
+        "sigma_z_m": float(sigma_z_m),
+        "amp_px": float(amp_px),
+        "sigma_px": float(sigma_px),
+        "rho": float(rho),
+        "jitter_sigma_px": float(jitter_sigma_px),
+        "disp_rms_px": float(np.sqrt(np.mean(disp * disp))) if disp.size else 0.0,
+        "disp_p90_px": float(np.quantile(disp, 0.90)) if disp.size else 0.0,
+    }
+    return dx, dz, telemetry
+
+
 def apply_phase_screen(iq_ch: np.ndarray, phase_rad: np.ndarray) -> np.ndarray:
     arr = np.asarray(iq_ch)
     phase = np.asarray(phase_rad, dtype=np.float32)

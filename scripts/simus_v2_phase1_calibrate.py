@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from scripts.simus_v2_acceptance import _combine_anchor_envelope, evaluate_run, _write_csv, _write_json
+from scripts.simus_v2_acceptance import ANCHOR_PRESETS, _combine_anchor_envelope, evaluate_run, _write_csv, _write_json
 from scripts.simus_v2_anchor_envelopes import DEFAULT_ACCEPTANCE_METRICS
 from scripts.physical_doppler_sanity_link import BandEdges, TileSpec
 from sim.simus.config import default_profile_config
@@ -243,6 +243,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--candidate", action="append", default=None, help="Candidate name(s); comma-separated allowed.")
     ap.add_argument("--anchor-json", type=Path, default=Path("reports/simus_v2/anchors/simus_v2_anchor_envelopes.json"))
+    ap.add_argument("--profile-gate", type=str, default=None)
+    ap.add_argument("--anchor-preset", type=str, choices=sorted(ANCHOR_PRESETS.keys()), default=None)
     ap.add_argument("--anchor-kind", action="append", default=None, help="Anchor kind(s); comma-separated allowed.")
     ap.add_argument("--out-root", type=Path, default=Path("runs/sim"))
     ap.add_argument("--out-csv", type=Path, default=None)
@@ -259,15 +261,28 @@ def main() -> None:
         raise SystemExit(f"unknown candidates: {', '.join(sorted(unknown))}")
 
     anchor_payload = json.loads(Path(args.anchor_json).read_text(encoding="utf-8"))
-    anchor_kinds = _parse_list(args.anchor_kind) or ["shin", "gammex_along", "gammex_across", "ulm_7883227"]
+    anchor_kinds = _parse_list(args.anchor_kind)
+    if args.profile_gate and (args.anchor_preset or anchor_kinds):
+        raise SystemExit("--profile-gate is mutually exclusive with --anchor-preset/--anchor-kind")
+    if args.anchor_preset:
+        if anchor_kinds:
+            raise SystemExit("--anchor-preset and --anchor-kind are mutually exclusive")
+        anchor_kinds = list(ANCHOR_PRESETS[str(args.anchor_preset)])
+    if not anchor_kinds and not args.profile_gate:
+        if str(args.profile) == "ClinIntraOp-Pf-v2":
+            anchor_kinds = list(ANCHOR_PRESETS["intraop_brainlike"])
+        else:
+            anchor_kinds = list(ANCHOR_PRESETS["pooled_iq"])
     metrics = list(DEFAULT_ACCEPTANCE_METRICS)
-    acceptance_env = _combine_anchor_envelope(
-        anchor_payload,
-        anchor_kinds,
-        metrics,
-        lower_q=0.10,
-        upper_q=0.90,
-    )
+    acceptance_env = None
+    if not args.profile_gate:
+        acceptance_env = _combine_anchor_envelope(
+            anchor_payload,
+            anchor_kinds,
+            metrics,
+            lower_q=0.10,
+            upper_q=0.90,
+        )
     bands = BandEdges(pf_lo_hz=30.0, pf_hi_hz=250.0, pg_lo_hz=250.0, pg_hi_hz=400.0, pa_lo_hz=400.0)
     tile = TileSpec(h=8, w=8, stride=3)
 
@@ -282,13 +297,24 @@ def main() -> None:
         if not (args.reuse_existing and (run_root / "dataset" / "meta.json").is_file()):
             cfg = _candidate_cfg(args.profile, args.tier, int(args.seed), candidate_name)
             write_simus_run(out_root=run_root, cfg=cfg, skip_bundle=True)
-        summary, metric_rows = evaluate_run(
-            run_dir=run_root,
-            bands=bands,
-            tile=tile,
-            acceptance_env=acceptance_env,
-            metrics=metrics,
-        )
+        if args.profile_gate:
+            from scripts.simus_v2_acceptance import _evaluate_profile_gate, summarize_run
+
+            summary, metric_rows = _evaluate_profile_gate(
+                run_summary=summarize_run(run_dir=run_root, bands=bands, tile=tile),
+                anchor_payload=anchor_payload,
+                gate_name=str(args.profile_gate),
+                lower_q=0.10,
+                upper_q=0.90,
+            )
+        else:
+            summary, metric_rows = evaluate_run(
+                run_dir=run_root,
+                bands=bands,
+                tile=tile,
+                acceptance_env=dict(acceptance_env or {}),
+                metrics=metrics,
+            )
         mean_miss = 0.0
         max_miss = 0.0
         miss_n = 0
@@ -343,6 +369,8 @@ def main() -> None:
         "tier": args.tier,
         "seed": int(args.seed),
         "anchor_json": str(args.anchor_json),
+        "profile_gate": None if args.profile_gate is None else str(args.profile_gate),
+        "anchor_preset": None if args.anchor_preset is None else str(args.anchor_preset),
         "anchor_kinds": anchor_kinds,
         "metrics": metrics,
         "best_candidate": None if best is None else best["candidate"],
