@@ -272,6 +272,59 @@ Current interpretation:
 - it is not yet admitted into headline benchmarking until the paper-tier clip
   is scored by `scripts/simus_v2_acceptance.py`
 
+Phase 1 calibration status:
+
+- added a dedicated candidate harness:
+  - `scripts/simus_v2_phase1_calibrate.py`
+- added two minimal residual-motion extensions while keeping the benchmark
+  target, labels, and detector unchanged:
+  - pulse-to-pulse residual jitter
+  - multi-mode elastic residuals
+- candidate comparison artifacts:
+  - `reports/simus_v2/acceptance/simus_v2_phase1_candidate_compare.csv`
+  - `reports/simus_v2/acceptance/simus_v2_phase1_candidate_compare.json`
+
+Best candidate so far:
+
+- `calM2`
+  - acceptance:
+    - `reports/simus_v2/acceptance/simus_v2_phase1_calibration_clin_intraop_pf_v2_paper_seed0_calM2_single.json`
+    - `reports/simus_v2/acceptance/simus_v2_phase1_calibration_clin_intraop_pf_v2_paper_seed0_calM2_single.csv`
+  - score:
+    - `11/13` passed on the current pooled IQ-anchor gate
+  - remaining failed metrics:
+    - `svd_bg_cum_r1`
+    - `svd_bg_cum_r2`
+
+What was tried:
+
+- smooth-motion tuning:
+  - `calA`, `calB`
+  - improved background alias and coherence but stalled at `10/13`
+- explicit residual jitter:
+  - `calJ1`
+  - broke background coherence aggressively but still left background too
+    rank-1/rank-2 dominated
+- multi-mode elastic residuals:
+  - `calM1`, `calM2`, `calM3`
+  - `calM2` was the clear near-pass
+  - stronger local tuning beyond `calM2` regressed already-passing metrics
+- localized multi-mode residual:
+  - `calL1`
+  - did not improve the blocker cleanly
+
+Current blocker:
+
+- the remaining mismatch is not generic motion amplitude
+- it is ordinary-background subspace realism:
+  - background remains too rank-1 / rank-2 dominated relative to the frozen
+    anchor envelope
+- this means Phase 1 is materially improved but not fully accepted yet
+- Phase 2 should not start until either:
+  - the background model is updated more deeply, or
+  - the acceptance harness is explicitly split into profile-specific envelopes
+    with separate brain-like vs phantom nuisance contexts
+
 ### Phase 2: Implement `ClinMobile-Pf-v2`
 
 Purpose:
