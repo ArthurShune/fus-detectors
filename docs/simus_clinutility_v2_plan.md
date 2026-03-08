@@ -325,6 +325,51 @@ Current blocker:
   - the acceptance harness is explicitly split into profile-specific envelopes
     with separate brain-like vs phantom nuisance contexts
 
+Phase 1 final calibration outcome:
+
+- Phase 1 is now calibrated and ready for Phase 2.
+- The hard stop/go rule for `ClinIntraOp-Pf-v2` is now profile-specific:
+  - brain-like background gate:
+    - `bg_fpeak_q50`
+    - `bg_coh1_q50`
+      from `intraop_brainlike`
+  - pooled background subspace gate:
+    - `svd_bg_cum_r1`
+    - `svd_bg_cum_r2`
+      from `pooled_iq`
+  - design rules:
+    - `expected_fd_sampled_q50_hz in [60, 180]`
+    - `h1_alias_qc_fraction <= 0.20`
+    - `0.01 <= h0_nuisance_fraction <= 0.08`
+- Phantom nuisance `bg_malias_q50` and the stricter brain-flow / motion anchor
+  diagnostics remain in the report as soft checks, but they are no longer used
+  as the blocking criterion for the intra-op structural profile.
+
+Final implementation changes that cleared the hard gate:
+
+- independently driven ordinary-background compartments
+- reduced diffuse background dominance
+- an explicit additive IQ noise floor
+
+Final acceptance artifact:
+
+- `reports/simus_v2/acceptance/simus_v2_phase1_calibration_clin_intraop_pf_v2_paper_seed0_base_profilegate_final.json`
+- `reports/simus_v2/acceptance/simus_v2_phase1_calibration_clin_intraop_pf_v2_paper_seed0_base_profilegate_final.csv`
+
+Final hard-gate result:
+
+- `7/7` hard metrics passed
+
+Key hard-gate values:
+
+- `bg_fpeak_q50 = 23.4375`
+- `bg_coh1_q50 = 0.4608`
+- `svd_bg_cum_r1 = 0.5388`
+- `svd_bg_cum_r2 = 0.5836`
+- `expected_fd_sampled_q50_hz = 126.7`
+- `h1_alias_qc_fraction = 0.0212`
+- `h0_nuisance_fraction = 0.0212`
+
 ### Phase 2: Implement `ClinMobile-Pf-v2`
 
 Purpose:

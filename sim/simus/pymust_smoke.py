@@ -19,6 +19,7 @@ from sim.simus.labels import build_label_pack
 from sim.simus.motion import (
     apply_phase_screen,
     build_motion_artifacts,
+    build_localized_motion_component,
     build_phase_screen_series,
     sample_motion_displacements_m,
 )
@@ -191,6 +192,57 @@ def _sample_uniform_excluding_mask(
     return xs, zs
 
 
+def _sample_gaussian_excluding_mask(
+    rng: np.random.Generator,
+    *,
+    n: int,
+    center_x: float,
+    center_z: float,
+    sigma_x: float,
+    sigma_z: float,
+    x_min: float,
+    x_max: float,
+    z_min: float,
+    z_max: float,
+    exclude_mask_fn,
+    max_tries: int = 80,
+) -> tuple[np.ndarray, np.ndarray]:
+    xs = np.empty((n,), dtype=np.float32)
+    zs = np.empty((n,), dtype=np.float32)
+    filled = 0
+    while filled < n and max_tries > 0:
+        max_tries -= 1
+        need = n - filled
+        x = rng.normal(loc=float(center_x), scale=max(float(sigma_x), 1e-6), size=need).astype(np.float32)
+        z = rng.normal(loc=float(center_z), scale=max(float(sigma_z), 1e-6), size=need).astype(np.float32)
+        keep = (
+            (x >= float(x_min))
+            & (x <= float(x_max))
+            & (z >= float(z_min))
+            & (z <= float(z_max))
+            & (~exclude_mask_fn(x, z))
+        )
+        k = int(np.sum(keep))
+        if k <= 0:
+            continue
+        xs[filled : filled + k] = x[keep][:k]
+        zs[filled : filled + k] = z[keep][:k]
+        filled += k
+    if filled < n:
+        x_fill, z_fill = _sample_uniform_excluding_mask(
+            rng,
+            n=n - filled,
+            x_min=x_min,
+            x_max=x_max,
+            z_min=z_min,
+            z_max=z_max,
+            exclude_mask_fn=exclude_mask_fn,
+        )
+        xs[filled:] = x_fill
+        zs[filled:] = z_fill
+    return xs, zs
+
+
 def _match_iq_shape(iq_ch: np.ndarray, ref_shape: tuple[int, int]) -> np.ndarray:
     arr = np.asarray(iq_ch)
     if arr.ndim != 2:
@@ -316,7 +368,7 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
             ) <= (0.5 * float(clutter.thickness_m))
         return out
 
-    # Tissue: uniform over ROI excluding the vessel strip.
+    # Tissue: ordinary background pool plus independently driven local parcels.
     xs_tissue, zs_tissue = _sample_uniform_excluding_mask(
         rng,
         n=int(cfg.tissue_count),
@@ -332,6 +384,51 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         "zs_tissue": zs_tissue,
         "rc_tissue": rc_tissue,
     }
+
+    background_states: list[dict[str, Any]] = []
+    for bidx, compartment in enumerate(tuple(cfg.background_compartments)):
+        xs_bg, zs_bg = _sample_gaussian_excluding_mask(
+            rng,
+            n=int(compartment.scatterer_count),
+            center_x=float(compartment.center_x_m),
+            center_z=float(compartment.center_z_m),
+            sigma_x=float(compartment.sigma_x_m),
+            sigma_z=float(compartment.sigma_z_m),
+            x_min=x_min,
+            x_max=x_max,
+            z_min=z_min,
+            z_max=z_max,
+            exclude_mask_fn=_in_excluded_scene,
+        )
+        rc_bg = (float(compartment.rc_scale) * rng.standard_normal(int(compartment.scatterer_count))).astype(np.float32)
+        dx_bg_px, dz_bg_px, tele_bg = build_localized_motion_component(
+            cfg=cfg,
+            center_x_m=float(compartment.center_x_m),
+            center_z_m=float(compartment.center_z_m),
+            sigma_x_m=float(compartment.sigma_x_m),
+            sigma_z_m=float(compartment.sigma_z_m),
+            amp_px=float(compartment.motion_amp_px),
+            sigma_px=float(compartment.motion_sigma_px),
+            rho=float(compartment.motion_rho),
+            jitter_sigma_px=float(compartment.motion_jitter_sigma_px),
+            lateral_scale=float(compartment.lateral_scale),
+            axial_scale=float(compartment.axial_scale),
+            seed=int(cfg.seed) + 9001 + 37 * bidx,
+        )
+        background_states.append(
+            {
+                "spec": compartment,
+                "xs": xs_bg,
+                "zs": zs_bg,
+                "rc": rc_bg,
+                "dx_px": dx_bg_px,
+                "dz_px": dz_bg_px,
+                "telemetry": tele_bg,
+            }
+        )
+        scatterers_init[f"xs_bg_compartment_{bidx}"] = xs_bg.copy()
+        scatterers_init[f"zs_bg_compartment_{bidx}"] = zs_bg.copy()
+        scatterers_init[f"rc_bg_compartment_{bidx}"] = rc_bg.copy()
 
     clutter_states: list[dict[str, Any]] = []
     for cidx, clutter in enumerate(tuple(cfg.structured_clutter)):
@@ -397,6 +494,8 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
     iq_shape_ref: tuple[int, int] | None = None
     phase_series = None
     phase_telemetry: dict[str, Any] = {"enabled": False, "phase_rms_rad": 0.0}
+    noise_rng = np.random.default_rng(int(cfg.seed) + 8101)
+    noise_sigmas: list[float] = []
 
     for t in range(int(cfg.T)):
         dx_tissue_m, dz_tissue_m = sample_motion_displacements_m(
@@ -423,6 +522,35 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
             clutter_xs.append((np.asarray(state["xs"], dtype=np.float32) + dx_clutter_m).astype(np.float32, copy=False))
             clutter_zs.append((np.asarray(state["zs"], dtype=np.float32) + dz_clutter_m).astype(np.float32, copy=False))
 
+        bg_xs = []
+        bg_zs = []
+        bg_rc = [np.asarray(state["rc"], dtype=np.float32) for state in background_states]
+        for state in background_states:
+            dx_bg_global_m, dz_bg_global_m = sample_motion_displacements_m(
+                field_dx_px=motion_art.dx_px[t],
+                field_dz_px=motion_art.dz_px[t],
+                x_m=np.asarray(state["xs"], dtype=np.float32),
+                z_m=np.asarray(state["zs"], dtype=np.float32),
+                cfg=cfg,
+            )
+            dx_bg_local_m, dz_bg_local_m = sample_motion_displacements_m(
+                field_dx_px=np.asarray(state["dx_px"], dtype=np.float32)[t],
+                field_dz_px=np.asarray(state["dz_px"], dtype=np.float32)[t],
+                x_m=np.asarray(state["xs"], dtype=np.float32),
+                z_m=np.asarray(state["zs"], dtype=np.float32),
+                cfg=cfg,
+            )
+            bg_xs.append(
+                (
+                    np.asarray(state["xs"], dtype=np.float32) + dx_bg_global_m + dx_bg_local_m
+                ).astype(np.float32, copy=False)
+            )
+            bg_zs.append(
+                (
+                    np.asarray(state["zs"], dtype=np.float32) + dz_bg_global_m + dz_bg_local_m
+                ).astype(np.float32, copy=False)
+            )
+
         blood_xs = []
         blood_zs = []
         blood_rc = [np.asarray(state["rc"], dtype=np.float32) for state in blood_states]
@@ -436,9 +564,9 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
             )
             blood_xs.append((np.asarray(state["xs"], dtype=np.float32) + dx_blood_m).astype(np.float32, copy=False))
             blood_zs.append((np.asarray(state["zs"], dtype=np.float32) + dz_blood_m).astype(np.float32, copy=False))
-        xs = np.concatenate([xs_tissue_t] + clutter_xs + blood_xs).astype(np.float32, copy=False)
-        zs = np.concatenate([zs_tissue_t] + clutter_zs + blood_zs).astype(np.float32, copy=False)
-        rc = np.concatenate([rc_tissue] + clutter_rc + blood_rc).astype(np.float32, copy=False)
+        xs = np.concatenate([xs_tissue_t] + bg_xs + clutter_xs + blood_xs).astype(np.float32, copy=False)
+        zs = np.concatenate([zs_tissue_t] + bg_zs + clutter_zs + blood_zs).astype(np.float32, copy=False)
+        rc = np.concatenate([rc_tissue] + bg_rc + clutter_rc + blood_rc).astype(np.float32, copy=False)
 
         rf, _rf_spec = pm.simus(xs, zs, rc, txdel, param)
         rf = np.asarray(rf, dtype=np.float32)
@@ -463,6 +591,16 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
             M = pm.dasmtx(1j * np.array(iq_ch.shape, dtype=np.int64), X, Z, txdel, param)
 
         img = (M @ iq_ch.flatten(order="F")).reshape(X.shape, order="F")
+        if cfg.noise.enabled and float(cfg.noise.iq_rms_frac) > 0.0:
+            img_arr = np.asarray(img, dtype=np.complex64)
+            frame_rms = float(np.sqrt(np.mean(np.abs(img_arr) ** 2))) if img_arr.size else 0.0
+            sigma = float(cfg.noise.iq_rms_frac) * frame_rms / float(np.sqrt(2.0))
+            noise = sigma * (
+                noise_rng.standard_normal(img_arr.shape).astype(np.float32)
+                + 1j * noise_rng.standard_normal(img_arr.shape).astype(np.float32)
+            )
+            img = (img_arr + noise.astype(np.complex64, copy=False)).astype(np.complex64, copy=False)
+            noise_sigmas.append(float(sigma))
         Icube[t] = np.asarray(img, dtype=np.complex64)
 
         for state in blood_states:
@@ -515,6 +653,12 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         "motion_telemetry": motion_art.telemetry,
         "phase_screen_rad": np.asarray(phase_series, dtype=np.float32) if phase_series is not None else np.zeros((int(cfg.T), 0), dtype=np.float32),
         "phase_screen_telemetry": phase_telemetry,
+        "noise_telemetry": {
+            "enabled": bool(cfg.noise.enabled),
+            "iq_rms_frac": float(cfg.noise.iq_rms_frac),
+            "sigma_q50": float(np.quantile(np.asarray(noise_sigmas, dtype=np.float32), 0.50)) if noise_sigmas else 0.0,
+            "sigma_q90": float(np.quantile(np.asarray(noise_sigmas, dtype=np.float32), 0.90)) if noise_sigmas else 0.0,
+        },
         "txdel_s": txdel,
         "grid_x_m": xg,
         "grid_z_m": zg,
@@ -523,15 +667,18 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
             "n_microvascular_vessels": int(sum(1 for v in vessels if v.role == "microvascular")),
             "n_nuisance_vessels": int(sum(1 for v in vessels if v.role == "nuisance_pa")),
             "n_structured_clutter": int(len(tuple(cfg.structured_clutter))),
+            "n_background_compartments": int(len(tuple(cfg.background_compartments))),
             "microvascular_fraction": float(np.mean(mask_microvascular)),
             "nuisance_fraction": float(np.mean(mask_nuisance_pa)),
             "specular_struct_fraction": float(np.mean(labels.mask_h0_specular_struct)),
             "h1_pf_main_fraction": float(np.mean(labels.mask_h1_pf_main)),
             "h1_alias_qc_fraction": float(np.mean(labels.mask_h1_alias_qc)),
             "h0_nuisance_fraction": float(np.mean(labels.mask_h0_nuisance_pa)),
+            "background_compartment_scatterers": int(sum(int(state["xs"].size) for state in background_states)),
             "expected_fd_true_q50_hz": float(np.quantile(labels.expected_fd_true_hz[labels.mask_flow], 0.50)) if np.any(labels.mask_flow) else 0.0,
             "expected_fd_sampled_q50_hz": float(np.quantile(labels.expected_fd_sampled_hz[labels.mask_flow], 0.50)) if np.any(labels.mask_flow) else 0.0,
         },
+        "background_compartment_telemetry": [dict(state["telemetry"]) for state in background_states],
     }
 
     return {

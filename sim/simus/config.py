@@ -81,6 +81,29 @@ class StructuredClutterSpec:
 
 
 @dataclass(frozen=True)
+class BackgroundCompartmentSpec:
+    name: str
+    center_x_m: float
+    center_z_m: float
+    sigma_x_m: float
+    sigma_z_m: float
+    scatterer_count: int = 120
+    rc_scale: float = 0.4
+    motion_amp_px: float = 0.0
+    motion_sigma_px: float = 10.0
+    motion_rho: float = 0.9
+    motion_jitter_sigma_px: float = 0.0
+    lateral_scale: float = 1.0
+    axial_scale: float = 0.7
+
+
+@dataclass(frozen=True)
+class NoiseSpec:
+    enabled: bool = False
+    iq_rms_frac: float = 0.0
+
+
+@dataclass(frozen=True)
 class SimusConfig:
     preset: SimusPreset = "microvascular_like"
     tier: SimusTier = "smoke"
@@ -119,7 +142,9 @@ class SimusConfig:
     bg_top_exclusion_frac: float = 0.10
     motion: MotionSpec = MotionSpec()
     phase_screen: PhaseScreenSpec = PhaseScreenSpec()
+    noise: NoiseSpec = NoiseSpec()
     structured_clutter: tuple[StructuredClutterSpec, ...] = ()
+    background_compartments: tuple[BackgroundCompartmentSpec, ...] = ()
 
     reservoir_scale: int = 4
     reinject_depth_span_m: float = 0.003
@@ -223,6 +248,7 @@ def default_config(*, preset: SimusPreset, tier: SimusTier, seed: int) -> SimusC
         vessels=(vessel,),
         motion=MotionSpec(enabled=False),
         phase_screen=PhaseScreenSpec(enabled=False),
+        noise=NoiseSpec(enabled=False),
         reservoir_scale=4,
         reinject_depth_span_m=float(reinject_depth_span_m),
         **grid,
@@ -234,12 +260,13 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
     structural_profile = profile == "ClinIntraOp-Pf-Struct-v2"
     clin_v2 = profile == "ClinIntraOp-Pf-v2"
     if tier == "paper":
-        tissue_count = 2600
+        tissue_count = 1200 if clin_v2 else 2600
         guard_px = 2
         reservoir_span = 1.5e-3
         micro_blood_count = 280 if not clin_v2 else 320
         nuisance_blood_count = 520 if not clin_v2 else 620
         nuisance_vmax = 0.065 if profile in ("ClinIntraOp-Pf-v1", "ClinIntraOp-Pf-Struct-v2") else 0.090
+        noise = NoiseSpec(enabled=False)
         if structural_profile:
             motion = MotionSpec(enabled=False)
             phase_screen = PhaseScreenSpec(enabled=False)
@@ -253,23 +280,26 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 cardiac_hz=1.10,
                 cardiac_amp_x_px=0.10,
                 cardiac_amp_z_px=0.05,
-                random_walk_sigma_px=0.01,
-                drift_x_px=0.10,
-                drift_z_px=0.04,
-                elastic_amp_px=0.12,
-                elastic_sigma_px=20.0,
+                random_walk_sigma_px=0.04,
+                pulse_jitter_sigma_px=0.06,
+                drift_x_px=0.20,
+                drift_z_px=0.09,
+                elastic_amp_px=0.42,
+                elastic_sigma_px=14.0,
                 elastic_depth_decay_frac=0.32,
-                elastic_temporal_rho=0.99,
+                elastic_temporal_rho=0.72,
+                elastic_mode_count=4,
                 elastic_lateral_scale=1.0,
                 elastic_axial_scale=0.60,
             )
             phase_screen = PhaseScreenSpec(
                 enabled=True,
-                std_rad=0.35,
-                corr_len_elem=14.0,
-                drift_rho=0.998,
-                drift_sigma_rad=0.004,
+                std_rad=0.42,
+                corr_len_elem=8.0,
+                drift_rho=0.95,
+                drift_sigma_rad=0.018,
             )
+            noise = NoiseSpec(enabled=True, iq_rms_frac=0.24)
             micro_blood_rc_scale = 0.22
             nuisance_vmax = 0.085
         elif profile == "ClinIntraOp-Pf-v1":
@@ -290,6 +320,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 elastic_axial_scale=0.65,
             )
             phase_screen = PhaseScreenSpec(enabled=True, std_rad=0.60, corr_len_elem=12.0, drift_rho=1.0, drift_sigma_rad=0.0)
+            noise = NoiseSpec(enabled=False)
             micro_blood_rc_scale = 0.18
         else:
             motion = MotionSpec(
@@ -317,6 +348,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 drift_rho=0.995,
                 drift_sigma_rad=0.015,
             )
+            noise = NoiseSpec(enabled=False)
             micro_blood_rc_scale = 0.18
         micro_vessels = (
             _legacy_vessel(
@@ -404,13 +436,61 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 rc_scale=1.2,
             ),
         ) if clin_v2 else ()
+        background_compartments = (
+            BackgroundCompartmentSpec(
+                name="bg_superficial_left",
+                center_x_m=-4.6e-3,
+                center_z_m=9.0e-3,
+                sigma_x_m=1.8e-3,
+                sigma_z_m=1.4e-3,
+                scatterer_count=280,
+                rc_scale=0.55,
+                motion_amp_px=0.32,
+                motion_sigma_px=10.0,
+                motion_rho=0.78,
+                motion_jitter_sigma_px=0.03,
+                lateral_scale=1.0,
+                axial_scale=0.72,
+            ),
+            BackgroundCompartmentSpec(
+                name="bg_mid_core",
+                center_x_m=1.0e-3,
+                center_z_m=13.0e-3,
+                sigma_x_m=2.6e-3,
+                sigma_z_m=2.2e-3,
+                scatterer_count=320,
+                rc_scale=0.50,
+                motion_amp_px=0.36,
+                motion_sigma_px=12.0,
+                motion_rho=0.74,
+                motion_jitter_sigma_px=0.025,
+                lateral_scale=1.0,
+                axial_scale=0.68,
+            ),
+            BackgroundCompartmentSpec(
+                name="bg_deep_right",
+                center_x_m=4.8e-3,
+                center_z_m=17.2e-3,
+                sigma_x_m=2.0e-3,
+                sigma_z_m=2.5e-3,
+                scatterer_count=280,
+                rc_scale=0.52,
+                motion_amp_px=0.30,
+                motion_sigma_px=11.0,
+                motion_rho=0.80,
+                motion_jitter_sigma_px=0.025,
+                lateral_scale=0.95,
+                axial_scale=0.72,
+            ),
+        ) if clin_v2 else ()
     else:
-        tissue_count = 720
+        tissue_count = 340 if clin_v2 else 720
         guard_px = 1
         reservoir_span = 2.0e-3
         micro_blood_count = 90 if not clin_v2 else 120
         nuisance_blood_count = 180 if not clin_v2 else 220
         nuisance_vmax = 0.17 if profile in ("ClinIntraOp-Pf-v1", "ClinIntraOp-Pf-Struct-v2") else 0.22
+        noise = NoiseSpec(enabled=False)
         if structural_profile:
             motion = MotionSpec(enabled=False)
             phase_screen = PhaseScreenSpec(enabled=False)
@@ -424,23 +504,26 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 cardiac_hz=1.10,
                 cardiac_amp_x_px=0.05,
                 cardiac_amp_z_px=0.03,
-                random_walk_sigma_px=0.006,
-                drift_x_px=0.04,
-                drift_z_px=0.02,
-                elastic_amp_px=0.08,
-                elastic_sigma_px=7.0,
+                random_walk_sigma_px=0.02,
+                pulse_jitter_sigma_px=0.04,
+                drift_x_px=0.10,
+                drift_z_px=0.05,
+                elastic_amp_px=0.20,
+                elastic_sigma_px=6.0,
                 elastic_depth_decay_frac=0.30,
-                elastic_temporal_rho=0.99,
+                elastic_temporal_rho=0.75,
+                elastic_mode_count=3,
                 elastic_lateral_scale=1.0,
                 elastic_axial_scale=0.60,
             )
             phase_screen = PhaseScreenSpec(
                 enabled=True,
-                std_rad=0.28,
-                corr_len_elem=7.0,
-                drift_rho=0.998,
-                drift_sigma_rad=0.003,
+                std_rad=0.34,
+                corr_len_elem=6.0,
+                drift_rho=0.95,
+                drift_sigma_rad=0.012,
             )
+            noise = NoiseSpec(enabled=True, iq_rms_frac=0.16)
             micro_blood_rc_scale = 0.22
             nuisance_vmax = 0.19
         elif profile == "ClinIntraOp-Pf-v1":
@@ -461,6 +544,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 elastic_axial_scale=0.65,
             )
             phase_screen = PhaseScreenSpec(enabled=True, std_rad=0.45, corr_len_elem=6.0, drift_rho=1.0, drift_sigma_rad=0.0)
+            noise = NoiseSpec(enabled=False)
             micro_blood_rc_scale = 0.18
         else:
             motion = MotionSpec(
@@ -488,6 +572,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 drift_rho=0.992,
                 drift_sigma_rad=0.012,
             )
+            noise = NoiseSpec(enabled=False)
             micro_blood_rc_scale = 0.18
         micro_vessels = (
             _legacy_vessel(
@@ -563,6 +648,57 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 rc_scale=1.15,
             ),
         ) if clin_v2 else ()
+        background_compartments = (
+            BackgroundCompartmentSpec(
+                name="bg_superficial_left",
+                center_x_m=-4.0e-3,
+                center_z_m=8.8e-3,
+                sigma_x_m=1.6e-3,
+                sigma_z_m=1.2e-3,
+                scatterer_count=90,
+                rc_scale=0.55,
+                motion_amp_px=0.22,
+                motion_sigma_px=6.0,
+                motion_rho=0.78,
+                motion_jitter_sigma_px=0.02,
+                lateral_scale=1.0,
+                axial_scale=0.72,
+            ),
+            BackgroundCompartmentSpec(
+                name="bg_mid_core",
+                center_x_m=1.0e-3,
+                center_z_m=13.0e-3,
+                sigma_x_m=2.4e-3,
+                sigma_z_m=2.0e-3,
+                scatterer_count=110,
+                rc_scale=0.50,
+                motion_amp_px=0.26,
+                motion_sigma_px=7.0,
+                motion_rho=0.74,
+                motion_jitter_sigma_px=0.015,
+                lateral_scale=1.0,
+                axial_scale=0.68,
+            ),
+            BackgroundCompartmentSpec(
+                name="bg_deep_right",
+                center_x_m=4.2e-3,
+                center_z_m=17.0e-3,
+                sigma_x_m=1.8e-3,
+                sigma_z_m=2.2e-3,
+                scatterer_count=90,
+                rc_scale=0.52,
+                motion_amp_px=0.22,
+                motion_sigma_px=6.5,
+                motion_rho=0.80,
+                motion_jitter_sigma_px=0.015,
+                lateral_scale=0.95,
+                axial_scale=0.72,
+            ),
+        ) if clin_v2 else ()
+
+    if not clin_v2:
+        background_compartments = ()
+        noise = NoiseSpec(enabled=False)
 
     vessels = tuple(v for v in micro_vessels + nuisance_vessels if int(v.blood_count) > 0)
     main_micro = micro_vessels[0]
@@ -572,7 +708,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
         profile=str(profile),
         seed=int(seed),
         tissue_count=int(tissue_count),
-        tissue_rc_scale=1.0,
+        tissue_rc_scale=0.85 if clin_v2 else 1.0,
         blood_count=int(sum(v.blood_count for v in vessels)),
         blood_rc_scale=float(main_micro.blood_rc_scale),
         vessel_center_x_m=float(main_micro.center_x_m),
@@ -585,7 +721,9 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
         bg_top_exclusion_frac=0.10,
         motion=motion,
         phase_screen=phase_screen,
+        noise=noise,
         structured_clutter=structured_clutter,
+        background_compartments=background_compartments,
         reservoir_scale=4,
         reinject_depth_span_m=float(reservoir_span),
         **grid,

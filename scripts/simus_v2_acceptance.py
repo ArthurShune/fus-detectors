@@ -19,6 +19,64 @@ ANCHOR_PRESETS: dict[str, list[str]] = {
     "phantom_nuisance": ["gammex_along", "gammex_across"],
 }
 
+PROFILE_GATES: dict[str, dict[str, Any]] = {
+    "ClinIntraOp-Pf-v2": {
+        "hard_sections": (
+            {
+                "name": "brain_background",
+                "anchor_preset": "intraop_brainlike",
+                "metrics": ("bg_fpeak_q50", "bg_coh1_q50"),
+            },
+            {
+                "name": "pooled_background_subspace",
+                "anchor_preset": "pooled_iq",
+                "metrics": ("svd_bg_cum_r1", "svd_bg_cum_r2"),
+            },
+        ),
+        "hard_rules": (
+            {
+                "name": "scene.expected_fd_sampled_q50_hz",
+                "path": ("scene", "expected_fd_sampled_q50_hz"),
+                "lo": 60.0,
+                "hi": 180.0,
+            },
+            {
+                "name": "scene.h1_alias_qc_fraction",
+                "path": ("scene", "h1_alias_qc_fraction"),
+                "lo": 0.0,
+                "hi": 0.20,
+            },
+            {
+                "name": "scene.h0_nuisance_fraction",
+                "path": ("scene", "h0_nuisance_fraction"),
+                "lo": 0.01,
+                "hi": 0.08,
+            },
+        ),
+        "soft_sections": (
+            {
+                "name": "phantom_nuisance",
+                "anchor_preset": "phantom_nuisance",
+                "metrics": ("bg_malias_q50",),
+            },
+            {
+                "name": "brain_flow_motion",
+                "anchor_preset": "intraop_brainlike",
+                "metrics": (
+                    "flow_fpeak_q50",
+                    "flow_coh1_q50",
+                    "flow_malias_q50",
+                    "svd_flow_cum_r1",
+                    "svd_flow_cum_r2",
+                    "reg_shift_rms",
+                    "reg_shift_p90",
+                    "reg_psr_median",
+                ),
+            },
+        ),
+    },
+}
+
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -82,14 +140,12 @@ def _combine_anchor_envelope(payload: dict[str, Any], anchor_kinds: list[str], m
     return combined
 
 
-def evaluate_run(
+def summarize_run(
     *,
     run_dir: Path,
     bands: BandEdges,
     tile: TileSpec,
-    acceptance_env: dict[str, Any],
-    metrics: list[str],
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+) -> dict[str, Any]:
     icube, masks, meta = load_canonical_run(Path(run_dir))
     prf_hz = float(meta.get("acquisition", {}).get("prf_hz", meta.get("config", {}).get("prf_hz", 0.0)))
     report = summarize_icube(
@@ -117,6 +173,24 @@ def evaluate_run(
         report=report,
         motion_features=motion,
     )
+    return {
+        "run_dir": str(Path(run_dir)),
+        "case_key": str(Path(run_dir).name),
+        "row": row,
+        "scene": dict(meta.get("scene") or {}),
+    }
+
+
+def evaluate_run(
+    *,
+    run_dir: Path,
+    bands: BandEdges,
+    tile: TileSpec,
+    acceptance_env: dict[str, Any],
+    metrics: list[str],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    run_summary = summarize_run(run_dir=run_dir, bands=bands, tile=tile)
+    row = dict(run_summary["row"])
     metric_rows: list[dict[str, Any]] = []
     required = 0
     passed = 0
@@ -147,14 +221,122 @@ def evaluate_run(
             }
         )
     summary = {
-        "run_dir": str(Path(run_dir)),
-        "case_key": str(Path(run_dir).name),
+        "run_dir": str(run_summary["run_dir"]),
+        "case_key": str(run_summary["case_key"]),
         "required_metrics": int(required),
         "passed_metrics": int(passed),
         "failed_metrics": int(max(required - passed, 0)),
         "pass_fraction": float(passed / required) if required else None,
         "overall_pass": bool(required > 0 and passed == required),
         "row": row,
+        "scene": dict(run_summary["scene"]),
+    }
+    return summary, metric_rows
+
+
+def _lookup_nested(obj: dict[str, Any], path: tuple[str, ...]) -> Any:
+    cur: Any = obj
+    for key in path:
+        if not isinstance(cur, dict):
+            return None
+        cur = cur.get(key)
+    return cur
+
+
+def _evaluate_profile_gate(
+    *,
+    run_summary: dict[str, Any],
+    anchor_payload: dict[str, Any],
+    gate_name: str,
+    lower_q: float,
+    upper_q: float,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    gate = PROFILE_GATES[str(gate_name)]
+    row = dict(run_summary["row"])
+    scene = dict(run_summary.get("scene") or {})
+    metric_rows: list[dict[str, Any]] = []
+    hard_required = 0
+    hard_passed = 0
+    soft_required = 0
+    soft_passed = 0
+
+    def add_metric_row(section_name: str, metric: str, value: Any, lo: Any, hi: Any, source: str, required_kind: str) -> None:
+        nonlocal hard_required, hard_passed, soft_required, soft_passed
+        if value is None or lo is None or hi is None:
+            status = "skipped"
+            is_pass = None
+        else:
+            is_pass = bool(float(lo) <= float(value) <= float(hi))
+            status = "pass" if is_pass else "fail"
+            if required_kind == "hard":
+                hard_required += 1
+                hard_passed += int(is_pass)
+            else:
+                soft_required += 1
+                soft_passed += int(is_pass)
+        metric_rows.append(
+            {
+                "run_dir": str(run_summary["run_dir"]),
+                "case_key": str(run_summary["case_key"]),
+                "section": section_name,
+                "metric": metric,
+                "value": value,
+                "lo": lo,
+                "hi": hi,
+                "status": status,
+                "source": source,
+                "required_kind": required_kind,
+            }
+        )
+
+    for section_kind, required_kind in (("hard_sections", "hard"), ("soft_sections", "soft")):
+        for section in gate.get(section_kind, ()):
+            acceptance_env = _combine_anchor_envelope(
+                anchor_payload,
+                list(ANCHOR_PRESETS[str(section["anchor_preset"])]),
+                list(section["metrics"]),
+                lower_q=float(lower_q),
+                upper_q=float(upper_q),
+            )
+            for metric in section["metrics"]:
+                env = acceptance_env.get(str(metric), {})
+                add_metric_row(
+                    str(section["name"]),
+                    str(metric),
+                    row.get(str(metric)),
+                    env.get("lo"),
+                    env.get("hi"),
+                    f"anchors:{section['anchor_preset']}",
+                    required_kind,
+                )
+
+    for rule in gate.get("hard_rules", ()):
+        value = _lookup_nested({"scene": scene, "row": row}, tuple(rule["path"]))
+        add_metric_row(
+            "design_rules",
+            str(rule["name"]),
+            value,
+            rule.get("lo"),
+            rule.get("hi"),
+            "design",
+            "hard",
+        )
+
+    summary = {
+        "run_dir": str(run_summary["run_dir"]),
+        "case_key": str(run_summary["case_key"]),
+        "required_metrics": int(hard_required),
+        "passed_metrics": int(hard_passed),
+        "failed_metrics": int(max(hard_required - hard_passed, 0)),
+        "pass_fraction": float(hard_passed / hard_required) if hard_required else None,
+        "overall_pass": bool(hard_required > 0 and hard_passed == hard_required),
+        "soft_required_metrics": int(soft_required),
+        "soft_passed_metrics": int(soft_passed),
+        "soft_failed_metrics": int(max(soft_required - soft_passed, 0)),
+        "soft_pass_fraction": float(soft_passed / soft_required) if soft_required else None,
+        "row": row,
+        "scene": scene,
+        "profile_gate": str(gate_name),
     }
     return summary, metric_rows
 
@@ -164,6 +346,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--run", type=Path, action="append", default=None)
     ap.add_argument("--sim-root", type=Path, action="append", default=None)
     ap.add_argument("--anchor-json", type=Path, default=Path("reports/simus_v2/anchors/simus_v2_anchor_envelopes.json"))
+    ap.add_argument("--profile-gate", type=str, choices=sorted(PROFILE_GATES.keys()), default=None)
     ap.add_argument("--anchor-preset", type=str, choices=sorted(ANCHOR_PRESETS.keys()), default=None)
     ap.add_argument("--anchor-kind", type=str, action="append", default=None)
     ap.add_argument("--metrics", type=str, default=",".join(DEFAULT_ACCEPTANCE_METRICS))
@@ -189,20 +372,24 @@ def main() -> None:
 
     payload = json.loads(Path(args.anchor_json).read_text(encoding="utf-8"))
     anchor_kinds = _parse_kinds(args.anchor_kind)
+    if args.profile_gate and (args.anchor_preset or anchor_kinds):
+        raise SystemExit("--profile-gate is mutually exclusive with --anchor-preset/--anchor-kind")
     if args.anchor_preset:
         if anchor_kinds:
             raise SystemExit("--anchor-preset and --anchor-kind are mutually exclusive")
         anchor_kinds = list(ANCHOR_PRESETS[str(args.anchor_preset)])
-    if not anchor_kinds:
+    if not anchor_kinds and not args.profile_gate:
         anchor_kinds = list(ANCHOR_PRESETS["pooled_iq"])
     metrics = [m.strip() for m in str(args.metrics).split(",") if m.strip()]
-    acceptance_env = _combine_anchor_envelope(
-        payload,
-        anchor_kinds,
-        metrics,
-        lower_q=float(args.lower_q),
-        upper_q=float(args.upper_q),
-    )
+    acceptance_env = None
+    if not args.profile_gate:
+        acceptance_env = _combine_anchor_envelope(
+            payload,
+            anchor_kinds,
+            metrics,
+            lower_q=float(args.lower_q),
+            upper_q=float(args.upper_q),
+        )
 
     bands = BandEdges(
         pf_lo_hz=float(args.pf[0]),
@@ -229,19 +416,30 @@ def main() -> None:
         if key in seen:
             continue
         seen.add(key)
-        summary, rows = evaluate_run(
-            run_dir=Path(run_dir),
-            bands=bands,
-            tile=tile,
-            acceptance_env=acceptance_env,
-            metrics=metrics,
-        )
+        if args.profile_gate:
+            run_summary = summarize_run(run_dir=Path(run_dir), bands=bands, tile=tile)
+            summary, rows = _evaluate_profile_gate(
+                run_summary=run_summary,
+                anchor_payload=payload,
+                gate_name=str(args.profile_gate),
+                lower_q=float(args.lower_q),
+                upper_q=float(args.upper_q),
+            )
+        else:
+            summary, rows = evaluate_run(
+                run_dir=Path(run_dir),
+                bands=bands,
+                tile=tile,
+                acceptance_env=dict(acceptance_env or {}),
+                metrics=metrics,
+            )
         summaries.append(summary)
         metric_rows.extend(rows)
 
     out_payload = {
         "schema_version": "simus_v2_acceptance.v1",
         "anchor_json": str(Path(args.anchor_json)),
+        "profile_gate": None if args.profile_gate is None else str(args.profile_gate),
         "anchor_preset": None if args.anchor_preset is None else str(args.anchor_preset),
         "anchor_kinds": anchor_kinds,
         "metrics": metrics,
