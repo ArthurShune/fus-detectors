@@ -6,7 +6,13 @@ from typing import Any, Literal
 
 
 SimusPreset = Literal["microvascular_like", "alias_stress"]
-SimusProfile = Literal["ClinIntraOp-Pf-v1", "ClinMobile-Pf-v1", "ClinIntraOp-Pf-Struct-v2", "ClinIntraOp-Pf-v2"]
+SimusProfile = Literal[
+    "ClinIntraOp-Pf-v1",
+    "ClinMobile-Pf-v1",
+    "ClinIntraOp-Pf-Struct-v2",
+    "ClinIntraOp-Pf-v2",
+    "ClinMobile-Pf-v2",
+]
 SimusTier = Literal["smoke", "paper"]
 VesselRole = Literal["microvascular", "nuisance_pa"]
 
@@ -258,20 +264,22 @@ def default_config(*, preset: SimusPreset, tier: SimusTier, seed: int) -> SimusC
 def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int) -> SimusConfig:
     grid = _default_grid(tier)
     structural_profile = profile == "ClinIntraOp-Pf-Struct-v2"
-    clin_v2 = profile == "ClinIntraOp-Pf-v2"
+    intraop_v2 = profile == "ClinIntraOp-Pf-v2"
+    mobile_v2 = profile == "ClinMobile-Pf-v2"
+    clin_v2 = intraop_v2 or mobile_v2
     if tier == "paper":
-        tissue_count = 1200 if clin_v2 else 2600
+        tissue_count = 1200 if intraop_v2 else (1000 if mobile_v2 else 2600)
         guard_px = 2
         reservoir_span = 1.5e-3
-        micro_blood_count = 280 if not clin_v2 else 320
-        nuisance_blood_count = 520 if not clin_v2 else 620
+        micro_blood_count = 280 if not (intraop_v2 or mobile_v2) else (320 if intraop_v2 else 340)
+        nuisance_blood_count = 520 if not (intraop_v2 or mobile_v2) else (620 if intraop_v2 else 760)
         nuisance_vmax = 0.065 if profile in ("ClinIntraOp-Pf-v1", "ClinIntraOp-Pf-Struct-v2") else 0.090
         noise = NoiseSpec(enabled=False)
         if structural_profile:
             motion = MotionSpec(enabled=False)
             phase_screen = PhaseScreenSpec(enabled=False)
             micro_blood_rc_scale = 0.35
-        elif clin_v2:
+        elif intraop_v2:
             motion = MotionSpec(
                 enabled=True,
                 breathing_hz=0.30,
@@ -302,6 +310,37 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
             noise = NoiseSpec(enabled=True, iq_rms_frac=0.24)
             micro_blood_rc_scale = 0.22
             nuisance_vmax = 0.085
+        elif mobile_v2:
+            motion = MotionSpec(
+                enabled=True,
+                breathing_hz=0.45,
+                breathing_amp_x_px=0.65,
+                breathing_amp_z_px=0.32,
+                cardiac_hz=1.30,
+                cardiac_amp_x_px=0.14,
+                cardiac_amp_z_px=0.07,
+                random_walk_sigma_px=0.06,
+                pulse_jitter_sigma_px=0.10,
+                drift_x_px=0.42,
+                drift_z_px=0.18,
+                elastic_amp_px=0.62,
+                elastic_sigma_px=12.0,
+                elastic_depth_decay_frac=0.36,
+                elastic_temporal_rho=0.66,
+                elastic_mode_count=5,
+                elastic_lateral_scale=1.0,
+                elastic_axial_scale=0.72,
+            )
+            phase_screen = PhaseScreenSpec(
+                enabled=True,
+                std_rad=0.58,
+                corr_len_elem=7.0,
+                drift_rho=0.92,
+                drift_sigma_rad=0.030,
+            )
+            noise = NoiseSpec(enabled=True, iq_rms_frac=0.28)
+            micro_blood_rc_scale = 0.22
+            nuisance_vmax = 0.115
         elif profile == "ClinIntraOp-Pf-v1":
             motion = MotionSpec(
                 enabled=True,
@@ -394,7 +433,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 radius_m=4.0e-4,
                 z_min_m=12.5e-3,
                 z_max_m=20.5e-3,
-                blood_count=micro_blood_count if clin_v2 else 0,
+                blood_count=micro_blood_count if (intraop_v2 or mobile_v2) else 0,
                 blood_rc_scale=micro_blood_rc_scale,
                 blood_vmax_mps=0.016,
                 blood_profile="poiseuille",
@@ -405,14 +444,31 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 name="nuisance_superficial",
                 role="nuisance_pa",
                 center_x_m=-5.0e-3,
-                radius_m=1.2e-3,
+                radius_m=1.2e-3 if not mobile_v2 else 1.6e-3,
                 z_min_m=5.8e-3,
-                z_max_m=10.8e-3,
+                z_max_m=10.8e-3 if not mobile_v2 else 11.8e-3,
                 blood_count=nuisance_blood_count,
                 blood_rc_scale=0.28,
                 blood_vmax_mps=nuisance_vmax,
                 blood_profile="poiseuille",
             ),
+        ) + (
+            (
+                _legacy_vessel(
+                    name="nuisance_mid",
+                    role="nuisance_pa",
+                    center_x_m=4.8e-3,
+                    radius_m=1.1e-3,
+                    z_min_m=8.0e-3,
+                    z_max_m=14.5e-3,
+                    blood_count=max(1, nuisance_blood_count // 2),
+                    blood_rc_scale=0.24,
+                    blood_vmax_mps=0.095,
+                    blood_profile="poiseuille",
+                ),
+            )
+            if mobile_v2
+            else ()
         )
         structured_clutter = (
             StructuredClutterSpec(
@@ -422,7 +478,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 x1_m=8.5e-3,
                 z1_m=6.8e-3,
                 thickness_m=3.8e-4,
-                scatterer_count=420,
+                scatterer_count=420 if not mobile_v2 else 520,
                 rc_scale=1.4,
             ),
             StructuredClutterSpec(
@@ -432,10 +488,25 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 x1_m=1.5e-3,
                 z1_m=17.8e-3,
                 thickness_m=5.5e-4,
-                scatterer_count=340,
+                scatterer_count=340 if not mobile_v2 else 420,
                 rc_scale=1.2,
             ),
-        ) if clin_v2 else ()
+        ) + (
+            (
+                StructuredClutterSpec(
+                    name="deep_boundary",
+                    x0_m=-1.0e-3,
+                    z0_m=12.5e-3,
+                    x1_m=8.0e-3,
+                    z1_m=22.5e-3,
+                    thickness_m=6.0e-4,
+                    scatterer_count=360,
+                    rc_scale=1.1,
+                ),
+            )
+            if mobile_v2
+            else ()
+        ) if (intraop_v2 or mobile_v2) else ()
         background_compartments = (
             BackgroundCompartmentSpec(
                 name="bg_superficial_left",
@@ -482,20 +553,40 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 lateral_scale=0.95,
                 axial_scale=0.72,
             ),
-        ) if clin_v2 else ()
+        ) + (
+            (
+                BackgroundCompartmentSpec(
+                    name="bg_deep_left",
+                    center_x_m=-3.2e-3,
+                    center_z_m=18.5e-3,
+                    sigma_x_m=2.2e-3,
+                    sigma_z_m=2.6e-3,
+                    scatterer_count=260,
+                    rc_scale=0.56,
+                    motion_amp_px=0.34,
+                    motion_sigma_px=12.0,
+                    motion_rho=0.72,
+                    motion_jitter_sigma_px=0.03,
+                    lateral_scale=1.0,
+                    axial_scale=0.78,
+                ),
+            )
+            if mobile_v2
+            else ()
+        ) if (intraop_v2 or mobile_v2) else ()
     else:
-        tissue_count = 340 if clin_v2 else 720
+        tissue_count = 340 if intraop_v2 else (280 if mobile_v2 else 720)
         guard_px = 1
         reservoir_span = 2.0e-3
-        micro_blood_count = 90 if not clin_v2 else 120
-        nuisance_blood_count = 180 if not clin_v2 else 220
+        micro_blood_count = 90 if not (intraop_v2 or mobile_v2) else (120 if intraop_v2 else 130)
+        nuisance_blood_count = 180 if not (intraop_v2 or mobile_v2) else (220 if intraop_v2 else 280)
         nuisance_vmax = 0.17 if profile in ("ClinIntraOp-Pf-v1", "ClinIntraOp-Pf-Struct-v2") else 0.22
         noise = NoiseSpec(enabled=False)
         if structural_profile:
             motion = MotionSpec(enabled=False)
             phase_screen = PhaseScreenSpec(enabled=False)
             micro_blood_rc_scale = 0.35
-        elif clin_v2:
+        elif intraop_v2:
             motion = MotionSpec(
                 enabled=True,
                 breathing_hz=0.30,
@@ -526,6 +617,37 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
             noise = NoiseSpec(enabled=True, iq_rms_frac=0.16)
             micro_blood_rc_scale = 0.22
             nuisance_vmax = 0.19
+        elif mobile_v2:
+            motion = MotionSpec(
+                enabled=True,
+                breathing_hz=0.45,
+                breathing_amp_x_px=0.40,
+                breathing_amp_z_px=0.18,
+                cardiac_hz=1.30,
+                cardiac_amp_x_px=0.08,
+                cardiac_amp_z_px=0.04,
+                random_walk_sigma_px=0.04,
+                pulse_jitter_sigma_px=0.08,
+                drift_x_px=0.22,
+                drift_z_px=0.10,
+                elastic_amp_px=0.34,
+                elastic_sigma_px=5.5,
+                elastic_depth_decay_frac=0.34,
+                elastic_temporal_rho=0.68,
+                elastic_mode_count=4,
+                elastic_lateral_scale=1.0,
+                elastic_axial_scale=0.72,
+            )
+            phase_screen = PhaseScreenSpec(
+                enabled=True,
+                std_rad=0.44,
+                corr_len_elem=5.0,
+                drift_rho=0.92,
+                drift_sigma_rad=0.022,
+            )
+            noise = NoiseSpec(enabled=True, iq_rms_frac=0.20)
+            micro_blood_rc_scale = 0.22
+            nuisance_vmax = 0.26
         elif profile == "ClinIntraOp-Pf-v1":
             motion = MotionSpec(
                 enabled=True,
@@ -606,7 +728,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 radius_m=7.0e-4,
                 z_min_m=12.0e-3,
                 z_max_m=19.0e-3,
-                blood_count=micro_blood_count if clin_v2 else 0,
+                blood_count=micro_blood_count if (intraop_v2 or mobile_v2) else 0,
                 blood_rc_scale=micro_blood_rc_scale,
                 blood_vmax_mps=0.018,
                 blood_profile="poiseuille",
@@ -617,14 +739,31 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 name="nuisance_superficial",
                 role="nuisance_pa",
                 center_x_m=-5.5e-3,
-                radius_m=1.6e-3,
+                radius_m=1.6e-3 if not mobile_v2 else 1.9e-3,
                 z_min_m=5.8e-3,
-                z_max_m=10.2e-3,
+                z_max_m=10.2e-3 if not mobile_v2 else 11.2e-3,
                 blood_count=nuisance_blood_count,
                 blood_rc_scale=0.28,
                 blood_vmax_mps=nuisance_vmax,
                 blood_profile="poiseuille",
             ),
+        ) + (
+            (
+                _legacy_vessel(
+                    name="nuisance_mid",
+                    role="nuisance_pa",
+                    center_x_m=4.6e-3,
+                    radius_m=1.2e-3,
+                    z_min_m=8.0e-3,
+                    z_max_m=13.8e-3,
+                    blood_count=max(1, nuisance_blood_count // 2),
+                    blood_rc_scale=0.24,
+                    blood_vmax_mps=0.22,
+                    blood_profile="poiseuille",
+                ),
+            )
+            if mobile_v2
+            else ()
         )
         structured_clutter = (
             StructuredClutterSpec(
@@ -634,7 +773,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 x1_m=9.0e-3,
                 z1_m=6.6e-3,
                 thickness_m=4.0e-4,
-                scatterer_count=160,
+                scatterer_count=160 if not mobile_v2 else 220,
                 rc_scale=1.35,
             ),
             StructuredClutterSpec(
@@ -644,10 +783,25 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 x1_m=1.0e-3,
                 z1_m=16.0e-3,
                 thickness_m=5.0e-4,
-                scatterer_count=140,
+                scatterer_count=140 if not mobile_v2 else 180,
                 rc_scale=1.15,
             ),
-        ) if clin_v2 else ()
+        ) + (
+            (
+                StructuredClutterSpec(
+                    name="deep_boundary",
+                    x0_m=-1.0e-3,
+                    z0_m=12.0e-3,
+                    x1_m=8.0e-3,
+                    z1_m=20.5e-3,
+                    thickness_m=5.5e-4,
+                    scatterer_count=150,
+                    rc_scale=1.1,
+                ),
+            )
+            if mobile_v2
+            else ()
+        ) if (intraop_v2 or mobile_v2) else ()
         background_compartments = (
             BackgroundCompartmentSpec(
                 name="bg_superficial_left",
@@ -694,9 +848,29 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 lateral_scale=0.95,
                 axial_scale=0.72,
             ),
-        ) if clin_v2 else ()
+        ) + (
+            (
+                BackgroundCompartmentSpec(
+                    name="bg_deep_left",
+                    center_x_m=-3.0e-3,
+                    center_z_m=18.2e-3,
+                    sigma_x_m=2.0e-3,
+                    sigma_z_m=2.4e-3,
+                    scatterer_count=90,
+                    rc_scale=0.56,
+                    motion_amp_px=0.28,
+                    motion_sigma_px=7.0,
+                    motion_rho=0.72,
+                    motion_jitter_sigma_px=0.02,
+                    lateral_scale=1.0,
+                    axial_scale=0.78,
+                ),
+            )
+            if mobile_v2
+            else ()
+        ) if (intraop_v2 or mobile_v2) else ()
 
-    if not clin_v2:
+    if not (intraop_v2 or mobile_v2):
         background_compartments = ()
         noise = NoiseSpec(enabled=False)
 
@@ -708,7 +882,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
         profile=str(profile),
         seed=int(seed),
         tissue_count=int(tissue_count),
-        tissue_rc_scale=0.85 if clin_v2 else 1.0,
+        tissue_rc_scale=0.85 if (intraop_v2 or mobile_v2) else 1.0,
         blood_count=int(sum(v.blood_count for v in vessels)),
         blood_rc_scale=float(main_micro.blood_rc_scale),
         vessel_center_x_m=float(main_micro.center_x_m),

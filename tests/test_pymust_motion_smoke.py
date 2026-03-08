@@ -70,3 +70,27 @@ def test_pymust_clin_v2_profile_keeps_motion_and_phase_moderate():
     assert 0.0 < float(motion["disp_rms_px"]) < 1.0
     assert phase["enabled"] is True
     assert 0.0 < float(phase["phase_rms_rad"]) < 1.0
+
+
+def test_pymust_mobile_v2_profile_is_harder_than_intraop_v2():
+    from sim.simus.config import default_profile_config
+    from sim.simus.pymust_smoke import generate_icube
+
+    intra = default_profile_config(profile="ClinIntraOp-Pf-v2", tier="smoke", seed=0)
+    intra = dataclasses.replace(intra, T=3, tissue_count=96)
+    mobile = default_profile_config(profile="ClinMobile-Pf-v2", tier="smoke", seed=0)
+    mobile = dataclasses.replace(mobile, T=3, tissue_count=96)
+
+    intra_out = generate_icube(intra)
+    mobile_out = generate_icube(mobile)
+
+    intra_motion = dict(intra_out["debug"]["motion_telemetry"])
+    mobile_motion = dict(mobile_out["debug"]["motion_telemetry"])
+    intra_phase = dict(intra_out["debug"]["phase_screen_telemetry"])
+    mobile_phase = dict(mobile_out["debug"]["phase_screen_telemetry"])
+    intra_scene = dict(intra_out["debug"]["scene_telemetry"])
+    mobile_scene = dict(mobile_out["debug"]["scene_telemetry"])
+
+    assert float(mobile_motion["disp_rms_px"]) > float(intra_motion["disp_rms_px"])
+    assert float(mobile_phase["phase_rms_rad"]) > float(intra_phase["phase_rms_rad"])
+    assert float(mobile_scene["h0_nuisance_fraction"]) > float(intra_scene["h0_nuisance_fraction"])

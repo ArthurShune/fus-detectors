@@ -17,7 +17,13 @@ from sim.kwave.icube_bundle import write_acceptance_bundle_from_icube
 from sim.simus.config import default_profile_config
 from sim.simus.pymust_smoke import SimusConfig, default_config, dataset_meta, generate_icube
 
-SUPPORTED_SIMUS_PROFILES = ("ClinIntraOp-Pf-v1", "ClinMobile-Pf-v1", "ClinIntraOp-Pf-Struct-v2", "ClinIntraOp-Pf-v2")
+SUPPORTED_SIMUS_PROFILES = (
+    "ClinIntraOp-Pf-v1",
+    "ClinMobile-Pf-v1",
+    "ClinIntraOp-Pf-Struct-v2",
+    "ClinIntraOp-Pf-v2",
+    "ClinMobile-Pf-v2",
+)
 
 
 def _utc_now_iso() -> str:
