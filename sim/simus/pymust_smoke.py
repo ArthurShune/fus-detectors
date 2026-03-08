@@ -6,6 +6,7 @@ from typing import Any, Literal
 import numpy as np
 
 from sim.simus.config import (
+    StructuredClutterSpec,
     SimusConfig,
     SimusPreset,
     SimusProfile,
@@ -75,6 +76,79 @@ def _vz_profile_from_x(
         vz = float(vmax_mps) * (1.0 - rr)
         vz = np.maximum(vz, 0.0).astype(np.float32, copy=False)
     return vz
+
+
+def _distance_to_segment(
+    *,
+    x: np.ndarray,
+    z: np.ndarray,
+    x0: float,
+    z0: float,
+    x1: float,
+    z1: float,
+) -> np.ndarray:
+    px = np.asarray(x, dtype=np.float32)
+    pz = np.asarray(z, dtype=np.float32)
+    vx = np.float32(float(x1) - float(x0))
+    vz = np.float32(float(z1) - float(z0))
+    denom = np.float32(vx * vx + vz * vz)
+    if float(denom) <= 0.0:
+        return np.sqrt((px - np.float32(float(x0))) ** 2 + (pz - np.float32(float(z0))) ** 2).astype(np.float32, copy=False)
+    t = (((px - np.float32(float(x0))) * vx) + ((pz - np.float32(float(z0))) * vz)) / denom
+    t = np.clip(t, 0.0, 1.0).astype(np.float32, copy=False)
+    proj_x = np.float32(float(x0)) + t * vx
+    proj_z = np.float32(float(z0)) + t * vz
+    return np.sqrt((px - proj_x) ** 2 + (pz - proj_z) ** 2).astype(np.float32, copy=False)
+
+
+def _structured_clutter_mask(
+    *,
+    X: np.ndarray,
+    Z: np.ndarray,
+    spec: StructuredClutterSpec,
+) -> np.ndarray:
+    dist = _distance_to_segment(
+        x=X,
+        z=Z,
+        x0=float(spec.x0_m),
+        z0=float(spec.z0_m),
+        x1=float(spec.x1_m),
+        z1=float(spec.z1_m),
+    )
+    return dist <= (0.5 * float(spec.thickness_m))
+
+
+def _sample_structured_clutter(
+    rng: np.random.Generator,
+    *,
+    spec: StructuredClutterSpec,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    n = max(1, int(spec.scatterer_count))
+    x0 = float(spec.x0_m)
+    z0 = float(spec.z0_m)
+    x1 = float(spec.x1_m)
+    z1 = float(spec.z1_m)
+    t = rng.uniform(0.0, 1.0, size=n).astype(np.float32)
+    cx = np.float32(x0) + t * np.float32(x1 - x0)
+    cz = np.float32(z0) + t * np.float32(z1 - z0)
+    dx = np.float32(x1 - x0)
+    dz = np.float32(z1 - z0)
+    seg_len = float(np.hypot(dx, dz))
+    if seg_len <= 1e-9:
+        nx = np.float32(1.0)
+        nz = np.float32(0.0)
+    else:
+        nx = np.float32(-dz / seg_len)
+        nz = np.float32(dx / seg_len)
+    jitter = rng.uniform(
+        low=-0.5 * float(spec.thickness_m),
+        high=0.5 * float(spec.thickness_m),
+        size=n,
+    ).astype(np.float32)
+    xs = (cx + jitter * nx).astype(np.float32, copy=False)
+    zs = (cz + jitter * nz).astype(np.float32, copy=False)
+    rc = (float(spec.rc_scale) * rng.standard_normal(n)).astype(np.float32)
+    return xs, zs, rc
 
 
 def _sample_uniform_excluding_mask(
@@ -166,6 +240,7 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
     expected_vz_mps = np.zeros((int(cfg.H), int(cfg.W)), dtype=np.float32)
     mask_microvascular = np.zeros((int(cfg.H), int(cfg.W)), dtype=bool)
     mask_nuisance_pa = np.zeros((int(cfg.H), int(cfg.W)), dtype=bool)
+    mask_structured_clutter = np.zeros((int(cfg.H), int(cfg.W)), dtype=bool)
     vessel_role_map = np.zeros((int(cfg.H), int(cfg.W)), dtype=np.int16)
     for vessel in vessels:
         vessel_mask = _vessel_mask_strip(
@@ -193,10 +268,13 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
             mask_microvascular |= vessel_mask
             vessel_role_map[vessel_mask] = 1
 
-    base_bg = (~(mask_microvascular | mask_nuisance_pa)).copy()
+    for clutter in tuple(cfg.structured_clutter):
+        mask_structured_clutter |= _structured_clutter_mask(X=X, Z=Z, spec=clutter)
+
+    base_bg = (~(mask_microvascular | mask_nuisance_pa | mask_structured_clutter)).copy()
     base_bg[: max(1, int(round(float(cfg.bg_top_exclusion_frac) * int(cfg.H)))), :] = False
     if int(base_bg.sum()) < 16:
-        base_bg = ~(mask_microvascular | mask_nuisance_pa)
+        base_bg = ~(mask_microvascular | mask_nuisance_pa | mask_structured_clutter)
 
     expected_fd_true_hz = (
         (2.0 * float(param.fc) / max(float(param.c), 1e-9)) * expected_vz_mps
@@ -204,6 +282,7 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
     labels = build_label_pack(
         mask_microvascular=mask_microvascular,
         mask_nuisance_pa=mask_nuisance_pa,
+        mask_specular_struct=mask_structured_clutter,
         base_bg_mask=base_bg,
         expected_fd_true_hz=expected_fd_true_hz,
         prf_hz=float(cfg.prf_hz),
@@ -217,7 +296,7 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
     x_min, x_max = float(cfg.x_min_m), float(cfg.x_max_m)
     z_min, z_max = float(cfg.z_min_m), float(cfg.z_max_m)
 
-    def _in_vessel(x: np.ndarray, z: np.ndarray) -> np.ndarray:
+    def _in_excluded_scene(x: np.ndarray, z: np.ndarray) -> np.ndarray:
         out = np.zeros_like(x, dtype=bool)
         for vessel in vessels:
             keep = np.abs(x - float(vessel.center_x_m)) <= float(vessel.radius_m)
@@ -226,6 +305,15 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
             if vessel.z_max_m is not None:
                 keep &= z <= float(vessel.z_max_m)
             out |= keep
+        for clutter in tuple(cfg.structured_clutter):
+            out |= _distance_to_segment(
+                x=x,
+                z=z,
+                x0=float(clutter.x0_m),
+                z0=float(clutter.z0_m),
+                x1=float(clutter.x1_m),
+                z1=float(clutter.z1_m),
+            ) <= (0.5 * float(clutter.thickness_m))
         return out
 
     # Tissue: uniform over ROI excluding the vessel strip.
@@ -236,16 +324,24 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         x_max=x_max,
         z_min=z_min,
         z_max=z_max,
-        exclude_mask_fn=_in_vessel,
+        exclude_mask_fn=_in_excluded_scene,
     )
     rc_tissue = (float(cfg.tissue_rc_scale) * rng.standard_normal(int(cfg.tissue_count))).astype(np.float32)
-
-    blood_states: list[dict[str, Any]] = []
     scatterers_init: dict[str, np.ndarray] = {
         "xs_tissue": xs_tissue,
         "zs_tissue": zs_tissue,
         "rc_tissue": rc_tissue,
     }
+
+    clutter_states: list[dict[str, Any]] = []
+    for cidx, clutter in enumerate(tuple(cfg.structured_clutter)):
+        xs_clutter, zs_clutter, rc_clutter = _sample_structured_clutter(rng, spec=clutter)
+        clutter_states.append({"spec": clutter, "xs": xs_clutter, "zs": zs_clutter, "rc": rc_clutter})
+        scatterers_init[f"xs_clutter_{cidx}"] = xs_clutter.copy()
+        scatterers_init[f"zs_clutter_{cidx}"] = zs_clutter.copy()
+        scatterers_init[f"rc_clutter_{cidx}"] = rc_clutter.copy()
+
+    blood_states: list[dict[str, Any]] = []
     res_scale = max(1, int(cfg.reservoir_scale))
     span = float(max(1e-6, float(cfg.reinject_depth_span_m)))
     for vidx, vessel in enumerate(vessels):
@@ -313,6 +409,20 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         xs_tissue_t = (xs_tissue + dx_tissue_m).astype(np.float32, copy=False)
         zs_tissue_t = (zs_tissue + dz_tissue_m).astype(np.float32, copy=False)
 
+        clutter_xs = []
+        clutter_zs = []
+        clutter_rc = [np.asarray(state["rc"], dtype=np.float32) for state in clutter_states]
+        for state in clutter_states:
+            dx_clutter_m, dz_clutter_m = sample_motion_displacements_m(
+                field_dx_px=motion_art.dx_px[t],
+                field_dz_px=motion_art.dz_px[t],
+                x_m=np.asarray(state["xs"], dtype=np.float32),
+                z_m=np.asarray(state["zs"], dtype=np.float32),
+                cfg=cfg,
+            )
+            clutter_xs.append((np.asarray(state["xs"], dtype=np.float32) + dx_clutter_m).astype(np.float32, copy=False))
+            clutter_zs.append((np.asarray(state["zs"], dtype=np.float32) + dz_clutter_m).astype(np.float32, copy=False))
+
         blood_xs = []
         blood_zs = []
         blood_rc = [np.asarray(state["rc"], dtype=np.float32) for state in blood_states]
@@ -326,9 +436,9 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
             )
             blood_xs.append((np.asarray(state["xs"], dtype=np.float32) + dx_blood_m).astype(np.float32, copy=False))
             blood_zs.append((np.asarray(state["zs"], dtype=np.float32) + dz_blood_m).astype(np.float32, copy=False))
-        xs = np.concatenate([xs_tissue_t] + blood_xs).astype(np.float32, copy=False)
-        zs = np.concatenate([zs_tissue_t] + blood_zs).astype(np.float32, copy=False)
-        rc = np.concatenate([rc_tissue] + blood_rc).astype(np.float32, copy=False)
+        xs = np.concatenate([xs_tissue_t] + clutter_xs + blood_xs).astype(np.float32, copy=False)
+        zs = np.concatenate([zs_tissue_t] + clutter_zs + blood_zs).astype(np.float32, copy=False)
+        rc = np.concatenate([rc_tissue] + clutter_rc + blood_rc).astype(np.float32, copy=False)
 
         rf, _rf_spec = pm.simus(xs, zs, rc, txdel, param)
         rf = np.asarray(rf, dtype=np.float32)
@@ -392,6 +502,7 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         "expected_fd_sampled_hz": labels.expected_fd_sampled_hz,
         "expected_vz_mps": expected_vz_mps,
         "vessel_role_map": vessel_role_map,
+        "mask_h0_specular_struct": labels.mask_h0_specular_struct,
         "scatterers_init": scatterers_init,
         "motion_dx_px": motion_art.dx_px,
         "motion_dz_px": motion_art.dz_px,
@@ -408,6 +519,19 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         "grid_x_m": xg,
         "grid_z_m": zg,
         "fd_vmax_hz": float(np.max(labels.expected_fd_true_hz)) if labels.expected_fd_true_hz.size else 0.0,
+        "scene_telemetry": {
+            "n_microvascular_vessels": int(sum(1 for v in vessels if v.role == "microvascular")),
+            "n_nuisance_vessels": int(sum(1 for v in vessels if v.role == "nuisance_pa")),
+            "n_structured_clutter": int(len(tuple(cfg.structured_clutter))),
+            "microvascular_fraction": float(np.mean(mask_microvascular)),
+            "nuisance_fraction": float(np.mean(mask_nuisance_pa)),
+            "specular_struct_fraction": float(np.mean(labels.mask_h0_specular_struct)),
+            "h1_pf_main_fraction": float(np.mean(labels.mask_h1_pf_main)),
+            "h1_alias_qc_fraction": float(np.mean(labels.mask_h1_alias_qc)),
+            "h0_nuisance_fraction": float(np.mean(labels.mask_h0_nuisance_pa)),
+            "expected_fd_true_q50_hz": float(np.quantile(labels.expected_fd_true_hz[labels.mask_flow], 0.50)) if np.any(labels.mask_flow) else 0.0,
+            "expected_fd_sampled_q50_hz": float(np.quantile(labels.expected_fd_sampled_hz[labels.mask_flow], 0.50)) if np.any(labels.mask_flow) else 0.0,
+        },
     }
 
     return {
@@ -422,6 +546,7 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         "mask_h1_alias_qc": labels.mask_h1_alias_qc.astype(bool, copy=False),
         "mask_h0_bg": labels.mask_h0_bg.astype(bool, copy=False),
         "mask_h0_nuisance_pa": labels.mask_h0_nuisance_pa.astype(bool, copy=False),
+        "mask_h0_specular_struct": labels.mask_h0_specular_struct.astype(bool, copy=False),
         "debug": debug,
         "param": {"probe": str(cfg.probe), "fc_hz": float(param.fc), "fs_hz": float(param.fs), "c_mps": float(param.c)},
     }

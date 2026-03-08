@@ -20,6 +20,7 @@ class SimusLabelPack:
     mask_h1_alias_qc: np.ndarray
     mask_h0_bg: np.ndarray
     mask_h0_nuisance_pa: np.ndarray
+    mask_h0_specular_struct: np.ndarray
     expected_fd_true_hz: np.ndarray
     expected_fd_sampled_hz: np.ndarray
 
@@ -49,6 +50,7 @@ def build_label_pack(
     *,
     mask_microvascular: np.ndarray,
     mask_nuisance_pa: np.ndarray,
+    mask_specular_struct: np.ndarray | None,
     base_bg_mask: np.ndarray,
     expected_fd_true_hz: np.ndarray,
     prf_hz: float,
@@ -57,8 +59,9 @@ def build_label_pack(
 ) -> SimusLabelPack:
     mask_micro = np.asarray(mask_microvascular, dtype=bool)
     mask_nuisance = np.asarray(mask_nuisance_pa, dtype=bool)
+    mask_specular = np.asarray(mask_specular_struct, dtype=bool) if mask_specular_struct is not None else np.zeros_like(mask_micro, dtype=bool)
     mask_flow = (mask_micro | mask_nuisance).astype(bool, copy=False)
-    bg = np.asarray(base_bg_mask, dtype=bool) & (~mask_flow)
+    bg = np.asarray(base_bg_mask, dtype=bool) & (~mask_flow) & (~mask_specular)
     fd_true = np.asarray(expected_fd_true_hz, dtype=np.float32)
     fd_sampled = np.abs(fold_to_nyquist(fd_true, float(prf_hz))).astype(np.float32, copy=False)
     mask_alias_expected = (mask_flow & (np.abs(fd_true) > (0.5 * float(prf_hz)))).astype(bool, copy=False)
@@ -70,6 +73,7 @@ def build_label_pack(
     mask_h1_pf_main = mask_micro & pf_core & (~mask_alias_expected) & (~guard)
     mask_h1_alias_qc = mask_flow & (mask_alias_expected | pa_band) & (~guard)
     mask_h0_nuisance = mask_nuisance & pa_band & (~guard)
+    mask_h0_specular = mask_specular & (~guard) & (~mask_flow)
     mask_h0_bg = bg & (~guard)
 
     return SimusLabelPack(
@@ -83,6 +87,7 @@ def build_label_pack(
         mask_h1_alias_qc=mask_h1_alias_qc.astype(bool, copy=False),
         mask_h0_bg=mask_h0_bg.astype(bool, copy=False),
         mask_h0_nuisance_pa=mask_h0_nuisance.astype(bool, copy=False),
+        mask_h0_specular_struct=mask_h0_specular.astype(bool, copy=False),
         expected_fd_true_hz=fd_true.astype(np.float32, copy=False),
         expected_fd_sampled_hz=fd_sampled.astype(np.float32, copy=False),
     )
