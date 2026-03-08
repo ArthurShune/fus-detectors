@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -98,16 +101,23 @@ def ensure_ulm_block_extracted(
         names = set(zf.namelist())
         if member not in names:
             raise FileNotFoundError(f"Missing member {member!r} in {zip_path}")
-        zf.extract(member, path=cache)
-
-    extracted = cache / member  # cache/IQ/IQ_XXX.hdf5
-    if not extracted.is_file():
-        raise FileNotFoundError(f"Extraction failed; expected {extracted}")
-    extracted.replace(out_path)
-    try:
-        (cache / "IQ").rmdir()
-    except OSError:
-        pass
+        with zf.open(member, "r") as src:
+            with tempfile.NamedTemporaryFile(
+                dir=cache,
+                prefix=f"{out_path.stem}.",
+                suffix=".tmp",
+                delete=False,
+            ) as tmp:
+                shutil.copyfileobj(src, tmp)
+                tmp_path = Path(tmp.name)
+    # Another worker may have finished the same extraction while we were writing.
+    if out_path.is_file():
+        try:
+            tmp_path.unlink()
+        except FileNotFoundError:
+            pass
+        return out_path
+    os.replace(tmp_path, out_path)
     return out_path
 
 
@@ -150,4 +160,3 @@ __all__ = [
     "ensure_ulm_block_extracted",
     "load_ulm_block_iq",
 ]
-
