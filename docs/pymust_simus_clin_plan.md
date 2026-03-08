@@ -2,6 +2,10 @@
 
 This plan is derived from [pymust_specv2.md](/home/arthu/stap-for-fus/pymust_specv2.md), but it is grounded in the code that already exists in this repo.
 
+For the next clinically anchored realism track beyond this corrected frozen
+benchmark, see
+[simus_clinutility_v2_plan.md](/home/arthu/stap-for-fus/docs/simus_clinutility_v2_plan.md).
+
 ## Repo reality
 
 Already implemented:
