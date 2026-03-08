@@ -96,24 +96,58 @@ def build_motion_artifacts(
     if float(spec.random_walk_sigma_px) > 0.0:
         dx_rigid += _normalized_random_walk(T, rng=rng, step_sigma=float(spec.random_walk_sigma_px))
         dz_rigid += _normalized_random_walk(T, rng=rng, step_sigma=float(spec.random_walk_sigma_px))
+    if float(spec.pulse_jitter_sigma_px) > 0.0:
+        dx_jitter = rng.normal(scale=float(spec.pulse_jitter_sigma_px), size=T).astype(np.float32)
+        dz_jitter = rng.normal(scale=float(spec.pulse_jitter_sigma_px), size=T).astype(np.float32)
+        dx_jitter -= np.float32(np.mean(dx_jitter))
+        dz_jitter -= np.float32(np.mean(dz_jitter))
+        dx_rigid += dx_jitter
+        dz_rigid += dz_jitter
 
     if float(spec.elastic_amp_px) > 0.0:
-        base_dx = _smooth_unit_field(H, W, sigma_px=float(spec.elastic_sigma_px), rng=rng)
-        base_dz = _smooth_unit_field(H, W, sigma_px=float(spec.elastic_sigma_px), rng=rng)
+        mode_count = max(int(spec.elastic_mode_count), 1)
         depth_decay = float(np.clip(spec.elastic_depth_decay_frac, 1e-3, 5.0))
         z = (np.arange(H, dtype=np.float32) + 0.5) / max(float(H), 1.0)
         depth_w = np.exp(-z / depth_decay).astype(np.float32)
         depth_w /= float(np.sqrt(np.mean(depth_w * depth_w)) + 1e-12)
-        base_dx = (float(spec.elastic_lateral_scale) * base_dx * depth_w[:, None]).astype(np.float32, copy=False)
-        base_dz = (float(spec.elastic_axial_scale) * base_dz * depth_w[:, None]).astype(np.float32, copy=False)
-        coef_x = (float(spec.elastic_amp_px) * _ar1_series(T, rho=float(spec.elastic_temporal_rho), rng=rng)).astype(
-            np.float32, copy=False
-        )
-        coef_z = (float(spec.elastic_amp_px) * _ar1_series(T, rho=float(spec.elastic_temporal_rho), rng=rng)).astype(
-            np.float32, copy=False
-        )
-        dx_el = (coef_x[:, None, None] * base_dx[None, :, :]).astype(np.float32, copy=False)
-        dz_el = (coef_z[:, None, None] * base_dz[None, :, :]).astype(np.float32, copy=False)
+        amp_scale = float(spec.elastic_amp_px) / float(np.sqrt(mode_count))
+        dx_el = np.zeros((T, H, W), dtype=np.float32)
+        dz_el = np.zeros((T, H, W), dtype=np.float32)
+        base_dx = zeros_hw
+        base_dz = zeros_hw
+        coef_x = zeros_t
+        coef_z = zeros_t
+        for midx in range(mode_count):
+            mode_dx = _smooth_unit_field(H, W, sigma_px=float(spec.elastic_sigma_px), rng=rng)
+            mode_dz = _smooth_unit_field(H, W, sigma_px=float(spec.elastic_sigma_px), rng=rng)
+            if mode_count > 1:
+                x = np.linspace(-1.0, 1.0, W, dtype=np.float32)
+                z_axis = np.linspace(0.0, 1.0, H, dtype=np.float32)
+                x_center = np.float32(rng.uniform(-0.7, 0.7))
+                z_center = np.float32(rng.uniform(0.15, 0.85))
+                x_width = np.float32(rng.uniform(0.20, 0.45))
+                z_width = np.float32(rng.uniform(0.18, 0.35))
+                x_env = np.exp(-0.5 * ((x - x_center) / max(float(x_width), 1e-3)) ** 2).astype(np.float32)
+                z_env = np.exp(-0.5 * ((z_axis - z_center) / max(float(z_width), 1e-3)) ** 2).astype(np.float32)
+                region = (z_env[:, None] * x_env[None, :]).astype(np.float32, copy=False)
+                region /= float(np.sqrt(np.mean(region * region)) + 1e-12)
+                mode_dx = (mode_dx * region).astype(np.float32, copy=False)
+                mode_dz = (mode_dz * region).astype(np.float32, copy=False)
+            mode_dx = (float(spec.elastic_lateral_scale) * mode_dx * depth_w[:, None]).astype(np.float32, copy=False)
+            mode_dz = (float(spec.elastic_axial_scale) * mode_dz * depth_w[:, None]).astype(np.float32, copy=False)
+            mode_coef_x = (amp_scale * _ar1_series(T, rho=float(spec.elastic_temporal_rho), rng=rng)).astype(
+                np.float32, copy=False
+            )
+            mode_coef_z = (amp_scale * _ar1_series(T, rho=float(spec.elastic_temporal_rho), rng=rng)).astype(
+                np.float32, copy=False
+            )
+            dx_el += (mode_coef_x[:, None, None] * mode_dx[None, :, :]).astype(np.float32, copy=False)
+            dz_el += (mode_coef_z[:, None, None] * mode_dz[None, :, :]).astype(np.float32, copy=False)
+            if midx == 0:
+                base_dx = mode_dx
+                base_dz = mode_dz
+                coef_x = mode_coef_x
+                coef_z = mode_coef_z
     else:
         base_dx = zeros_hw
         base_dz = zeros_hw
@@ -131,10 +165,12 @@ def build_motion_artifacts(
         "enabled": True,
         "rigid_rms_px": float(np.sqrt(np.mean(rigid_disp * rigid_disp))) if rigid_disp.size else 0.0,
         "rigid_p90_px": float(np.quantile(rigid_disp, 0.90)) if rigid_disp.size else 0.0,
+        "pulse_jitter_sigma_px": float(spec.pulse_jitter_sigma_px),
         "elastic_amp_px": float(spec.elastic_amp_px),
         "elastic_sigma_px": float(spec.elastic_sigma_px),
         "elastic_depth_decay_frac": float(spec.elastic_depth_decay_frac),
         "elastic_temporal_rho": float(spec.elastic_temporal_rho),
+        "elastic_mode_count": int(max(spec.elastic_mode_count, 1)),
         "disp_rms_px": float(np.sqrt(np.mean(disp * disp))) if disp.size else 0.0,
         "disp_p90_px": float(np.quantile(disp, 0.90)) if disp.size else 0.0,
     }

@@ -47,12 +47,14 @@ class MotionSpec:
     cardiac_amp_x_px: float = 0.0
     cardiac_amp_z_px: float = 0.0
     random_walk_sigma_px: float = 0.0
+    pulse_jitter_sigma_px: float = 0.0
     drift_x_px: float = 0.0
     drift_z_px: float = 0.0
     elastic_amp_px: float = 0.0
     elastic_sigma_px: float = 12.0
     elastic_depth_decay_frac: float = 0.35
     elastic_temporal_rho: float = 0.98
+    elastic_mode_count: int = 1
     elastic_lateral_scale: float = 1.0
     elastic_axial_scale: float = 0.6
 
