@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures as cf
 import csv
 import dataclasses
 import json
+import multiprocessing as mp
+import os
 from pathlib import Path
 from typing import Any
 
@@ -459,6 +462,124 @@ def _candidate_cfg(profile: str, tier: str, seed: int, candidate_name: str):
     return dataclasses.replace(cfg, motion=motion, phase_screen=phase, noise=noise, background_compartments=background)
 
 
+def _prepare_thread_env(threads_per_worker: int | None) -> None:
+    if threads_per_worker is None or int(threads_per_worker) <= 0:
+        return
+    value = str(int(threads_per_worker))
+    for key in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+        os.environ[key] = value
+
+
+def _run_candidate_seed(task: dict[str, Any]) -> dict[str, Any]:
+    _prepare_thread_env(task.get("threads_per_worker"))
+    profile = str(task["profile"])
+    tier = str(task["tier"])
+    seed = int(task["seed"])
+    candidate_name = str(task["candidate"])
+    run_root = Path(str(task["run_root"]))
+    anchor_payload = dict(task["anchor_payload"])
+    acceptance_env = task.get("acceptance_env")
+    profile_gate = task.get("profile_gate")
+    reuse_existing = bool(task.get("reuse_existing", False))
+    bands = BandEdges(pf_lo_hz=30.0, pf_hi_hz=250.0, pg_lo_hz=250.0, pg_hi_hz=400.0, pa_lo_hz=400.0)
+    tile = TileSpec(h=8, w=8, stride=3)
+
+    if not (reuse_existing and (run_root / "dataset" / "meta.json").is_file()):
+        cfg = _candidate_cfg(profile, tier, seed, candidate_name)
+        write_simus_run(out_root=run_root, cfg=cfg, skip_bundle=True)
+    if profile_gate:
+        from scripts.simus_v2_acceptance import _evaluate_profile_gate, summarize_run
+
+        summary, metric_rows = _evaluate_profile_gate(
+            run_summary=summarize_run(run_dir=run_root, bands=bands, tile=tile),
+            anchor_payload=anchor_payload,
+            gate_name=str(profile_gate),
+            lower_q=0.10,
+            upper_q=0.90,
+        )
+    else:
+        summary, metric_rows = evaluate_run(
+            run_dir=run_root,
+            bands=bands,
+            tile=tile,
+            acceptance_env=dict(acceptance_env or {}),
+            metrics=list(DEFAULT_ACCEPTANCE_METRICS),
+        )
+
+    mean_miss = 0.0
+    run_max_miss = 0.0
+    miss_n = 0
+    for metric_row in metric_rows:
+        miss = _norm_miss(metric_row.get("value"), metric_row.get("lo"), metric_row.get("hi"))
+        metric_row["norm_miss"] = miss
+        if miss is not None:
+            mean_miss += float(miss)
+            run_max_miss = max(run_max_miss, float(miss))
+            miss_n += 1
+    mean_miss = float(mean_miss / miss_n) if miss_n else 0.0
+    run_row = {
+        "candidate": candidate_name,
+        "seed": seed,
+        "description": CANDIDATES[candidate_name]["description"],
+        "run_dir": str(run_root),
+        "passed_metrics": int(summary["passed_metrics"]),
+        "required_metrics": int(summary["required_metrics"]),
+        "failed_metrics": int(summary["failed_metrics"]),
+        "pass_fraction": summary["pass_fraction"],
+        "overall_pass": bool(summary["overall_pass"]),
+        "mean_norm_miss": mean_miss,
+        "max_norm_miss": run_max_miss,
+    }
+    for metric_row in metric_rows:
+        metric = str(metric_row["metric"])
+        run_row[f"{metric}__value"] = metric_row["value"]
+        run_row[f"{metric}__status"] = metric_row["status"]
+        run_row[f"{metric}__norm_miss"] = metric_row["norm_miss"]
+    return {
+        "candidate": candidate_name,
+        "seed": seed,
+        "summary": summary,
+        "metrics": metric_rows,
+        "run_row": run_row,
+    }
+
+
+def _default_max_workers(*, tier: str, tasks: int, threads_per_worker: int | None) -> int:
+    if tasks <= 1:
+        return 1
+    cpu_total = max(os.cpu_count() or 1, 1)
+    if threads_per_worker is not None and int(threads_per_worker) > 0:
+        by_threads = max(cpu_total // max(int(threads_per_worker), 1), 1)
+        return max(1, min(tasks, by_threads))
+    if tier == "paper":
+        return max(1, min(tasks, 2))
+    return max(1, min(tasks, 4))
+
+
+def _run_tasks_parallel(task_items: list[dict[str, Any]], *, max_workers: int) -> dict[tuple[str, int], dict[str, Any]]:
+    run_results: dict[tuple[str, int], dict[str, Any]] = {}
+    if max_workers <= 1:
+        for task in task_items:
+            result = _run_candidate_seed(task)
+            run_results[(str(result["candidate"]), int(result["seed"]))] = result
+        return run_results
+    try:
+        ctx = mp.get_context("spawn")
+        with cf.ProcessPoolExecutor(max_workers=max_workers, mp_context=ctx) as ex:
+            fut_map = {ex.submit(_run_candidate_seed, task): task for task in task_items}
+            for fut in cf.as_completed(fut_map):
+                result = fut.result()
+                run_results[(str(result["candidate"]), int(result["seed"]))] = result
+        return run_results
+    except (PermissionError, OSError):
+        with cf.ThreadPoolExecutor(max_workers=max_workers) as ex:
+            fut_map = {ex.submit(_run_candidate_seed, task): task for task in task_items}
+            for fut in cf.as_completed(fut_map):
+                result = fut.result()
+                run_results[(str(result["candidate"]), int(result["seed"]))] = result
+        return run_results
+
+
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Run named Phase 1 calibration candidates against the frozen SIMUS v2 acceptance gate.")
     ap.add_argument("--profile", type=str, default="ClinIntraOp-Pf-v2")
@@ -474,6 +595,8 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--out-csv", type=Path, default=None)
     ap.add_argument("--out-json", type=Path, default=None)
     ap.add_argument("--reuse-existing", action="store_true")
+    ap.add_argument("--max-workers", type=int, default=0, help="Parallel candidate/seed workers (0=auto, 1=serial).")
+    ap.add_argument("--threads-per-worker", type=int, default=0, help="BLAS/OpenMP threads per worker (0=leave unchanged).")
     return ap.parse_args()
 
 
@@ -516,10 +639,37 @@ def main() -> None:
     out_csv = args.out_csv or Path("reports/simus_v2/acceptance") / f"{stem}.csv"
     out_json = args.out_json or Path("reports/simus_v2/acceptance") / f"{stem}.json"
     out_runs_csv = out_csv.with_name(f"{out_csv.stem}_runs.csv")
+    threads_per_worker = int(args.threads_per_worker) if int(args.threads_per_worker) > 0 else None
+    _prepare_thread_env(threads_per_worker)
+    task_items: list[dict[str, Any]] = []
+    for candidate_name in candidates:
+        for seed in seeds:
+            run_root = Path(args.out_root) / f"{stem}_{candidate_name}_seed{seed}"
+            task_items.append(
+                {
+                    "profile": args.profile,
+                    "tier": args.tier,
+                    "seed": int(seed),
+                    "candidate": candidate_name,
+                    "run_root": str(run_root),
+                    "anchor_payload": anchor_payload,
+                    "acceptance_env": acceptance_env,
+                    "profile_gate": args.profile_gate,
+                    "reuse_existing": bool(args.reuse_existing),
+                    "threads_per_worker": threads_per_worker,
+                }
+            )
+    max_workers = int(args.max_workers) if int(args.max_workers) > 0 else _default_max_workers(
+        tier=str(args.tier),
+        tasks=len(task_items),
+        threads_per_worker=threads_per_worker,
+    )
 
     rows: list[dict[str, Any]] = []
     run_rows: list[dict[str, Any]] = []
     payload_runs: list[dict[str, Any]] = []
+    run_results = _run_tasks_parallel(task_items, max_workers=max_workers)
+
     for candidate_name in candidates:
         candidate_runs: list[dict[str, Any]] = []
         seeds_passed = 0
@@ -529,58 +679,10 @@ def main() -> None:
         max_norm_miss = 0.0
         worst_pass_fraction = 1.0
         for seed in seeds:
-            run_root = Path(args.out_root) / f"{stem}_{candidate_name}_seed{seed}"
-            if not (args.reuse_existing and (run_root / "dataset" / "meta.json").is_file()):
-                cfg = _candidate_cfg(args.profile, args.tier, int(seed), candidate_name)
-                write_simus_run(out_root=run_root, cfg=cfg, skip_bundle=True)
-            if args.profile_gate:
-                from scripts.simus_v2_acceptance import _evaluate_profile_gate, summarize_run
-
-                summary, metric_rows = _evaluate_profile_gate(
-                    run_summary=summarize_run(run_dir=run_root, bands=bands, tile=tile),
-                    anchor_payload=anchor_payload,
-                    gate_name=str(args.profile_gate),
-                    lower_q=0.10,
-                    upper_q=0.90,
-                )
-            else:
-                summary, metric_rows = evaluate_run(
-                    run_dir=run_root,
-                    bands=bands,
-                    tile=tile,
-                    acceptance_env=dict(acceptance_env or {}),
-                    metrics=metrics,
-                )
-            mean_miss = 0.0
-            run_max_miss = 0.0
-            miss_n = 0
-            for metric_row in metric_rows:
-                miss = _norm_miss(metric_row.get("value"), metric_row.get("lo"), metric_row.get("hi"))
-                metric_row["norm_miss"] = miss
-                if miss is not None:
-                    mean_miss += float(miss)
-                    run_max_miss = max(run_max_miss, float(miss))
-                    max_norm_miss = max(max_norm_miss, float(miss))
-                    miss_n += 1
-            mean_miss = float(mean_miss / miss_n) if miss_n else 0.0
-            run_row = {
-                "candidate": candidate_name,
-                "seed": int(seed),
-                "description": CANDIDATES[candidate_name]["description"],
-                "run_dir": str(run_root),
-                "passed_metrics": int(summary["passed_metrics"]),
-                "required_metrics": int(summary["required_metrics"]),
-                "failed_metrics": int(summary["failed_metrics"]),
-                "pass_fraction": summary["pass_fraction"],
-                "overall_pass": bool(summary["overall_pass"]),
-                "mean_norm_miss": mean_miss,
-                "max_norm_miss": run_max_miss,
-            }
-            for metric_row in metric_rows:
-                metric = str(metric_row["metric"])
-                run_row[f"{metric}__value"] = metric_row["value"]
-                run_row[f"{metric}__status"] = metric_row["status"]
-                run_row[f"{metric}__norm_miss"] = metric_row["norm_miss"]
+            result = dict(run_results[(candidate_name, int(seed))])
+            summary = dict(result["summary"])
+            metric_rows = list(result["metrics"])
+            run_row = dict(result["run_row"])
             run_rows.append(run_row)
             candidate_runs.append(
                 {
@@ -592,8 +694,9 @@ def main() -> None:
             seeds_passed += int(bool(summary["overall_pass"]))
             total_passed_metrics += int(summary["passed_metrics"])
             total_required_metrics += int(summary["required_metrics"])
-            total_mean_miss += float(mean_miss)
+            total_mean_miss += float(run_row["mean_norm_miss"])
             worst_pass_fraction = min(worst_pass_fraction, float(summary["pass_fraction"]))
+            max_norm_miss = max(max_norm_miss, float(run_row["max_norm_miss"]))
         mean_norm_miss = float(total_mean_miss / max(len(seeds), 1))
         row = {
             "candidate": candidate_name,
@@ -651,6 +754,8 @@ def main() -> None:
         "anchor_preset": None if args.anchor_preset is None else str(args.anchor_preset),
         "anchor_kinds": anchor_kinds,
         "metrics": metrics,
+        "max_workers": int(max_workers),
+        "threads_per_worker": threads_per_worker,
         "best_candidate": None if best is None else best["candidate"],
         "runs": payload_runs,
     }
