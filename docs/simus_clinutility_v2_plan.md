@@ -575,6 +575,38 @@ Decision:
   fresh seeds remain inside the hard brain-like background envelope
 - `ClinMobile-Pf-v2` does not currently need that same rework
 
+Bounded stability retuning result:
+
+- a multi-seed Phase 1 stability harness was added in
+  `scripts/simus_v2_phase1_calibrate.py` and run against the two failing fresh
+  intra-op seeds (`121`, `122`) with bounded candidates
+  `calM2, stabI1, stabI2, stabI3, stabI4`
+- partial results were written to:
+  - `reports/simus_v2/acceptance/simus_v2_phase1_stability_seed121_122_partial.csv`
+  - `reports/simus_v2/acceptance/simus_v2_phase1_stability_seed121_122_partial.json`
+- the key finding was that bounded motion/background tuning improved the
+  low-rank background metrics but did **not** move the blocker metric at all:
+  - `seed121`: `bg_fpeak_q50` stayed at `70.3125` for `base`, `calM2`,
+    `stabI1`, `stabI2`, `stabI3`
+  - `seed122`: `bg_fpeak_q50` stayed at `93.75` for the same candidate set
+- this means the current blocker is not a simple residual-motion amplitude
+  issue; it is deeper in the realized ordinary-background dynamics or scene
+  construction
+- an additional guard test on the existing failing runs showed that widening the
+  background exclusion around nuisance/specular structures also leaves
+  `bg_fpeak_q50` unchanged, so the issue is not just a loose `H0_bg` mask
+
+Updated decision:
+
+- stop bounded Phase 1 motion/background retuning for `ClinIntraOp-Pf-v2`
+- the next intra-op step should be a **structural redesign** of the ordinary
+  background model
+- likely redesign targets:
+  - ordinary-background compartment construction
+  - structured clutter / nuisance interaction with the background spectrum
+  - any scene component that is forcing persistent background peaks into the
+    `70.3/93.75 Hz` bins across fresh seeds
+
 ### Phase 4: Implement `ClinFunctional-Pf-v2`
 
 Purpose:
