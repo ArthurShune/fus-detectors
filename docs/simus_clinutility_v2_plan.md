@@ -544,6 +544,37 @@ Interpretation:
   repeated on a larger fresh-seed split once more `Clin*-Pf-v2` paper runs have
   been amortized or cached
 
+Fresh-seed gate check after the checkpoint:
+
+- `ClinMobile-Pf-v2` remained stable on fresh held-out seeds:
+  - `seed121`: `6/6` hard metrics passed
+  - `seed122`: `6/6` hard metrics passed
+- `ClinIntraOp-Pf-v2` did not remain stable on fresh held-out seeds:
+  - `seed121`: `6/7` hard metrics passed
+    - hard failure: `bg_fpeak_q50 = 70.3125`, above the brain-like upper bound
+      `26.5625`
+  - `seed122`: `5/7` hard metrics passed
+    - hard failures:
+      - `bg_fpeak_q50 = 93.75`
+      - `svd_bg_cum_r1 = 0.6046`, above the pooled-IQ upper bound `0.5613`
+- the accepted `seed0` intra-op calibration run had
+  `bg_fpeak_q50 = 23.4375`; the fresh failures therefore reflect a real
+  stability gap rather than a tiny threshold miss
+- the intra-op fresh seeds also showed higher realized residual-motion telemetry
+  than the accepted `seed0` case:
+  - accepted `seed0`: `disp_rms_px = 0.3580`
+  - `seed121`: `0.5568`
+  - `seed122`: `0.6133`
+
+Decision:
+
+- Phase 3 should be treated as blocked by `ClinIntraOp-Pf-v2` profile stability
+  rather than continued immediately on a wider held-out split
+- the correct next step is to return to Phase 1 calibration for the intra-op
+  profile and tighten the ordinary-background / residual-motion stability until
+  fresh seeds remain inside the hard brain-like background envelope
+- `ClinMobile-Pf-v2` does not currently need that same rework
+
 ### Phase 4: Implement `ClinFunctional-Pf-v2`
 
 Purpose:
