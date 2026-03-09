@@ -338,6 +338,70 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "rc_scale": 0.88,
         },
     },
+    "stabI5_coupledbg": {
+        "description": "Coupled low-frequency tissue background with one dominant mass mode and weaker shear modes.",
+        "motion": {},
+        "phase_screen": {
+            "drift_rho": 1.0,
+            "drift_sigma_rad": 0.0,
+        },
+        "noise": {
+            "iq_rms_frac": 0.22,
+        },
+        "background": {},
+        "ordinary_background": {
+            "mode": "coupled_mass_shear_v2",
+            "global_cutoff_hz": 7.0,
+            "shear1_cutoff_hz": 11.0,
+            "shear2_cutoff_hz": 13.0,
+            "residual_cutoff_hz": 9.0,
+            "global_disp_px": 0.10,
+            "shear1_disp_px": 0.036,
+            "shear2_disp_px": 0.028,
+            "residual_disp_px": 0.010,
+            "global_dx_scale": 0.07,
+            "global_dz_scale": 1.00,
+            "shear_dx_scale": 0.20,
+            "shear_dz_scale": 0.16,
+            "deep_dz_scale": 0.10,
+            "sector_mix_scale": 0.10,
+            "anchor_motion_scale": 0.14,
+            "structured_motion_scale": 1.10,
+            "sectorize_mid": False,
+        },
+    },
+    "stabI6_coupledbg_sector": {
+        "description": "Coupled low-frequency background with left/right mid-depth sectors to relieve rank-1 dominance.",
+        "motion": {},
+        "phase_screen": {
+            "drift_rho": 1.0,
+            "drift_sigma_rad": 0.0,
+        },
+        "noise": {
+            "iq_rms_frac": 0.22,
+        },
+        "background": {},
+        "ordinary_background": {
+            "mode": "coupled_mass_shear_v2",
+            "global_cutoff_hz": 7.0,
+            "shear1_cutoff_hz": 11.0,
+            "shear2_cutoff_hz": 13.0,
+            "residual_cutoff_hz": 9.0,
+            "global_disp_px": 0.095,
+            "shear1_disp_px": 0.040,
+            "shear2_disp_px": 0.030,
+            "residual_disp_px": 0.010,
+            "global_dx_scale": 0.07,
+            "global_dz_scale": 0.98,
+            "shear_dx_scale": 0.22,
+            "shear_dz_scale": 0.16,
+            "deep_dz_scale": 0.10,
+            "sector_mix_scale": 0.16,
+            "anchor_motion_scale": 0.14,
+            "structured_motion_scale": 1.10,
+            "sectorize_mid": True,
+        },
+    },
     "mobileA": {
         "description": "Reduce additive noise and high-rate jitter while keeping mobile nuisance prevalence intact.",
         "motion": {
@@ -455,11 +519,19 @@ def _candidate_cfg(profile: str, tier: str, seed: int, candidate_name: str):
     motion = dataclasses.replace(cfg.motion, **spec["motion"])
     phase = dataclasses.replace(cfg.phase_screen, **spec["phase_screen"])
     noise = dataclasses.replace(cfg.noise, **spec.get("noise", {}))
+    ordinary_background = dataclasses.replace(cfg.ordinary_background, **dict(spec.get("ordinary_background", {})))
     background = _scale_background_compartments(
         tuple(cfg.background_compartments),
         **dict(spec.get("background", {})),
     )
-    return dataclasses.replace(cfg, motion=motion, phase_screen=phase, noise=noise, background_compartments=background)
+    return dataclasses.replace(
+        cfg,
+        motion=motion,
+        phase_screen=phase,
+        noise=noise,
+        background_compartments=background,
+        ordinary_background=ordinary_background,
+    )
 
 
 def _prepare_thread_env(threads_per_worker: int | None) -> None:

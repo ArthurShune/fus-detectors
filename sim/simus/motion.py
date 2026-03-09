@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 from scipy.ndimage import gaussian_filter, gaussian_filter1d, map_coordinates
 
-from sim.simus.config import MotionSpec, PhaseScreenSpec, SimusConfig
+from sim.simus.config import BackgroundCompartmentSpec, MotionSpec, OrdinaryBackgroundSpec, PhaseScreenSpec, SimusConfig
 
 
 @dataclass(frozen=True)
@@ -19,6 +19,15 @@ class MotionArtifacts:
     elastic_base_dz_px: np.ndarray
     elastic_coef_x: np.ndarray
     elastic_coef_z: np.ndarray
+    telemetry: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class CoupledBackgroundArtifacts:
+    dx_series_px: np.ndarray
+    dz_series_px: np.ndarray
+    structured_dx_px: np.ndarray
+    structured_dz_px: np.ndarray
     telemetry: dict[str, Any]
 
 
@@ -44,6 +53,30 @@ def _ar1_series(T: int, *, rho: float, rng: np.random.Generator) -> np.ndarray:
     out -= np.float32(np.mean(out))
     rms = float(np.sqrt(np.mean(out * out))) + 1e-12
     return (out / rms).astype(np.float32, copy=False)
+
+
+def _series_from_cutoff(
+    T: int,
+    *,
+    prf_hz: float,
+    cutoff_hz: float,
+    rms_amp: float,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    cutoff = float(max(cutoff_hz, 1e-3))
+    rho = float(np.exp(-2.0 * np.pi * cutoff / max(float(prf_hz), 1e-6)))
+    return (float(rms_amp) * _ar1_series(T, rho=rho, rng=rng)).astype(np.float32, copy=False)
+
+
+def _delay_series(values: np.ndarray, delay: int) -> np.ndarray:
+    arr = np.asarray(values, dtype=np.float32)
+    d = max(int(delay), 0)
+    if d <= 0 or arr.size == 0:
+        return arr.astype(np.float32, copy=False)
+    out = np.empty_like(arr)
+    out[:d] = arr[0]
+    out[d:] = arr[:-d]
+    return out.astype(np.float32, copy=False)
 
 
 def _smooth_unit_field(H: int, W: int, *, sigma_px: float, rng: np.random.Generator) -> np.ndarray:
@@ -323,6 +356,122 @@ def build_localized_motion_component(
         "disp_p90_px": float(np.quantile(disp, 0.90)) if disp.size else 0.0,
     }
     return dx, dz, telemetry
+
+
+def build_coupled_background_artifacts(
+    *,
+    cfg: SimusConfig,
+    compartments: tuple[BackgroundCompartmentSpec, ...],
+    seed: int,
+) -> CoupledBackgroundArtifacts:
+    spec: OrdinaryBackgroundSpec = cfg.ordinary_background
+    T = int(cfg.T)
+    n_comp = len(tuple(compartments))
+    zeros = np.zeros((n_comp, T), dtype=np.float32)
+    zeros_t = np.zeros((T,), dtype=np.float32)
+    if str(spec.mode) != "coupled_mass_shear_v2" or T <= 0 or n_comp <= 0:
+        return CoupledBackgroundArtifacts(
+            dx_series_px=zeros,
+            dz_series_px=zeros,
+            structured_dx_px=zeros_t,
+            structured_dz_px=zeros_t,
+            telemetry={"enabled": False, "mode": str(spec.mode)},
+        )
+
+    rng = np.random.default_rng(int(seed))
+    g0 = _series_from_cutoff(
+        T,
+        prf_hz=float(cfg.prf_hz),
+        cutoff_hz=float(spec.global_cutoff_hz),
+        rms_amp=float(spec.global_disp_px),
+        rng=rng,
+    )
+    s1n = _series_from_cutoff(
+        T,
+        prf_hz=float(cfg.prf_hz),
+        cutoff_hz=float(spec.shear1_cutoff_hz),
+        rms_amp=float(spec.shear1_disp_px),
+        rng=rng,
+    )
+    s2n = _series_from_cutoff(
+        T,
+        prf_hz=float(cfg.prf_hz),
+        cutoff_hz=float(spec.shear2_cutoff_hz),
+        rms_amp=float(spec.shear2_disp_px),
+        rng=rng,
+    )
+    rn = _series_from_cutoff(
+        T,
+        prf_hz=float(cfg.prf_hz),
+        cutoff_hz=float(spec.residual_cutoff_hz),
+        rms_amp=float(spec.residual_disp_px),
+        rng=rng,
+    )
+    s1 = (0.70 * _delay_series(g0, 1) + s1n).astype(np.float32, copy=False)
+    s2 = (0.60 * _delay_series(g0, 3) + s2n).astype(np.float32, copy=False)
+
+    dx_series = np.zeros((n_comp, T), dtype=np.float32)
+    dz_series = np.zeros((n_comp, T), dtype=np.float32)
+    for idx, comp in enumerate(tuple(compartments)):
+        name = str(comp.name).lower()
+        if "left" in name:
+            x_sign = -1.0
+        elif "right" in name:
+            x_sign = 1.0
+        else:
+            x_sign = 0.0
+        if "deep" in name:
+            depth_mix = float(spec.deep_dz_scale)
+        elif "superficial" in name:
+            depth_mix = 0.04
+        else:
+            depth_mix = 0.08
+        sector_mix = float(spec.sector_mix_scale) * x_sign if ("mid" in name and bool(spec.sectorize_mid)) else 0.0
+        dz = (
+            float(spec.global_dz_scale) * g0
+            + (0.35 + sector_mix) * float(spec.shear_dz_scale) * s1
+            + depth_mix * s2
+            + 0.35 * rn
+        ).astype(np.float32, copy=False)
+        dx = (
+            float(spec.global_dx_scale) * g0
+            + x_sign * float(spec.shear_dx_scale) * s1
+            + sector_mix * s2
+            + 0.20 * rn
+        ).astype(np.float32, copy=False)
+        dx_series[idx] = dx
+        dz_series[idx] = dz
+
+    structured_dx = (
+        float(spec.structured_motion_scale) * float(spec.global_dx_scale) * g0
+        + 0.25 * float(spec.shear_dx_scale) * s1
+    ).astype(np.float32, copy=False)
+    structured_dz = (
+        float(spec.structured_motion_scale) * float(spec.global_dz_scale) * g0
+        + 0.35 * float(spec.shear_dz_scale) * s1
+        + 0.10 * s2
+    ).astype(np.float32, copy=False)
+
+    telemetry = {
+        "enabled": True,
+        "mode": str(spec.mode),
+        "global_cutoff_hz": float(spec.global_cutoff_hz),
+        "shear1_cutoff_hz": float(spec.shear1_cutoff_hz),
+        "shear2_cutoff_hz": float(spec.shear2_cutoff_hz),
+        "residual_cutoff_hz": float(spec.residual_cutoff_hz),
+        "global_disp_rms_px": float(np.sqrt(np.mean(g0 * g0))) if g0.size else 0.0,
+        "shear1_disp_rms_px": float(np.sqrt(np.mean(s1 * s1))) if s1.size else 0.0,
+        "shear2_disp_rms_px": float(np.sqrt(np.mean(s2 * s2))) if s2.size else 0.0,
+        "residual_disp_rms_px": float(np.sqrt(np.mean(rn * rn))) if rn.size else 0.0,
+        "sectorize_mid": bool(spec.sectorize_mid),
+    }
+    return CoupledBackgroundArtifacts(
+        dx_series_px=dx_series,
+        dz_series_px=dz_series,
+        structured_dx_px=structured_dx,
+        structured_dz_px=structured_dz,
+        telemetry=telemetry,
+    )
 
 
 def apply_phase_screen(iq_ch: np.ndarray, phase_rad: np.ndarray) -> np.ndarray:

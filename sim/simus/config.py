@@ -110,6 +110,28 @@ class NoiseSpec:
 
 
 @dataclass(frozen=True)
+class OrdinaryBackgroundSpec:
+    mode: Literal["independent_compartments", "coupled_mass_shear_v2"] = "independent_compartments"
+    global_cutoff_hz: float = 7.0
+    shear1_cutoff_hz: float = 11.0
+    shear2_cutoff_hz: float = 13.0
+    residual_cutoff_hz: float = 9.0
+    global_disp_px: float = 0.12
+    shear1_disp_px: float = 0.045
+    shear2_disp_px: float = 0.035
+    residual_disp_px: float = 0.015
+    global_dx_scale: float = 0.10
+    global_dz_scale: float = 1.00
+    shear_dx_scale: float = 0.24
+    shear_dz_scale: float = 0.20
+    deep_dz_scale: float = 0.12
+    sector_mix_scale: float = 0.14
+    anchor_motion_scale: float = 0.18
+    structured_motion_scale: float = 1.15
+    sectorize_mid: bool = False
+
+
+@dataclass(frozen=True)
 class SimusConfig:
     preset: SimusPreset = "microvascular_like"
     tier: SimusTier = "smoke"
@@ -151,6 +173,7 @@ class SimusConfig:
     noise: NoiseSpec = NoiseSpec()
     structured_clutter: tuple[StructuredClutterSpec, ...] = ()
     background_compartments: tuple[BackgroundCompartmentSpec, ...] = ()
+    ordinary_background: OrdinaryBackgroundSpec = OrdinaryBackgroundSpec()
 
     reservoir_scale: int = 4
     reinject_depth_span_m: float = 0.003
@@ -255,6 +278,7 @@ def default_config(*, preset: SimusPreset, tier: SimusTier, seed: int) -> SimusC
         motion=MotionSpec(enabled=False),
         phase_screen=PhaseScreenSpec(enabled=False),
         noise=NoiseSpec(enabled=False),
+        ordinary_background=OrdinaryBackgroundSpec(mode="independent_compartments"),
         reservoir_scale=4,
         reinject_depth_span_m=float(reinject_depth_span_m),
         **grid,
@@ -870,6 +894,8 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
             else ()
         ) if (intraop_v2 or mobile_v2) else ()
 
+    ordinary_background = OrdinaryBackgroundSpec(mode="independent_compartments")
+
     if not (intraop_v2 or mobile_v2):
         background_compartments = ()
         noise = NoiseSpec(enabled=False)
@@ -898,6 +924,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
         noise=noise,
         structured_clutter=structured_clutter,
         background_compartments=background_compartments,
+        ordinary_background=ordinary_background,
         reservoir_scale=4,
         reinject_depth_span_m=float(reservoir_span),
         **grid,
