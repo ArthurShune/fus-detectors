@@ -478,6 +478,72 @@ Outputs:
 - `reports/simus_v2/*frozen_profile_search*.{csv,json}`
 - `reports/simus_v2/*symmetric_pipeline_compare*.{csv,json}`
 
+Initial checkpoint status:
+
+- a first `v2` refreeze checkpoint is complete using:
+  - development cases:
+    - `runs/sim/simus_clin_intraop_pf_v2_phase1_paper_seed0`
+    - `runs/sim/simus_clin_mobile_pf_v2_phase2_paper_seed0`
+  - held-out cases:
+    - `runs/sim/simus_clin_intraop_pf_v2_phase3_cases/simus_clinintraop_pf_v2_seed121`
+    - `runs/sim/simus_clin_mobile_pf_v2_phase3_cases/simus_clinmobile_pf_v2_seed121`
+- this was intentionally treated as an interim checkpoint rather than the final
+  `v2` freeze, because fresh `Clin*-Pf-v2` paper-tier generation is
+  substantially slower than the corrected `v1` track and the larger `121-124`
+  batch would have turned Phase 3 into a multi-hour pure synthesis run
+
+Artifacts:
+
+- frozen profile search:
+  - `reports/simus_v2/simus_fair_profile_search_seed0to121.csv`
+  - `reports/simus_v2/simus_fair_profile_search_seed0to121.json`
+- stage-symmetric residualizer/head audit:
+  - `reports/simus_v2/simus_symmetric_pipeline_compare_seed0to121.csv`
+  - `reports/simus_v2/simus_symmetric_pipeline_compare_seed0to121.json`
+  - `reports/simus_v2/simus_symmetric_pipeline_compare_seed0to121_headline.csv`
+  - `reports/simus_v2/simus_symmetric_pipeline_compare_seed0to121_headline.json`
+
+Checkpoint result:
+
+- the frozen family search selected:
+  - `STAP`: `Brain-SIMUS-Clin-MotionLong-v0`
+  - `MC-SVD`: `rank6`
+  - `Adaptive Global SVD`: `sensitive_r6`
+  - `Local SVD (Fixed Energy)`: `tile16_s4_ef95`
+  - `Adaptive Local SVD`: `tile12_s4_bal_r8_rect`
+  - `RPCA`: `lam1_it250_ds2_t32_r4`
+  - `HOSVD`: `rank8_16_16_ds2_t32`
+- on the held-out `seed121` pair, the frozen family-to-family ranking remained
+  mixed in the way expected for a harder clinically anchored track:
+  - `RPCA` had the strongest `auc_main_vs_bg` (`0.677`)
+  - `STAP` had by far the strongest `auc_main_vs_nuisance` (`0.688`) and the
+    lowest nuisance FPR at matched `TPR_main=0.5` (`0.254`)
+- in the stricter stage-symmetric detector-head audit, the same frozen STAP head
+  improved five of the six residualizer families relative to their best native
+  simple detector head (`PD` vs `Kasai`):
+  - `Adaptive Local SVD -> STAP`: `auc_bg=0.743`, `auc_nuis=0.818`,
+    `fpr_nuis=0.122`
+  - `HOSVD -> STAP`: `0.752 / 0.908 / 0.049`
+  - `MC-SVD -> STAP`: `0.765 / 0.852 / 0.088`
+  - `RPCA -> STAP`: `0.818 / 0.927 / 0.023`
+  - `Adaptive Global SVD -> STAP`: `0.781 / 0.867 / 0.082`
+- the one clear exception was `Local SVD (Fixed Energy)`, where the native
+  `Kasai` head remained stronger than the frozen STAP head on this checkpoint:
+  - `Local SVD (Fixed Energy) -> Kasai`: `0.588 / 0.448 / 0.589`
+  - `Local SVD (Fixed Energy) -> STAP`: `0.495 / 0.377 / 0.701`
+
+Interpretation:
+
+- this checkpoint is already enough to reject the simplest failure story:
+  accepted `v2` realism does not automatically erase STAP's detector-head
+  advantage
+- it is not yet enough to claim the final `v2` freeze is complete, because the
+  checkpoint still reuses the accepted `seed0` intra-op/mobile runs as the
+  development pair
+- before the benchmark is treated as final, the same Phase 3 protocol should be
+  repeated on a larger fresh-seed split once more `Clin*-Pf-v2` paper runs have
+  been amortized or cached
+
 ### Phase 4: Implement `ClinFunctional-Pf-v2`
 
 Purpose:
