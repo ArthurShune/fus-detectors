@@ -607,6 +607,126 @@ Updated decision:
   - any scene component that is forcing persistent background peaks into the
     `70.3/93.75 Hz` bins across fresh seeds
 
+### Phase 1R: Redesign the intra-op ordinary background
+
+Purpose:
+
+- stabilize `ClinIntraOp-Pf-v2` across fresh seeds without relaxing the hard
+  profile gate
+- fix the ordinary-background failure mode rather than continuing bounded knob
+  retuning
+
+Diagnosis:
+
+- the blocker is now specific:
+  - accepted `seed0`: `bg_fpeak_q50 = 23.4375`
+  - failing `seed121`: `70.3125`
+  - failing `seed122`: `93.75`
+- those values sit exactly on the discrete 64-pulse Doppler grid and were not
+  moved by bounded motion/jitter/elastic retuning
+- widening the `H0_bg` exclusion around nuisance/specular masks also left
+  `bg_fpeak_q50` unchanged
+- the most likely problem is therefore the topology of the ordinary-background
+  scene model itself, not detector behavior, label leakage, or nuisance-vessel
+  contamination
+
+Redesign direction:
+
+- replace independently driven ordinary-background compartments with a
+  mechanically coupled low-frequency tissue model
+- use deterministic superficial / mid-depth / deep background regions rather
+  than seed-random ordinary-background compartments
+- drive those regions with:
+  - one dominant low-frequency mass-motion component
+  - two weaker delayed regional shear modes
+  - a clip-static coupling / phase term
+- retain a controlled near-static diffuse anchor so the background does not
+  collapse into whichever residual component wins a given seed
+- keep structured clutter sheets/boundaries tied to the same low-frequency
+  mechanics rather than giving them independent temporal drivers
+
+Implementation targets:
+
+- `sim/simus/config.py`
+  - add a new ordinary-background model family, e.g.
+    `ordinary_bg_model = coupled_mass_shear_v2`
+  - freeze deterministic region geometry and latent-driver gains / delays
+- `sim/simus/motion.py`
+  - add the coupled latent background-driver construction
+  - optionally split this into a new helper if the file becomes unwieldy
+- `sim/simus/pymust_smoke.py`
+  - exercise the new ordinary-background path in smoke mode
+- `sim/simus/pilot_pymust_simus.py`
+  - apply the redesigned background / clip-static phase model
+  - emit additional scene-side debug telemetry
+- `scripts/simus_v2_phase1_calibrate.py`
+  - stop exploring the old independent-compartment family
+  - compare only redesign candidates
+- `scripts/simus_v2_acceptance.py`
+  - keep the hard gate unchanged
+  - add only non-blocking scene-side diagnostics if needed
+
+First redesign candidate family:
+
+- `stabI5_coupledbg`
+  - deterministic superficial / mid-depth / deep regions
+  - one dominant low-frequency tissue driver
+  - two weaker delayed regional shear modes
+  - clip-static phase screen
+- `stabI6_coupledbg_sector`
+  - same as `stabI5`
+  - split the mid-depth ordinary background into left/right sectors to reduce
+    excessive rank-1 concentration without pushing the background peak upward
+
+Decision rule:
+
+- treat `seed0`, `seed121`, and `seed122` as the redesign set
+- accept the redesign only if one candidate passes `7/7` hard metrics on all
+  three redesign seeds with no threshold changes
+- if a candidate clears that bar, promote it to `ClinIntraOp-Pf-v2.1` and run
+  untouched confirmation seeds `123` and `124`
+- proceed back to Phase 3 only if those confirmation seeds also pass the same
+  hard gate
+- if neither `stabI5` nor `stabI6` clears the redesign set, stop incremental
+  tuning and revisit the intra-op scene concept at the benchmark-design level
+
+Interpretation:
+
+- this should be treated as the decisive intra-op realism pass, not the start
+  of an open-ended candidate sweep
+- `ClinMobile-Pf-v2` remains accepted and should not be changed while this
+  intra-op redesign is being resolved
+
+Outcome:
+
+- the decisive redesign-set pass was run on `seed0`, `seed121`, and `seed122`
+  using:
+  - `base`
+  - `stabI5_coupledbg`
+  - `stabI6_coupledbg_sector`
+- none of those candidates cleared the redesign-set gate
+- both coupled-background candidates failed to improve the blocker metric on the
+  held-out seeds and also broke the previously accepted `seed0` case
+- measured `bg_fpeak_q50` values from
+  `reports/simus_v2/acceptance/simus_v2_phase1_redesign_seed0_121_122.csv`:
+  - `base`: `seed0=117.1875`, `seed121=46.875`, `seed122=93.75`
+  - `stabI5_coupledbg`: `seed0=117.1875`, `seed121=46.875`, `seed122=93.75`
+  - `stabI6_coupledbg_sector`: `seed0=117.1875`, `seed121=70.3125`,
+    `seed122=93.75`
+- this means the current intra-op redesign hypothesis did not survive the
+  decisive pass
+
+Updated decision:
+
+- restore `ClinIntraOp-Pf-v2` to the last validated independent-compartment
+  default while keeping the coupled-background machinery as experimental code
+- do not continue incremental `stabI*` tuning on this branch
+- before reopening Phase 3, revisit the intra-op profile concept at the
+  benchmark-design level:
+  - either redefine the intra-op background gate/context
+  - or redesign the ordinary-background scene around a different clinical
+    nuisance hypothesis
+
 ### Phase 4: Implement `ClinFunctional-Pf-v2`
 
 Purpose:

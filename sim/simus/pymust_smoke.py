@@ -18,6 +18,7 @@ from sim.simus.config import (
 from sim.simus.labels import build_label_pack
 from sim.simus.motion import (
     apply_phase_screen,
+    build_coupled_background_artifacts,
     build_motion_artifacts,
     build_localized_motion_component,
     build_phase_screen_series,
@@ -343,6 +344,18 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
     )
 
     motion_art = build_motion_artifacts(cfg=cfg, seed=int(cfg.seed) + 2001)
+    coupled_bg = build_coupled_background_artifacts(
+        cfg=cfg,
+        compartments=tuple(cfg.background_compartments),
+        seed=int(cfg.seed) + 9101,
+    )
+    dx_grid_m = float((float(cfg.x_max_m) - float(cfg.x_min_m)) / max(int(cfg.W) - 1, 1))
+    dz_grid_m = float((float(cfg.z_max_m) - float(cfg.z_min_m)) / max(int(cfg.H) - 1, 1))
+    anchor_motion_scale = (
+        float(cfg.ordinary_background.anchor_motion_scale)
+        if str(cfg.ordinary_background.mode) == "coupled_mass_shear_v2"
+        else 1.0
+    )
 
     # ---- Scatterers ----
     x_min, x_max = float(cfg.x_min_m), float(cfg.x_max_m)
@@ -368,7 +381,7 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
             ) <= (0.5 * float(clutter.thickness_m))
         return out
 
-    # Tissue: ordinary background pool plus independently driven local parcels.
+    # Tissue: diffuse anchor pool plus ordinary-background compartments.
     xs_tissue, zs_tissue = _sample_uniform_excluding_mask(
         rng,
         n=int(cfg.tissue_count),
@@ -401,20 +414,30 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
             exclude_mask_fn=_in_excluded_scene,
         )
         rc_bg = (float(compartment.rc_scale) * rng.standard_normal(int(compartment.scatterer_count))).astype(np.float32)
-        dx_bg_px, dz_bg_px, tele_bg = build_localized_motion_component(
-            cfg=cfg,
-            center_x_m=float(compartment.center_x_m),
-            center_z_m=float(compartment.center_z_m),
-            sigma_x_m=float(compartment.sigma_x_m),
-            sigma_z_m=float(compartment.sigma_z_m),
-            amp_px=float(compartment.motion_amp_px),
-            sigma_px=float(compartment.motion_sigma_px),
-            rho=float(compartment.motion_rho),
-            jitter_sigma_px=float(compartment.motion_jitter_sigma_px),
-            lateral_scale=float(compartment.lateral_scale),
-            axial_scale=float(compartment.axial_scale),
-            seed=int(cfg.seed) + 9001 + 37 * bidx,
-        )
+        if str(cfg.ordinary_background.mode) == "coupled_mass_shear_v2":
+            dx_bg_px = np.asarray(coupled_bg.dx_series_px[bidx], dtype=np.float32)
+            dz_bg_px = np.asarray(coupled_bg.dz_series_px[bidx], dtype=np.float32)
+            tele_bg = {
+                "enabled": True,
+                "mode": "coupled_mass_shear_v2",
+                "disp_rms_px": float(np.sqrt(np.mean(dx_bg_px * dx_bg_px + dz_bg_px * dz_bg_px))),
+                "disp_p90_px": float(np.quantile(np.sqrt(dx_bg_px * dx_bg_px + dz_bg_px * dz_bg_px), 0.90)),
+            }
+        else:
+            dx_bg_px, dz_bg_px, tele_bg = build_localized_motion_component(
+                cfg=cfg,
+                center_x_m=float(compartment.center_x_m),
+                center_z_m=float(compartment.center_z_m),
+                sigma_x_m=float(compartment.sigma_x_m),
+                sigma_z_m=float(compartment.sigma_z_m),
+                amp_px=float(compartment.motion_amp_px),
+                sigma_px=float(compartment.motion_sigma_px),
+                rho=float(compartment.motion_rho),
+                jitter_sigma_px=float(compartment.motion_jitter_sigma_px),
+                lateral_scale=float(compartment.lateral_scale),
+                axial_scale=float(compartment.axial_scale),
+                seed=int(cfg.seed) + 9001 + 37 * bidx,
+            )
         background_states.append(
             {
                 "spec": compartment,
@@ -505,6 +528,9 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
             z_m=zs_tissue,
             cfg=cfg,
         )
+        if anchor_motion_scale != 1.0:
+            dx_tissue_m = (anchor_motion_scale * dx_tissue_m).astype(np.float32, copy=False)
+            dz_tissue_m = (anchor_motion_scale * dz_tissue_m).astype(np.float32, copy=False)
         xs_tissue_t = (xs_tissue + dx_tissue_m).astype(np.float32, copy=False)
         zs_tissue_t = (zs_tissue + dz_tissue_m).astype(np.float32, copy=False)
 
@@ -519,6 +545,13 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
                 z_m=np.asarray(state["zs"], dtype=np.float32),
                 cfg=cfg,
             )
+            if str(cfg.ordinary_background.mode) == "coupled_mass_shear_v2":
+                dx_clutter_m = (
+                    dx_clutter_m + np.float32(coupled_bg.structured_dx_px[t] * dx_grid_m)
+                ).astype(np.float32, copy=False)
+                dz_clutter_m = (
+                    dz_clutter_m + np.float32(coupled_bg.structured_dz_px[t] * dz_grid_m)
+                ).astype(np.float32, copy=False)
             clutter_xs.append((np.asarray(state["xs"], dtype=np.float32) + dx_clutter_m).astype(np.float32, copy=False))
             clutter_zs.append((np.asarray(state["zs"], dtype=np.float32) + dz_clutter_m).astype(np.float32, copy=False))
 
@@ -533,13 +566,23 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
                 z_m=np.asarray(state["zs"], dtype=np.float32),
                 cfg=cfg,
             )
-            dx_bg_local_m, dz_bg_local_m = sample_motion_displacements_m(
-                field_dx_px=np.asarray(state["dx_px"], dtype=np.float32)[t],
-                field_dz_px=np.asarray(state["dz_px"], dtype=np.float32)[t],
-                x_m=np.asarray(state["xs"], dtype=np.float32),
-                z_m=np.asarray(state["zs"], dtype=np.float32),
-                cfg=cfg,
-            )
+            if str(cfg.ordinary_background.mode) == "coupled_mass_shear_v2":
+                dx_bg_local_m = np.full_like(
+                    np.asarray(state["xs"], dtype=np.float32),
+                    np.float32(np.asarray(state["dx_px"], dtype=np.float32)[t] * dx_grid_m),
+                )
+                dz_bg_local_m = np.full_like(
+                    np.asarray(state["zs"], dtype=np.float32),
+                    np.float32(np.asarray(state["dz_px"], dtype=np.float32)[t] * dz_grid_m),
+                )
+            else:
+                dx_bg_local_m, dz_bg_local_m = sample_motion_displacements_m(
+                    field_dx_px=np.asarray(state["dx_px"], dtype=np.float32)[t],
+                    field_dz_px=np.asarray(state["dz_px"], dtype=np.float32)[t],
+                    x_m=np.asarray(state["xs"], dtype=np.float32),
+                    z_m=np.asarray(state["zs"], dtype=np.float32),
+                    cfg=cfg,
+                )
             bg_xs.append(
                 (
                     np.asarray(state["xs"], dtype=np.float32) + dx_bg_global_m + dx_bg_local_m
@@ -668,6 +711,7 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
             "n_nuisance_vessels": int(sum(1 for v in vessels if v.role == "nuisance_pa")),
             "n_structured_clutter": int(len(tuple(cfg.structured_clutter))),
             "n_background_compartments": int(len(tuple(cfg.background_compartments))),
+            "ordinary_bg_mode": str(cfg.ordinary_background.mode),
             "microvascular_fraction": float(np.mean(mask_microvascular)),
             "nuisance_fraction": float(np.mean(mask_nuisance_pa)),
             "specular_struct_fraction": float(np.mean(labels.mask_h0_specular_struct)),
@@ -679,6 +723,7 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
             "expected_fd_sampled_q50_hz": float(np.quantile(labels.expected_fd_sampled_hz[labels.mask_flow], 0.50)) if np.any(labels.mask_flow) else 0.0,
         },
         "background_compartment_telemetry": [dict(state["telemetry"]) for state in background_states],
+        "coupled_background_telemetry": dict(coupled_bg.telemetry),
     }
 
     return {
