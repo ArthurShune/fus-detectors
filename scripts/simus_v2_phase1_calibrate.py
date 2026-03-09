@@ -11,7 +11,7 @@ from typing import Any
 from scripts.simus_v2_acceptance import ANCHOR_PRESETS, _combine_anchor_envelope, evaluate_run, _write_csv, _write_json
 from scripts.simus_v2_anchor_envelopes import DEFAULT_ACCEPTANCE_METRICS
 from scripts.physical_doppler_sanity_link import BandEdges, TileSpec
-from sim.simus.config import default_profile_config
+from sim.simus.config import BackgroundCompartmentSpec, default_profile_config
 from sim.simus.pilot_pymust_simus import write_simus_run
 
 
@@ -21,6 +21,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
         "motion": {},
         "phase_screen": {},
         "noise": {},
+        "background": {},
     },
     "calA": {
         "description": "Balanced residual-motion increase with moderate phase drift.",
@@ -39,6 +40,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_sigma_rad": 0.02,
         },
         "noise": {},
+        "background": {},
     },
     "calB": {
         "description": "Stronger stochastic residual motion with faster elastic decorrelation.",
@@ -57,6 +59,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_sigma_rad": 0.025,
         },
         "noise": {},
+        "background": {},
     },
     "calC": {
         "description": "Phase-heavy decorrelation with moderate residual motion.",
@@ -75,6 +78,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_sigma_rad": 0.04,
         },
         "noise": {},
+        "background": {},
     },
     "calD": {
         "description": "High-motion candidate with moderate phase drift.",
@@ -94,6 +98,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_sigma_rad": 0.02,
         },
         "noise": {},
+        "background": {},
     },
     "calJ1": {
         "description": "Balanced candidate with explicit pulse-to-pulse residual jitter.",
@@ -114,6 +119,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_sigma_rad": 0.02,
         },
         "noise": {},
+        "background": {},
     },
     "calJ2": {
         "description": "Stronger jitter-led candidate for aggressive background decorrelation.",
@@ -134,6 +140,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_sigma_rad": 0.03,
         },
         "noise": {},
+        "background": {},
     },
     "calM1": {
         "description": "Multi-mode elastic residual with moderate pulse jitter.",
@@ -154,6 +161,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_sigma_rad": 0.02,
         },
         "noise": {},
+        "background": {},
     },
     "calM2": {
         "description": "Stronger multi-mode elastic residual with lighter jitter for coherence balance.",
@@ -174,6 +182,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_sigma_rad": 0.018,
         },
         "noise": {},
+        "background": {},
     },
     "calM3": {
         "description": "Higher-mode residual field with moderate jitter to reduce background rank concentration.",
@@ -194,6 +203,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_sigma_rad": 0.016,
         },
         "noise": {},
+        "background": {},
     },
     "calL1": {
         "description": "Localized multi-mode residual field tuned from the near-pass M2 candidate.",
@@ -214,6 +224,116 @@ CANDIDATES: dict[str, dict[str, Any]] = {
             "drift_sigma_rad": 0.018,
         },
         "noise": {},
+        "background": {},
+    },
+    "stabI1": {
+        "description": "Lower-variance intra-op residuals with modest background-motion damping.",
+        "motion": {
+            "random_walk_sigma_px": 0.025,
+            "pulse_jitter_sigma_px": 0.035,
+            "drift_x_px": 0.16,
+            "drift_z_px": 0.07,
+            "elastic_amp_px": 0.34,
+            "elastic_temporal_rho": 0.78,
+            "elastic_mode_count": 3,
+        },
+        "phase_screen": {
+            "std_rad": 0.40,
+            "corr_len_elem": 8.0,
+            "drift_rho": 0.95,
+            "drift_sigma_rad": 0.018,
+        },
+        "noise": {
+            "iq_rms_frac": 0.26,
+        },
+        "background": {
+            "motion_amp_scale": 0.82,
+            "motion_jitter_scale": 0.60,
+            "motion_rho_delta": 0.04,
+            "rc_scale": 0.95,
+        },
+    },
+    "stabI2": {
+        "description": "Stronger damping of background compartments with a slightly higher noise floor.",
+        "motion": {
+            "random_walk_sigma_px": 0.02,
+            "pulse_jitter_sigma_px": 0.03,
+            "drift_x_px": 0.15,
+            "drift_z_px": 0.06,
+            "elastic_amp_px": 0.32,
+            "elastic_temporal_rho": 0.80,
+            "elastic_mode_count": 3,
+        },
+        "phase_screen": {
+            "std_rad": 0.38,
+            "corr_len_elem": 8.0,
+            "drift_rho": 0.96,
+            "drift_sigma_rad": 0.016,
+        },
+        "noise": {
+            "iq_rms_frac": 0.28,
+        },
+        "background": {
+            "motion_amp_scale": 0.72,
+            "motion_jitter_scale": 0.50,
+            "motion_rho_delta": 0.06,
+            "rc_scale": 0.90,
+        },
+    },
+    "stabI3": {
+        "description": "Reduced compartment dominance with preserved global motion and extra noise decorrelation.",
+        "motion": {
+            "random_walk_sigma_px": 0.03,
+            "pulse_jitter_sigma_px": 0.04,
+            "drift_x_px": 0.17,
+            "drift_z_px": 0.07,
+            "elastic_amp_px": 0.36,
+            "elastic_temporal_rho": 0.78,
+            "elastic_mode_count": 4,
+        },
+        "phase_screen": {
+            "std_rad": 0.40,
+            "corr_len_elem": 8.0,
+            "drift_rho": 0.95,
+            "drift_sigma_rad": 0.017,
+        },
+        "noise": {
+            "iq_rms_frac": 0.30,
+        },
+        "background": {
+            "motion_amp_scale": 0.68,
+            "motion_jitter_scale": 0.45,
+            "motion_rho_delta": 0.05,
+            "rc_scale": 0.82,
+            "scatterer_scale": 0.90,
+        },
+    },
+    "stabI4": {
+        "description": "Keep more deterministic motion while strongly narrowing stochastic background spread.",
+        "motion": {
+            "random_walk_sigma_px": 0.015,
+            "pulse_jitter_sigma_px": 0.025,
+            "drift_x_px": 0.18,
+            "drift_z_px": 0.08,
+            "elastic_amp_px": 0.30,
+            "elastic_temporal_rho": 0.82,
+            "elastic_mode_count": 2,
+        },
+        "phase_screen": {
+            "std_rad": 0.41,
+            "corr_len_elem": 8.0,
+            "drift_rho": 0.96,
+            "drift_sigma_rad": 0.016,
+        },
+        "noise": {
+            "iq_rms_frac": 0.27,
+        },
+        "background": {
+            "motion_amp_scale": 0.65,
+            "motion_jitter_scale": 0.35,
+            "motion_rho_delta": 0.08,
+            "rc_scale": 0.88,
+        },
     },
     "mobileA": {
         "description": "Reduce additive noise and high-rate jitter while keeping mobile nuisance prevalence intact.",
@@ -274,6 +394,7 @@ CANDIDATES: dict[str, dict[str, Any]] = {
         "noise": {
             "iq_rms_frac": 0.20,
         },
+        "background": {},
     },
 }
 
@@ -299,13 +420,43 @@ def _norm_miss(value: float | None, lo: float | None, hi: float | None) -> float
     return float(value - hi) / width
 
 
+def _scale_background_compartments(
+    compartments: tuple[BackgroundCompartmentSpec, ...],
+    *,
+    motion_amp_scale: float = 1.0,
+    motion_jitter_scale: float = 1.0,
+    motion_sigma_scale: float = 1.0,
+    motion_rho_delta: float = 0.0,
+    rc_scale: float = 1.0,
+    scatterer_scale: float = 1.0,
+) -> tuple[BackgroundCompartmentSpec, ...]:
+    out: list[BackgroundCompartmentSpec] = []
+    for comp in compartments:
+        out.append(
+            dataclasses.replace(
+                comp,
+                rc_scale=float(comp.rc_scale) * float(rc_scale),
+                scatterer_count=max(1, int(round(float(comp.scatterer_count) * float(scatterer_scale)))),
+                motion_amp_px=float(comp.motion_amp_px) * float(motion_amp_scale),
+                motion_sigma_px=float(comp.motion_sigma_px) * float(motion_sigma_scale),
+                motion_rho=float(min(0.999, max(0.0, float(comp.motion_rho) + float(motion_rho_delta)))),
+                motion_jitter_sigma_px=float(comp.motion_jitter_sigma_px) * float(motion_jitter_scale),
+            )
+        )
+    return tuple(out)
+
+
 def _candidate_cfg(profile: str, tier: str, seed: int, candidate_name: str):
     cfg = default_profile_config(profile=profile, tier=tier, seed=seed)  # type: ignore[arg-type]
     spec = CANDIDATES[candidate_name]
     motion = dataclasses.replace(cfg.motion, **spec["motion"])
     phase = dataclasses.replace(cfg.phase_screen, **spec["phase_screen"])
     noise = dataclasses.replace(cfg.noise, **spec.get("noise", {}))
-    return dataclasses.replace(cfg, motion=motion, phase_screen=phase, noise=noise)
+    background = _scale_background_compartments(
+        tuple(cfg.background_compartments),
+        **dict(spec.get("background", {})),
+    )
+    return dataclasses.replace(cfg, motion=motion, phase_screen=phase, noise=noise, background_compartments=background)
 
 
 def parse_args() -> argparse.Namespace:
@@ -313,6 +464,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--profile", type=str, default="ClinIntraOp-Pf-v2")
     ap.add_argument("--tier", type=str, default="paper", choices=["smoke", "paper"])
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--seeds", action="append", default=None, help="Seed list(s); comma-separated allowed. Overrides --seed when provided.")
     ap.add_argument("--candidate", action="append", default=None, help="Candidate name(s); comma-separated allowed.")
     ap.add_argument("--anchor-json", type=Path, default=Path("reports/simus_v2/anchors/simus_v2_anchor_envelopes.json"))
     ap.add_argument("--profile-gate", type=str, default=None)
@@ -328,6 +480,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     candidates = _parse_list(args.candidate) or ["base", "calA", "calB", "calC", "calD"]
+    seeds = [int(s) for s in (_parse_list(args.seeds) if args.seeds else [str(args.seed)])]
     unknown = [name for name in candidates if name not in CANDIDATES]
     if unknown:
         raise SystemExit(f"unknown candidates: {', '.join(sorted(unknown))}")
@@ -358,76 +511,128 @@ def main() -> None:
     bands = BandEdges(pf_lo_hz=30.0, pf_hi_hz=250.0, pg_lo_hz=250.0, pg_hi_hz=400.0, pa_lo_hz=400.0)
     tile = TileSpec(h=8, w=8, stride=3)
 
-    stem = f"simus_v2_phase1_calibration_{args.profile.replace('-', '_').lower()}_{args.tier}_seed{args.seed}"
+    seed_tag = "_".join(f"s{seed}" for seed in seeds)
+    stem = f"simus_v2_phase1_calibration_{args.profile.replace('-', '_').lower()}_{args.tier}_{seed_tag}"
     out_csv = args.out_csv or Path("reports/simus_v2/acceptance") / f"{stem}.csv"
     out_json = args.out_json or Path("reports/simus_v2/acceptance") / f"{stem}.json"
+    out_runs_csv = out_csv.with_name(f"{out_csv.stem}_runs.csv")
 
     rows: list[dict[str, Any]] = []
+    run_rows: list[dict[str, Any]] = []
     payload_runs: list[dict[str, Any]] = []
     for candidate_name in candidates:
-        run_root = Path(args.out_root) / f"{stem}_{candidate_name}"
-        if not (args.reuse_existing and (run_root / "dataset" / "meta.json").is_file()):
-            cfg = _candidate_cfg(args.profile, args.tier, int(args.seed), candidate_name)
-            write_simus_run(out_root=run_root, cfg=cfg, skip_bundle=True)
-        if args.profile_gate:
-            from scripts.simus_v2_acceptance import _evaluate_profile_gate, summarize_run
+        candidate_runs: list[dict[str, Any]] = []
+        seeds_passed = 0
+        total_passed_metrics = 0
+        total_required_metrics = 0
+        total_mean_miss = 0.0
+        max_norm_miss = 0.0
+        worst_pass_fraction = 1.0
+        for seed in seeds:
+            run_root = Path(args.out_root) / f"{stem}_{candidate_name}_seed{seed}"
+            if not (args.reuse_existing and (run_root / "dataset" / "meta.json").is_file()):
+                cfg = _candidate_cfg(args.profile, args.tier, int(seed), candidate_name)
+                write_simus_run(out_root=run_root, cfg=cfg, skip_bundle=True)
+            if args.profile_gate:
+                from scripts.simus_v2_acceptance import _evaluate_profile_gate, summarize_run
 
-            summary, metric_rows = _evaluate_profile_gate(
-                run_summary=summarize_run(run_dir=run_root, bands=bands, tile=tile),
-                anchor_payload=anchor_payload,
-                gate_name=str(args.profile_gate),
-                lower_q=0.10,
-                upper_q=0.90,
+                summary, metric_rows = _evaluate_profile_gate(
+                    run_summary=summarize_run(run_dir=run_root, bands=bands, tile=tile),
+                    anchor_payload=anchor_payload,
+                    gate_name=str(args.profile_gate),
+                    lower_q=0.10,
+                    upper_q=0.90,
+                )
+            else:
+                summary, metric_rows = evaluate_run(
+                    run_dir=run_root,
+                    bands=bands,
+                    tile=tile,
+                    acceptance_env=dict(acceptance_env or {}),
+                    metrics=metrics,
+                )
+            mean_miss = 0.0
+            run_max_miss = 0.0
+            miss_n = 0
+            for metric_row in metric_rows:
+                miss = _norm_miss(metric_row.get("value"), metric_row.get("lo"), metric_row.get("hi"))
+                metric_row["norm_miss"] = miss
+                if miss is not None:
+                    mean_miss += float(miss)
+                    run_max_miss = max(run_max_miss, float(miss))
+                    max_norm_miss = max(max_norm_miss, float(miss))
+                    miss_n += 1
+            mean_miss = float(mean_miss / miss_n) if miss_n else 0.0
+            run_row = {
+                "candidate": candidate_name,
+                "seed": int(seed),
+                "description": CANDIDATES[candidate_name]["description"],
+                "run_dir": str(run_root),
+                "passed_metrics": int(summary["passed_metrics"]),
+                "required_metrics": int(summary["required_metrics"]),
+                "failed_metrics": int(summary["failed_metrics"]),
+                "pass_fraction": summary["pass_fraction"],
+                "overall_pass": bool(summary["overall_pass"]),
+                "mean_norm_miss": mean_miss,
+                "max_norm_miss": run_max_miss,
+            }
+            for metric_row in metric_rows:
+                metric = str(metric_row["metric"])
+                run_row[f"{metric}__value"] = metric_row["value"]
+                run_row[f"{metric}__status"] = metric_row["status"]
+                run_row[f"{metric}__norm_miss"] = metric_row["norm_miss"]
+            run_rows.append(run_row)
+            candidate_runs.append(
+                {
+                    "seed": int(seed),
+                    "summary": summary,
+                    "metrics": metric_rows,
+                }
             )
-        else:
-            summary, metric_rows = evaluate_run(
-                run_dir=run_root,
-                bands=bands,
-                tile=tile,
-                acceptance_env=dict(acceptance_env or {}),
-                metrics=metrics,
-            )
-        mean_miss = 0.0
-        max_miss = 0.0
-        miss_n = 0
-        for metric_row in metric_rows:
-            miss = _norm_miss(metric_row.get("value"), metric_row.get("lo"), metric_row.get("hi"))
-            metric_row["norm_miss"] = miss
-            if miss is not None:
-                mean_miss += float(miss)
-                max_miss = max(max_miss, float(miss))
-                miss_n += 1
-        mean_miss = float(mean_miss / miss_n) if miss_n else 0.0
+            seeds_passed += int(bool(summary["overall_pass"]))
+            total_passed_metrics += int(summary["passed_metrics"])
+            total_required_metrics += int(summary["required_metrics"])
+            total_mean_miss += float(mean_miss)
+            worst_pass_fraction = min(worst_pass_fraction, float(summary["pass_fraction"]))
+        mean_norm_miss = float(total_mean_miss / max(len(seeds), 1))
         row = {
             "candidate": candidate_name,
             "description": CANDIDATES[candidate_name]["description"],
-            "run_dir": str(run_root),
-            "passed_metrics": int(summary["passed_metrics"]),
-            "required_metrics": int(summary["required_metrics"]),
-            "failed_metrics": int(summary["failed_metrics"]),
-            "pass_fraction": summary["pass_fraction"],
-            "overall_pass": bool(summary["overall_pass"]),
-            "mean_norm_miss": mean_miss,
-            "max_norm_miss": max_miss,
+            "seeds": ",".join(str(seed) for seed in seeds),
+            "seeds_total": len(seeds),
+            "seeds_passed": seeds_passed,
+            "all_seeds_pass": seeds_passed == len(seeds),
+            "passed_metrics": total_passed_metrics,
+            "required_metrics": total_required_metrics,
+            "failed_metrics": total_required_metrics - total_passed_metrics,
+            "pass_fraction": float(total_passed_metrics / max(total_required_metrics, 1)),
+            "worst_seed_pass_fraction": worst_pass_fraction,
+            "mean_norm_miss": mean_norm_miss,
+            "max_norm_miss": max_norm_miss,
         }
-        for metric_row in metric_rows:
-            metric = str(metric_row["metric"])
-            row[f"{metric}__value"] = metric_row["value"]
-            row[f"{metric}__status"] = metric_row["status"]
-            row[f"{metric}__norm_miss"] = metric_row["norm_miss"]
+        for seed in seeds:
+            seed_run = next(run for run in candidate_runs if int(run["seed"]) == int(seed))
+            row[f"seed{seed}__pass_fraction"] = float(seed_run["summary"]["pass_fraction"])
+            row[f"seed{seed}__overall_pass"] = bool(seed_run["summary"]["overall_pass"])
+            for metric_row in seed_run["metrics"]:
+                metric = str(metric_row["metric"])
+                row[f"seed{seed}__{metric}__value"] = metric_row["value"]
+                row[f"seed{seed}__{metric}__status"] = metric_row["status"]
         rows.append(row)
         payload_runs.append(
             {
                 "candidate": candidate_name,
                 "description": CANDIDATES[candidate_name]["description"],
-                "summary": summary,
-                "metrics": metric_rows,
+                "aggregate": row,
+                "runs": candidate_runs,
             }
         )
 
     rows.sort(
         key=lambda r: (
-            -int(bool(r["overall_pass"])),
+            -int(bool(r["all_seeds_pass"])),
+            -int(r["seeds_passed"]),
+            -float(r["worst_seed_pass_fraction"]),
             -int(r["passed_metrics"]),
             float(r["mean_norm_miss"]),
             float(r["max_norm_miss"]),
@@ -440,6 +645,7 @@ def main() -> None:
         "profile": args.profile,
         "tier": args.tier,
         "seed": int(args.seed),
+        "seeds": seeds,
         "anchor_json": str(args.anchor_json),
         "profile_gate": None if args.profile_gate is None else str(args.profile_gate),
         "anchor_preset": None if args.anchor_preset is None else str(args.anchor_preset),
@@ -449,8 +655,10 @@ def main() -> None:
         "runs": payload_runs,
     }
     _write_csv(out_csv, rows)
+    _write_csv(out_runs_csv, run_rows)
     _write_json(out_json, out_payload)
     print(f"[simus-v2-phase1-calibrate] wrote {out_csv}")
+    print(f"[simus-v2-phase1-calibrate] wrote {out_runs_csv}")
     print(f"[simus-v2-phase1-calibrate] wrote {out_json}")
     if best is not None:
         print(
