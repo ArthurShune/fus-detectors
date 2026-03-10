@@ -856,6 +856,117 @@ Interpretation:
   - `ClinMobile-Pf-v2`
   - `ClinIntraOpParenchyma-Pf-v3`
 
+### Phase 3: Refreeze on the accepted `v2` structural track
+
+Purpose:
+
+- rerun the frozen-profile family comparison only on accepted `v2` cases
+- rerun the stage-symmetric detector-head audit on the same accepted split
+- determine whether a single frozen STAP profile remains competitive once the
+  clinically anchored benchmark is harder than corrected `v1`
+
+Fresh accepted split used for the first `v2` checkpoint:
+
+- development:
+  - `seed125`
+  - `seed126`
+- held-out evaluation:
+  - `seed127`
+  - `seed128`
+- profiles:
+  - `ClinMobile-Pf-v2`
+  - `ClinIntraOpParenchyma-Pf-v3`
+
+Acceptance artifacts for this split:
+
+- `reports/simus_v2/acceptance/simus_v2_acceptance_clin_mobile_pf_v2_phase3_seed125.json`
+- `reports/simus_v2/acceptance/simus_v2_acceptance_clin_mobile_pf_v2_phase3_seed126.json`
+- `reports/simus_v2/acceptance/simus_v2_acceptance_clin_mobile_pf_v2_phase3_seed127.json`
+- `reports/simus_v2/acceptance/simus_v2_acceptance_clin_mobile_pf_v2_phase3_seed128.json`
+- `reports/simus_v2/acceptance/simus_v2_acceptance_clin_intraop_parenchyma_pf_v3_phase3_seed125.json`
+- `reports/simus_v2/acceptance/simus_v2_acceptance_clin_intraop_parenchyma_pf_v3_phase3_seed126.json`
+- `reports/simus_v2/acceptance/simus_v2_acceptance_clin_intraop_parenchyma_pf_v3_phase3_seed127.json`
+- `reports/simus_v2/acceptance/simus_v2_acceptance_clin_intraop_parenchyma_pf_v3_phase3_seed128.json`
+
+Frozen-profile search outputs:
+
+- `reports/simus_v2/simus_fair_profile_search_seed125_126_to_127_128.csv`
+- `reports/simus_v2/simus_fair_profile_search_seed125_126_to_127_128.json`
+
+Selected frozen configs on dev:
+
+- `STAP`:
+  - `Brain-SIMUS-Clin-MotionMidRobust-v0`
+- `MC-SVD`:
+  - `rank6`
+- `Adaptive Global SVD`:
+  - `conservative_r8`
+- `Local SVD (Fixed Energy)`:
+  - `tile16_s4_ef95_rect`
+- `Adaptive Local SVD`:
+  - `tile12_s4_bal_r8`
+- `RPCA`:
+  - `lam1_it250_ds2_t32_r4`
+- `HOSVD`:
+  - `rank8_16_16_ds2_t32`
+
+Held-out family-to-family result on accepted `seed127+128`:
+
+- `STAP`:
+  - `auc_bg = 0.7434`
+  - `auc_nuis = 0.7907`
+  - `fpr_nuis@TPR0.5 = 0.1636`
+- `RPCA`:
+  - `0.7862 / 0.2660 / 0.8740`
+- `Adaptive Global SVD`:
+  - `0.7294 / 0.1457 / 0.9814`
+- `Adaptive Local SVD`:
+  - `0.7283 / 0.1075 / 0.9746`
+- `MC-SVD`:
+  - `0.7241 / 0.1524 / 0.9794`
+- `HOSVD`:
+  - `0.7194 / 0.2859 / 0.8187`
+- `Local SVD (Fixed Energy)`:
+  - `0.6123 / 0.3521 / 0.6659`
+
+Interpretation:
+
+- on the accepted harder `v2` split, a single frozen STAP profile no longer
+  dominates `auc_main_vs_bg`
+- `RPCA` is higher on `auc_main_vs_bg` alone
+- STAP remains clearly strongest on nuisance separation and on the combined
+  low-tail selection score used for the family freeze
+
+Stage-symmetric residualizer/head audit outputs:
+
+- `reports/simus_v2/simus_symmetric_pipeline_compare_seed125_126_to_127_128.csv`
+- `reports/simus_v2/simus_symmetric_pipeline_compare_seed125_126_to_127_128.json`
+- `reports/simus_v2/simus_symmetric_pipeline_compare_seed125_126_to_127_128_headline.csv`
+- `reports/simus_v2/simus_symmetric_pipeline_compare_seed125_126_to_127_128_headline.json`
+
+Best overall deployed stack on held-out accepted `v2`:
+
+- `Adaptive Global SVD -> STAP`
+  - `auc_bg = 0.8128`
+  - `auc_nuis = 0.8736`
+  - `fpr_nuis@TPR0.5 = 0.0776`
+
+Best native simple stack on held-out accepted `v2`:
+
+- `HOSVD -> Kasai`
+  - `auc_bg = 0.7531`
+  - `auc_nuis = 0.5614`
+  - `fpr_nuis@TPR0.5 = 0.4535`
+
+Detector-head audit interpretation:
+
+- the same frozen STAP head still improves nuisance separation for every
+  selected residualizer family relative to its best native simple head
+- the best overall deployed stack on accepted `v2` remains a STAP-headed stack
+- this means the accepted harder benchmark weakens the earlier “STAP dominates
+  all summary metrics” story, but it does not remove the detector-head
+  advantage
+
 ### Phase 4: Implement `ClinFunctional-Pf-v2`
 
 Purpose:
