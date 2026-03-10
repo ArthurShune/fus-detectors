@@ -19,6 +19,7 @@ from sim.simus.functional import default_functional_design, write_functional_cas
 
 SIMPLE_HEADS = ("pd", "kasai")
 FPR_TAGS = ("1e-04", "1e-03")
+READOUT_MODES = ("basic", "bgcdf", "outside_glm", "bgcdf_outside_glm")
 
 
 @dataclass(frozen=True)
@@ -98,7 +99,44 @@ def _selected_stap_profile(stack_payload: dict[str, Any]) -> str:
     return str(profile)
 
 
-def _glm_tmap(stack_ehw: np.ndarray, regressor: np.ndarray, eps: float = 1e-12) -> np.ndarray:
+def _bg_cdf(frame: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    vals = np.asarray(frame, dtype=np.float64)[np.asarray(mask, dtype=bool)]
+    vals = vals[np.isfinite(vals)]
+    if vals.size == 0:
+        return np.asarray(frame, dtype=np.float32, copy=True)
+    vals = np.sort(vals)
+    flat = np.asarray(frame, dtype=np.float64).reshape(-1)
+    ranks = np.searchsorted(vals, flat, side="right").astype(np.float64)
+    out = (ranks / float(vals.size)).reshape(frame.shape)
+    return out.astype(np.float32, copy=False)
+
+
+def _transform_stack(stack_ehw: np.ndarray, readout_mode: str, bg_mask: np.ndarray) -> np.ndarray:
+    mode = str(readout_mode)
+    if mode not in READOUT_MODES:
+        raise ValueError(f"unsupported readout mode {readout_mode!r}")
+    if mode in {"basic", "outside_glm"}:
+        return np.asarray(stack_ehw, dtype=np.float32, copy=False)
+    out = [_bg_cdf(frame, bg_mask) for frame in np.asarray(stack_ehw, dtype=np.float32)]
+    return np.stack(out, axis=0).astype(np.float32, copy=False)
+
+
+def _build_nuisance_regressor(stack_ehw: np.ndarray, readout_mode: str, outside_mask: np.ndarray) -> np.ndarray | None:
+    mode = str(readout_mode)
+    if mode not in {"outside_glm", "bgcdf_outside_glm"}:
+        return None
+    if not np.any(outside_mask):
+        return None
+    return np.mean(np.asarray(stack_ehw, dtype=np.float32)[:, outside_mask], axis=1).astype(np.float32, copy=False)
+
+
+def _glm_tmap(
+    stack_ehw: np.ndarray,
+    regressor: np.ndarray,
+    *,
+    nuisance_regressor: np.ndarray | None = None,
+    eps: float = 1e-12,
+) -> np.ndarray:
     Y = np.asarray(stack_ehw, dtype=np.float64)
     if Y.ndim != 3:
         raise ValueError(f"expected (E,H,W), got {Y.shape}")
@@ -111,15 +149,40 @@ def _glm_tmap(stack_ehw: np.ndarray, regressor: np.ndarray, eps: float = 1e-12) 
     trend = (t_idx - t_idx.mean()) / (t_idx.std() + eps)
     reg = np.asarray(regressor, dtype=np.float64).reshape(E)
     reg = (reg - reg.mean()) / (reg.std() + eps)
-    X = np.stack([intercept, trend, reg], axis=1)
+    cols = [intercept, trend]
+    if nuisance_regressor is not None:
+        nuis = np.asarray(nuisance_regressor, dtype=np.float64).reshape(E)
+        nuis = (nuis - nuis.mean()) / (nuis.std() + eps)
+        cols.append(nuis)
+    cols.append(reg)
+    X = np.stack(cols, axis=1)
     XtX_inv = np.linalg.pinv(X.T @ X)
     beta = XtX_inv @ (X.T @ y)
     resid = y - X @ beta
     dof = max(E - X.shape[1], 1)
     sigma2 = np.sum(resid * resid, axis=0) / float(dof)
-    var_beta = np.diag(XtX_inv)[2] * sigma2
-    t_stat = beta[2] / np.sqrt(var_beta + eps)
+    target_idx = X.shape[1] - 1
+    var_beta = np.diag(XtX_inv)[target_idx] * sigma2
+    t_stat = beta[target_idx] / np.sqrt(var_beta + eps)
     return t_stat.reshape(H, W).astype(np.float32, copy=False)
+
+
+def _functional_maps(
+    task_stack: np.ndarray,
+    null_stack: np.ndarray,
+    regressor: np.ndarray,
+    *,
+    readout_mode: str,
+    bg_mask: np.ndarray,
+    outside_mask: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    task_x = _transform_stack(task_stack, readout_mode, bg_mask)
+    null_x = _transform_stack(null_stack, readout_mode, bg_mask)
+    task_nuis = _build_nuisance_regressor(task_x, readout_mode, outside_mask)
+    null_nuis = _build_nuisance_regressor(null_x, readout_mode, outside_mask)
+    task_map = _glm_tmap(task_x, regressor, nuisance_regressor=task_nuis)
+    null_map = _glm_tmap(null_x, regressor, nuisance_regressor=null_nuis)
+    return task_map, null_map
 
 
 def _corr(a: np.ndarray, b: np.ndarray, eps: float = 1e-12) -> float:
@@ -237,7 +300,7 @@ def _derive_bundle_timed(
 
 
 def _summarize_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    grouped: dict[tuple[str, str, str, str, str], list[dict[str, Any]]] = {}
+    grouped: dict[tuple[str, str, str, str, str, str], list[dict[str, Any]]] = {}
     for row in rows:
         grouped.setdefault(
             (
@@ -246,11 +309,12 @@ def _summarize_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 str(row["method_family"]),
                 str(row["config_name"]),
                 str(row["detector_head"]),
+                str(row.get("readout_mode") or "basic"),
             ),
             [],
         ).append(row)
     out: list[dict[str, Any]] = []
-    for (split, base_profile, method_family, config_name, detector_head), items in sorted(grouped.items()):
+    for (split, base_profile, method_family, config_name, detector_head, readout_mode), items in sorted(grouped.items()):
         def _mean(key: str) -> float | None:
             vals = [float(r[key]) for r in items if r.get(key) is not None]
             return float(np.mean(np.asarray(vals, dtype=np.float64))) if vals else None
@@ -266,6 +330,7 @@ def _summarize_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "detector_label": row0["detector_label"],
             "pipeline_label": row0["pipeline_label"],
             "stap_profile": row0["stap_profile"],
+            "readout_mode": readout_mode,
             "count": int(len(items)),
             "mean_auc_activation_vs_bg": _mean("auc_activation_vs_bg"),
             "mean_auc_activation_vs_nuisance": _mean("auc_activation_vs_nuisance"),
@@ -330,6 +395,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--dev-seeds", type=str, default="221")
     ap.add_argument("--eval-seeds", type=str, default="222")
     ap.add_argument("--ensemble-count", type=int, default=8)
+    ap.add_argument("--readout-mode", type=str, default="basic", choices=READOUT_MODES)
     ap.add_argument("--max-workers", type=int, default=2)
     ap.add_argument("--threads-per-worker", type=int, default=12)
     ap.add_argument("--stap-device", type=str, default="cuda")
@@ -491,8 +557,14 @@ def main() -> None:
             for detector_head in ("pd", "kasai", "stap", "stap_pd"):
                 task_stack = np.stack(task_scores[detector_head], axis=0).astype(np.float32, copy=False)
                 null_stack = np.stack(null_scores[detector_head], axis=0).astype(np.float32, copy=False)
-                task_map = _glm_tmap(task_stack, reg)
-                null_map = _glm_tmap(null_stack, reg)
+                task_map, null_map = _functional_maps(
+                    task_stack,
+                    null_stack,
+                    reg,
+                    readout_mode=str(args.readout_mode),
+                    bg_mask=(mask_bg & (~activation_roi)),
+                    outside_mask=outside_mask,
+                )
                 structural = evaluate_structural_metrics(
                     score=task_map,
                     mask_h1_pf_main=activation_roi,
@@ -516,6 +588,7 @@ def main() -> None:
                     "detector_label": _detector_label(detector_head),
                     "pipeline_label": _pipeline_label(residual.baseline_type, detector_head),
                     "stap_profile": stap_profile if detector_head in {"stap", "stap_pd"} else None,
+                    "readout_mode": str(args.readout_mode),
                     "auc_activation_vs_bg": structural.get("auc_main_vs_bg"),
                     "auc_activation_vs_nuisance": structural.get("auc_main_vs_nuisance"),
                     "roi_corr_task": _corr(roi_series_task, reg),
@@ -557,6 +630,7 @@ def main() -> None:
         "dev_seeds": dev_seeds,
         "eval_seeds": eval_seeds,
         "ensemble_count": int(args.ensemble_count),
+        "readout_mode": str(args.readout_mode),
         "selected_residual_specs": [r.__dict__ for r in residual_specs],
         "stap_profile": stap_profile,
         "rows": rows,

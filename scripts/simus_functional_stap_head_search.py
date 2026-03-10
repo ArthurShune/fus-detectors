@@ -119,6 +119,7 @@ def main() -> None:
     base_profiles = [str(x) for x in functional_payload["base_profiles"]]
     dev_seeds = [int(x) for x in functional_payload["dev_seeds"]]
     eval_seeds = [int(x) for x in functional_payload["eval_seeds"]]
+    readout_mode = str(functional_payload.get("readout_mode") or "basic")
     native_dev_summary = [
         row
         for row in functional_payload["summary"]
@@ -249,6 +250,7 @@ def main() -> None:
                         "detector_label": _detector_label(detector_head),
                         "pipeline_label": _pipeline_label(residual["baseline_type"], detector_head),
                         "stap_profile": stap_profile,
+                        "readout_mode": readout_mode,
                         "auc_activation_vs_bg": structural.get("auc_main_vs_bg"),
                         "auc_activation_vs_nuisance": structural.get("auc_main_vs_nuisance"),
                         "roi_corr_task": _corr(roi_series_task, reg),
@@ -334,6 +336,7 @@ def main() -> None:
                 "native_auc_activation_vs_bg_eval": float(native_eval["mean_auc_activation_vs_bg"]),
                 "native_auc_activation_vs_nuisance_eval": float(native_eval["mean_auc_activation_vs_nuisance"]),
                 "native_runtime_ms_eval": float(native_eval["mean_runtime_ms"]),
+                "readout_mode": readout_mode,
                 "stap_detector_head_dev": str(stap_row["detector_head"]) if stap_row else None,
                 "stap_profile_dev": str(stap_row["stap_profile"]) if stap_row else None,
                 "stap_selection_score_dev": float(stap_row["selection_score"]) if stap_row else None,
@@ -350,6 +353,7 @@ def main() -> None:
         "base_profiles": base_profiles,
         "dev_seeds": dev_seeds,
         "eval_seeds": eval_seeds,
+        "readout_mode": readout_mode,
         "stap_profiles": stap_profiles,
         "rows": rows,
         "summary": summary,
