@@ -727,6 +727,91 @@ Updated decision:
   - or redesign the ordinary-background scene around a different clinical
     nuisance hypothesis
 
+### Phase 1S: Split the intra-op track
+
+Purpose:
+
+- replace the monolithic intra-op benchmark with a clinically narrower
+  competitive profile and a separate development-only surface profile
+- preserve the existing hard gate unchanged while aligning it to the scene
+  family it can actually represent
+
+Diagnosis:
+
+- the failed redesign showed that the current monolithic intra-op profile is
+  trying to force one `H0_bg` definition to cover both:
+  - brain-like parenchymal background
+  - surface/coupling/boundary-dominated nuisance
+- the hard gate remains useful for a brain-like parenchymal background, but it
+  is not a credible acceptance target for a mixed field where superficial
+  contamination is allowed to define ordinary background
+
+New profile split:
+
+- `ClinIntraOpParenchyma-Pf-v3`
+  - competitive profile
+  - accepted only if it passes the unchanged intra-op hard gate
+  - ordinary background must remain brain-like
+  - superficial high-velocity vessels, boundary structures, and coupling bands
+    are explicit nuisance layers rather than part of `H0_bg`
+- `ClinIntraOpSurface-Pf-dev0`
+  - development-only profile
+  - descriptive telemetry only
+  - no frozen-family comparison and no headline claim until a stronger
+    surface-dominated real-IQ anchor exists
+
+Design rule for the competitive profile:
+
+- reuse the stable accepted background machinery rather than inventing a third
+  ordinary-background generator
+- lower motion severity relative to `ClinMobile-Pf-v2`
+- keep the phase/coupling term clip-static or clip-piecewise-static
+- reserve a shallow surface band for nuisance structures so that:
+  - `H0_bg` remains parenchymal
+  - surface contamination still leaks into the residual/detector outputs
+    through the simulated physics
+
+Decision rule:
+
+- build at most two competitive candidates:
+  - `ClinIntraOpParenchyma-Pf-v3a`
+  - `ClinIntraOpParenchyma-Pf-v3b`
+- calibrate on already-burned seeds:
+  - `0`, `121`, `122`
+- require unchanged hard-gate passes on all three
+- then confirm on untouched seeds:
+  - `123`, `124`
+- if neither competitive candidate passes, pause the competitive intra-op
+  track and proceed with accepted-profile work on:
+  - `ClinMobile-Pf-v2`
+  - and later functional benchmarking only on accepted profiles
+
+Implementation targets:
+
+- `sim/simus/config.py`
+  - add:
+    - `ClinIntraOpParenchyma-Pf-v3`
+    - `ClinIntraOpSurface-Pf-dev0`
+- `sim/simus/pilot_pymust_simus.py`
+  - compose explicit parenchymal and surface nuisance zones
+- `sim/simus/labels.py`
+  - keep the label taxonomy unchanged but restrict `H0_bg` to the parenchymal
+    zone for the competitive intra-op profile
+- `scripts/simus_v2_acceptance.py`
+  - route `ClinIntraOpParenchyma-Pf-v3` to the existing hard gate
+  - route `ClinIntraOpSurface-Pf-dev0` to telemetry-only reporting
+- `scripts/simus_v2_phase1_calibrate.py`
+  - stop `stabI*` exploration on the monolithic intra-op profile
+  - compare only the new parenchymal-profile candidates
+
+Interpretation:
+
+- this is no longer a parameter-retuning problem
+- it is a benchmark-design split motivated by the failure of the monolithic
+  intra-op profile to stabilize under the fixed gate
+- Phase 3 remains blocked until one accepted competitive intra-op parenchymal
+  profile exists
+
 ### Phase 4: Implement `ClinFunctional-Pf-v2`
 
 Purpose:
