@@ -96,7 +96,7 @@ def parse_args() -> argparse.Namespace:
         "--tier",
         type=str,
         default="smoke",
-        choices=["smoke", "paper"],
+        choices=["smoke", "paper", "functional"],
         help="Runtime tier: small fast config vs moderate paper-scale cross-check.",
     )
 
@@ -208,6 +208,7 @@ def write_simus_run(
     mask_h1_alias_qc = result.get("mask_h1_alias_qc")
     mask_h0_bg = result.get("mask_h0_bg")
     mask_h0_nuisance_pa = result.get("mask_h0_nuisance_pa")
+    mask_activation_roi = result.get("mask_activation_roi")
     mask_bg_zone = result.get("mask_bg_zone")
     mask_surface_nuisance_zone = result.get("mask_surface_nuisance_zone")
     debug = result["debug"]
@@ -238,6 +239,8 @@ def write_simus_run(
         _save(dataset_dir, "mask_h0_bg", np.asarray(mask_h0_bg, dtype=bool))
     if mask_h0_nuisance_pa is not None:
         _save(dataset_dir, "mask_h0_nuisance_pa", np.asarray(mask_h0_nuisance_pa, dtype=bool))
+    if mask_activation_roi is not None:
+        _save(dataset_dir, "mask_activation_roi", np.asarray(mask_activation_roi, dtype=bool))
     if mask_bg_zone is not None:
         _save(dataset_dir, "mask_bg_zone", np.asarray(mask_bg_zone, dtype=bool))
     if mask_surface_nuisance_zone is not None:
@@ -359,6 +362,7 @@ def write_simus_run(
             "mask_h0_bg": "background excluding flow and guard",
             "mask_h0_nuisance_pa": "nuisance_vessel & sampled_fd in Pa & ~guard",
             "mask_h0_specular_struct": "structured clutter / specular-support diagnostic negative",
+            "mask_activation_roi": "functional activation ROI diagnostic / positive support",
         },
         "scene": dict(debug.get("scene_telemetry", {})),
         "config": dataset_meta(cfg),

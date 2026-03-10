@@ -270,7 +270,9 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
     if float(cfg.z_max_m) <= float(cfg.z_min_m):
         raise ValueError("z_max_m must be > z_min_m")
 
-    rng = np.random.default_rng(int(cfg.seed))
+    scene_seed = int(cfg.seed) if cfg.scene_seed is None else int(cfg.scene_seed)
+    realization_seed = int(cfg.seed) if cfg.realization_seed is None else int(cfg.realization_seed)
+    rng = np.random.default_rng(scene_seed)
     dt_prp = 1.0 / float(cfg.prf_hz)
 
     # ---- PyMUST parameters ----
@@ -294,7 +296,9 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
     mask_microvascular = np.zeros((int(cfg.H), int(cfg.W)), dtype=bool)
     mask_nuisance_pa = np.zeros((int(cfg.H), int(cfg.W)), dtype=bool)
     mask_structured_clutter = np.zeros((int(cfg.H), int(cfg.W)), dtype=bool)
+    mask_activation_roi = np.zeros((int(cfg.H), int(cfg.W)), dtype=bool)
     vessel_role_map = np.zeros((int(cfg.H), int(cfg.W)), dtype=np.int16)
+    activation_names = {str(v) for v in tuple(cfg.activation_vessel_names)}
     for vessel in vessels:
         vessel_mask = _vessel_mask_strip(
             X=X,
@@ -320,6 +324,8 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         else:
             mask_microvascular |= vessel_mask
             vessel_role_map[vessel_mask] = 1
+            if str(vessel.name) in activation_names:
+                mask_activation_roi |= vessel_mask
 
     for clutter in tuple(cfg.structured_clutter):
         mask_structured_clutter |= _structured_clutter_mask(X=X, Z=Z, spec=clutter)
@@ -334,7 +340,7 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
     if parenchyma_rows > 0:
         mask_parenchyma_zone[: min(int(cfg.H), parenchyma_rows), :] = False
     use_split_zones = profile_name in {"ClinIntraOpParenchyma-Pf-v3", "ClinIntraOpSurface-Pf-dev0"}
-    nuisance_seed = int(cfg.seed) if cfg.nuisance_seed is None else int(cfg.nuisance_seed)
+    nuisance_seed = realization_seed if cfg.nuisance_seed is None else int(cfg.nuisance_seed)
 
     base_bg = (~(mask_microvascular | mask_nuisance_pa | mask_structured_clutter)).copy()
     base_bg[: max(1, int(round(float(cfg.bg_top_exclusion_frac) * int(cfg.H)))), :] = False
@@ -488,7 +494,10 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         n_blood = int(vessel.blood_count)
         xs_blood = rng.uniform(x_lo, x_hi, size=n_blood).astype(np.float32)
         zs_blood = rng.uniform(z_lo, z_hi, size=n_blood).astype(np.float32)
-        rc_blood = (float(vessel.blood_rc_scale) * rng.standard_normal(n_blood)).astype(np.float32)
+        vessel_rc_scale = float(vessel.blood_rc_scale)
+        if str(vessel.name) in activation_names:
+            vessel_rc_scale *= 1.0 + float(cfg.activation_rc_gain)
+        rc_blood = (vessel_rc_scale * rng.standard_normal(n_blood)).astype(np.float32)
         vz_blood = _vz_profile_from_x(
             xs_blood,
             cx=float(vessel.center_x_m),
@@ -498,11 +507,11 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         )
 
         res_n = int(res_scale * max(1, n_blood))
-        rng_res = np.random.default_rng(int(cfg.seed) + 1337 + 17 * vidx)
+        rng_res = np.random.default_rng(scene_seed + 1337 + 17 * vidx)
         res_x = rng_res.uniform(x_lo, x_hi, size=res_n).astype(np.float32)
         res_z_hi = min(z_lo + span, z_hi)
         res_z = rng_res.uniform(z_lo, res_z_hi, size=res_n).astype(np.float32)
-        res_rc = (float(vessel.blood_rc_scale) * rng_res.standard_normal(res_n)).astype(np.float32)
+        res_rc = (vessel_rc_scale * rng_res.standard_normal(res_n)).astype(np.float32)
 
         blood_states.append(
             {
@@ -533,7 +542,7 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
     iq_shape_ref: tuple[int, int] | None = None
     phase_series = None
     phase_telemetry: dict[str, Any] = {"enabled": False, "phase_rms_rad": 0.0}
-    noise_rng = np.random.default_rng(int(cfg.seed) + 8101)
+    noise_rng = np.random.default_rng(realization_seed + 8101)
     noise_sigmas: list[float] = []
 
     for t in range(int(cfg.T)):
@@ -724,7 +733,11 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         "fd_vmax_hz": float(np.max(labels.expected_fd_true_hz)) if labels.expected_fd_true_hz.size else 0.0,
         "scene_telemetry": {
             "scene_family": str(cfg.scene_family or profile_name or "default"),
+            "scene_seed": int(scene_seed),
+            "realization_seed": int(realization_seed),
             "nuisance_seed": int(nuisance_seed),
+            "activation_vessel_names": sorted(activation_names),
+            "activation_rc_gain": float(cfg.activation_rc_gain),
             "n_microvascular_vessels": int(sum(1 for v in vessels if v.role == "microvascular")),
             "n_nuisance_vessels": int(sum(1 for v in vessels if v.role == "nuisance_pa")),
             "n_structured_clutter": int(len(tuple(cfg.structured_clutter))),
@@ -736,6 +749,7 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
             "microvascular_fraction": float(np.mean(mask_microvascular)),
             "nuisance_fraction": float(np.mean(mask_nuisance_pa)),
             "specular_struct_fraction": float(np.mean(labels.mask_h0_specular_struct)),
+            "activation_roi_fraction": float(np.mean(mask_activation_roi)),
             "h1_pf_main_fraction": float(np.mean(labels.mask_h1_pf_main)),
             "h1_alias_qc_fraction": float(np.mean(labels.mask_h1_alias_qc)),
             "h0_nuisance_fraction": float(np.mean(labels.mask_h0_nuisance_pa)),
@@ -761,6 +775,7 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         "mask_h0_bg": labels.mask_h0_bg.astype(bool, copy=False),
         "mask_h0_nuisance_pa": labels.mask_h0_nuisance_pa.astype(bool, copy=False),
         "mask_h0_specular_struct": labels.mask_h0_specular_struct.astype(bool, copy=False),
+        "mask_activation_roi": mask_activation_roi.astype(bool, copy=False),
         "mask_bg_zone": mask_parenchyma_zone.astype(bool, copy=False),
         "mask_surface_nuisance_zone": mask_surface_zone.astype(bool, copy=False),
         "debug": debug,
