@@ -967,6 +967,47 @@ Detector-head audit interpretation:
   all summary metrics” story, but it does not remove the detector-head
   advantage
 
+Frozen deployed-stack search outputs:
+
+- `reports/simus_v2/simus_stap_stack_search_seed125_126_to_127_128_fixed.csv`
+- `reports/simus_v2/simus_stap_stack_search_seed125_126_to_127_128_fixed.json`
+
+This search keeps the accepted `v2` dev/eval split fixed, freezes the selected
+residualizer configuration from the family search, and then chooses the best
+single STAP profile jointly with that upstream residualizer on the development
+split.
+
+Selected deployed stack on dev:
+
+- `RPCA -> STAP`
+  - residualizer config: `lam1_it250_ds2_t32_r4`
+  - STAP profile: `Brain-SIMUS-Clin-MotionRobust-v0`
+
+Held-out deployed-stack result on accepted `seed127+128`:
+
+- `RPCA -> STAP`:
+  - `auc_bg = 0.8279`
+  - `auc_nuis = 0.9202`
+  - `fpr_nuis@TPR0.5 = 0.0314`
+
+Interpretation:
+
+- this frozen deployed stack improves all three summary metrics relative to the
+  historical `MC-SVD -> STAP` family on the same accepted `v2` split
+- it also improves over the best frozen non-STAP family baselines on the same
+  held-out split
+- the remaining path to “improve every metric” on accepted `v2` is therefore
+  upstream residualizer selection inside a frozen STAP-headed stack, not a new
+  detector objective
+
+Phase 3 conclusion:
+
+- accepted `v2` now supports a single superior frozen STAP-headed deployed
+  stack for the structural benchmark:
+  - `RPCA -> STAP` with `Brain-SIMUS-Clin-MotionRobust-v0`
+- that result should be treated as the structural `v2` headline until the
+  functional phase or a future surface-anchored track shows otherwise
+
 ### Phase 4: Implement `ClinFunctional-Pf-v2`
 
 Purpose:
