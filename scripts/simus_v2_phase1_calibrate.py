@@ -14,7 +14,7 @@ from typing import Any
 from scripts.simus_v2_acceptance import ANCHOR_PRESETS, _combine_anchor_envelope, evaluate_run, _write_csv, _write_json
 from scripts.simus_v2_anchor_envelopes import DEFAULT_ACCEPTANCE_METRICS
 from scripts.physical_doppler_sanity_link import BandEdges, TileSpec
-from sim.simus.config import BackgroundCompartmentSpec, default_profile_config
+from sim.simus.config import BackgroundCompartmentSpec, StructuredClutterSpec, VesselSpec, default_profile_config
 from sim.simus.pilot_pymust_simus import write_simus_run
 
 
@@ -463,6 +463,90 @@ CANDIDATES: dict[str, dict[str, Any]] = {
         },
         "background": {},
     },
+    "v3a": {
+        "description": "Deeper parenchymal competitive zone with shallower nuisance vessel and boundary geometry.",
+        "config": {
+            "parenchyma_zone_top_frac": 0.30,
+            "surface_nuisance_zone_top_frac": 0.30,
+            "bg_top_exclusion_frac": 0.12,
+        },
+        "motion": {
+            "breathing_amp_x_px": 0.34,
+            "breathing_amp_z_px": 0.16,
+            "drift_x_px": 0.12,
+            "drift_z_px": 0.05,
+            "elastic_amp_px": 0.24,
+        },
+        "phase_screen": {},
+        "noise": {
+            "iq_rms_frac": 0.20,
+        },
+        "background": {},
+        "vessels": {
+            "nuisance_superficial": {
+                "center_x_m": -6.2e-3,
+                "radius_m": 1.20e-3,
+                "z_min_m": 5.6e-3,
+                "z_max_m": 9.4e-3,
+                "blood_vmax_mps": 0.082,
+            },
+        },
+        "structured_clutter": {
+            "superficial_sheet": {
+                "z0_m": 5.9e-3,
+                "z1_m": 6.1e-3,
+                "scatterer_count": 260,
+            },
+            "oblique_boundary": {
+                "z0_m": 6.4e-3,
+                "z1_m": 14.0e-3,
+                "scatterer_count": 220,
+            },
+        },
+    },
+    "v3b": {
+        "description": "More conservative parenchymal zone with weaker superficial nuisance and quieter intra-op dynamics.",
+        "config": {
+            "parenchyma_zone_top_frac": 0.34,
+            "surface_nuisance_zone_top_frac": 0.34,
+            "bg_top_exclusion_frac": 0.14,
+        },
+        "motion": {
+            "breathing_amp_x_px": 0.30,
+            "breathing_amp_z_px": 0.14,
+            "drift_x_px": 0.10,
+            "drift_z_px": 0.04,
+            "elastic_amp_px": 0.20,
+            "random_walk_sigma_px": 0.02,
+            "pulse_jitter_sigma_px": 0.05,
+        },
+        "phase_screen": {},
+        "noise": {
+            "iq_rms_frac": 0.18,
+        },
+        "background": {},
+        "vessels": {
+            "nuisance_superficial": {
+                "center_x_m": -6.4e-3,
+                "radius_m": 1.10e-3,
+                "z_min_m": 5.6e-3,
+                "z_max_m": 9.0e-3,
+                "blood_vmax_mps": 0.078,
+            },
+        },
+        "structured_clutter": {
+            "superficial_sheet": {
+                "z0_m": 5.8e-3,
+                "z1_m": 6.0e-3,
+                "scatterer_count": 220,
+            },
+            "oblique_boundary": {
+                "z0_m": 6.2e-3,
+                "z1_m": 13.2e-3,
+                "scatterer_count": 180,
+            },
+        },
+    },
 }
 
 
@@ -513,6 +597,28 @@ def _scale_background_compartments(
     return tuple(out)
 
 
+def _override_structured_clutter(
+    clutter_specs: tuple[StructuredClutterSpec, ...],
+    overrides: dict[str, dict[str, Any]],
+) -> tuple[StructuredClutterSpec, ...]:
+    out: list[StructuredClutterSpec] = []
+    for spec in clutter_specs:
+        patch = dict(overrides.get(str(spec.name), {}))
+        out.append(dataclasses.replace(spec, **patch) if patch else spec)
+    return tuple(out)
+
+
+def _override_vessels(
+    vessels: tuple[VesselSpec, ...],
+    overrides: dict[str, dict[str, Any]],
+) -> tuple[VesselSpec, ...]:
+    out: list[VesselSpec] = []
+    for vessel in vessels:
+        patch = dict(overrides.get(str(vessel.name), {}))
+        out.append(dataclasses.replace(vessel, **patch) if patch else vessel)
+    return tuple(out)
+
+
 def _candidate_cfg(profile: str, tier: str, seed: int, candidate_name: str):
     cfg = default_profile_config(profile=profile, tier=tier, seed=seed)  # type: ignore[arg-type]
     spec = CANDIDATES[candidate_name]
@@ -524,6 +630,11 @@ def _candidate_cfg(profile: str, tier: str, seed: int, candidate_name: str):
         tuple(cfg.background_compartments),
         **dict(spec.get("background", {})),
     )
+    vessels = _override_vessels(tuple(cfg.vessels), dict(spec.get("vessels", {})))
+    structured_clutter = _override_structured_clutter(
+        tuple(cfg.structured_clutter),
+        dict(spec.get("structured_clutter", {})),
+    )
     return dataclasses.replace(
         cfg,
         motion=motion,
@@ -531,6 +642,9 @@ def _candidate_cfg(profile: str, tier: str, seed: int, candidate_name: str):
         noise=noise,
         background_compartments=background,
         ordinary_background=ordinary_background,
+        vessels=vessels,
+        structured_clutter=structured_clutter,
+        **dict(spec.get("config", {})),
     )
 
 
