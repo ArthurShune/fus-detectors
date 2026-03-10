@@ -15,7 +15,7 @@ SimusProfile = Literal[
     "ClinIntraOpParenchyma-Pf-v3",
     "ClinIntraOpSurface-Pf-dev0",
 ]
-SimusTier = Literal["smoke", "paper"]
+SimusTier = Literal["smoke", "paper", "functional"]
 VesselRole = Literal["microvascular", "nuisance_pa"]
 
 
@@ -140,6 +140,8 @@ class SimusConfig:
     profile: str | None = None
     scene_family: str | None = None
     nuisance_seed: int | None = None
+    scene_seed: int | None = None
+    realization_seed: int | None = None
 
     seed: int = 0
     prf_hz: float = 1500.0
@@ -183,6 +185,8 @@ class SimusConfig:
 
     reservoir_scale: int = 4
     reinject_depth_span_m: float = 0.003
+    activation_vessel_names: tuple[str, ...] = ()
+    activation_rc_gain: float = 0.0
 
 
 def _default_grid(tier: SimusTier) -> dict[str, Any]:
@@ -192,6 +196,20 @@ def _default_grid(tier: SimusTier) -> dict[str, Any]:
             "T": 64,
             "H": 128,
             "W": 128,
+            "x_min_m": -9.6e-3,
+            "x_max_m": 9.6e-3,
+            "z_min_m": 5.0e-3,
+            "z_max_m": 24.2e-3,
+            "probe": "L11-5v",
+            "c_mps": 1540.0,
+            "fs_mult": 4.0,
+        }
+    if tier == "functional":
+        return {
+            "prf_hz": 1500.0,
+            "T": 32,
+            "H": 96,
+            "W": 96,
             "x_min_m": -9.6e-3,
             "x_max_m": 9.6e-3,
             "z_min_m": 5.0e-3,
@@ -244,7 +262,7 @@ def _legacy_vessel(
 
 def default_config(*, preset: SimusPreset, tier: SimusTier, seed: int) -> SimusConfig:
     grid = _default_grid(tier)
-    if tier == "paper":
+    if tier in ("paper", "functional"):
         vessel_radius_m = 1.2e-3 if preset == "microvascular_like" else 1.8e-3
         blood_vmax_mps = 0.015 if preset == "microvascular_like" else 0.090
         tissue_count = 2000
@@ -300,7 +318,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
     intraop_surface_dev0 = profile == "ClinIntraOpSurface-Pf-dev0"
     mobile_background_family = mobile_v2 or intraop_parenchyma_v3 or intraop_surface_dev0
     clin_v2 = intraop_v2 or mobile_v2 or intraop_parenchyma_v3 or intraop_surface_dev0
-    if tier == "paper":
+    if tier in ("paper", "functional"):
         if intraop_v2:
             tissue_count = 1200
         elif mobile_v2 or intraop_surface_dev0:

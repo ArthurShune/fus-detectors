@@ -25,7 +25,7 @@ def parse_args() -> argparse.Namespace:
         choices=["microvascular_like", "alias_stress"],
         help="Named SIMUS regime (legacy path).",
     )
-    ap.add_argument("--tier", type=str, default="smoke", choices=["smoke", "paper"])
+    ap.add_argument("--tier", type=str, default="smoke", choices=["smoke", "paper", "functional"])
     ap.add_argument("--skip-bundle", action="store_true")
     ap.add_argument("--probe", type=str, default=None)
     ap.add_argument("--prf-hz", type=float, default=None)
