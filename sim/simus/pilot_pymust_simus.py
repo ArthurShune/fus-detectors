@@ -23,6 +23,8 @@ SUPPORTED_SIMUS_PROFILES = (
     "ClinIntraOp-Pf-Struct-v2",
     "ClinIntraOp-Pf-v2",
     "ClinMobile-Pf-v2",
+    "ClinIntraOpParenchyma-Pf-v3",
+    "ClinIntraOpSurface-Pf-dev0",
 )
 
 
@@ -206,6 +208,8 @@ def write_simus_run(
     mask_h1_alias_qc = result.get("mask_h1_alias_qc")
     mask_h0_bg = result.get("mask_h0_bg")
     mask_h0_nuisance_pa = result.get("mask_h0_nuisance_pa")
+    mask_bg_zone = result.get("mask_bg_zone")
+    mask_surface_nuisance_zone = result.get("mask_surface_nuisance_zone")
     debug = result["debug"]
     param = result["param"]
 
@@ -234,6 +238,10 @@ def write_simus_run(
         _save(dataset_dir, "mask_h0_bg", np.asarray(mask_h0_bg, dtype=bool))
     if mask_h0_nuisance_pa is not None:
         _save(dataset_dir, "mask_h0_nuisance_pa", np.asarray(mask_h0_nuisance_pa, dtype=bool))
+    if mask_bg_zone is not None:
+        _save(dataset_dir, "mask_bg_zone", np.asarray(mask_bg_zone, dtype=bool))
+    if mask_surface_nuisance_zone is not None:
+        _save(dataset_dir, "mask_surface_nuisance_zone", np.asarray(mask_surface_nuisance_zone, dtype=bool))
     if result.get("mask_h0_specular_struct") is not None:
         _save(dataset_dir, "mask_h0_specular_struct", np.asarray(result.get("mask_h0_specular_struct"), dtype=bool))
 

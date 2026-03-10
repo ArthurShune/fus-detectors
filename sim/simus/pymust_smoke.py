@@ -324,6 +324,17 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
     for clutter in tuple(cfg.structured_clutter):
         mask_structured_clutter |= _structured_clutter_mask(X=X, Z=Z, spec=clutter)
 
+    profile_name = str(cfg.profile or "")
+    surface_rows = int(round(float(cfg.surface_nuisance_zone_top_frac) * int(cfg.H)))
+    parenchyma_rows = int(round(float(cfg.parenchyma_zone_top_frac) * int(cfg.H)))
+    mask_surface_zone = np.zeros((int(cfg.H), int(cfg.W)), dtype=bool)
+    if surface_rows > 0:
+        mask_surface_zone[: min(int(cfg.H), surface_rows), :] = True
+    mask_parenchyma_zone = np.ones((int(cfg.H), int(cfg.W)), dtype=bool)
+    if parenchyma_rows > 0:
+        mask_parenchyma_zone[: min(int(cfg.H), parenchyma_rows), :] = False
+    use_split_zones = profile_name in {"ClinIntraOpParenchyma-Pf-v3", "ClinIntraOpSurface-Pf-dev0"}
+
     base_bg = (~(mask_microvascular | mask_nuisance_pa | mask_structured_clutter)).copy()
     base_bg[: max(1, int(round(float(cfg.bg_top_exclusion_frac) * int(cfg.H)))), :] = False
     if int(base_bg.sum()) < 16:
@@ -337,6 +348,10 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         mask_nuisance_pa=mask_nuisance_pa,
         mask_specular_struct=mask_structured_clutter,
         base_bg_mask=base_bg,
+        mask_bg_zone=mask_parenchyma_zone if use_split_zones else None,
+        mask_pf_zone=mask_parenchyma_zone if use_split_zones else None,
+        mask_nuisance_zone=mask_surface_zone if use_split_zones else None,
+        mask_alias_source=mask_microvascular if use_split_zones else None,
         expected_fd_true_hz=expected_fd_true_hz,
         prf_hz=float(cfg.prf_hz),
         bands=cfg.bands,
@@ -707,17 +722,22 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         "grid_z_m": zg,
         "fd_vmax_hz": float(np.max(labels.expected_fd_true_hz)) if labels.expected_fd_true_hz.size else 0.0,
         "scene_telemetry": {
+            "scene_family": str(cfg.scene_family or profile_name or "default"),
             "n_microvascular_vessels": int(sum(1 for v in vessels if v.role == "microvascular")),
             "n_nuisance_vessels": int(sum(1 for v in vessels if v.role == "nuisance_pa")),
             "n_structured_clutter": int(len(tuple(cfg.structured_clutter))),
             "n_background_compartments": int(len(tuple(cfg.background_compartments))),
             "ordinary_bg_mode": str(cfg.ordinary_background.mode),
+            "use_split_zones": bool(use_split_zones),
+            "surface_zone_fraction": float(np.mean(mask_surface_zone)) if use_split_zones else 0.0,
+            "parenchyma_zone_fraction": float(np.mean(mask_parenchyma_zone)) if use_split_zones else 1.0,
             "microvascular_fraction": float(np.mean(mask_microvascular)),
             "nuisance_fraction": float(np.mean(mask_nuisance_pa)),
             "specular_struct_fraction": float(np.mean(labels.mask_h0_specular_struct)),
             "h1_pf_main_fraction": float(np.mean(labels.mask_h1_pf_main)),
             "h1_alias_qc_fraction": float(np.mean(labels.mask_h1_alias_qc)),
             "h0_nuisance_fraction": float(np.mean(labels.mask_h0_nuisance_pa)),
+            "h0_bg_fraction": float(np.mean(labels.mask_h0_bg)),
             "background_compartment_scatterers": int(sum(int(state["xs"].size) for state in background_states)),
             "expected_fd_true_q50_hz": float(np.quantile(labels.expected_fd_true_hz[labels.mask_flow], 0.50)) if np.any(labels.mask_flow) else 0.0,
             "expected_fd_sampled_q50_hz": float(np.quantile(labels.expected_fd_sampled_hz[labels.mask_flow], 0.50)) if np.any(labels.mask_flow) else 0.0,
@@ -739,6 +759,8 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         "mask_h0_bg": labels.mask_h0_bg.astype(bool, copy=False),
         "mask_h0_nuisance_pa": labels.mask_h0_nuisance_pa.astype(bool, copy=False),
         "mask_h0_specular_struct": labels.mask_h0_specular_struct.astype(bool, copy=False),
+        "mask_bg_zone": mask_parenchyma_zone.astype(bool, copy=False),
+        "mask_surface_nuisance_zone": mask_surface_zone.astype(bool, copy=False),
         "debug": debug,
         "param": {"probe": str(cfg.probe), "fc_hz": float(param.fc), "fs_hz": float(param.fs), "c_mps": float(param.c)},
     }

@@ -130,3 +130,43 @@ def test_pymust_simus_mobile_v2_profile_emits_mobile_nuisance_scene():
     assert scene["n_nuisance_vessels"] >= 2
     assert scene["n_structured_clutter"] >= 3
     assert scene["n_background_compartments"] >= 4
+
+
+def test_pymust_simus_intraop_parenchyma_v3_restricts_background_to_parenchyma_zone():
+    from sim.simus.config import default_profile_config
+    from sim.simus.pymust_smoke import generate_icube
+
+    cfg = default_profile_config(profile="ClinIntraOpParenchyma-Pf-v3", tier="smoke", seed=0)
+    cfg = dataclasses.replace(cfg, T=2, tissue_count=96)
+    out = generate_icube(cfg)
+
+    mask_bg = np.asarray(out["mask_h0_bg"], dtype=bool)
+    mask_zone = np.asarray(out["mask_bg_zone"], dtype=bool)
+    mask_surface = np.asarray(out["mask_surface_nuisance_zone"], dtype=bool)
+    scene = dict(out["debug"]["scene_telemetry"])
+
+    assert int(mask_bg.sum()) > 0
+    assert np.all(mask_bg <= mask_zone)
+    assert not np.any(mask_bg & mask_surface)
+    assert scene["scene_family"] == "clin_intraop_parenchyma_v3"
+    assert scene["use_split_zones"] is True
+    assert float(scene["surface_zone_fraction"]) > 0.0
+
+
+def test_pymust_simus_intraop_surface_dev_profile_emits_surface_telemetry():
+    from sim.simus.config import default_profile_config
+    from sim.simus.pymust_smoke import generate_icube
+
+    cfg = default_profile_config(profile="ClinIntraOpSurface-Pf-dev0", tier="smoke", seed=0)
+    cfg = dataclasses.replace(cfg, T=2, tissue_count=96)
+    out = generate_icube(cfg)
+
+    scene = dict(out["debug"]["scene_telemetry"])
+    mask_surface = np.asarray(out["mask_surface_nuisance_zone"], dtype=bool)
+    mask_nuis = np.asarray(out["mask_h0_nuisance_pa"], dtype=bool)
+
+    assert scene["scene_family"] == "clin_intraop_surface_dev0"
+    assert scene["use_split_zones"] is True
+    assert float(scene["surface_zone_fraction"]) > 0.0
+    assert int(mask_surface.sum()) > 0
+    assert int(mask_nuis.sum()) > 0
