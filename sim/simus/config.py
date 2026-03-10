@@ -139,6 +139,7 @@ class SimusConfig:
     tier: SimusTier = "smoke"
     profile: str | None = None
     scene_family: str | None = None
+    nuisance_seed: int | None = None
 
     seed: int = 0
     prf_hz: float = 1500.0
@@ -302,8 +303,10 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
     if tier == "paper":
         if intraop_v2:
             tissue_count = 1200
-        elif mobile_background_family:
+        elif mobile_v2 or intraop_surface_dev0:
             tissue_count = 1000
+        elif intraop_parenchyma_v3:
+            tissue_count = 700
         else:
             tissue_count = 2600
         guard_px = 2
@@ -357,7 +360,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                 drift_rho=1.0,
                 drift_sigma_rad=0.0,
             )
-            noise = NoiseSpec(enabled=True, iq_rms_frac=0.24)
+            noise = NoiseSpec(enabled=True, iq_rms_frac=0.16)
             micro_blood_rc_scale = 0.22
             nuisance_vmax = 0.090
         elif intraop_surface_dev0:
@@ -631,51 +634,116 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
             ) if intraop_surface_dev0 else ()
         ) if clin_v2 else ()
         background_compartments = (
-            BackgroundCompartmentSpec(
-                name="bg_superficial_left",
-                center_x_m=-4.6e-3,
-                center_z_m=9.0e-3,
-                sigma_x_m=1.8e-3,
-                sigma_z_m=1.4e-3,
-                scatterer_count=280,
-                rc_scale=0.55,
-                motion_amp_px=0.32,
-                motion_sigma_px=10.0,
-                motion_rho=0.78,
-                motion_jitter_sigma_px=0.03,
-                lateral_scale=1.0,
-                axial_scale=0.72,
-            ),
-            BackgroundCompartmentSpec(
-                name="bg_mid_core",
-                center_x_m=1.0e-3,
-                center_z_m=13.0e-3,
-                sigma_x_m=2.6e-3,
-                sigma_z_m=2.2e-3,
-                scatterer_count=320,
-                rc_scale=0.50,
-                motion_amp_px=0.36,
-                motion_sigma_px=12.0,
-                motion_rho=0.74,
-                motion_jitter_sigma_px=0.025,
-                lateral_scale=1.0,
-                axial_scale=0.68,
-            ),
-            BackgroundCompartmentSpec(
-                name="bg_deep_right",
-                center_x_m=4.8e-3,
-                center_z_m=17.2e-3,
-                sigma_x_m=2.0e-3,
-                sigma_z_m=2.5e-3,
-                scatterer_count=280,
-                rc_scale=0.52,
-                motion_amp_px=0.30,
-                motion_sigma_px=11.0,
-                motion_rho=0.80,
-                motion_jitter_sigma_px=0.025,
-                lateral_scale=0.95,
-                axial_scale=0.72,
-            ),
+            (
+                BackgroundCompartmentSpec(
+                    name="bg_reg_left_sup",
+                    center_x_m=-5.0e-3,
+                    center_z_m=11.5e-3,
+                    sigma_x_m=3.4e-3,
+                    sigma_z_m=3.0e-3,
+                    scatterer_count=220,
+                    rc_scale=0.24,
+                    motion_amp_px=0.040,
+                    motion_sigma_px=22.0,
+                    motion_rho=0.997,
+                    motion_jitter_sigma_px=0.0,
+                    lateral_scale=0.16,
+                    axial_scale=0.45,
+                ),
+                BackgroundCompartmentSpec(
+                    name="bg_reg_mid",
+                    center_x_m=-0.5e-3,
+                    center_z_m=14.5e-3,
+                    sigma_x_m=4.2e-3,
+                    sigma_z_m=3.2e-3,
+                    scatterer_count=260,
+                    rc_scale=0.28,
+                    motion_amp_px=0.050,
+                    motion_sigma_px=24.0,
+                    motion_rho=0.997,
+                    motion_jitter_sigma_px=0.0,
+                    lateral_scale=0.16,
+                    axial_scale=0.50,
+                ),
+                BackgroundCompartmentSpec(
+                    name="bg_reg_right",
+                    center_x_m=4.8e-3,
+                    center_z_m=17.0e-3,
+                    sigma_x_m=3.4e-3,
+                    sigma_z_m=3.0e-3,
+                    scatterer_count=220,
+                    rc_scale=0.24,
+                    motion_amp_px=0.040,
+                    motion_sigma_px=22.0,
+                    motion_rho=0.997,
+                    motion_jitter_sigma_px=0.0,
+                    lateral_scale=0.16,
+                    axial_scale=0.45,
+                ),
+                BackgroundCompartmentSpec(
+                    name="bg_reg_deep",
+                    center_x_m=-1.0e-3,
+                    center_z_m=19.0e-3,
+                    sigma_x_m=4.4e-3,
+                    sigma_z_m=2.6e-3,
+                    scatterer_count=180,
+                    rc_scale=0.20,
+                    motion_amp_px=0.032,
+                    motion_sigma_px=26.0,
+                    motion_rho=0.998,
+                    motion_jitter_sigma_px=0.0,
+                    lateral_scale=0.12,
+                    axial_scale=0.40,
+                ),
+            )
+            if intraop_parenchyma_v3
+            else (
+                BackgroundCompartmentSpec(
+                    name="bg_superficial_left",
+                    center_x_m=-4.6e-3,
+                    center_z_m=9.0e-3,
+                    sigma_x_m=1.8e-3,
+                    sigma_z_m=1.4e-3,
+                    scatterer_count=280,
+                    rc_scale=0.55,
+                    motion_amp_px=0.32,
+                    motion_sigma_px=10.0,
+                    motion_rho=0.78,
+                    motion_jitter_sigma_px=0.03,
+                    lateral_scale=1.0,
+                    axial_scale=0.72,
+                ),
+                BackgroundCompartmentSpec(
+                    name="bg_mid_core",
+                    center_x_m=1.0e-3,
+                    center_z_m=13.0e-3,
+                    sigma_x_m=2.6e-3,
+                    sigma_z_m=2.2e-3,
+                    scatterer_count=320,
+                    rc_scale=0.50,
+                    motion_amp_px=0.36,
+                    motion_sigma_px=12.0,
+                    motion_rho=0.74,
+                    motion_jitter_sigma_px=0.025,
+                    lateral_scale=1.0,
+                    axial_scale=0.68,
+                ),
+                BackgroundCompartmentSpec(
+                    name="bg_deep_right",
+                    center_x_m=4.8e-3,
+                    center_z_m=17.2e-3,
+                    sigma_x_m=2.0e-3,
+                    sigma_z_m=2.5e-3,
+                    scatterer_count=280,
+                    rc_scale=0.52,
+                    motion_amp_px=0.30,
+                    motion_sigma_px=11.0,
+                    motion_rho=0.80,
+                    motion_jitter_sigma_px=0.025,
+                    lateral_scale=0.95,
+                    axial_scale=0.72,
+                ),
+            )
         ) + (
             (
                 BackgroundCompartmentSpec(
@@ -694,7 +762,7 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
                     axial_scale=0.78,
                 ),
             )
-            if mobile_background_family
+            if (mobile_v2 or intraop_surface_dev0)
             else ()
         ) if (intraop_v2 or mobile_background_family) else ()
     else:
@@ -1017,51 +1085,116 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
             ) if intraop_surface_dev0 else ()
         ) if clin_v2 else ()
         background_compartments = (
-            BackgroundCompartmentSpec(
-                name="bg_superficial_left",
-                center_x_m=-4.0e-3,
-                center_z_m=8.8e-3,
-                sigma_x_m=1.6e-3,
-                sigma_z_m=1.2e-3,
-                scatterer_count=90,
-                rc_scale=0.55,
-                motion_amp_px=0.22,
-                motion_sigma_px=6.0,
-                motion_rho=0.78,
-                motion_jitter_sigma_px=0.02,
-                lateral_scale=1.0,
-                axial_scale=0.72,
-            ),
-            BackgroundCompartmentSpec(
-                name="bg_mid_core",
-                center_x_m=1.0e-3,
-                center_z_m=13.0e-3,
-                sigma_x_m=2.4e-3,
-                sigma_z_m=2.0e-3,
-                scatterer_count=110,
-                rc_scale=0.50,
-                motion_amp_px=0.26,
-                motion_sigma_px=7.0,
-                motion_rho=0.74,
-                motion_jitter_sigma_px=0.015,
-                lateral_scale=1.0,
-                axial_scale=0.68,
-            ),
-            BackgroundCompartmentSpec(
-                name="bg_deep_right",
-                center_x_m=4.2e-3,
-                center_z_m=17.0e-3,
-                sigma_x_m=1.8e-3,
-                sigma_z_m=2.2e-3,
-                scatterer_count=90,
-                rc_scale=0.52,
-                motion_amp_px=0.22,
-                motion_sigma_px=6.5,
-                motion_rho=0.80,
-                motion_jitter_sigma_px=0.015,
-                lateral_scale=0.95,
-                axial_scale=0.72,
-            ),
+            (
+                BackgroundCompartmentSpec(
+                    name="bg_reg_left_sup",
+                    center_x_m=-5.0e-3,
+                    center_z_m=11.5e-3,
+                    sigma_x_m=3.4e-3,
+                    sigma_z_m=3.0e-3,
+                    scatterer_count=220,
+                    rc_scale=0.24,
+                    motion_amp_px=0.040,
+                    motion_sigma_px=22.0,
+                    motion_rho=0.997,
+                    motion_jitter_sigma_px=0.0,
+                    lateral_scale=0.16,
+                    axial_scale=0.45,
+                ),
+                BackgroundCompartmentSpec(
+                    name="bg_reg_mid",
+                    center_x_m=-0.5e-3,
+                    center_z_m=14.5e-3,
+                    sigma_x_m=4.2e-3,
+                    sigma_z_m=3.2e-3,
+                    scatterer_count=260,
+                    rc_scale=0.28,
+                    motion_amp_px=0.050,
+                    motion_sigma_px=24.0,
+                    motion_rho=0.997,
+                    motion_jitter_sigma_px=0.0,
+                    lateral_scale=0.16,
+                    axial_scale=0.50,
+                ),
+                BackgroundCompartmentSpec(
+                    name="bg_reg_right",
+                    center_x_m=4.8e-3,
+                    center_z_m=17.0e-3,
+                    sigma_x_m=3.4e-3,
+                    sigma_z_m=3.0e-3,
+                    scatterer_count=220,
+                    rc_scale=0.24,
+                    motion_amp_px=0.040,
+                    motion_sigma_px=22.0,
+                    motion_rho=0.997,
+                    motion_jitter_sigma_px=0.0,
+                    lateral_scale=0.16,
+                    axial_scale=0.45,
+                ),
+                BackgroundCompartmentSpec(
+                    name="bg_reg_deep",
+                    center_x_m=-1.0e-3,
+                    center_z_m=19.0e-3,
+                    sigma_x_m=4.4e-3,
+                    sigma_z_m=2.6e-3,
+                    scatterer_count=180,
+                    rc_scale=0.20,
+                    motion_amp_px=0.032,
+                    motion_sigma_px=26.0,
+                    motion_rho=0.998,
+                    motion_jitter_sigma_px=0.0,
+                    lateral_scale=0.12,
+                    axial_scale=0.40,
+                ),
+            )
+            if intraop_parenchyma_v3
+            else (
+                BackgroundCompartmentSpec(
+                    name="bg_superficial_left",
+                    center_x_m=-4.0e-3,
+                    center_z_m=8.8e-3,
+                    sigma_x_m=1.6e-3,
+                    sigma_z_m=1.2e-3,
+                    scatterer_count=90,
+                    rc_scale=0.55,
+                    motion_amp_px=0.22,
+                    motion_sigma_px=6.0,
+                    motion_rho=0.78,
+                    motion_jitter_sigma_px=0.02,
+                    lateral_scale=1.0,
+                    axial_scale=0.72,
+                ),
+                BackgroundCompartmentSpec(
+                    name="bg_mid_core",
+                    center_x_m=1.0e-3,
+                    center_z_m=13.0e-3,
+                    sigma_x_m=2.4e-3,
+                    sigma_z_m=2.0e-3,
+                    scatterer_count=110,
+                    rc_scale=0.50,
+                    motion_amp_px=0.26,
+                    motion_sigma_px=7.0,
+                    motion_rho=0.74,
+                    motion_jitter_sigma_px=0.015,
+                    lateral_scale=1.0,
+                    axial_scale=0.68,
+                ),
+                BackgroundCompartmentSpec(
+                    name="bg_deep_right",
+                    center_x_m=4.2e-3,
+                    center_z_m=17.0e-3,
+                    sigma_x_m=1.8e-3,
+                    sigma_z_m=2.2e-3,
+                    scatterer_count=90,
+                    rc_scale=0.52,
+                    motion_amp_px=0.22,
+                    motion_sigma_px=6.5,
+                    motion_rho=0.80,
+                    motion_jitter_sigma_px=0.015,
+                    lateral_scale=0.95,
+                    axial_scale=0.72,
+                ),
+            )
         ) + (
             (
                 BackgroundCompartmentSpec(
@@ -1116,7 +1249,8 @@ def default_profile_config(*, profile: SimusProfile, tier: SimusTier, seed: int)
         scene_family=scene_family,
         seed=int(seed),
         tissue_count=int(tissue_count),
-        tissue_rc_scale=0.85 if (intraop_v2 or mobile_background_family) else 1.0,
+        nuisance_seed=42 if intraop_parenchyma_v3 else None,
+        tissue_rc_scale=0.65 if intraop_parenchyma_v3 else 0.85 if (intraop_v2 or mobile_background_family) else 1.0,
         blood_count=int(sum(v.blood_count for v in vessels)),
         blood_rc_scale=float(main_micro.blood_rc_scale),
         vessel_center_x_m=float(main_micro.center_x_m),

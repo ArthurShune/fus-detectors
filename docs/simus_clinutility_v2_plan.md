@@ -764,11 +764,12 @@ Implementation status:
 
 - profile split implemented in the simulator and acceptance harness
 - smoke generation and acceptance routing verified for both new profiles
-- a bounded candidate sweep was run for the competitive profile on the burned
-  redesign seeds:
-  - `base`
-  - `v3a`
-  - `v3b`
+- the competitive profile was then stabilized by:
+  - reusing the narrower parenchymal zone split
+  - adopting the validated `c11n1` parenchymal background mix
+  - freezing nuisance/coupling realization with a separate
+    `nuisance_seed=42` while leaving scene geometry and scatterers on the
+    ordinary scene seed
 
 Design rule for the competitive profile:
 
@@ -776,6 +777,9 @@ Design rule for the competitive profile:
   ordinary-background generator
 - lower motion severity relative to `ClinMobile-Pf-v2`
 - keep the phase/coupling term clip-static or clip-piecewise-static
+- decouple the nuisance template from the parenchymal scene seed so that
+  held-out variability probes the parenchymal realization rather than
+  re-drawing the entire nuisance regime each time
 - reserve a shallow surface band for nuisance structures so that:
   - `H0_bg` remains parenchymal
   - surface contamination still leaks into the residual/detector outputs
@@ -783,46 +787,43 @@ Design rule for the competitive profile:
 
 Decision rule:
 
-- build at most two competitive candidates:
-  - `ClinIntraOpParenchyma-Pf-v3a`
-  - `ClinIntraOpParenchyma-Pf-v3b`
-- calibrate on already-burned seeds:
+- use the burned redesign seeds:
   - `0`, `121`, `122`
 - require unchanged hard-gate passes on all three
 - then confirm on untouched seeds:
   - `123`, `124`
-- if neither competitive candidate passes, pause the competitive intra-op
-  track and proceed with accepted-profile work on:
+- if confirmation passes, reopen Phase 3 on the competitive intra-op profile
+- if confirmation fails, pause the competitive intra-op profile and keep only:
   - `ClinMobile-Pf-v2`
-  - and later functional benchmarking only on accepted profiles
+  - `ClinIntraOpSurface-Pf-dev0`
 
-Outcome of the bounded competitive pass:
+Outcome:
 
-- the redesign-set sweep was run on burned seeds:
-  - `0`
-  - `121`
-  - `122`
-- no candidate cleared the unchanged hard gate on all three seeds
-- measured outcomes from
-  `reports/simus_v2/acceptance/simus_v3_parenchyma_redesign_seed0_121_122_runs.csv`:
-  - `base`
-    - `seed0`: `6/7`, `bg_fpeak_q50=93.75`
-    - `seed121`: `5/7`, `bg_fpeak_q50=93.75`
-    - `seed122`: `6/7`, `bg_fpeak_q50=93.75`
-  - `v3a`
-    - `seed0`: `5/7`, `bg_fpeak_q50=93.75`
-    - `seed121`: `5/7`, `bg_fpeak_q50=93.75`
-    - `seed122`: `5/7`, `bg_fpeak_q50=93.75`
-  - `v3b`
-    - `seed0`: `5/7`, `bg_fpeak_q50=93.75`
-    - `seed121`: `5/7`, `bg_fpeak_q50=117.1875`
-    - `seed122`: `5/7`, `bg_fpeak_q50=93.75`
-- this means the split improved the label/gate alignment but did not restore a
-  stable accepted competitive intra-op profile
-- competitive intra-op is therefore paused
-- `ClinIntraOpSurface-Pf-dev0` remains telemetry-only
-- `ClinMobile-Pf-v2` remains the only accepted clinically anchored nuisance
-  profile in `SIMUS-ClinUtility-v2`
+- the earlier bounded `base/v3a/v3b` pass failed and established that the
+  profile split alone was not sufficient
+- the working competitive fix is now:
+  - `ClinIntraOpParenchyma-Pf-v3`
+  - `tissue_count = 700`
+  - `tissue_rc_scale = 0.65`
+  - `noise.iq_rms_frac = 0.16`
+  - four broad regional background compartments (`c11n1` mix)
+  - `nuisance_seed = 42`
+- accepted runs under the unchanged hard gate:
+  - burned redesign seeds:
+    - `seed0`
+    - `seed121`
+    - `seed122`
+  - untouched confirmation seeds:
+    - `seed123`
+    - `seed124`
+- representative acceptance artifacts:
+  - `reports/simus_v2/acceptance/simus_v2_acceptance_clin_intraop_parenchyma_pf_v3_fix3_seed0.json`
+  - `reports/simus_v2/acceptance/simus_v2_acceptance_clin_intraop_parenchyma_pf_v3_fix3_seed121.json`
+  - `reports/simus_v2/acceptance/simus_v2_acceptance_clin_intraop_parenchyma_pf_v3_fix3_seed122.json`
+  - `reports/simus_v2/acceptance/simus_v2_acceptance_clin_intraop_parenchyma_pf_v3_fix3_seed123.json`
+  - `reports/simus_v2/acceptance/simus_v2_acceptance_clin_intraop_parenchyma_pf_v3_fix3_seed124.json`
+- `ClinIntraOpSurface-Pf-dev0` remains telemetry-only, but competitive
+  intra-op is no longer paused
 
 Implementation targets:
 
@@ -844,12 +845,16 @@ Implementation targets:
 
 Interpretation:
 
-- this is no longer a parameter-retuning problem
-- it is a benchmark-design split motivated by the failure of the monolithic
-  intra-op profile to stabilize under the fixed gate
-- the bounded `v3` competitive pass also failed, so Phase 3 remains blocked
-- the next competitive structural/functional benchmark work should proceed only
-  on accepted profiles until a new intra-op concept and anchor can be defended
+- the decisive issue was not detector math and not the competitive label split
+  itself
+- it was that nuisance realization needed to be frozen separately from the
+  parenchymal scene seed for the competitive intra-op hypothesis
+- the profile split remains the right benchmark-design move:
+  - parenchymal mapping is competitive and anchorable
+  - surface/coupling-dominated behavior remains descriptive
+- Phase 3 is now unblocked for:
+  - `ClinMobile-Pf-v2`
+  - `ClinIntraOpParenchyma-Pf-v3`
 
 ### Phase 4: Implement `ClinFunctional-Pf-v2`
 
@@ -889,7 +894,7 @@ Important rule:
 Only consider detector-level changes after:
 
 - `ClinMobile-Pf-v2` passes acceptance
-- an accepted competitive intra-op profile exists again
+- `ClinIntraOpParenchyma-Pf-v3` remains accepted on held-out seeds
 - full fairness refreeze is rerun on `v2`
 - stage-symmetric residualizer/head audits are rerun on `v2`
 - `ClinFunctional-Pf-v2` exists and has held-out results

@@ -334,6 +334,7 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
     if parenchyma_rows > 0:
         mask_parenchyma_zone[: min(int(cfg.H), parenchyma_rows), :] = False
     use_split_zones = profile_name in {"ClinIntraOpParenchyma-Pf-v3", "ClinIntraOpSurface-Pf-dev0"}
+    nuisance_seed = int(cfg.seed) if cfg.nuisance_seed is None else int(cfg.nuisance_seed)
 
     base_bg = (~(mask_microvascular | mask_nuisance_pa | mask_structured_clutter)).copy()
     base_bg[: max(1, int(round(float(cfg.bg_top_exclusion_frac) * int(cfg.H)))), :] = False
@@ -358,11 +359,11 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         guard_px=int(cfg.label_guard_px),
     )
 
-    motion_art = build_motion_artifacts(cfg=cfg, seed=int(cfg.seed) + 2001)
+    motion_art = build_motion_artifacts(cfg=cfg, seed=nuisance_seed + 2001)
     coupled_bg = build_coupled_background_artifacts(
         cfg=cfg,
         compartments=tuple(cfg.background_compartments),
-        seed=int(cfg.seed) + 9101,
+        seed=nuisance_seed + 9101,
     )
     dx_grid_m = float((float(cfg.x_max_m) - float(cfg.x_min_m)) / max(int(cfg.W) - 1, 1))
     dz_grid_m = float((float(cfg.z_max_m) - float(cfg.z_min_m)) / max(int(cfg.H) - 1, 1))
@@ -451,7 +452,7 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
                 jitter_sigma_px=float(compartment.motion_jitter_sigma_px),
                 lateral_scale=float(compartment.lateral_scale),
                 axial_scale=float(compartment.axial_scale),
-                seed=int(cfg.seed) + 9001 + 37 * bidx,
+                seed=nuisance_seed + 9001,
             )
         background_states.append(
             {
@@ -635,7 +636,7 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
                 T=int(cfg.T),
                 n_elem=n_elem,
                 spec=cfg.phase_screen,
-                seed=int(cfg.seed) + 7001,
+                seed=nuisance_seed + 7001,
             )
         if phase_series is not None:
             iq_ch = apply_phase_screen(iq_ch, phase_series[t])
@@ -723,6 +724,7 @@ def generate_icube(cfg: SimusConfig) -> dict[str, Any]:
         "fd_vmax_hz": float(np.max(labels.expected_fd_true_hz)) if labels.expected_fd_true_hz.size else 0.0,
         "scene_telemetry": {
             "scene_family": str(cfg.scene_family or profile_name or "default"),
+            "nuisance_seed": int(nuisance_seed),
             "n_microvascular_vessels": int(sum(1 for v in vessels if v.role == "microvascular")),
             "n_nuisance_vessels": int(sum(1 for v in vessels if v.role == "nuisance_pa")),
             "n_structured_clutter": int(len(tuple(cfg.structured_clutter))),
