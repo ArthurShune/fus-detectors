@@ -52,6 +52,10 @@ def build_label_pack(
     mask_nuisance_pa: np.ndarray,
     mask_specular_struct: np.ndarray | None,
     base_bg_mask: np.ndarray,
+    mask_bg_zone: np.ndarray | None = None,
+    mask_pf_zone: np.ndarray | None = None,
+    mask_nuisance_zone: np.ndarray | None = None,
+    mask_alias_source: np.ndarray | None = None,
     expected_fd_true_hz: np.ndarray,
     prf_hz: float,
     bands: DopplerBandSpec,
@@ -62,6 +66,18 @@ def build_label_pack(
     mask_specular = np.asarray(mask_specular_struct, dtype=bool) if mask_specular_struct is not None else np.zeros_like(mask_micro, dtype=bool)
     mask_flow = (mask_micro | mask_nuisance).astype(bool, copy=False)
     bg = np.asarray(base_bg_mask, dtype=bool) & (~mask_flow) & (~mask_specular)
+    bg_zone = np.asarray(mask_bg_zone, dtype=bool) if mask_bg_zone is not None else np.ones_like(mask_micro, dtype=bool)
+    pf_zone = np.asarray(mask_pf_zone, dtype=bool) if mask_pf_zone is not None else np.ones_like(mask_micro, dtype=bool)
+    nuisance_zone = (
+        np.asarray(mask_nuisance_zone, dtype=bool)
+        if mask_nuisance_zone is not None
+        else np.ones_like(mask_micro, dtype=bool)
+    )
+    alias_source = (
+        np.asarray(mask_alias_source, dtype=bool)
+        if mask_alias_source is not None
+        else mask_flow.astype(bool, copy=False)
+    )
     fd_true = np.asarray(expected_fd_true_hz, dtype=np.float32)
     fd_sampled = np.abs(fold_to_nyquist(fd_true, float(prf_hz))).astype(np.float32, copy=False)
     mask_alias_expected = (mask_flow & (np.abs(fd_true) > (0.5 * float(prf_hz)))).astype(bool, copy=False)
@@ -70,15 +86,16 @@ def build_label_pack(
     pf_core = _in_band(fd_sampled, bands.pf_core_low_hz, bands.pf_core_high_hz)
     pa_band = _in_band(fd_sampled, bands.pa_low_hz, bands.pa_high_hz)
 
-    mask_h1_pf_main = mask_micro & pf_core & (~mask_alias_expected) & (~guard)
-    mask_h1_alias_qc = mask_flow & (mask_alias_expected | pa_band) & (~guard)
-    mask_h0_nuisance = mask_nuisance & pa_band & (~guard)
-    mask_h0_specular = mask_specular & (~guard) & (~mask_flow)
-    mask_h0_bg = bg & (~guard)
+    mask_h1_pf_main = mask_micro & pf_core & (~mask_alias_expected) & (~guard) & pf_zone
+    mask_h1_alias_qc = alias_source & (mask_alias_expected | pa_band) & (~guard) & pf_zone
+    mask_h0_nuisance = mask_nuisance & pa_band & (~guard) & nuisance_zone
+    mask_h0_specular = mask_specular & (~guard) & (~mask_flow) & nuisance_zone
+    mask_h0_bg = bg & bg_zone & (~guard)
+    mask_bg = (bg & bg_zone).astype(bool, copy=False)
 
     return SimusLabelPack(
         mask_flow=mask_flow.astype(bool, copy=False),
-        mask_bg=bg.astype(bool, copy=False),
+        mask_bg=mask_bg,
         mask_alias_expected=mask_alias_expected.astype(bool, copy=False),
         mask_microvascular=mask_micro.astype(bool, copy=False),
         mask_nuisance_pa=mask_nuisance.astype(bool, copy=False),

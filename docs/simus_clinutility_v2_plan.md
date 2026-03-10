@@ -760,6 +760,13 @@ New profile split:
   - no frozen-family comparison and no headline claim until a stronger
     surface-dominated real-IQ anchor exists
 
+Implementation status:
+
+- profile split implemented in the simulator and acceptance harness
+- smoke generation and acceptance routing verified for both new profiles
+- next step is candidate calibration for the competitive profile, not further
+  tuning of the archived monolithic intra-op `v2`
+
 Design rule for the competitive profile:
 
 - reuse the stable accepted background machinery rather than inventing a third

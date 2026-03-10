@@ -137,6 +137,67 @@ PROFILE_GATES: dict[str, dict[str, Any]] = {
     },
 }
 
+PROFILE_GATES["ClinIntraOpParenchyma-Pf-v3"] = {
+    "hard_sections": tuple(PROFILE_GATES["ClinIntraOp-Pf-v2"]["hard_sections"]),
+    "hard_rules": tuple(PROFILE_GATES["ClinIntraOp-Pf-v2"]["hard_rules"]),
+    "soft_sections": tuple(PROFILE_GATES["ClinIntraOp-Pf-v2"]["soft_sections"]),
+}
+
+PROFILE_GATES["ClinIntraOpSurface-Pf-dev0"] = {
+    "telemetry_only": True,
+    "soft_sections": (
+        {
+            "name": "surface_brain_background",
+            "anchor_preset": "intraop_brainlike",
+            "metrics": ("bg_fpeak_q50", "bg_coh1_q50"),
+        },
+        {
+            "name": "surface_background_subspace",
+            "anchor_preset": "pooled_iq",
+            "metrics": ("svd_bg_cum_r1", "svd_bg_cum_r2"),
+        },
+        {
+            "name": "surface_nuisance",
+            "anchor_preset": "phantom_nuisance",
+            "metrics": ("bg_malias_q50",),
+        },
+        {
+            "name": "surface_flow_motion",
+            "anchor_preset": "intraop_brainlike",
+            "metrics": (
+                "flow_fpeak_q50",
+                "flow_coh1_q50",
+                "flow_malias_q50",
+                "svd_flow_cum_r1",
+                "svd_flow_cum_r2",
+                "reg_shift_rms",
+                "reg_shift_p90",
+                "reg_psr_median",
+            ),
+        },
+    ),
+    "soft_rules": (
+        {
+            "name": "scene.expected_fd_sampled_q50_hz",
+            "path": ("scene", "expected_fd_sampled_q50_hz"),
+            "lo": 60.0,
+            "hi": 180.0,
+        },
+        {
+            "name": "scene.h1_alias_qc_fraction",
+            "path": ("scene", "h1_alias_qc_fraction"),
+            "lo": 0.0,
+            "hi": 0.30,
+        },
+        {
+            "name": "scene.h0_nuisance_fraction",
+            "path": ("scene", "h0_nuisance_fraction"),
+            "lo": 0.03,
+            "hi": 0.20,
+        },
+    ),
+}
+
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -312,6 +373,7 @@ def _evaluate_profile_gate(
     upper_q: float,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     gate = PROFILE_GATES[str(gate_name)]
+    telemetry_only = bool(gate.get("telemetry_only", False))
     row = dict(run_summary["row"])
     scene = dict(run_summary.get("scene") or {})
     metric_rows: list[dict[str, Any]] = []
@@ -382,6 +444,18 @@ def _evaluate_profile_gate(
             "hard",
         )
 
+    for rule in gate.get("soft_rules", ()):
+        value = _lookup_nested({"scene": scene, "row": row}, tuple(rule["path"]))
+        add_metric_row(
+            "design_rules_soft",
+            str(rule["name"]),
+            value,
+            rule.get("lo"),
+            rule.get("hi"),
+            "design",
+            "soft",
+        )
+
     summary = {
         "run_dir": str(run_summary["run_dir"]),
         "case_key": str(run_summary["case_key"]),
@@ -389,7 +463,7 @@ def _evaluate_profile_gate(
         "passed_metrics": int(hard_passed),
         "failed_metrics": int(max(hard_required - hard_passed, 0)),
         "pass_fraction": float(hard_passed / hard_required) if hard_required else None,
-        "overall_pass": bool(hard_required > 0 and hard_passed == hard_required),
+        "overall_pass": None if telemetry_only else bool(hard_required > 0 and hard_passed == hard_required),
         "soft_required_metrics": int(soft_required),
         "soft_passed_metrics": int(soft_passed),
         "soft_failed_metrics": int(max(soft_required - soft_passed, 0)),
@@ -397,6 +471,7 @@ def _evaluate_profile_gate(
         "row": row,
         "scene": scene,
         "profile_gate": str(gate_name),
+        "competitive_profile": not telemetry_only,
     }
     return summary, metric_rows
 
