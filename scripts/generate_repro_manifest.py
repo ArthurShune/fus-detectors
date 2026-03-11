@@ -56,7 +56,7 @@ class ArtifactInfo:
 
 def _run(cmd: list[str]) -> str:
     p = subprocess.run(cmd, cwd=str(REPO), check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    return p.stdout.strip()
+    return p.stdout.rstrip()
 
 
 def _git_info() -> dict[str, Any]:
