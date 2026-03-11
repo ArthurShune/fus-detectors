@@ -477,11 +477,86 @@ def accepted_v2_section() -> tuple[dict[str, Any], list[dict[str, Any]]]:
     return section, rows
 
 
+def uncertainty_section() -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    path = REPORT_DIR / 'clinical_translation_uncertainty.json'
+    data = _load_json(path)['sections']
+    section = {
+        'dataset_role': 'consistency and uncertainty summaries over existing real-data outputs',
+        'source': str(path.relative_to(ROOT)),
+        **data,
+    }
+    rows = [
+        {
+            'domain': 'uncertainty', 'claim': 'mace_phase2_fp_reduction_is_consistent',
+            'metric': 'mace_phase2_fp_reduction_fraction_mean',
+            'value': data['mace_phase2']['fp_reduction_fraction']['center'],
+            'unit': 'fraction', 'source': str(path.relative_to(ROOT)),
+            'notes': '95% bootstrap CI available in the uncertainty report.'
+        },
+        {
+            'domain': 'uncertainty', 'claim': 'mace_holdout_safety_is_consistent',
+            'metric': 'mace_holdout_all_plane_safety_win_rate',
+            'value': data['mace_holdout']['all_planes_safety_win_rate']['center'],
+            'unit': 'fraction', 'source': str(path.relative_to(ROOT)),
+            'notes': 'Held-out alias-gate safety win rate across test planes.'
+        },
+        {
+            'domain': 'uncertainty', 'claim': 'ulm_brainlike_corr_gain_is_consistently_positive',
+            'metric': 'ulm_brainlike_delta_corr_score_mean',
+            'value': data['ulm_brainlike']['delta_corr_score']['center'],
+            'unit': 'score', 'source': str(path.relative_to(ROOT)),
+            'notes': '95% bootstrap CI excludes zero in the current uncertainty summary.'
+        },
+    ]
+    return section, rows
+
+
+def detector_head_audit_section() -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    path = REPORT_DIR / 'realdata_detector_head_audit.json'
+    summary = _load_json(path)['summary']
+    section = {
+        'dataset_role': 'same-residual real-data detector-head audit',
+        'source': str(path.relative_to(ROOT)),
+        'coverage_note': (
+            'Coverage is limited to bundles where score_stap_preka.npy is non-zero. '
+            'In Shin this currently means raw and MC-SVD families only; ULM coverage comes '
+            'from the existing MC-SVD-style motion-sweep bundles.'
+        ),
+        'summary': summary,
+    }
+    rows = [
+        {
+            'domain': 'real_head_audit', 'claim': 'ulm_brainlike_same_residual_stap_beats_pd_on_auc',
+            'metric': 'delta_auc_flow_bg',
+            'value': _num(summary['ulm_brainlike']['stap_minus_pd']['auc_flow_bg']['delta']['center']),
+            'unit': 'auc', 'source': str(path.relative_to(ROOT)),
+            'notes': 'Same residual cube, ULM brainlike motion bundles.'
+        },
+        {
+            'domain': 'real_head_audit', 'claim': 'ulm_elastic_same_residual_stap_beats_pd_on_auc',
+            'metric': 'delta_auc_flow_bg',
+            'value': _num(summary['ulm_elastic']['stap_minus_pd']['auc_flow_bg']['delta']['center']),
+            'unit': 'auc', 'source': str(path.relative_to(ROOT)),
+            'notes': 'Same residual cube, ULM elastic motion bundles.'
+        },
+        {
+            'domain': 'real_head_audit', 'claim': 'shin_mcsvd_same_residual_stap_is_mixed',
+            'metric': 'delta_auc_flow_bg',
+            'value': _num(summary['shin_mc_svd']['stap_minus_kasai']['auc_flow_bg']['delta']['center']),
+            'unit': 'auc', 'source': str(path.relative_to(ROOT)),
+            'notes': 'Same residual cube, current Shin STAP-active coverage remains narrow.'
+        },
+    ]
+    return section, rows
+
+
 def render_md(packet: dict[str, Any], rows: list[dict[str, Any]]) -> str:
     mace = packet['sections']['mace']
     shin_ulm = packet['sections']['shin_ulm']
     gammex = packet['sections']['gammex']
     v2 = packet['sections']['accepted_v2']
+    unc = packet['sections']['uncertainty']
+    audit = packet['sections']['real_head_audit']
     lines = []
     lines.append('# Clinical Translation Packet')
     lines.append('')
@@ -514,7 +589,12 @@ def render_md(packet: dict[str, Any], rows: list[dict[str, Any]]) -> str:
         lines.append(f"- On the Pf-peak-selected held-out subset (`n={h_sel['n_planes']}`), hit retention stayed at `{100*(h_sel['hit_retention'] or 0):.1f}%`; this subset is a stability check, not a separate false-positive effect-size estimate.")
     lines.append('- Interpretation: Macé currently supports the translational story as a retrospective whole-brain readout/atlas anchor rather than as a raw-IQ superiority benchmark.')
     lines.append('')
-    lines.append('## 4. Brain-Like Real-IQ Anchors (Shin / ULM)')
+    lines.append('## 4. Consistency / Uncertainty')
+    lines.append(f"- Macé phase-2 false-positive reduction is consistent: `{100*unc['mace_phase2']['fp_reduction_fraction']['center']:.1f}%` (95% CI `{100*unc['mace_phase2']['fp_reduction_fraction']['lo']:.1f}` to `{100*unc['mace_phase2']['fp_reduction_fraction']['hi']:.1f}`).")
+    lines.append(f"- Macé held-out safety win rate remains high: `{100*unc['mace_holdout']['all_planes_safety_win_rate']['center']:.1f}%` (95% CI `{100*unc['mace_holdout']['all_planes_safety_win_rate']['lo']:.1f}` to `{100*unc['mace_holdout']['all_planes_safety_win_rate']['hi']:.1f}`).")
+    lines.append(f"- ULM brainlike correlation gain remains positive with uncertainty: `{unc['ulm_brainlike']['delta_corr_score']['center']:.3f}` (95% CI `{unc['ulm_brainlike']['delta_corr_score']['lo']:.3f}` to `{unc['ulm_brainlike']['delta_corr_score']['hi']:.3f}`).")
+    lines.append('')
+    lines.append('## 5. Brain-Like Real-IQ Anchors (Shin / ULM)')
     sh = shin_ulm['shin']
     ub = shin_ulm['ulm_motion_sweeps']['brainlike']
     ue = shin_ulm['ulm_motion_sweeps']['elastic']
@@ -522,7 +602,14 @@ def render_md(packet: dict[str, Any], rows: list[dict[str, Any]]) -> str:
     lines.append(f"- On ULM brainlike motion sweeps, STAP improved mean correlation score by `{(ub['mean_corr_score_stap']-ub['mean_corr_score_base']):.3f}` and reduced background variance ratio by `{(ub['mean_bg_var_ratio_stap']-ub['mean_bg_var_ratio_base']):.3f}`.")
     lines.append(f"- On ULM elastic motion sweeps, STAP improved mean correlation score by `{(ue['mean_corr_score_stap']-ue['mean_corr_score_base']):.3f}` and reduced background variance ratio by `{(ue['mean_bg_var_ratio_stap']-ue['mean_bg_var_ratio_base']):.3f}`.")
     lines.append('')
-    lines.append('## 5. Gammex Artifact-Tail Control')
+    lines.append('## 6. Same-Residual Real-Data Detector-Head Audit')
+    lines.append('- Coverage is intentionally narrow and explicit: only bundles with active STAP scores are audited.')
+    lines.append(f"- ULM brainlike same-residual audit: `ΔAUC(STAP−PD) = {audit['summary']['ulm_brainlike']['stap_minus_pd']['auc_flow_bg']['delta']['center']:.3f}`.")
+    lines.append(f"- ULM elastic same-residual audit: `ΔAUC(STAP−PD) = {audit['summary']['ulm_elastic']['stap_minus_pd']['auc_flow_bg']['delta']['center']:.3f}`.")
+    lines.append(f"- Shin MC-SVD same-residual audit is mixed: `ΔAUC(STAP−Kasai) = {audit['summary']['shin_mc_svd']['stap_minus_kasai']['auc_flow_bg']['delta']['center']:.3f}`.")
+    lines.append('- Interpretation: the same-residual detector-head story is strong on ULM, but not yet uniformly positive on the currently available Shin bundles.')
+    lines.append('')
+    lines.append('## 7. Gammex Artifact-Tail Control')
     ga = gammex['along_linear17']
     gx = gammex['across17']
     lines.append(f"- Along-linear17 remained actionable: `{ga['ka_state_counts']}` with `max_abs_delta_flow = {ga['max_abs_delta_flow']}`.")
@@ -530,7 +617,7 @@ def render_md(packet: dict[str, Any], rows: list[dict[str, Any]]) -> str:
     lines.append(f"- In the artifact-heavy across17 regime, STAP improved pooled TPR at `FPR=1e-3` by `{((gx['stap_tpr_at_fpr1e3'] or 0)-(gx['base_tpr_at_fpr1e3'] or 0)):.3f}` over the base score.")
     lines.append('')
     lines.append('## Practical Reading')
-    lines.append('- The strongest translational story is not “STAP wins every pipeline.” It is that STAP is a nuisance-focused detector head that materially improves structural nuisance rejection and remains favorable in almost all accepted functional detector-head comparisons.')
+    lines.append('- The strongest translational story is not “STAP wins every pipeline” or “real-data evidence is uniformly positive.” It is that STAP is a nuisance-focused detector head that materially improves accepted structural nuisance rejection, remains favorable in almost all accepted functional detector-head comparisons, and already shows a strong same-residual real-IQ advantage on ULM while remaining mixed on the currently available Shin bundles.')
     lines.append('- The latency frontier already provides a clinically usable fast STAP operating point (`Adaptive Global SVD -> STAP`) in the sub-0.35 s range, while the highest-quality structural stack remains slower (`RPCA -> STAP`).')
     return '\n'.join(lines) + '\n'
 
@@ -544,6 +631,8 @@ def main() -> None:
         ('shin_ulm', shin_ulm_section),
         ('gammex', gammex_section),
         ('accepted_v2', accepted_v2_section),
+        ('uncertainty', uncertainty_section),
+        ('real_head_audit', detector_head_audit_section),
     ]:
         sec, rows = fn()
         sections[name] = sec
