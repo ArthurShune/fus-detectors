@@ -40,7 +40,9 @@ def _q(v: list[float], q: float) -> float:
 def _fmt_cell(med: float, q25: float, q75: float) -> str:
     if not (np.isfinite(med) and np.isfinite(q25) and np.isfinite(q75)):
         return r"\textemdash"
-    return f"{med:.4f} ({q25:.4f},{q75:.4f})"
+    if abs(med) < 5e-7 and abs(q25) < 5e-7 and abs(q75) < 5e-7:
+        return "0"
+    return f"{med:.3f} ({q25:.3f},{q75:.3f})"
 
 
 def parse_args() -> argparse.Namespace:
@@ -166,7 +168,7 @@ def main() -> None:
     lines.append(r"\end{tabular}")
     lines.append(r"}")
     lines.append(
-        r"\caption{Brain-* k-Wave low-FPR operating points using flow-evidence detection scores (higher = more likely flow): baseline power Doppler and matched-subspace STAP. Each regime uses five non-overlapping 64-frame windows (offsets 0/64/128/192/256); each window has $n_{\mathrm{neg}}=50199$ ($fpr_{\min}\approx 1.99\times 10^{-5}$). At this support, FPR targets $10^{-4}$, $3\!\times\!10^{-4}$, and $10^{-3}$ correspond to $\approx 5$, $\approx 15$, and $\approx 50$ false-positive pixels per window, respectively. Entries report median (IQR) TPR across windows at each target FPR. Baselines compare clutter suppression strategies (MC--SVD; adaptive SVD (SV similarity cutoff); block-wise local SVD (overlap-add); RPCA; HOSVD) and are scored by power Doppler; STAP is applied on top of MC--SVD. Full per-window outputs are provided in \SuppOrApp{app:repro}.}"
+        r"\caption{Brain-* k-Wave low-FPR operating points using flow-evidence detection scores (higher = more likely flow): baseline power Doppler and matched-subspace STAP. Each regime uses five non-overlapping 64-frame windows (offsets 0/64/128/192/256); each window has $n_{\mathrm{neg}}=50199$ ($fpr_{\min}\approx 1.99\times 10^{-5}$). At this support, FPR targets $10^{-4}$, $3\!\times\!10^{-4}$, and $10^{-3}$ correspond to approximately 5, 15, and 50 false-positive pixels per window. Entries report median (IQR) TPR across windows at each target FPR. Cells shown as 0 indicate no measurable sensitivity at that supported operating point. Baselines compare clutter suppression strategies (MC--SVD; adaptive SVD with a spatial singular-vector similarity cutoff; block-wise local SVD with overlap-add; RPCA; HOSVD) and are scored by power Doppler; STAP is applied on top of the MC--SVD residual.}"
     )
     lines.append(r"\label{tab:brain_kwave_vnext_baselines}")
     lines.append(r"\end{table}")

@@ -393,7 +393,7 @@ This work is a reproducible processing pipeline (decode $\rightarrow$ baseline $
 Claims are stratified by regime to separate quantitative detection efficacy from label-free instrumentation.
 
 \begin{itemize}[nosep]
-  \item \textbf{Brain-k-Wave simulations (labeled).} Across Brain-OpenSkull / Brain-AliasContract / Brain-SkullOR regimes, the fixed profile retains measurable sensitivity at ultra-low FPR in the matched-subspace STAP score (i.e., $\mathrm{TPR}(\alpha)>0$ as $\alpha\to 10^{-4}$--$10^{-3}$), with the strongest low-FPR gains in the alias-augmented Brain-AliasContract and skull/OR-inspired Brain-SkullOR regimes (Table~\ref{tab:brain_kwave_vnext_baselines}).
+  \item \textbf{Brain-k-Wave simulations (labeled).} Across Brain-OpenSkull / Brain-AliasContract / Brain-SkullOR regimes, the fixed profile retains measurable sensitivity at ultra-low FPR in the matched-subspace STAP score (i.e., $\mathrm{TPR}(\alpha)>0$ as $\alpha\to 10^{-4}$--$10^{-3}$), with the strongest low-FPR gains in the alias-augmented Brain-AliasContract and skull/OR-inspired Brain-SkullOR regimes. The full strict-tail operating-point table is provided in the Supplement.
   \item \textbf{Phantom acquisitions (structurally labeled Gammex flow phantom).} We decode raw beamformer outputs, derive B-mode-only tube masks (flow/background), benchmark conventional short-ensemble Doppler baselines, and report structural-label low-FPR operating points and within-ensemble motion ladders.
   \item \textbf{Accepted SIMUS-ClinUtility-v2 benchmarks (structurally/ functionally labeled moving-scatterer data).} We report held-out structural and functional detection performance only on the accepted nuisance profiles (\texttt{ClinMobile-Pf-v2}, \texttt{ClinIntraOpParenchyma-Pf-v3}), after re-freezing all method families on the accepted development split.
   \item \textbf{ULM Zenodo 7883227 (real kHz IQ).} We report label-free motion-robustness curves on beamformed IQ blocks using controlled rigid/nonrigid motion injection, with fairness alignment and degeneracy checks (no task ROC).
@@ -446,15 +446,32 @@ ULM Zenodo 7883227 (PRF 1000; 128-frame blocks) & MC--SVD baseline with energy f
 \label{sec:results}
 
 \paragraph{Results roadmap.}
-We first report labeled Brain-* simulation results at ultra-low FPR, then structurally labeled Gammex flow phantom results (including motion ladders), then the accepted clinically anchored \emph{SIMUS-ClinUtility-v2} checkpoint, and finally label-free motion-robustness evidence on real kHz IQ (ULM 7883227). Additional dataset audits and diagnostic panels are provided in \SuppOrApp{app:supp-results}.
+We first summarize the accepted clinically anchored \emph{SIMUS-ClinUtility-v2} checkpoint that carries the main translational interpretation, then report the supporting labeled Brain-* simulation results at ultra-low FPR, the structurally labeled Gammex flow phantom results (including motion ladders), and finally label-free motion-robustness evidence on real kHz IQ (ULM 7883227). Additional dataset audits and diagnostic panels are provided in \SuppOrApp{app:supp-results}.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{l c c c c c}
+\hline
+Structural stack & Total runtime (s) & STAP add-on (s) & AUC$_{\mathrm{main/bg}}$ & AUC$_{\mathrm{main/nuis}}$ & FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$ \\
+\hline
+HOSVD $\rightarrow$ Kasai & 0.167 & -- & 0.753 & 0.561 & 0.453 \\
+Adaptive Global SVD $\rightarrow$ STAP & 0.342 & 0.256 & 0.813 & 0.874 & 0.078 \\
+RPCA $\rightarrow$ Kasai & 1.783 & -- & 0.837 & 0.442 & 0.593 \\
+RPCA $\rightarrow$ STAP (headline) & 2.155 & 0.470 & 0.828 & 0.920 & 0.031 \\
+\hline
+\end{tabular}
+\caption{Accepted \emph{SIMUS-ClinUtility-v2} structural checkpoint on held-out evaluation seeds. We foreground four representative operating points: the fastest strong native simple stack overall (HOSVD$\rightarrow$Kasai), the fastest accepted structural STAP point on the latency frontier (Adaptive Global SVD$\rightarrow$STAP), the same-residual native reference (RPCA$\rightarrow$Kasai), and the final accepted deployed headline stack (RPCA$\rightarrow$STAP). This is the reader-facing structural summary because it captures the clinically relevant tradeoff between runtime, parenchymal sensitivity, and nuisance-tail control more directly than the older pilot-only Brain-* table.}
+\label{tab:accepted_v2_structural_main}
+\end{table}
 
 \paragraph{Scope and low-FPR operating protocol.}
 Quantitative detection performance is reported on labeled Brain-* simulations, structurally labeled phantom regimes (Gammex flow phantom sequences; labels derived from B-mode geometry), and the accepted \emph{SIMUS-ClinUtility-v2} benchmark using the strict low-FPR operating protocol of Section~\ref{sec:eval}. Real kHz IQ datasets are used for instrumentation (band-energy integrity checks and label-free motion-robustness proxies), not task ROC. Conditional execution is a decision-rule variant (compute gating) that uses a flow-proxy mask; leakage ablations and additional diagnostics are reported in \SuppOrApp{app:supp-results}.
 
 \subsection{Brain-k-Wave regimes (labeled): low-FPR ROC and latency}
-We report labeled low-FPR operating points on Brain-* k-Wave simulations using flow-evidence detection scores under a right-tail convention (higher = more flow-like; thresholds calibrated on the high-score tail): a baseline power Doppler score and the proposed matched-subspace STAP score (Notation). Baseline methods compare clutter suppression strategies (MC--SVD; adaptive SVD with a spatial singular-vector similarity cutoff; block-wise local SVD with overlap-add; RPCA; HOSVD) and are scored using the same power Doppler statistic; STAP is evaluated on top of the MC--SVD residual. Across Brain-* regimes, these baselines (including adaptive and local SVD filters) degrade sharply in the ultra-low-FPR tail, while the localized STAP score retains measurable sensitivity at ultra-low FPR (i.e., $\mathrm{TPR}(\alpha)>0$ at $\alpha=10^{-4}$--$10^{-3}$), including in the SkullOR regime where alias deliberately leaks into the positive class. Table~\ref{tab:brain_kwave_vnext_baselines} summarizes low-FPR operating points for representative pilot realizations over five non-overlapping 64-frame windows (offsets 0/64/128/192/256); each window has $n_{\mathrm{neg}}=50199$ background pixels ($fpr_{\min}=1/n_{\mathrm{neg}}\approx 1.99\times 10^{-5}$), so FPR targets down to $10^{-4}$ are empirically supported. Numbers are medians (IQR) over windows and are computed by choosing $\tau$ per method per window on that window's negative set to match the target FPR, then evaluating TPR on the corresponding positive set. The wider IQR at $\alpha=10^{-4}$ in Brain-OpenSkull reflects window-to-window nonstationarity and finite tail support under a fixed, local-covariance profile (some windows with nonzero supported-tail sensitivity versus near-floor windows). Per-window thresholds and realized FPRs are provided in \SuppOrApp{app:repro}.
+We report labeled low-FPR operating points on Brain-* k-Wave simulations using flow-evidence detection scores under a right-tail convention (higher = more flow-like; thresholds calibrated on the high-score tail): a baseline power Doppler score and the proposed matched-subspace STAP score (Notation). Baseline methods compare clutter suppression strategies (MC--SVD; adaptive SVD with a spatial singular-vector similarity cutoff; block-wise local SVD with overlap-add; RPCA; HOSVD) and are scored using the same power Doppler statistic; STAP is evaluated on top of the MC--SVD residual. Across Brain-* regimes, these baselines (including adaptive and local SVD filters) degrade sharply in the ultra-low-FPR tail, while the localized STAP score retains measurable sensitivity at ultra-low FPR (i.e., $\mathrm{TPR}(\alpha)>0$ at $\alpha=10^{-4}$--$10^{-3}$), including in the SkullOR regime where alias deliberately leaks into the positive class. The full window-resolved operating-point table is provided in the Supplement; in the main text we foreground the accepted \emph{SIMUS-ClinUtility-v2} checkpoint (Table~\ref{tab:accepted_v2_structural_main}) because it is the narrower clinically anchored benchmark used for translational interpretation. The Brain-* pilot table remains important as a strict-tail stress test and detector-component audit, but it is no longer the primary reader-facing summary table.
 \noindent Importantly, the MC--SVD+PD baseline row and the STAP row share the identical MC--SVD residual cube and differ only in the detector statistic (PD versus matched-subspace), isolating the effect of the detector rather than the clutter-suppression stage.
-\noindent To quantify deployment-relevant threshold transfer, Table~\ref{tab:brain_crosswindow_calibration} calibrates $\tau_\alpha$ on one window and evaluates on a disjoint window, reporting both cross-window TPR and the realized cross-window FPR (FPR drift). Full per-pair outputs are written to \path{reports/brain\_crosswindow\_calibration.csv}.
+\noindent To quantify deployment-relevant threshold transfer, Table~\ref{tab:brain_crosswindow_calibration} calibrates $\tau_\alpha$ on one window and evaluates on a disjoint window, reporting both cross-window TPR and the realized cross-window FPR (FPR drift).
 
 \begin{table}[t]
 \centering
@@ -472,12 +489,12 @@ We report labeled low-FPR operating points on Brain-* k-Wave simulations using f
   \end{center}
 }
 \endgroup
-\caption{Brain-* cross-window threshold calibration audit for the pre-KA STAP score. ``Within-window'' matches the main reporting protocol (calibrate $\tau_\alpha$ on a window's negatives and evaluate on that same window) and is identical to the STAP row of Table~\ref{tab:brain_kwave_vnext_baselines} (same score, masks, and five 64-frame windows). ``Cross-window'' calibrates $\tau_\alpha$ on one window and evaluates on a disjoint window ($n=20$ ordered window pairs). Reported values are median (IQR) over windows/pairs, and the realized cross-window FPR quantifies drift under window-to-window distribution shift.}
+\caption{Brain-* cross-window threshold calibration audit for the pre-KA STAP score. ``Within-window'' matches the main reporting protocol (calibrate $\tau_\alpha$ on a window's negatives and evaluate on that same window) under the same score, masks, and five 64-frame windows used in the supplementary strict-tail operating table. ``Cross-window'' calibrates $\tau_\alpha$ on one window and evaluates on a disjoint window ($n=20$ ordered window pairs). Reported values are median (IQR) over windows/pairs, and the realized cross-window FPR quantifies drift under window-to-window distribution shift.}
 \label{tab:brain_crosswindow_calibration}
 \end{table}
 
 \paragraph{Baseline fairness and frozen settings.}
-All baseline hyperparameters are fixed prior to reporting results. For Brain-* pilots, the MC--SVD energy-fraction cutoff is selected by a one-time sweep and then frozen at $e=0.90$ for all reported windows (sweep report in \path{reports/brain\_mcsvd\_energy\_sweep\_seed1.csv} / \path{reports/brain\_mcsvd\_energy\_sweep\_seed1.json}). The adaptive similarity-cutoff SVD and block-wise local SVD baselines use deterministic, frozen rules; implementation details are provided in \SuppOrApp{app:baseline-adaptive-svd} and \SuppOrApp{app:baseline-local-svd}. RPCA and HOSVD baselines use standard, reproducible settings documented in \SuppOrApp{app:repro}. All baselines are scored using the same right-tail power Doppler statistic so that differences isolate the clutter-suppression stage rather than the scoring rule. Table~\ref{tab:brain_baseline_summary} summarizes the baseline families and what differs between them.
+All baseline hyperparameters are fixed prior to reporting results. For Brain-* pilots, the MC--SVD energy-fraction cutoff is selected once and then frozen at $e=0.90$ for all reported windows. The adaptive similarity-cutoff SVD and block-wise local SVD baselines use deterministic, frozen rules; implementation details are provided in \SuppOrApp{app:baseline-adaptive-svd} and \SuppOrApp{app:baseline-local-svd}. RPCA and HOSVD baselines use standard, reproducible settings documented in \SuppOrApp{app:repro}. All baselines are scored using the same right-tail power Doppler statistic so that differences isolate the clutter-suppression stage rather than the scoring rule. Table~\ref{tab:brain_baseline_summary} summarizes the baseline families and what differs between them.
 
 \begin{table}[t]
 \centering
@@ -503,17 +520,6 @@ STAP (pre-KA) & local & robust covariance $\rightarrow$ whitening $\rightarrow$ 
 \label{tab:brain_baseline_summary}
 \end{table}
 
-\IfFileExists{reports/brain_kwave_vnext_baselines_table.tex}{%
-  \input{reports/brain_kwave_vnext_baselines_table.tex}%
-}{%
-  \begin{center}
-  \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/brain_kwave_vnext_baselines_table.tex}.\\
-    Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/brain_kwave_vnext_baselines_table.py}.
-  \end{minipage}}
-  \end{center}
-}
-
 \paragraph{Detector-component ablation (whitening versus band selectivity).}
 To address the concern that the proposed score is ``local adaptive whitening + band energy'' rebranded, we report two detector ablations on the identical MC--SVD residual cube: (i) \emph{whitened total power} (apply $R_i^{-1/2}$ but do not partition the Doppler spectrum) and (ii) an \emph{unwhitened} matched-subspace ratio (set $R_i=I$ but retain the fixed flow-band subspace). Table~\ref{tab:brain_detector_ablation} shows that whitening alone without band partition does not control the strict tail, while matched-subspace (banded) scoring is the dominant contributor in these Brain-* regimes under the fixed-profile protocol. The unwhitened ratio corresponds to a normalized Doppler-band energy detector; the full STAP score generalizes this statistic to colored interference via tile-local covariance whitening. In these pilot simulations, the strong performance of the identity-covariance control suggests that after coarse baseline filtering the residual can be close to temporally white; we retain whitening in the primary score as the statistically principled colored-interference generalization.
 \IfFileExists{reports/brain_detector_ablation_table.tex}{%
@@ -531,7 +537,7 @@ To address the concern that the proposed score is ``local adaptive whitening + b
 }
 
 \paragraph{Detector-swap composability audit (matched-subspace scoring on competing residuals).}
-To isolate detector effects from the clutter-suppression stage, we also compute the matched-subspace STAP score on residuals produced by competing clutter filters (RPCA and HOSVD) and compare it to power Doppler scoring on the same residual under the identical window/mask protocol. Table~\ref{tab:brain_detector_swap} reports this paired-residual audit; under the fixed STAP profile used throughout, strict-tail improvements do not automatically persist when composing STAP with these more aggressive low-rank baselines. We therefore treat STAP as a second-stage detector defined for a coarse baseline residual (MC--SVD in the main pipeline), and use the controlled detector swap in Table~\ref{tab:brain_kwave_vnext_baselines} (PD versus matched-subspace on the same MC--SVD residual) as the primary isolation of detector effects.
+To isolate detector effects from the clutter-suppression stage, we also compute the matched-subspace STAP score on residuals produced by competing clutter filters (RPCA and HOSVD) and compare it to power Doppler scoring on the same residual under the identical window/mask protocol. Table~\ref{tab:brain_detector_swap} reports this paired-residual audit; under the fixed STAP profile used throughout, strict-tail improvements do not automatically persist when composing STAP with these more aggressive low-rank baselines. We therefore treat STAP as a second-stage detector defined for a coarse baseline residual (MC--SVD in the main Brain-* pipeline), and use the controlled detector swap on the same MC--SVD residual as the primary isolation of detector effects.
 \IfFileExists{reports/brain_detector_swap_table.tex}{%
   \input{reports/brain_detector_swap_table.tex}%
 }{%
@@ -564,7 +570,7 @@ We further report a 1D fixed-profile sensitivity sweep over covariance diagonal 
 }
 
 \paragraph{Relaxed operating-point sanity anchor (Brain-*).}
-Several baseline rows in Table~\ref{tab:brain_kwave_vnext_baselines} take the value $\mathrm{TPR}(\alpha)\approx 0$ at $\alpha\le 10^{-3}$. To reduce ambiguity around whether these zeros reflect implementation or tuning errors, Table~\ref{tab:brain_baseline_sanity_relaxed} contrasts one strict-tail operating point ($\alpha=10^{-3}$) with two relaxed operating points ($\alpha\in\{10^{-2},10^{-1}\}$) under the same window protocol; $\alpha=10^{-2}$ is a moderate reference point and $\alpha=10^{-1}$ is an intentionally relaxed non-degeneracy sanity anchor.
+Several baseline rows in the supplementary Brain-* strict-tail table take the value $\mathrm{TPR}(\alpha)\approx 0$ at $\alpha\le 10^{-3}$. To reduce ambiguity around whether these zeros reflect implementation or tuning errors, Table~\ref{tab:brain_baseline_sanity_relaxed} contrasts one strict-tail operating point ($\alpha=10^{-3}$) with two relaxed operating points ($\alpha\in\{10^{-2},10^{-1}\}$) under the same window protocol; $\alpha=10^{-2}$ is a moderate reference point and $\alpha=10^{-1}$ is an intentionally relaxed non-degeneracy sanity anchor.
 \IfFileExists{reports/brain_baseline_sanity_relaxed_table.tex}{%
   \input{reports/brain_baseline_sanity_relaxed_table.tex}%
 }{%
@@ -609,7 +615,7 @@ This tail-dominance failure mode motivates both the strict low-FPR operating dis
 \paragraph{Latency and conditional execution.}
 We also report representative runtimes for baseline clutter suppression and STAP under a conservative fixed operating profile (tile geometry, slow-time aperture $L_t$, and covariance-conditioning targets fixed \emph{a priori}). Conditional execution reduces runtime by skipping the STAP stage on tiles with negligible proxy flow support and reverting to the baseline score there. Because this changes the overall decision rule, it can change operating characteristics; we therefore treat conditional execution as a distinct variant and require explicit leakage controls when reporting it. Unless otherwise stated, conditional execution uses a \emph{disjoint-window} proxy mask for detection reporting (mask derived from one window and applied to a disjoint window) to avoid same-window proxy leakage.
 
-\noindent Latency is measured via deterministic replay scripts that run both a \emph{legacy} path (eager execution; CUDA graphs disabled) and an \emph{optimized} path (CUDA graphs enabled when supported; \texttt{STAP\_FAST\_CUDA\_GRAPH=1}). We report \emph{steady-state} means over windows/frames 2..N and exclude the first replay window/frame, which includes one-time GPU overheads (initialization, kernel compilation, and optional CUDA-graph capture). The baseline and STAP stages are timed separately (excluding disk I/O), and ``Total'' reports baseline+STAP wall time; full legacy-versus-optimized per-window statistics and parity checks for the RTX~4080~SUPER reruns are written to \path{reports/latency/4080super_latency_summary.csv} / \path{reports/latency/4080super_latency_summary.json}.
+\noindent Latency is measured via deterministic replay scripts that run both a \emph{legacy} path (eager execution; CUDA graphs disabled) and an \emph{optimized} path (CUDA graphs enabled when supported; \texttt{STAP\_FAST\_CUDA\_GRAPH=1}). We report \emph{steady-state} means over windows/frames 2..N and exclude the first replay window/frame, which includes one-time GPU overheads (initialization, kernel compilation, and optional CUDA-graph capture). The baseline and STAP stages are timed separately (excluding disk I/O), and ``Total'' reports baseline+STAP wall time.
 
 \begin{table}[ht]
 \centering
@@ -628,7 +634,7 @@ Gammex across (linear17 @ PRF 2500; per cine frame) & $0.005$ & $0.105$ & $0.110
 \hline
 \end{tabular}
 }
-\caption{Consolidated CUDA-accelerated latency summary (steady-state timing; excludes disk I/O). Times are steady-state means over windows/frames 2..N from a single replay process: Brain-* uses windows 2..5 (offsets 0/64/128/192/256) via \path{scripts/latency_rerun_check.py}, while Shin and Gammex use windows/frames 2..N via \path{scripts/latency_realdata_rerun_check.py}. The first replay window/frame includes one-time GPU overheads (initialization, kernel compilation, and optional CUDA-graph capture) and is excluded. ``Total'' reports baseline+STAP wall time. Hardware: NVIDIA GeForce RTX 3050 6GB Laptop GPU (CUDA 12.1; \texttt{stap\_device=cuda}). Conditional execution is not reported for structurally labeled Gammex bundles.}
+\caption{Consolidated CUDA-accelerated latency summary (steady-state timing; excludes disk I/O). Times are steady-state means over windows/frames 2..N from a single replay process. The first replay window/frame includes one-time GPU overheads (initialization, kernel compilation, and optional CUDA-graph capture) and is excluded. ``Total'' reports baseline+STAP wall time. Hardware: NVIDIA GeForce RTX 3050 6GB Laptop GPU (CUDA 12.1; \texttt{stap\_device=cuda}). Conditional execution is not reported for structurally labeled Gammex bundles.}
 \label{tab:latency_summary}
 \end{table}
 
@@ -649,7 +655,7 @@ Gammex across (linear17 @ PRF 2500; per cine frame) & $0.001$ & $0.019$ & $0.020
 \hline
 \end{tabular}
 }
-\caption{Same latency protocol as Table~\ref{tab:latency_summary}, rerun on a workstation-class GPU. Entries report optimized-path steady-state means (windows/frames 2..N; excludes disk I/O and excludes the first replay window/frame). Values are derived from \path{reports/latency/4080super_latency_summary.csv}. Hardware: NVIDIA GeForce RTX 4080 SUPER 16GB (see \path{reports/hw/4080super_nvidia_smi.txt}; \texttt{stap\_device=cuda}). Conditional execution is not reported for structurally labeled Gammex bundles.}
+\caption{Same latency protocol as Table~\ref{tab:latency_summary}, rerun on a workstation-class GPU. Entries report optimized-path steady-state means (windows/frames 2..N; excludes disk I/O and excludes the first replay window/frame). Hardware: NVIDIA GeForce RTX 4080 SUPER 16GB (\texttt{stap\_device=cuda}). Conditional execution is not reported for structurally labeled Gammex bundles.}
 \label{tab:latency_summary_4080super}
 \end{table}
 
@@ -840,7 +846,7 @@ Outside simulation, the translational evidence is supportive but intentionally n
 The next steps are therefore clear. We keep \texttt{ClinIntraOpSurface-Pf-dev0} telemetry-only until a stronger surface-dominated real-IQ anchor can be defended, extend the accepted-profile functional benchmark to larger held-out splits and retrospective real-data audits, and consider detector-level changes only if a single frozen STAP head no longer remains competitive on the accepted clinically anchored benchmark. In parallel, we will continue to reduce latency via hardware-aware implementations of the batched covariance and band-energy kernels toward real-time deployment, and will explore compact frozen learned regularizers only when they preserve the shrink-only auditability and low-FPR reporting guarantees established here.
 
 \section*{Data and code availability}
-All datasets used in this work are either publicly available (as cited) or derived deterministically from those sources. All code used to generate the reported tables and figures is versioned; the exact commit hash (and, when available, a public repository URL and release tag) are recorded in the reproducibility manifest (\SuppOrApp{app:repro}). A minimal CUDA-enabled software environment is specified in \path{environment.yml} (Python 3.11; PyTorch 2.4 + CUDA 12.1); a container recipe is provided as \path{Dockerfile}. As a single-command example, Table~\ref{tab:brain_kwave_vnext_baselines} can be regenerated (pilot generation + baseline matrix + LaTeX table) by running \path{bash scripts/reproduce_table5_brain_kwave.sh} (expected output: \path{reports/brain_kwave_vnext_baselines_table.tex}).
+All datasets used in this work are either publicly available (as cited) or derived deterministically from those sources. All code used to generate the reported tables and figures is versioned; the exact commit hash (and, when available, a public repository URL and release tag) are recorded in the reproducibility manifest (\SuppOrApp{app:repro}). A minimal CUDA-enabled software environment is specified in \path{environment.yml} (Python 3.11; PyTorch 2.4 + CUDA 12.1); a container recipe is provided as \path{Dockerfile}. As a single-command example, the supplementary Brain-* strict-tail table can be regenerated (pilot generation + baseline matrix + LaTeX table) by running \path{bash scripts/reproduce_table5_brain_kwave.sh}.
 
 \paragraph{Code repository.}
 The reference implementation and reproduction scripts are available at \path{https://github.com/ArthurShune/stap-for-fus}. The canonical commit hash and (when available) a release tag are recorded in the reproducibility manifest (\SuppOrApp{app:repro}).
