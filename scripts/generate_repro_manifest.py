@@ -79,6 +79,10 @@ def _git_info() -> dict[str, Any]:
         ".synctex.gz",
         ".pdf",
     )
+    ignore_exact_paths = {
+        "repro_manifest.json",
+        "appendix_repro_manifest.tex",
+    }
 
     def _status_paths(line: str) -> list[str]:
         # Porcelain v1 is 2 status chars + space + path (or "old -> new" for renames).
@@ -93,7 +97,7 @@ def _git_info() -> dict[str, Any]:
     kept: list[str] = []
     for ln in raw_lines:
         paths = _status_paths(ln)
-        if all(p.endswith(ignore_suffixes) for p in paths):
+        if all((p.endswith(ignore_suffixes) or p in ignore_exact_paths) for p in paths):
             ignored.append(ln.strip())
         else:
             kept.append(ln.strip())
