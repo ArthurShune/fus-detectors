@@ -22,7 +22,7 @@ When KA is enabled, it is shrink-only and preserves a protected do-not-penalize 
   \item Fixed-profile sensitivity sweep (Brain-OpenSkull; $\lambda$, tile size, $L_t$): Figure~\ref{fig:brain_openskull_profile_sensitivity}.
   \item Shin proxy-metric comparisons, runtime, and measured rigid-motion telemetry: Figure~\ref{fig:shin_baseline_matrix_proxy_metrics} and Figure~\ref{fig:shin_motion_telemetry}.
   \item Corrected SIMUS/PyMUST moving-scatterer frozen-benchmark comparison and stage-symmetric detector-head audit: Tables~\ref{tab:simus_frozen_benchmark_v1p2} and \ref{tab:simus_symmetric_pipeline_v1p2}.
-  \item Accepted SIMUS-ClinUtility-v2 structural/functional latency-vs-performance checkpoint: Tables~\ref{tab:simus_v2_structural_latency} and \ref{tab:simus_v2_functional_latency}.
+  \item Accepted SIMUS-ClinUtility-v2 structural/functional latency-vs-performance checkpoint and compact real-data translation audit: Tables~\ref{tab:simus_v2_structural_latency}, \ref{tab:simus_v2_functional_latency}, and \ref{tab:realdata_detector_head_audit}.
 \end{itemize}
 
 \subsection{Full ROC curves for labeled regimes}
@@ -701,4 +701,27 @@ STAP head aggregate (11/12 positive) & 0.442 & +0.088 & -- & -- & -- \\
 \end{tabular}
 \caption{Accepted \emph{SIMUS-ClinUtility-v2} functional checkpoint on held-out evaluation seeds using the common readout \texttt{bgcdf\_outside\_glm}. The first two rows report the best end-to-end held-out pipeline on each accepted profile; the final row reports the mean STAP-head runtime in the strict detector-head audit, where the residualizer is held fixed and only the detector head is swapped. In that audit the mean native runtime is 0.274~s, the mean STAP-head runtime is 0.442~s, and the mean held-out selection-score gain is +0.088, with STAP positive in 11/12 accepted family/profile comparisons. Source artifacts: \path{reports/simus_v2/simus_eval_functional_seed221_222_to_223_224_ec6_bgcdf_outside_headline.csv}, \path{reports/simus_v2/simus_functional_stap_head_search_seed221_222_to_223_224_ec6_bgcdf_outside_headline.csv}, and \path{reports/simus_v2/simus_v2_latency_frontier.csv}.}
 \label{tab:simus_v2_functional_latency}
+\end{table}
+
+\subsection{Compact real-data translation audit}
+\label{app:realdata-translation-audit}
+To make the translational story less dependent on single point estimates, we summarize the existing real-data outputs with paired uncertainty and consistency summaries. On the Mac\'e whole-brain phase-2 sweep, label-free alias gating reduces matched-TPR false positives by 18.6\% (95\% CI 16.8--20.2) while retaining 81.0\% of tiles, and the plane-wise false-positive reduction win rate is 118/120. On the appendix-only held-out alias-gate check (\texttt{scan4}/\texttt{scan5}), false positives are reduced by 14.5\% (95\% CI 7.9--21.4) with a 97.5\% safety win rate across held-out planes. These readout-level results are retrospective and label-free, but they strengthen the claim that nuisance gating can improve whole-brain map hygiene without aggressive hit loss \cite{UrbanWholeBrain2015,Deffieux2021}. Full summaries are in \path{reports/clinical_translation/clinical_translation_uncertainty.json} and \path{reports/clinical_translation/clinical_translation_packet.md}.
+
+For the detector-head claim itself, the most direct real-data test is a same-residual audit: hold the residual cube fixed and compare PD, Kasai, and STAP on the same real-IQ bundle. Coverage is intentionally narrow and explicit. On currently available ULM 7883227 bundles, STAP is uniformly positive relative to both PD and Kasai under the same residual, whereas the currently available Shin bundles remain mixed and should be read as a low-motion real-IQ viability anchor rather than a superiority dataset \cite{ChavignonZenodo7883227,HeilesULMBenchmark2021,ShinLOCAULM2024,ShinZenodo10711806}. Table~\ref{tab:realdata_detector_head_audit} reports the compact summary.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{l l c c l}
+\hline
+Dataset & Residual family & $\Delta$AUC(STAP$-$PD) & $\Delta$AUC(STAP$-$Kasai) & Note \\
+\hline
+Shin RatBrain Fig3 & raw & $-0.012$ & $+0.004$ & near-neutral vs Kasai \\
+Shin RatBrain Fig3 & MC--SVD & $-0.134$ & $-0.117$ & mixed / negative on current STAP-active bundles \\
+ULM 7883227 brainlike & MC--SVD-style residual & $+0.281$ & $+0.261$ & positive on all audited bundles \\
+ULM 7883227 elastic & MC--SVD-style residual & $+0.282$ & $+0.251$ & positive on all audited bundles \\
+\hline
+\end{tabular}
+\caption{Compact same-residual detector-head audit on currently available real-IQ bundles. $\Delta$AUC denotes STAP minus the named simple head on the same residual cube. Coverage is intentionally limited to bundles with active STAP scores: Shin currently contributes only raw and MC--SVD residual families, while the ULM entries come from the existing MC--SVD-style motion-sweep bundles. The audit therefore supports a strong real-IQ detector-head story on ULM, but only a mixed one on the currently available Shin bundles. Source artifacts: \path{reports/clinical_translation/realdata_detector_head_audit.json} and \path{reports/clinical_translation/realdata_detector_head_audit.md}.}
+\label{tab:realdata_detector_head_audit}
 \end{table}
