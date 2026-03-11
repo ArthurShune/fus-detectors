@@ -159,6 +159,35 @@ def mace_section() -> tuple[dict[str, Any], list[dict[str, Any]]]:
             'notes': 'Mean retained hits after PD-only contract.'
         },
     ]
+    if holdout is not None:
+        cta = holdout['counts_test_all']
+        cts = holdout['counts_test_selected']
+        rows.extend([
+            {
+                'domain': 'mace', 'claim': 'holdout_alias_gate_reduces_offline_false_positives',
+                'metric': 'holdout_fp_reduction_fraction_all',
+                'value': _pct_reduction(float(cta['fp_pre'] or 0.0), float(cta['fp_post'] or 0.0)),
+                'unit': 'fraction',
+                'source': str(holdout_json.relative_to(ROOT)),
+                'notes': 'Held-out scan4/scan5 false-positive reduction under label-free alias gating on all planes.'
+            },
+            {
+                'domain': 'mace', 'claim': 'holdout_alias_gate_preserves_hits',
+                'metric': 'holdout_hit_retention_all',
+                'value': cta['hit_retention'],
+                'unit': 'fraction',
+                'source': str(holdout_json.relative_to(ROOT)),
+                'notes': 'Held-out scan4/scan5 hit retention under label-free alias gating on all planes.'
+            },
+            {
+                'domain': 'mace', 'claim': 'holdout_selected_planes_are_stable',
+                'metric': 'holdout_hit_retention_selected',
+                'value': cts['hit_retention'],
+                'unit': 'fraction',
+                'source': str(holdout_json.relative_to(ROOT)),
+                'notes': 'Held-out selected-plane hit retention; selected subset is small and used as a stability check only.'
+            },
+        ])
     return section, rows
 
 
@@ -477,6 +506,12 @@ def render_md(packet: dict[str, Any], rows: list[dict[str, Any]]) -> str:
     pdc = mace['pdonly_contract']
     lines.append(f"- In the whole-brain phase-2 sweep, alias gating reduced matched-TPR false positives by `{100*(p2['mean_fp_reduction_fraction'] or 0):.1f}%` while retaining `{100*(p2['mean_gate_kept_fraction'] or 0):.1f}%` of tiles on average.")
     lines.append(f"- In the PD-only contract sweep, the contract stayed in `C0_OFF` for all planes and still reduced false positives by `{100*(pdc['mean_fp_reduction_fraction'] or 0):.1f}%` while retaining `{100*(pdc['mean_hit_retention'] or 0):.1f}%` of hits.")
+    if 'alias_gate_holdout' in mace:
+        h = mace['alias_gate_holdout']
+        h_all = h['counts_test_all']
+        h_sel = h['counts_test_selected']
+        lines.append(f"- In the appendix-only held-out alias-gate check (`scan4/scan5`), label-free gating reduced offline CP/CA/DG proxy false positives by `{100*_pct_reduction(float(h_all['fp_pre'] or 0.0), float(h_all['fp_post'] or 0.0)):.1f}%` while retaining `{100*(h_all['hit_retention'] or 0):.1f}%` of VIS/SC/LGd proxy hits across all held-out planes.")
+        lines.append(f"- On the Pf-peak-selected held-out subset (`n={h_sel['n_planes']}`), hit retention stayed at `{100*(h_sel['hit_retention'] or 0):.1f}%`; this subset is a stability check, not a separate false-positive effect-size estimate.")
     lines.append('- Interpretation: Macé currently supports the translational story as a retrospective whole-brain readout/atlas anchor rather than as a raw-IQ superiority benchmark.')
     lines.append('')
     lines.append('## 4. Brain-Like Real-IQ Anchors (Shin / ULM)')
