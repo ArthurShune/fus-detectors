@@ -70,11 +70,11 @@ The main Brain-* results calibrate the operating threshold $\tau_\alpha$ on the 
   \end{center}
 }
 \endgroup
-\caption{Brain-* cross-window threshold calibration audit for the pre-KA STAP score. ``Within-window'' matches the main reporting protocol (calibrate $\tau_\alpha$ on a window's negatives and evaluate on that same window). ``Cross-window'' calibrates $\tau_\alpha$ on one window and evaluates on a disjoint window ($n=20$ ordered window pairs). Reported values are median (IQR) over windows/pairs. Full outputs are written to \path{reports/brain_crosswindow_calibration.csv} / \path{reports/brain_crosswindow_calibration_summary.json}.}
+\caption{Brain-* cross-window threshold calibration audit for the pre-KA STAP score. ``Within-window'' matches the main reporting protocol (calibrate $\tau_\alpha$ on a window's negatives and evaluate on that same window). ``Cross-window'' calibrates $\tau_\alpha$ on one window and evaluates on a disjoint window ($n=20$ ordered window pairs). Reported values are median (IQR) over windows/pairs.}
 \label{tab:brain_crosswindow_calibration}
 \end{table}
 \else
-\noindent In the paper build, the cross-window threshold-transfer audit is promoted to the main Results section (Table~\ref{tab:brain_crosswindow_calibration}) to emphasize deployable calibration (train on one window, evaluate on another) and to quantify realized FPR drift. Full per-pair outputs are written to \path{reports/brain_crosswindow_calibration.csv} / \path{reports/brain_crosswindow_calibration_summary.json}.
+\noindent In the paper build, the cross-window threshold-transfer audit is promoted to the main Results section (Table~\ref{tab:brain_crosswindow_calibration}) to emphasize deployable calibration (train on one window, evaluate on another) and to quantify realized FPR drift.
 \fi
 
 \subsection{Baseline sanity checks at relaxed operating points (Brain-*)}
@@ -143,7 +143,7 @@ To isolate the role of the STAP core from baseline prefiltering, we run a small 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{figs/paper/twinkling_gammex_ablation_prf_sensitivity.pdf}
-\caption{Gammex flow phantom: (left) STAP-only ablation comparing the standard baseline SVD band-pass + STAP pipeline to STAP-only on raw IQ (first 20 cine frames; both views). (right) PRF override sensitivity on the along view (first 20 cine frames). Points show TPR at a fixed FPR target of $10^{-3}$ with 95\% frame-bootstrap CIs under the structural tube masks. This is a low-cost sanity audit of the frozen-PRF band discretization (not tuned to improve ROC); PRF is an acquisition constant for a sequence family and band-sanity sentinels are deterministic functions of $(N,\mathrm{PRF})$. Full numeric outputs are in \path{reports/twinkling_gammex_ablation_prf_sensitivity.csv}.}
+\caption{Gammex flow phantom: (left) STAP-only ablation comparing the standard baseline SVD band-pass + STAP pipeline to STAP-only on raw IQ (first 20 cine frames; both views). (right) PRF override sensitivity on the along view (first 20 cine frames). Points show TPR at a fixed FPR target of $10^{-3}$ with 95\% frame-bootstrap CIs under the structural tube masks. This is a low-cost sanity audit of the frozen PRF/band discretization, not a tuned performance sweep.}
 \label{fig:twinkling_gammex_ablation_prf_sensitivity}
 \end{figure}
 \else
@@ -381,7 +381,7 @@ It is regenerated from \texttt{scripts/shin\_ratbrain\_baseline\_matrix.py} and
 }%
 }%
 }
-\caption{Shin RatBrain Fig3 baseline comparisons under label-free proxy masks (10 clips; three windows; Shin-U profile). Left: flow-proxy hit rate vs background tail rate $\alpha$ (median and IQR over scenarios). Middle: threshold-free AUC between flow-proxy and background-proxy score distributions. Right: runtime distribution per scenario in this CPU-only environment (baseline time for MC--SVD/RPCA/HOSVD; baseline+STAP total time for STAP variants), using compute-time telemetry captured in bundle metadata (excludes disk I/O and figure rendering). Full per-scenario outputs are in \path{reports/shin_ratbrain_baseline_matrix_shinU_e970_Lt64_nomaskunion_k80.csv}.}
+\caption{Shin RatBrain Fig3 baseline comparisons under label-free proxy masks (10 clips; three windows; Shin-U profile). Left: flow-proxy hit rate vs background tail rate $\alpha$ (median and IQR over scenarios). Middle: threshold-free AUC between flow-proxy and background-proxy score distributions. Right: runtime distribution per scenario in this CPU-only environment (baseline time for MC--SVD/RPCA/HOSVD; baseline+STAP total time for STAP variants), using compute-time telemetry captured in bundle metadata (excludes disk I/O and figure rendering).}
 \label{fig:shin_baseline_matrix_proxy_metrics}
 \end{figure}
 
@@ -401,7 +401,7 @@ It is regenerated from \texttt{scripts/shin\_ratbrain\_baseline\_matrix.py} and
 }%
 }%
 }
-\caption{Shin RatBrain Fig3 measured rigid-motion telemetry across the 30 baseline-matrix scenarios (10 clips $\times$ 3 windows). Left: histogram of estimated rigid shift RMS (pixels) from phase-correlation registration used in baseline preprocessing. Right: proxy-separation uplift $\Delta$AUC (STAP minus MC--SVD) versus the same shift statistic. Full extracted telemetry is in \path{reports/shin_motion_telemetry.csv}.}
+\caption{Shin RatBrain Fig3 measured rigid-motion telemetry across the 30 baseline-matrix scenarios (10 clips $\times$ 3 windows). Left: histogram of estimated rigid shift RMS (pixels) from phase-correlation registration used in baseline preprocessing. Right: proxy-separation uplift $\Delta$AUC (STAP minus MC--SVD) versus the same shift statistic.}
 \label{fig:shin_motion_telemetry}
 \end{figure}
 
@@ -441,12 +441,12 @@ STAP-only & 0.948 [0.944, 0.951] & 0.065 [0.024, 0.078] & 0.020 [0.003, 0.032] &
 \hline
 \end{tabular}
 }%
-\caption{Shin RatBrain Fig3 proxy-metric summary over 30 scenarios (10 clips $\times$ 3 windows) under the frozen Shin-U profile (PRF $=1$~kHz, $L_t=64$, MC--SVD energy fraction $\approx 0.97$). AUC is computed between flow-proxy and background-proxy score distributions; hit@$\alpha$ is the flow-proxy hit rate when the threshold is chosen to achieve background tail rate $\alpha$. Metrics are shown under two proxy-mask definitions: an MC--SVD-derived mask and a consensus mask (majority vote over MC--SVD/RPCA/HOSVD masks). Full per-scenario outputs are in \path{reports/shin_ratbrain_baseline_matrix_shinU_e970_Lt64_nomaskunion_k80.csv} and \path{reports/shin_ratbrain_crossmask_audit_shinU_consensus3.csv}.}
+\caption{Shin RatBrain Fig3 proxy-metric summary over 30 scenarios (10 clips $\times$ 3 windows) under the frozen Shin-U profile (PRF $=1$~kHz, $L_t=64$, MC--SVD energy fraction $\approx 0.97$). AUC is computed between flow-proxy and background-proxy score distributions; hit@$\alpha$ is the flow-proxy hit rate when the threshold is chosen to achieve background tail rate $\alpha$. Metrics are shown under two proxy-mask definitions: an MC--SVD-derived mask and a consensus mask (majority vote over MC--SVD/RPCA/HOSVD masks).}
 \label{tab:shin_baseline_matrix_proxy_summary}
 \end{table}
 
 \paragraph{Cross-mask audit (proxy-label sensitivity).}
-Table~\ref{tab:shin_baseline_matrix_proxy_summary} includes both the baseline-derived mask and the consensus mask results; full cross-mask outputs (including per-scenario thresholds and realized FPRs) are in \path{reports/shin_ratbrain_crossmask_audit_shinU_consensus3.csv}.
+Table~\ref{tab:shin_baseline_matrix_proxy_summary} includes both the baseline-derived mask and the consensus mask results.
 
 \paragraph{Profile variants (Shin-U vs Shin-S/L).}
 In addition to Shin-U, we evaluated two alternative frozen band profiles (Shin-S and Shin-L) designed to push the ``flow'' band Pf toward lower frequencies and increase Pf peak occupancy (an interpretability-forward choice for microvascular-like content under 1~kHz slow time). Across the same 10-clip calibration subset, these variants typically increase Pf-peak(flow) but render the contract actionability check $\Delta_{\mathrm{tail}}$ negative under our flow/background proxy sets, so the prior lies predominantly in $\mathcal{R}_1$ (safety-only) rather than $\mathcal{R}_2$ (actionable). We therefore treat Shin-S/L as conservative ``deployment-mode'' profiles ($\mathcal{R}_1$-only by design) and use Shin-U as the primary ``real IQ viability + safety'' anchor reported here.
@@ -616,6 +616,21 @@ Because there are no task labels and no ground-truth vessel segmentation, quanti
 In addition, the ``brain-like'' motion stress test is an image-domain warp applied to beamformed IQ (rigid + depth-decaying elastic components) rather than a scatterer-level forward model; it is designed to mimic the specific high-rank, spatially varying residual-motion mismatch represented in Brain-SkullOR, not to reproduce full ultrasound physics.
 Accordingly, we interpret Shin results as evidence of (i) deterministic real-IQ ingestion and band-energy summaries, (ii) KA prior auditability and invariants (shrink-only; protected tiles unchanged), and (iii) self-consistency under controlled residual-motion corruption, while leaving ROC uplift claims to labeled regimes (Brain-* simulations) and to future raw-IQ datasets with task/landmark structure.
 
+\subsection{Brain-* strict-tail operating points}
+\label{app:brain-kwave-vnext-table}
+The detailed Brain-* low-FPR operating-point table is placed here so that the main text can foreground the accepted clinically anchored \emph{SIMUS-ClinUtility-v2} checkpoint. The Brain-* pilots remain important as a labeled strict-tail stress test and as the basis for the detector-component ablations that follow.
+
+\IfFileExists{reports/brain_kwave_vnext_baselines_table.tex}{%
+  \input{reports/brain_kwave_vnext_baselines_table.tex}%
+}{%
+  \begin{center}
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/brain_kwave_vnext_baselines_table.tex}.\
+    Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/brain_kwave_vnext_baselines_table.py}.
+  \end{minipage}}
+  \end{center}
+}
+
 \subsection{Corrected SIMUS/PyMUST moving-scatterer benchmark (frozen v1)}
 \label{app:simus-frozen-benchmark}
 To complement the deterministic Brain-* k-Wave pilots with a moving-scatterer forward model, we freeze a corrected SIMUS/PyMUST benchmark after fixing the SIMUS motion-scaling bug uncovered during the motion-ladder audit. The frozen protocol is intentionally symmetric across methods: using corrected actual SIMUS cases from seeds 21--22 as a development split, we select one frozen configuration per method family over the repository's exposed tuning surface, then evaluate those fixed choices on held-out corrected actual cases from seeds 23--24. STAP is scored with its pre-KA matched-subspace detector (\texttt{score\_stap\_preka}); baselines are scored with their native baseline score maps. This benchmark is intended as a moving-scatterer realism and fairness checkpoint, not a replacement for the paper's primary labeled Brain-* and Gammex claims.
@@ -638,7 +653,7 @@ Adaptive Local SVD & \texttt{tile12\_s4\_bal\_r8} & 0.688 & 0.058 & 1.000 \\
 Adaptive Global SVD & \texttt{conservative\_r8} & 0.651 & 0.054 & 0.998 \\
 \hline
 \end{tabular}
-\caption{Corrected SIMUS/PyMUST moving-scatterer frozen-benchmark summary on held-out corrected actual cases (seeds 23--24). Each method family is given one frozen configuration chosen on the corrected development split (seeds 21--22) using the same selection protocol; labels match the implementation taxonomy used in the benchmark scripts. STAP is reported as the chained pipeline MC--SVD $\rightarrow$ STAP using the pre-KA matched-subspace detector score, while the non-STAP rows report the corresponding baseline score. The selected configurations and exact held-out aggregates are taken from \path{reports/simus_motion/simus_fair_profile_search_seed2122to2324_expanded_headline.csv}; per-case held-out outputs are in \path{reports/simus_motion/simus_frozen_benchmark_v1p2_eval_cases.csv}.}
+\caption{Corrected SIMUS/PyMUST moving-scatterer frozen-benchmark summary on held-out corrected actual cases (seeds 23--24). Each method family is given one frozen configuration chosen on the corrected development split (seeds 21--22) using the same selection protocol; labels match the implementation taxonomy used in the benchmark scripts. STAP is reported as the chained pipeline MC--SVD $\rightarrow$ STAP using the pre-KA matched-subspace detector score, while the non-STAP rows report the corresponding baseline score.}
 \label{tab:simus_frozen_benchmark_v1p2}
 \end{table}
 
@@ -660,7 +675,7 @@ HOSVD & \texttt{ef95\_ds2\_t32} & Kasai & 0.800 & 0.342 & 0.729 & \texttt{Motion
 \hline
 \end{tabular}%
 }
-\caption{Stage-symmetric detector-head audit on the same corrected SIMUS/PyMUST held-out cases (seeds 23--24). Each residualizer is frozen to the configuration selected on the corrected development split (seeds 21--22). The ``native head'' is the better of PD and Kasai, chosen on that same development split; in this benchmark Kasai is selected for every residualizer family. The STAP column applies the \emph{same single frozen STAP detector head} (\texttt{Brain-SIMUS-Clin-MotionMidRobust-v0}) to the same residual cube, rather than changing the upstream residualizer. This is the strict detector-head fairness audit: it gives conventional clutter filters their strongest simple Doppler head while asking whether the matched-subspace STAP detector still improves separation on the identical residual. In five of six residualizer families STAP improves both AUC measures and essentially eliminates nuisance-tail activation; for the fixed-energy local SVD residual, the native Kasai head retains slightly higher AUC$_{\mathrm{main/bg}}$, but STAP still sharply improves nuisance separation (AUC$_{\mathrm{main/nuis}}$ 0.611$\rightarrow$0.997, nuisance FPR 0.308$\rightarrow$0.000). Source artifacts are \path{reports/simus_motion/simus_symmetric_pipeline_compare_seed2122to2324_headline.csv} and \path{reports/simus_motion/simus_symmetric_pipeline_compare_seed2122to2324.csv}.}
+\caption{Stage-symmetric detector-head audit on the same corrected SIMUS/PyMUST held-out cases (seeds 23--24). Each residualizer is frozen to the configuration selected on the corrected development split (seeds 21--22). The ``native head'' is the better of PD and Kasai, chosen on that same development split; in this benchmark Kasai is selected for every residualizer family. The STAP column applies the \emph{same single frozen STAP detector head} (\texttt{Brain-SIMUS-Clin-MotionMidRobust-v0}) to the same residual cube, rather than changing the upstream residualizer. This is the strict detector-head fairness audit: it gives conventional clutter filters their strongest simple Doppler head while asking whether the matched-subspace STAP detector still improves separation on the identical residual. In five of six residualizer families STAP improves both AUC measures and essentially eliminates nuisance-tail activation; for the fixed-energy local SVD residual, the native Kasai head retains slightly higher AUC$_{\mathrm{main/bg}}$, but STAP still sharply improves nuisance separation (AUC$_{\mathrm{main/nuis}}$ 0.611$\rightarrow$0.997, nuisance FPR 0.308$\rightarrow$0.000).}
 \label{tab:simus_symmetric_pipeline_v1p2}
 \end{table}
 
@@ -681,7 +696,7 @@ RPCA $\rightarrow$ Kasai & 1.783 & -- & 0.837 & 0.442 & 0.593 \\
 RPCA $\rightarrow$ STAP (headline) & 2.155 & 0.470 & 0.828 & 0.920 & 0.031 \\
 \hline
 \end{tabular}
-\caption{Accepted \emph{SIMUS-ClinUtility-v2} structural checkpoint on held-out evaluation seeds. ``Total runtime'' is the mean held-out bundle runtime on the RTX~4080~SUPER. The STAP add-on is the mean extra STAP stage runtime beyond the upstream residualizer. The frontier makes the translational tradeoff easier to read: the same-residual native reference (\mbox{RPCA$\rightarrow$Kasai}) preserves slightly higher AUC$_{\mathrm{main/bg}}$, but \mbox{RPCA$\rightarrow$STAP} sharply improves nuisance separation and reduces nuisance-tail activation by nearly an order of magnitude at the matched TPR operating point, while \mbox{Adaptive~Global~SVD$\rightarrow$STAP} provides a sub-0.35~s accepted structural operating point that still improves all three structural summary metrics over the fastest strong native simple stack (\mbox{HOSVD$\rightarrow$Kasai}). Source artifacts: \path{reports/simus_v2/simus_v2_latency_frontier.csv} and \path{reports/simus_v2/simus_v2_latency_frontier_pareto.csv}.}
+\caption{Accepted \emph{SIMUS-ClinUtility-v2} structural checkpoint on held-out evaluation seeds. ``Total runtime'' is the mean held-out bundle runtime on the RTX~4080~SUPER. The STAP add-on is the mean extra STAP stage runtime beyond the upstream residualizer. The frontier makes the translational tradeoff easier to read: the same-residual native reference (\mbox{RPCA$\rightarrow$Kasai}) preserves slightly higher AUC$_{\mathrm{main/bg}}$, but \mbox{RPCA$\rightarrow$STAP} sharply improves nuisance separation and reduces nuisance-tail activation by nearly an order of magnitude at the matched TPR operating point, while \mbox{Adaptive~Global~SVD$\rightarrow$STAP} provides a sub-0.35~s accepted structural operating point that still improves all three structural summary metrics over the fastest strong native simple stack (\mbox{HOSVD$\rightarrow$Kasai}).}
 \label{tab:simus_v2_structural_latency}
 \end{table}
 
@@ -699,13 +714,13 @@ Mobile best pipeline: HOSVD $\rightarrow$ PD & 0.179 & 1.193 & 0.587 & 0.606 & 0
 STAP head aggregate (11/12 positive) & 0.442 & +0.088 & -- & -- & -- \\
 \hline
 \end{tabular}
-\caption{Accepted \emph{SIMUS-ClinUtility-v2} functional checkpoint on held-out evaluation seeds using the common readout \texttt{bgcdf\_outside\_glm}. The first two rows report the best end-to-end held-out pipeline on each accepted profile; the final row reports the mean STAP-head runtime in the strict detector-head audit, where the residualizer is held fixed and only the detector head is swapped. In that audit the mean native runtime is 0.274~s, the mean STAP-head runtime is 0.442~s, and the mean held-out selection-score gain is +0.088, with STAP positive in 11/12 accepted family/profile comparisons. Source artifacts: \path{reports/simus_v2/simus_eval_functional_seed221_222_to_223_224_ec6_bgcdf_outside_headline.csv}, \path{reports/simus_v2/simus_functional_stap_head_search_seed221_222_to_223_224_ec6_bgcdf_outside_headline.csv}, and \path{reports/simus_v2/simus_v2_latency_frontier.csv}.}
+\caption{Accepted \emph{SIMUS-ClinUtility-v2} functional checkpoint on held-out evaluation seeds using the common readout \texttt{bgcdf\_outside\_glm}. The first two rows report the best end-to-end held-out pipeline on each accepted profile; the final row reports the mean STAP-head runtime in the strict detector-head audit, where the residualizer is held fixed and only the detector head is swapped. In that audit the mean native runtime is 0.274~s, the mean STAP-head runtime is 0.442~s, and the mean held-out selection-score gain is +0.088, with STAP positive in 11/12 accepted family/profile comparisons.}
 \label{tab:simus_v2_functional_latency}
 \end{table}
 
 \subsection{Compact real-data translation audit}
 \label{app:realdata-translation-audit}
-To make the translational story less dependent on single point estimates, we summarize the existing real-data outputs with paired uncertainty and consistency summaries. On the Mac\'e whole-brain phase-2 sweep, label-free alias gating reduces matched-TPR false positives by 18.6\% (95\% CI 16.8--20.2) while retaining 81.0\% of tiles, and the plane-wise false-positive reduction win rate is 118/120. On the appendix-only held-out alias-gate check (\texttt{scan4}/\texttt{scan5}), false positives are reduced by 14.5\% (95\% CI 7.9--21.4) with a 97.5\% safety win rate across held-out planes. These readout-level results are retrospective and label-free, but they strengthen the claim that nuisance gating can improve whole-brain map hygiene without aggressive hit loss \cite{UrbanWholeBrain2015,Deffieux2021}. Full summaries are in \path{reports/clinical_translation/clinical_translation_uncertainty.json} and \path{reports/clinical_translation/clinical_translation_packet.md}.
+To make the translational story less dependent on single point estimates, we summarize the existing real-data outputs with paired uncertainty and consistency summaries. On the Mac\'e whole-brain phase-2 sweep, label-free alias gating reduces matched-TPR false positives by 18.6\% (95\% CI 16.8--20.2) while retaining 81.0\% of tiles, and the plane-wise false-positive reduction win rate is 118/120. On the appendix-only held-out alias-gate check (\texttt{scan4}/\texttt{scan5}), false positives are reduced by 14.5\% (95\% CI 7.9--21.4) with a 97.5\% safety win rate across held-out planes. These readout-level results are retrospective and label-free, but they strengthen the claim that nuisance gating can improve whole-brain map hygiene without aggressive hit loss \cite{UrbanWholeBrain2015,Deffieux2021}.
 
 For the detector-head claim itself, the most direct real-data test is a same-residual audit: hold the residual cube fixed and compare PD, Kasai, and STAP on the same real-IQ bundle. Coverage is intentionally narrow and explicit. On currently available ULM 7883227 bundles, STAP is uniformly positive relative to both PD and Kasai under the same residual, whereas the currently available Shin bundles remain mixed and should be read as a low-motion real-IQ viability anchor rather than a superiority dataset \cite{ChavignonZenodo7883227,HeilesULMBenchmark2021,ShinLOCAULM2024,ShinZenodo10711806}. Table~\ref{tab:realdata_detector_head_audit} reports the compact summary.
 
@@ -722,6 +737,6 @@ ULM 7883227 brainlike & MC--SVD-style residual & $+0.281$ & $+0.261$ & positive 
 ULM 7883227 elastic & MC--SVD-style residual & $+0.282$ & $+0.251$ & positive on all audited bundles \\
 \hline
 \end{tabular}
-\caption{Compact same-residual detector-head audit on currently available real-IQ bundles. $\Delta$AUC denotes STAP minus the named simple head on the same residual cube. Coverage is intentionally limited to bundles with active STAP scores: Shin currently contributes only raw and MC--SVD residual families, while the ULM entries come from the existing MC--SVD-style motion-sweep bundles. The audit therefore supports a strong real-IQ detector-head story on ULM, but only a mixed one on the currently available Shin bundles. Source artifacts: \path{reports/clinical_translation/realdata_detector_head_audit.json} and \path{reports/clinical_translation/realdata_detector_head_audit.md}.}
+\caption{Compact same-residual detector-head audit on currently available real-IQ bundles. $\Delta$AUC denotes STAP minus the named simple head on the same residual cube. Coverage is intentionally limited to bundles with active STAP scores: Shin currently contributes only raw and MC--SVD residual families, while the ULM entries come from the existing MC--SVD-style motion-sweep bundles. The audit therefore supports a strong real-IQ detector-head story on ULM, but only a mixed one on the currently available Shin bundles.}
 \label{tab:realdata_detector_head_audit}
 \end{table}
