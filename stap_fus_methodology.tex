@@ -609,7 +609,7 @@ We also report representative runtimes for baseline clutter suppression and STAP
 
 \noindent Latency is measured via deterministic replay scripts that run both a \emph{legacy} path (eager execution; CUDA graphs disabled) and an \emph{optimized} path (CUDA graphs enabled when supported; \texttt{STAP\_FAST\_CUDA\_GRAPH=1}). We report \emph{steady-state} means over windows/frames 2..N and exclude the first replay window/frame, which includes one-time GPU overheads (initialization, kernel compilation, and optional CUDA-graph capture). The baseline and STAP stages are timed separately (excluding disk I/O), and ``Total'' reports baseline+STAP wall time; full legacy-versus-optimized per-window statistics and parity checks for the RTX~4080~SUPER reruns are written to \path{reports/latency/4080super_latency_summary.csv} / \path{reports/latency/4080super_latency_summary.json}.
 
-\begin{table}[h]
+\begin{table}[ht]
 \centering
 \small
 \resizebox{\linewidth}{!}{%
@@ -630,7 +630,7 @@ Gammex across (linear17 @ PRF 2500; per cine frame) & $0.005$ & $0.105$ & $0.110
 \label{tab:latency_summary}
 \end{table}
 
-\begin{table}[h]
+\begin{table}[ht]
 \centering
 \small
 \resizebox{\linewidth}{!}{%
