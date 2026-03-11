@@ -22,7 +22,8 @@ When KA is enabled, it is shrink-only and preserves a protected do-not-penalize 
   \item Fixed-profile sensitivity sweep (Brain-OpenSkull; $\lambda$, tile size, $L_t$): Figure~\ref{fig:brain_openskull_profile_sensitivity}.
   \item Shin proxy-metric comparisons, runtime, and measured rigid-motion telemetry: Figure~\ref{fig:shin_baseline_matrix_proxy_metrics} and Figure~\ref{fig:shin_motion_telemetry}.
   \item Corrected SIMUS/PyMUST moving-scatterer frozen-benchmark comparison and stage-symmetric detector-head audit: Tables~\ref{tab:simus_frozen_benchmark_v1p2} and \ref{tab:simus_symmetric_pipeline_v1p2}.
-  \item Accepted SIMUS-ClinUtility-v2 structural/functional latency-vs-performance checkpoint and compact real-data translation audit: Tables~\ref{tab:simus_v2_structural_latency}, \ref{tab:simus_v2_functional_latency}, and \ref{tab:realdata_detector_head_audit}.
+\item Accepted SIMUS-ClinUtility-v2 structural/functional latency-vs-performance checkpoint and compact real-data translation audit: Tables~\ref{tab:simus_v2_structural_latency}, \ref{tab:simus_v2_functional_latency}, and \ref{tab:realdata_detector_head_audit}.
+\item Compact baseline-family summary for the labeled Brain-* pilots: Table~\ref{tab:brain_baseline_summary}.
 \end{itemize}
 
 \subsection{Full ROC curves for labeled regimes}
@@ -655,6 +656,30 @@ Adaptive Global SVD & \texttt{conservative\_r8} & 0.651 & 0.054 & 0.998 \\
 \end{tabular}
 \caption{Corrected SIMUS/PyMUST moving-scatterer frozen-benchmark summary on held-out corrected actual cases (seeds 23--24). Each method family is given one frozen configuration chosen on the corrected development split (seeds 21--22) using the same selection protocol; labels match the implementation taxonomy used in the benchmark scripts. STAP is reported as the chained pipeline MC--SVD $\rightarrow$ STAP using the pre-KA matched-subspace detector score, while the non-STAP rows report the corresponding baseline score.}
 \label{tab:simus_frozen_benchmark_v1p2}
+\end{table}
+
+\begin{table}[t]
+\centering
+\small
+\begingroup
+\setlength{\tabcolsep}{4pt}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{P{4.4cm} c P{5.6cm} c c P{2.9cm}}
+\hline
+Method & scope & cutoff / estimator & tuned? & score & specified \\
+\hline
+MC--SVD & global & fixed energy fraction ($e=0.90$) & tune-once & PD & \SuppOrApp{app:repro} \\
+Adaptive SVD (SV similarity cutoff) & global & rank via spatial singular-vector similarity drop & deterministic & PD & \SuppOrApp{app:baseline-adaptive-svd} \\
+Block-wise local SVD (overlap-add) & local & tile-local energy fraction ($e=0.90$) + overlap-add & deterministic & PD & \SuppOrApp{app:baseline-local-svd} \\
+RPCA & global & PCP (IALM) with fixed iterations/tolerance & deterministic & PD (sparse) & \SuppOrApp{app:impl-details} \\
+HOSVD & global & tensor energy fractions (default $0.99,0.99,0.99$) & deterministic & PD (residual) & \SuppOrApp{app:impl-details} \\
+STAP (pre-KA) & local & robust covariance $\rightarrow$ whitening $\rightarrow$ flow-subspace ratio & fixed profile & matched-subspace & main Methods \\
+\hline
+\end{tabular}
+}
+\endgroup
+\caption{Compact family summary for the labeled Brain-* pilot baselines. Baseline rows share the same PD flow-evidence score on their respective residual cubes; STAP differs by applying tile-local covariance whitening and a matched-subspace flow-band score on top of the MC--SVD residual.}
+\label{tab:brain_baseline_summary}
 \end{table}
 
 \begin{table}[t]
