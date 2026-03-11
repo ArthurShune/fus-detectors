@@ -22,6 +22,7 @@ When KA is enabled, it is shrink-only and preserves a protected do-not-penalize 
   \item Fixed-profile sensitivity sweep (Brain-OpenSkull; $\lambda$, tile size, $L_t$): Figure~\ref{fig:brain_openskull_profile_sensitivity}.
   \item Shin proxy-metric comparisons, runtime, and measured rigid-motion telemetry: Figure~\ref{fig:shin_baseline_matrix_proxy_metrics} and Figure~\ref{fig:shin_motion_telemetry}.
   \item Corrected SIMUS/PyMUST moving-scatterer frozen-benchmark comparison and stage-symmetric detector-head audit: Tables~\ref{tab:simus_frozen_benchmark_v1p2} and \ref{tab:simus_symmetric_pipeline_v1p2}.
+  \item Accepted SIMUS-ClinUtility-v2 structural/functional latency-vs-performance checkpoint: Tables~\ref{tab:simus_v2_structural_latency} and \ref{tab:simus_v2_functional_latency}.
 \end{itemize}
 
 \subsection{Full ROC curves for labeled regimes}
@@ -661,4 +662,42 @@ HOSVD & \texttt{ef95\_ds2\_t32} & Kasai & 0.800 & 0.342 & 0.729 & \texttt{Motion
 }
 \caption{Stage-symmetric detector-head audit on the same corrected SIMUS/PyMUST held-out cases (seeds 23--24). Each residualizer is frozen to the configuration selected on the corrected development split (seeds 21--22). The ``native head'' is the better of PD and Kasai, chosen on that same development split; in this benchmark Kasai is selected for every residualizer family. The STAP column applies the \emph{same single frozen STAP detector head} (\texttt{Brain-SIMUS-Clin-MotionMidRobust-v0}) to the same residual cube, rather than changing the upstream residualizer. This is the strict detector-head fairness audit: it gives conventional clutter filters their strongest simple Doppler head while asking whether the matched-subspace STAP detector still improves separation on the identical residual. In five of six residualizer families STAP improves both AUC measures and essentially eliminates nuisance-tail activation; for the fixed-energy local SVD residual, the native Kasai head retains slightly higher AUC$_{\mathrm{main/bg}}$, but STAP still sharply improves nuisance separation (AUC$_{\mathrm{main/nuis}}$ 0.611$\rightarrow$0.997, nuisance FPR 0.308$\rightarrow$0.000). Source artifacts are \path{reports/simus_motion/simus_symmetric_pipeline_compare_seed2122to2324_headline.csv} and \path{reports/simus_motion/simus_symmetric_pipeline_compare_seed2122to2324.csv}.}
 \label{tab:simus_symmetric_pipeline_v1p2}
+\end{table}
+
+\subsection{Accepted SIMUS-ClinUtility-v2 checkpoint: latency versus performance}
+\label{app:simus-v2-latency}
+The accepted \emph{SIMUS-ClinUtility-v2} track is intentionally narrower and more clinically anchored than the corrected frozen-v1 checkpoint. Competitive structural evaluation is restricted to the accepted nuisance profiles \texttt{ClinMobile-Pf-v2} and \texttt{ClinIntraOpParenchyma-Pf-v3}; the surface/coupling-heavy profile remains telemetry-only. For translational readers, the practical question is not only whether STAP improves nuisance separation, but how much runtime overhead is paid to obtain that improvement on the final accepted stacks. Table~\ref{tab:simus_v2_structural_latency} therefore summarizes the held-out structural checkpoint on an RTX~4080~SUPER using the final accepted deployed stack (\mbox{RPCA$\rightarrow$STAP}) together with two native simple references: the fastest strong native simple stack overall (\mbox{HOSVD$\rightarrow$Kasai}) and the same-residual native reference (\mbox{RPCA$\rightarrow$Kasai}). These are held-out bundle runtimes for the accepted SIMUS structural cases, not the earlier replay-window latency protocol used for Brain-*, Shin, and Gammex.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{l c c c c c}
+\hline
+Structural stack & Total runtime (s) & STAP add-on (s) & AUC$_{\mathrm{main/bg}}$ & AUC$_{\mathrm{main/nuis}}$ & FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$ \\
+\hline
+HOSVD $\rightarrow$ Kasai & 0.167 & -- & 0.753 & 0.561 & 0.453 \\
+RPCA $\rightarrow$ Kasai & 1.783 & -- & 0.837 & 0.442 & 0.593 \\
+RPCA $\rightarrow$ STAP & 2.155 & 0.470 & 0.828 & 0.920 & 0.031 \\
+\hline
+\end{tabular}
+\caption{Accepted \emph{SIMUS-ClinUtility-v2} structural checkpoint on held-out evaluation seeds. ``Total runtime'' is the mean held-out bundle runtime on the RTX~4080~SUPER. The STAP add-on is the mean extra STAP stage runtime beyond the upstream residualizer. The translational tradeoff is explicit: the same-residual native reference (\mbox{RPCA$\rightarrow$Kasai}) preserves slightly higher AUC$_{\mathrm{main/bg}}$, but \mbox{RPCA$\rightarrow$STAP} sharply improves nuisance separation and reduces nuisance-tail activation by nearly an order of magnitude at the matched TPR operating point. Source artifact: \path{reports/simus_v2/simus_v2_latency_summary.csv}.}
+\label{tab:simus_v2_structural_latency}
+\end{table}
+
+The functional checkpoint is reported separately because the common readout is different. On the broader held-out split we freeze the common readout to \texttt{bgcdf\_outside\_glm}, which makes the detector-head comparison interpretable in the same downstream map-hygiene language across families. Table~\ref{tab:simus_v2_functional_latency} summarizes the best held-out functional pipeline on each accepted profile together with the aggregate fair head result. The end-to-end best pipeline remains profile-dependent (intraoperative parenchymal mapping prefers an RPCA+STAP stack, while the mobile profile prefers a native HOSVD+PD stack), but the stricter detector-head audit still shows STAP as the better detector head in 11/12 accepted family/profile comparisons, with the sole remaining miss being an effective tie.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{l c c c c c}
+\hline
+Functional summary & Runtime (s) & Selection score & AUC$_{\mathrm{act/bg}}$ & AUC$_{\mathrm{act/nuis}}$ & Outside frac @ $10^{-3}$ \\
+\hline
+Intra-op best pipeline: RPCA $\rightarrow$ PD-after-STAP & 0.763 & 1.434 & 0.708 & 0.728 & 0.00124 \\
+Mobile best pipeline: HOSVD $\rightarrow$ PD & 0.179 & 1.193 & 0.587 & 0.606 & 0.00064 \\
+STAP head aggregate (11/12 positive) & 0.442 & +0.088 & -- & -- & -- \\
+\hline
+\end{tabular}
+\caption{Accepted \emph{SIMUS-ClinUtility-v2} functional checkpoint on held-out evaluation seeds using the common readout \texttt{bgcdf\_outside\_glm}. The first two rows report the best end-to-end held-out pipeline on each accepted profile; the final row reports the mean STAP-head runtime in the strict detector-head audit, where the residualizer is held fixed and only the detector head is swapped. In that audit the mean native runtime is 0.274~s, the mean STAP-head runtime is 0.442~s, and the mean held-out selection-score gain is +0.088, with STAP positive in 11/12 accepted family/profile comparisons. Source artifacts: \path{reports/simus_v2/simus_eval_functional_seed221_222_to_223_224_ec6_bgcdf_outside_headline.csv}, \path{reports/simus_v2/simus_functional_stap_head_search_seed221_222_to_223_224_ec6_bgcdf_outside_headline.csv}, and \path{reports/simus_v2/simus_v2_latency_summary.csv}.}
+\label{tab:simus_v2_functional_latency}
 \end{table}
