@@ -27,6 +27,7 @@ tmp/
 *.log
 *.out
 *.synctex.gz
+pymust_specv2.md
 
 # Large run outputs (tracked via LFS or archived)
 runs/motion/r4c/mcsvd_k8_reg4_stride2_seed*/
