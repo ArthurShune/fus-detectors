@@ -38,6 +38,12 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--dev-seeds", type=str, default="221")
     ap.add_argument("--eval-seeds", type=str, default="222")
     ap.add_argument("--families", type=str, required=True)
+    ap.add_argument(
+        "--profile-family-pairs",
+        type=str,
+        default="",
+        help="Optional comma-separated profile:family pairs to evaluate, e.g. ClinMobile-Pf-v2:local_svd.",
+    )
     ap.add_argument("--readout-mode", type=str, default="basic", choices=READOUT_MODES)
     ap.add_argument("--stap-profiles", type=str, default=",".join(FIXED_STAP_PROFILES))
     ap.add_argument("--stap-device", type=str, default="cuda")
@@ -48,6 +54,16 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--out-headline-csv", type=Path, required=True)
     ap.add_argument("--out-headline-json", type=Path, required=True)
     return ap.parse_args()
+
+
+def _parse_profile_family_pairs(spec: str) -> set[tuple[str, str]]:
+    out: set[tuple[str, str]] = set()
+    for item in _split_csv_list(str(spec or "")):
+        parts = item.split(":", 1)
+        if len(parts) != 2:
+            raise ValueError(f"expected profile:family pair, got {item!r}")
+        out.add((parts[0].strip(), parts[1].strip()))
+    return out
 
 
 def _candidate_grid(families: set[str]) -> list[dict[str, str]]:
@@ -73,6 +89,12 @@ def main() -> None:
     if not families:
         raise ValueError("no families")
     base_profiles = _split_csv_list(str(args.profiles))
+    pair_filter = _parse_profile_family_pairs(str(args.profile_family_pairs))
+    if pair_filter:
+        base_profiles = [p for p in base_profiles if any(p == q[0] for q in pair_filter)]
+        families = {f for f in families if any(f == q[1] for q in pair_filter)}
+        if not base_profiles or not families:
+            raise ValueError("profile-family pair filter excluded all requested profiles/families")
     dev_seeds = [int(x) for x in _split_csv_list(str(args.dev_seeds))]
     eval_seeds = [int(x) for x in _split_csv_list(str(args.eval_seeds))]
     stap_profiles = _split_csv_list(str(args.stap_profiles))
@@ -111,6 +133,8 @@ def main() -> None:
                 icube_shape = tuple(int(v) for v in np.load(Path(task_rows[0]["dataset_dir"]) / "icube.npy", mmap_mode="r").shape)
 
                 for cand in candidates:
+                    if pair_filter and (base_profile, str(cand["method_family"])) not in pair_filter:
+                        continue
                     bundle_overrides = cand["override_builder"](icube_shape)
                     native_scores = {"pd": [], "kasai": []}
                     native_null_scores = {"pd": [], "kasai": []}
@@ -310,6 +334,8 @@ def main() -> None:
     comparison = []
     for base_profile in base_profiles:
         for family in sorted(families):
+            if pair_filter and (base_profile, family) not in pair_filter:
+                continue
             dev_items = [r for r in dev_summary if str(r['base_profile']) == base_profile and str(r['method_family']) == family]
             native_dev = [r for r in dev_items if str(r['detector_head']) in {'pd','kasai'}]
             stap_dev = [r for r in dev_items if str(r['detector_head']) in {'stap','stap_pd'}]
@@ -347,6 +373,7 @@ def main() -> None:
         'dev_seeds': dev_seeds,
         'eval_seeds': eval_seeds,
         'families': sorted(families),
+        'profile_family_pairs': sorted([{'base_profile': p, 'method_family': f} for (p, f) in pair_filter], key=lambda x: (x['base_profile'], x['method_family'])),
         'readout_mode': str(args.readout_mode),
         'stap_profiles': stap_profiles,
         'rows': rows,
