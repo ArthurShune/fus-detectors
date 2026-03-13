@@ -3578,6 +3578,374 @@ def _band_energy_whitened_batched(
     return T_band, sw_pow
 
 
+def _band_energy_unwhitened_batched(
+    S_B_Lt_N_hw: torch.Tensor,
+    C_t: torch.Tensor,
+    *,
+    ridge: float = 0.10,
+    device: Optional[str] = None,
+    dtype: torch.dtype = torch.complex64,
+    eps: float = 1e-10,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Exact band-energy computation for the unwhitened detector family.
+
+    Unlike `_band_energy_whitened_batched`, this path does not build or factor any
+    covariance matrix. The band projector depends only on the fixed constraint
+    matrix `C_t`, so we precompute that once and apply it directly to all
+    snapshots in the batch.
+    """
+    if device is None:
+        device = S_B_Lt_N_hw.device
+
+    prec = os.getenv("STAP_BAND_PRECISION", "").strip().lower()
+    work_dtype = torch.complex128 if prec == "fp64" else dtype
+
+    S = S_B_Lt_N_hw.to(device=device, dtype=work_dtype)
+    Ct = C_t.to(device=device, dtype=work_dtype)
+    if Ct.numel() == 0:
+        B = int(S.shape[0])
+        N = int(S.shape[2])
+        h = int(S.shape[3])
+        w = int(S.shape[4]) if S.ndim >= 5 else 1
+        zeros = torch.zeros((B, N, h, w), dtype=torch.float32, device=device)
+        return zeros, zeros
+
+    if S.ndim == 4:
+        S = S.unsqueeze(-1)
+    Bsz, Lt_dim, N, h, w = S.shape
+    S_flat = S.permute(0, 1, 3, 4, 2).contiguous().view(Bsz, Lt_dim, -1)
+    sw_pow_flat = torch.sum(S_flat.conj() * S_flat, dim=1).real
+
+    Kc = int(Ct.shape[-1])
+    Lt_dim = int(Ct.shape[-2])
+    if Kc > Lt_dim:
+        with _prof_ctx("stap:band_energy:project:chol_Gram"):
+            Q, R = torch.linalg.qr(Ct, mode="reduced")
+            if R.numel() == 0:
+                B = int(S.shape[0])
+                N = int(S.shape[2])
+                zeros = torch.zeros((B, N, h, w), dtype=torch.float32, device=device)
+                return zeros, torch.clamp(sw_pow_flat, min=eps).view(B, N, h, w)
+            diag_abs = torch.abs(torch.diagonal(R, dim1=-2, dim2=-1))
+            sigma_max = torch.clamp(torch.max(diag_abs), min=1e-12)
+            rel_tol = max(1e-5, float(ridge))
+            keep = diag_abs >= (rel_tol * sigma_max)
+            if not bool(torch.any(keep)):
+                keep = diag_abs >= torch.max(diag_abs)
+            Q = Q[:, keep]
+        with _prof_ctx("stap:band_energy:project:gram_solve"):
+            z = torch.matmul(Q.conj().transpose(-2, -1).unsqueeze(0), S_flat)
+            T_band_flat = torch.sum(z.conj() * z, dim=1).real
+    else:
+        CtH = Ct.conj().transpose(-2, -1)
+        Gram = CtH @ Ct
+        ridge_eff = float(ridge)
+        if ridge_eff > 0.0:
+            try:
+                evals = torch.linalg.eigvalsh(Gram).real
+                evals = torch.clamp(evals, min=1e-12)
+                evals_max = evals.max()
+            except RuntimeError:
+                evals_max = torch.tensor(1.0, device=Ct.device, dtype=torch.float32)
+            ridge_scale = float(evals_max.item()) if float(evals_max.item()) < 1.0 else 1.0
+            Gram = Gram + (ridge_eff * ridge_scale) * torch.eye(
+                Gram.shape[-1], dtype=Gram.dtype, device=Gram.device
+            )
+
+        with _prof_ctx("stap:band_energy:project:chol_Gram"):
+            Lg = torch.linalg.cholesky(Gram)
+        with _prof_ctx("stap:band_energy:project:gram_solve"):
+            A = torch.linalg.solve_triangular(Lg, CtH, upper=False)
+            Pf = Ct @ torch.linalg.solve_triangular(Lg.conj().transpose(-2, -1), A, upper=True)
+            Pf = 0.5 * (Pf + Pf.conj().transpose(-2, -1))
+            proj = torch.matmul(Pf.unsqueeze(0), S_flat)
+            T_band_flat = torch.sum(S_flat.conj() * proj, dim=1).real
+
+    T_band = torch.clamp(T_band_flat, min=0.0).view(Bsz, N, h, w)
+    sw_pow = torch.clamp(sw_pow_flat, min=eps).view(Bsz, N, h, w)
+    return T_band, sw_pow
+
+
+def _direct_detector_infos_from_outputs(
+    band_frac_out: torch.Tensor,
+    score_out: torch.Tensor,
+    *,
+    Lt: int,
+    variant: str,
+    whiten_gamma: float,
+    cov_train_trim_q: float,
+    fd_grid: torch.Tensor,
+    fd_grid_source: str,
+    fd_meta: dict[str, float],
+    flow_band_used: Optional[Tuple[float, float]],
+    motion_half_span_hz: float,
+    cov_estimator: str,
+    diag_load: float,
+    msd_lambda_used: float,
+    t_hankel: float,
+    t_fdgrid: float,
+    t_band: float,
+) -> List[dict]:
+    B = int(band_frac_out.shape[0])
+    band_flat = band_frac_out.reshape(B, -1)
+    score_flat = score_out.reshape(B, -1)
+    band_sorted, _ = torch.sort(band_flat, dim=1)
+    score_sorted, _ = torch.sort(score_flat, dim=1)
+    Kb = int(band_sorted.shape[1])
+    Ks = int(score_sorted.shape[1])
+
+    def _interp_quantile(sorted_vals: torch.Tensor, q: float, count: int) -> torch.Tensor:
+        if count <= 0:
+            return torch.zeros((B,), dtype=torch.float32, device=sorted_vals.device)
+        pos = q * float(count - 1)
+        i0 = int(math.floor(pos))
+        i1 = min(count - 1, i0 + 1)
+        frac = float(pos - i0)
+        return (1.0 - frac) * sorted_vals[:, i0] + frac * sorted_vals[:, i1]
+
+    band_q50 = _interp_quantile(band_sorted, 0.50, Kb)
+    band_q90 = _interp_quantile(band_sorted, 0.90, Kb)
+    score_q10 = _interp_quantile(score_sorted, 0.10, Ks)
+    score_q50 = _interp_quantile(score_sorted, 0.50, Ks)
+    score_q90 = _interp_quantile(score_sorted, 0.90, Ks)
+    score_mean = score_flat.mean(dim=1)
+    score_var = score_flat.var(dim=1, unbiased=False)
+    flow_mean = band_flat.mean(dim=1)
+
+    infos: List[dict] = []
+    msd_lambda_eff = float(msd_lambda_used)
+    for b in range(B):
+        flow = float(flow_mean[b].item())
+        infos.append(
+            {
+                "Lt": int(Lt),
+                "detector_variant": str(variant),
+                "whiten_gamma": float(whiten_gamma),
+                "fd_grid_len": int(len(fd_grid)),
+                "band_Kc": int(len(fd_grid)),
+                "fd_grid_source": str(fd_grid_source),
+                "span_hz": float(fd_meta.get("span_hz", 0.0)),
+                "grid_step_hz": float(fd_meta.get("grid_step_hz", 0.0)),
+                "flow_band_hz": (
+                    [float(flow_band_used[0]), float(flow_band_used[1])]
+                    if flow_band_used is not None
+                    else None
+                ),
+                "cov_estimator": str(cov_estimator),
+                "diag_load": float(diag_load),
+                "cov_train_trim_q": float(cov_train_trim_q),
+                "cov_train_trim_k_eff": None,
+                "motion_half_span_hz": float(motion_half_span_hz),
+                "msd_lambda": msd_lambda_eff,
+                "lambda_conditioned": 0.0,
+                "lambda_condition_needed": 0.0,
+                "msd_lambda_conditioned": 0.0,
+                "msd_lambda_needed": 0.0,
+                "cond_R": float("nan"),
+                "cond_loaded": float("nan"),
+                "cov_trace": float("nan"),
+                "cov_rank_proxy": float("nan"),
+                "diag_load_requested": float(diag_load),
+                "kc_flow_cap": int(len(fd_grid)),
+                "band_fraction_median": float(band_q50[b].item()),
+                "band_fraction_p90": float(band_q90[b].item()),
+                "band_fraction_q50": float(band_q50[b].item()),
+                "score_q10": float(score_q10[b].item()),
+                "score_q50": float(score_q50[b].item()),
+                "score_q90": float(score_q90[b].item()),
+                "score_mean": float(score_mean[b].item()),
+                "score_var": float(score_var[b].item()),
+                "flow_fraction_tile": flow,
+                "motion_fraction_tile": 0.0,
+                "alias_fraction_tile": max(0.0, 1.0 - flow),
+                "gamma_flow": float("nan"),
+                "gamma_perp": float("nan"),
+                "stap_tile_statistic_used": False,
+                "stap_fast_direct_unwhitened": True,
+                "stap_hankel_ms": float(1000.0 * t_hankel),
+                "stap_cov_ms": 0.0,
+                "stap_shrink_ms": 0.0,
+                "stap_fdgrid_ms": float(1000.0 * t_fdgrid),
+                "stap_msd_ms": float(1000.0 * t_band),
+            }
+        )
+    return infos
+
+
+def _direct_unwhitened_detector_batched(
+    S_B_Lt_N_hw: torch.Tensor,
+    *,
+    prf_hz: float,
+    Lt: int,
+    diag_load: float,
+    cov_train_trim_q: float,
+    cov_estimator: str,
+    grid_step_rel: float,
+    fd_span_rel: Tuple[float, float],
+    min_pts: int,
+    max_pts: int,
+    fd_min_abs_hz: float,
+    motion_half_span_rel: Optional[float],
+    msd_ridge: float,
+    msd_agg_mode: str,
+    msd_ratio_rho: float,
+    msd_lambda: Optional[float],
+    detector_variant: str,
+    whiten_gamma: float,
+    fd_span_mode: str = "psd",
+    flow_band_hz: Optional[Tuple[float, float]] = None,
+    Ct_override: Optional[torch.Tensor] = None,
+    device: Optional[str] = None,
+    return_torch: bool = False,
+    telemetry_enabled: bool = True,
+    t_hankel: float = 0.0,
+) -> Tuple[np.ndarray | torch.Tensor, np.ndarray | torch.Tensor, List[dict]]:
+    if device is None:
+        device = S_B_Lt_N_hw.device
+
+    motion_half_span_hz = 0.0
+    base = prf_hz / float(Lt)
+    if motion_half_span_rel is not None:
+        motion_half_span_hz = max(0.0, float(motion_half_span_rel) * base)
+    else:
+        motion_half_span_hz = 0.1 * base
+
+    t_fdgrid = 0.0
+    fd_mode = str(fd_span_mode or "psd").strip().lower()
+    fd_grid_source = "span"
+    flow_band_used: Tuple[float, float] | None = None
+    t3 = time.perf_counter()
+    with _prof_ctx("stap:fd_grid"):
+        if fd_mode in {"flow_band", "band"} and flow_band_hz is not None:
+            try:
+                flow_band_used = (float(flow_band_hz[0]), float(flow_band_hz[1]))
+            except Exception:
+                flow_band_used = None
+            if flow_band_used is not None:
+                fd_grid, fd_meta = build_fd_grid_flow_band(
+                    prf_hz,
+                    Lt,
+                    flow_band_used,
+                    motion_half_span_hz=float(motion_half_span_hz),
+                    min_pts=min_pts,
+                    max_pts=max_pts,
+                )
+                fd_grid_source = "flow_band"
+            else:
+                fd_grid, fd_meta = build_fd_grid_span(
+                    prf_hz,
+                    Lt,
+                    fd_span_rel=fd_span_rel,
+                    grid_step_rel=grid_step_rel,
+                    fd_min_abs_hz=fd_min_abs_hz,
+                    min_pts=min_pts,
+                    max_pts=max_pts,
+                )
+        else:
+            fd_grid, fd_meta = build_fd_grid_span(
+                prf_hz,
+                Lt,
+                fd_span_rel=fd_span_rel,
+                grid_step_rel=grid_step_rel,
+                fd_min_abs_hz=fd_min_abs_hz,
+                min_pts=min_pts,
+                max_pts=max_pts,
+            )
+    t_fdgrid = time.perf_counter() - t3
+
+    with _prof_ctx("stap:constraints"):
+        if Ct_override is not None:
+            Ct = Ct_override.to(device=device, dtype=S_B_Lt_N_hw.dtype)
+        else:
+            Ct = bandpass_constraints_temporal(
+                Lt,
+                prf_hz,
+                fd_grid_hz=fd_grid.tolist(),
+                device=device,
+                dtype=S_B_Lt_N_hw.dtype,
+                mode="exp+deriv",
+            )
+
+    t4 = time.perf_counter()
+    with _prof_ctx("stap:band_energy:snapshots"):
+        T_band, sw_pow = _band_energy_unwhitened_batched(
+            S_B_Lt_N_hw,
+            Ct,
+            ridge=msd_ridge,
+            device=device,
+            dtype=S_B_Lt_N_hw.dtype,
+            eps=1e-10,
+        )
+    sw_pow_safe = torch.clamp(sw_pow, min=1e-10)
+    r_flow = torch.clamp(T_band / sw_pow_safe, min=0.0, max=1.0)
+    denom = torch.clamp(sw_pow_safe - T_band + float(msd_ratio_rho) * sw_pow_safe, min=1e-10)
+    ratio = torch.clamp(T_band / denom, min=0.0)
+    with _prof_ctx("stap:aggregate"):
+        band_frac_out = aggregate_over_snapshots_batched(r_flow, mode=msd_agg_mode).to(
+            dtype=torch.float32
+        )
+        ratio_out = aggregate_over_snapshots_batched(ratio, mode=msd_agg_mode).to(
+            dtype=torch.float32
+        )
+        pow_out = aggregate_over_snapshots_batched(sw_pow_safe, mode=msd_agg_mode).to(
+            dtype=torch.float32
+        )
+        score_out = pow_out if detector_variant == "whitened_power" else ratio_out
+    t_band = time.perf_counter() - t4
+
+    if telemetry_enabled:
+        infos = _direct_detector_infos_from_outputs(
+            band_frac_out,
+            score_out,
+            Lt=Lt,
+            variant=str(detector_variant),
+            whiten_gamma=float(whiten_gamma),
+            cov_train_trim_q=float(cov_train_trim_q),
+            fd_grid=fd_grid,
+            fd_grid_source=fd_grid_source,
+            fd_meta=fd_meta,
+            flow_band_used=flow_band_used,
+            motion_half_span_hz=float(motion_half_span_hz),
+            cov_estimator=str(cov_estimator),
+            diag_load=float(diag_load),
+            msd_lambda_used=float(msd_lambda) if msd_lambda is not None else 0.0,
+            t_hankel=float(t_hankel),
+            t_fdgrid=float(t_fdgrid),
+            t_band=float(t_band),
+        )
+    else:
+        B = int(band_frac_out.shape[0])
+        infos = []
+        for _ in range(B):
+            infos.append(
+                {
+                    "detector_variant": str(detector_variant),
+                    "whiten_gamma": float(whiten_gamma),
+                    "cov_train_trim_q": float(cov_train_trim_q),
+                    "cond_R": float("nan"),
+                    "cond_loaded": float("nan"),
+                    "cov_rank_proxy": float("nan"),
+                    "gamma_flow": float("nan"),
+                    "gamma_perp": float("nan"),
+                    "stap_fast_direct_unwhitened": True,
+                    "stap_hankel_ms": float(1000.0 * t_hankel),
+                    "stap_cov_ms": 0.0,
+                    "stap_shrink_ms": 0.0,
+                    "stap_fdgrid_ms": float(1000.0 * t_fdgrid),
+                    "stap_msd_ms": float(1000.0 * t_band),
+                }
+            )
+
+    if return_torch:
+        return band_frac_out.detach(), score_out.detach(), infos
+    return (
+        band_frac_out.detach().cpu().numpy().astype(np.float32, copy=False),
+        score_out.detach().cpu().numpy().astype(np.float32, copy=False),
+        infos,
+    )
+
+
 def _fractional_whiten_pair_batched(
     R_lam: torch.Tensor,
     S_flat: torch.Tensor,
@@ -4953,6 +5321,35 @@ def stap_temporal_core_batched(
         )
     t_hankel = time.perf_counter() - t0
 
+    if whiten_gamma <= 1e-8:
+        return _direct_unwhitened_detector_batched(
+            S_B_Lt_N_hw,
+            prf_hz=float(prf_hz),
+            Lt=int(Lt),
+            diag_load=float(diag_load),
+            cov_train_trim_q=float(cov_train_trim_q or 0.0),
+            cov_estimator=str(cov_estimator).lower(),
+            grid_step_rel=float(grid_step_rel),
+            fd_span_rel=fd_span_rel,
+            min_pts=int(min_pts),
+            max_pts=int(max_pts),
+            fd_min_abs_hz=float(fd_min_abs_hz),
+            motion_half_span_rel=motion_half_span_rel,
+            msd_ridge=float(msd_ridge),
+            msd_agg_mode=str(msd_agg_mode),
+            msd_ratio_rho=float(msd_ratio_rho),
+            msd_lambda=msd_lambda,
+            detector_variant=str(variant),
+            whiten_gamma=float(whiten_gamma),
+            fd_span_mode=str(fd_span_mode),
+            flow_band_hz=flow_band_hz,
+            Ct_override=Ct_override,
+            device=device,
+            return_torch=return_torch,
+            telemetry_enabled=telemetry_enabled,
+            t_hankel=float(t_hankel),
+        )
+
     B, _, N, h, w = S_B_Lt_N_hw.shape
     # Match the manuscript baseline snapshot flattening order (h,w,N) to avoid
     # silent stride/reshape-dependent behavior changes on non-contiguous Hankel
@@ -5553,6 +5950,35 @@ def pd_temporal_core_batched(
         cube_batch_T_hw, Lt, center=True, device=device, dtype=cube_batch_T_hw.dtype
     )
     t_hankel = time.perf_counter() - t0
+
+    if whiten_gamma <= 1e-8:
+        return _direct_unwhitened_detector_batched(
+            S_B_Lt_N_hw,
+            prf_hz=float(prf_hz),
+            Lt=int(Lt),
+            diag_load=float(diag_load),
+            cov_train_trim_q=float(cov_train_trim_q or 0.0),
+            cov_estimator=str(cov_estimator).lower(),
+            grid_step_rel=float(grid_step_rel),
+            fd_span_rel=fd_span_rel,
+            min_pts=int(min_pts),
+            max_pts=int(max_pts),
+            fd_min_abs_hz=float(fd_min_abs_hz),
+            motion_half_span_rel=motion_half_span_rel,
+            msd_ridge=float(msd_ridge),
+            msd_agg_mode=str(msd_agg_mode),
+            msd_ratio_rho=float(msd_ratio_rho),
+            msd_lambda=msd_lambda,
+            detector_variant=str(variant),
+            whiten_gamma=float(whiten_gamma),
+            fd_span_mode=str(fd_span_mode),
+            flow_band_hz=flow_band_hz,
+            Ct_override=Ct_override,
+            device=device,
+            return_torch=return_torch,
+            telemetry_enabled=telemetry_enabled,
+            t_hankel=float(t_hankel),
+        )
 
     B, _, N, h, w = S_B_Lt_N_hw.shape
     # Match the manuscript baseline snapshot flattening order (h,w,N) to avoid

@@ -301,6 +301,9 @@ def _run_shin(args: argparse.Namespace) -> Dict[str, Any]:
                 band_ratio_flow_high_hz=float(args.flow_high_hz),
                 band_ratio_alias_center_hz=float(args.alias_center_hz),
                 band_ratio_alias_width_hz=float(args.alias_width_hz),
+                stap_detector_variant=str(args.stap_detector_variant),
+                stap_whiten_gamma=float(args.stap_whiten_gamma),
+                hybrid_rescue_rule=str(args.hybrid_rescue_rule),
                 stap_device=str(args.stap_device),
                 run_stap=True,
                 stap_conditional_enable=bool(conditional),
@@ -431,6 +434,9 @@ def _run_gammex(args: argparse.Namespace) -> Dict[str, Any]:
                 band_ratio_flow_high_hz=float(args.flow_high_hz),
                 band_ratio_alias_center_hz=float(args.alias_center_hz),
                 band_ratio_alias_width_hz=float(args.alias_width_hz),
+                stap_detector_variant=str(args.stap_detector_variant),
+                stap_whiten_gamma=float(args.stap_whiten_gamma),
+                hybrid_rescue_rule=str(args.hybrid_rescue_rule),
                 mask_flow_override=mask_flow,
                 mask_bg_override=mask_bg,
                 stap_conditional_enable=False,
@@ -511,6 +517,26 @@ def main() -> None:
         default=False,
         help="Enable CUDA-event stage profiling inside the STAP fast path (default: %(default)s).",
     )
+    ap.add_argument(
+        "--stap-detector-variant",
+        type=str,
+        default="adaptive_guard",
+        choices=["msd_ratio", "whitened_power", "unwhitened_ratio", "hybrid_rescue", "adaptive_guard"],
+        help="Detector-family mode to profile (default: %(default)s).",
+    )
+    ap.add_argument(
+        "--stap-whiten-gamma",
+        type=float,
+        default=1.0,
+        help="Whitening exponent for msd_ratio / hybrid specialist branch (default: %(default)s).",
+    )
+    ap.add_argument(
+        "--hybrid-rescue-rule",
+        type=str,
+        default="guard_promote_v1",
+        choices=["guard_frac_v1", "alias_rescue_v1", "band_ratio_v1", "guard_promote_v1"],
+        help="Frozen routing rule used by hybrid/adaptive detector variants (default: %(default)s).",
+    )
 
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -567,6 +593,14 @@ def main() -> None:
     ap_g.add_argument("--alias-width-hz", type=float, default=250.0)
 
     args = ap.parse_args()
+    os.environ.setdefault("STAP_FAST_PATH", "1")
+    os.environ.setdefault("STAP_TILING_UNFOLD", "1")
+    os.environ.setdefault("STAP_FAST_CUDA_GRAPH", "1")
+    os.environ.setdefault("STAP_FAST_PD_ONLY", "1")
+    os.environ.setdefault("STAP_FAST_TELEMETRY", "0")
+    os.environ.setdefault("STAP_LATENCY_MODE", "1")
+    os.environ.setdefault("MC_SVD_TORCH", "1")
+    os.environ.setdefault("MC_SVD_TORCH_RETURN_CUBE", "1")
     if bool(args.profile_cuda_stages):
         os.environ["STAP_CUDA_EVENT_TIMING"] = "1"
 

@@ -166,6 +166,29 @@ def _normalize_hybrid_rescue_rule(rule: str | None) -> dict[str, object]:
     return {"name": name, **cfg}
 
 
+def _hybrid_choose_advanced_mask(
+    feature_map: np.ndarray,
+    *,
+    direction: str,
+    threshold: float,
+    prefer_advanced_on_invalid: bool = True,
+) -> np.ndarray:
+    feat = np.asarray(feature_map, dtype=np.float32)
+    finite = np.isfinite(feat)
+    if str(direction).strip() == "<=":
+        choose_advanced = feat <= float(threshold)
+    elif str(direction).strip() == ">=":
+        choose_advanced = feat >= float(threshold)
+    else:
+        raise ValueError(f"Unsupported hybrid rescue direction {direction!r}; expected '<=' or '>='.")
+    choose_advanced = np.asarray(choose_advanced, dtype=bool)
+    if prefer_advanced_on_invalid:
+        choose_advanced = choose_advanced | (~finite)
+    else:
+        choose_advanced = choose_advanced & finite
+    return choose_advanced.astype(np.bool_, copy=False)
+
+
 def _apply_hybrid_rescue_score_map(
     advanced_score: np.ndarray,
     rescue_score: np.ndarray,
@@ -183,18 +206,12 @@ def _apply_hybrid_rescue_score_map(
         raise ValueError(
             f"Hybrid rescue shape mismatch: advanced={adv.shape}, rescue={rescue.shape}, feature={feat.shape}"
         )
-    finite = np.isfinite(feat)
-    if str(direction).strip() == "<=":
-        choose_advanced = feat <= float(threshold)
-    elif str(direction).strip() == ">=":
-        choose_advanced = feat >= float(threshold)
-    else:
-        raise ValueError(f"Unsupported hybrid rescue direction {direction!r}; expected '<=' or '>='.")
-    choose_advanced = np.asarray(choose_advanced, dtype=bool)
-    if prefer_advanced_on_invalid:
-        choose_advanced = choose_advanced | (~finite)
-    else:
-        choose_advanced = choose_advanced & finite
+    choose_advanced = _hybrid_choose_advanced_mask(
+        feat,
+        direction=direction,
+        threshold=threshold,
+        prefer_advanced_on_invalid=prefer_advanced_on_invalid,
+    )
     hybrid = np.where(choose_advanced, adv, rescue).astype(np.float32, copy=False)
     rescue_mask = (~choose_advanced).astype(np.bool_, copy=False)
     stats: dict[str, float | str | int | None] = {
@@ -6506,7 +6523,12 @@ def _stap_pd_tile_lcmv_batch(
             "fd_span_mode": str(fd_span_mode),
             "flow_band_hz": flow_band_hz,
         }
-        core_fn = pd_temporal_core_batched if pd_only else stap_temporal_core_batched
+        force_pd_core = bool(float(whiten_gamma) <= 1e-8)
+        core_fn = (
+            pd_temporal_core_batched
+            if (pd_only or force_pd_core)
+            else stap_temporal_core_batched
+        )
         use_graph = (
             _stap_fast_cuda_graph_enabled(batch_size=int(cube_tensor.shape[0]))
             and torch is not None
@@ -6524,7 +6546,7 @@ def _stap_pd_tile_lcmv_batch(
             use_graph = False
         if use_graph:
             graph_key = (
-                "pd" if pd_only else "full",
+                "pd" if (pd_only or force_pd_core) else "full",
                 tuple(int(x) for x in cube_tensor.shape),
                 str(cube_tensor.dtype),
                 str(cube_tensor.device),
@@ -6713,6 +6735,8 @@ def _stap_pd(
     flow_alias_hz: float | None = None,
     flow_alias_fraction: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, dict]:
+    latency_mode_env = os.getenv("STAP_LATENCY_MODE", "").strip().lower()
+    latency_mode = latency_mode_env in {"1", "true", "yes", "on"}
     det_variant = str(detector_variant or "msd_ratio").strip().lower()
     det_variant = {
         "msd": "msd_ratio",
@@ -7832,7 +7856,12 @@ def _stap_pd(
                     "fd_span_mode": str(fd_span_mode),
                     "flow_band_hz": flow_band_hz_tuple,
                 }
-                core_fn_unfold = pd_temporal_core_batched if pd_only else stap_temporal_core_batched
+                force_pd_core_unfold = bool(float(whiten_gamma) <= 1e-8)
+                core_fn_unfold = (
+                    pd_temporal_core_batched
+                    if (pd_only or force_pd_core_unfold)
+                    else stap_temporal_core_batched
+                )
                 use_graph_unfold = (
                     _stap_fast_cuda_graph_enabled()
                     and torch is not None
@@ -7909,23 +7938,40 @@ def _stap_pd(
                         else nullcontext()
                     ):
                         cube_active = cube_tiles[:, y_inds, :, x_inds, :]  # (B,T,th,tw) contiguous via gather
+                    graph_pad_env = os.getenv("STAP_FAST_CUDA_GRAPH_PAD", "").strip().lower()
+                    graph_pad_enabled = graph_pad_env in {"1", "true", "yes", "on"}
+                    pad_to_batch = int(target_tiles) if graph_pad_enabled else int(chunk_size)
+                    if pad_to_batch < int(chunk_size):
+                        pad_to_batch = int(chunk_size)
+                    cube_active_run = cube_active
+                    if (
+                        graph_pad_enabled
+                        and int(cube_active.shape[0]) < pad_to_batch
+                        and bool(getattr(cube_active, "is_cuda", False))
+                    ):
+                        pad_shape = (pad_to_batch,) + tuple(int(v) for v in cube_active.shape[1:])
+                        cube_active_run = torch.zeros(
+                            pad_shape, dtype=cube_active.dtype, device=cube_active.device
+                        )
+                        cube_active_run[:chunk_size].copy_(cube_active)
                     with (
                         stap_stage_ctx("stap:core")
                         if stap_stage_ctx is not None
                         else nullcontext()
                     ):
+                        batch_for_graph = int(cube_active_run.shape[0])
                         if (
                             use_graph_unfold
-                            and _stap_fast_cuda_graph_enabled(batch_size=int(cube_active.shape[0]))
+                            and _stap_fast_cuda_graph_enabled(batch_size=batch_for_graph)
                             and core_fn_unfold is not None
-                            and bool(getattr(cube_active, "is_cuda", False))
+                            and bool(getattr(cube_active_run, "is_cuda", False))
                         ):
                             graph_key = (
                                 "unfold",
-                                "pd" if pd_only else "full",
-                                tuple(int(x) for x in cube_active.shape),
+                                "pd" if (pd_only or force_pd_core_unfold) else "full",
+                                tuple(int(x) for x in cube_active_run.shape),
                                 str(cube_active.dtype),
-                                str(cube_active.device),
+                                str(cube_active_run.device),
                                 core_kwargs_unfold["prf_hz"],
                                 core_kwargs_unfold["Lt"],
                                 core_kwargs_unfold["diag_load"],
@@ -7970,7 +8016,7 @@ def _stap_pd(
                             try:
                                 band_act, score_act, info_act = _stap_fast_cuda_graph_run(
                                     core_fn_unfold,
-                                    cube_active,
+                                    cube_active_run,
                                     core_kwargs=core_kwargs_unfold,
                                     cache_key=graph_key,
                                 )
@@ -7984,8 +8030,12 @@ def _stap_pd(
                             if core_fn_unfold is None:
                                 raise RuntimeError("STAP unfold tiling requested but core function is unavailable.")
                             band_act, score_act, info_act = core_fn_unfold(
-                                cube_active, return_torch=True, **core_kwargs_unfold
+                                cube_active_run, return_torch=True, **core_kwargs_unfold
                             )
+                        if int(cube_active_run.shape[0]) != int(chunk_size):
+                            band_act = band_act[:chunk_size]
+                            score_act = score_act[:chunk_size]
+                            info_act = info_act[:chunk_size]
                     t_core_total += time.perf_counter() - t0_core
 
                     band_used = band_act.to(dtype=torch.float32)
@@ -9782,61 +9832,67 @@ def _stap_pd(
         "ka_warning",
     ]
     tile_infos_trim: list[dict] = []
-    max_tile_sample = 200
-    # Prioritize KA-active tiles in the sample, then fill with inactive tiles for coverage.
-    active_tiles = [
-        info for info in tile_infos if info.get("ka_mode") and info.get("ka_mode") != "none"
-    ]
-    inactive_tiles = [
-        info for info in tile_infos if not (info.get("ka_mode") and info.get("ka_mode") != "none")
-    ]
-    for group in (active_tiles, inactive_tiles):
-        if len(tile_infos_trim) >= max_tile_sample:
-            break
-        step = max(1, len(group) // max_tile_sample) if group else 1
-        for idx, info in enumerate(group):
+    if not latency_mode:
+        max_tile_sample = 200
+        # Prioritize KA-active tiles in the sample, then fill with inactive tiles for coverage.
+        active_tiles = [
+            info for info in tile_infos if info.get("ka_mode") and info.get("ka_mode") != "none"
+        ]
+        inactive_tiles = [
+            info
+            for info in tile_infos
+            if not (info.get("ka_mode") and info.get("ka_mode") != "none")
+        ]
+        for group in (active_tiles, inactive_tiles):
             if len(tile_infos_trim) >= max_tile_sample:
                 break
-            if step > 1 and idx % step != 0:
-                continue
-            entry = {
-                k: info.get(k) for k in keep_tile_keys if k in info and info.get(k) is not None
-            }
-            # If KA is active but ratios are missing, derive from band means for visibility.
-            if entry.get("ka_mode") and entry.get("ka_mode") != "none":
-                pf_mean = entry.get("ka_pf_lambda_mean")
-                perp_mean = entry.get("ka_perp_lambda_mean")
-                if entry.get("ka_snr_flow_ratio") is None and pf_mean is not None and perp_mean:
-                    try:
-                        entry["ka_snr_flow_ratio"] = float(pf_mean) / max(float(perp_mean), 1e-9)
-                    except Exception:
-                        pass
-                if entry.get("ka_noise_perp_ratio") is None and perp_mean is not None:
-                    try:
-                        entry["ka_noise_perp_ratio"] = float(perp_mean)
-                    except Exception:
-                        pass
-            if entry:
-                tile_infos_trim.append(entry)
+            step = max(1, len(group) // max_tile_sample) if group else 1
+            for idx, info in enumerate(group):
+                if len(tile_infos_trim) >= max_tile_sample:
+                    break
+                if step > 1 and idx % step != 0:
+                    continue
+                entry = {
+                    k: info.get(k) for k in keep_tile_keys if k in info and info.get(k) is not None
+                }
+                # If KA is active but ratios are missing, derive from band means for visibility.
+                if entry.get("ka_mode") and entry.get("ka_mode") != "none":
+                    pf_mean = entry.get("ka_pf_lambda_mean")
+                    perp_mean = entry.get("ka_perp_lambda_mean")
+                    if entry.get("ka_snr_flow_ratio") is None and pf_mean is not None and perp_mean:
+                        try:
+                            entry["ka_snr_flow_ratio"] = float(pf_mean) / max(
+                                float(perp_mean), 1e-9
+                            )
+                        except Exception:
+                            pass
+                    if entry.get("ka_noise_perp_ratio") is None and perp_mean is not None:
+                        try:
+                            entry["ka_noise_perp_ratio"] = float(perp_mean)
+                        except Exception:
+                            pass
+                if entry:
+                    tile_infos_trim.append(entry)
     info_out["tile_infos_sample"] = tile_infos_trim
     info_out["tile_infos_total"] = int(len(tile_infos))
     map_shape = tuple(int(v) for v in pd.shape)
     info_out["_tile_metric_maps"] = {}
     tile_metric_map_errors: dict[str, str] = {}
-    for metric_name in (
-        "cond_loaded",
-        "cov_rank_proxy",
-        "flow_mu_ratio",
-        "bg_var_inflation",
-        "gamma_flow",
-        "gamma_perp",
-    ):
-        try:
-            info_out["_tile_metric_maps"][metric_name] = _tile_field_to_map(
-                tile_infos, metric_name, map_shape, tile_hw, stride
-            )
-        except Exception as exc:
-            tile_metric_map_errors[metric_name] = f"{type(exc).__name__}: {exc}"
+    if not latency_mode:
+        for metric_name in (
+            "cond_loaded",
+            "cov_rank_proxy",
+            "flow_mu_ratio",
+            "bg_var_inflation",
+            "gamma_flow",
+            "gamma_perp",
+        ):
+            try:
+                info_out["_tile_metric_maps"][metric_name] = _tile_field_to_map(
+                    tile_infos, metric_name, map_shape, tile_hw, stride
+                )
+            except Exception as exc:
+                tile_metric_map_errors[metric_name] = f"{type(exc).__name__}: {exc}"
     if tile_metric_map_errors:
         info_out["_tile_metric_map_errors"] = tile_metric_map_errors
 
@@ -10377,123 +10433,117 @@ def _stap_pd(
                 pd_avg[border_mask] = pd_base_full[border_mask]
                 bg_edge_clamp_global += int(np.count_nonzero(border_mask))
     bg_diag_error = None
-    try:
-        if pd_base_full is not None and mask_bg is not None:
-            edge_mask_global = None
-            pd_diff = (pd_avg - pd_base_full).astype(np.float64, copy=False)
-            bg_mask = mask_bg.astype(bool, copy=False)
-            if pd_diff.shape == bg_mask.shape and np.any(bg_mask):
-                edge_mask_global = bg_mask & (counts <= 1.0000001)
-                if edge_mask_global is not None and np.any(edge_mask_global):
-                    mism = edge_mask_global & (np.abs(pd_diff) > 1e-9)
-                    if np.any(mism):
-                        pd_avg = pd_avg.copy()
-                        pd_avg[mism] = pd_base_full[mism]
-                        pd_diff = (pd_avg - pd_base_full).astype(np.float64, copy=False)
-                        bg_edge_clamp_global = int(np.count_nonzero(mism))
-                diff_bg = np.abs(pd_diff[bg_mask])
-                info_out["bg_diff_abs_mean"] = float(np.mean(diff_bg))
-                info_out["bg_diff_abs_p90"] = float(np.quantile(diff_bg, 0.90))
-                info_out["bg_diff_abs_max"] = float(np.max(diff_bg))
-                base_bg = pd_base_full[bg_mask].astype(np.float64, copy=False)
-                denom = float(np.linalg.norm(base_bg) + 1e-12)
-                info_out["bg_diff_l2_rel"] = float(np.linalg.norm(diff_bg) / denom)
-                # Top-k outlier diagnostics
-                try:
-                    k = 20
-                    flat_idx = np.argpartition(-diff_bg, min(k, diff_bg.size - 1))[:k]
-                    # Map flat indices back to 2D coords
-                    ys, xs = np.where(bg_mask)
-                    top = []
-                    for i in flat_idx:
-                        y = int(ys[int(i)])
-                        x = int(xs[int(i)])
-                        top.append(
-                            [
-                                y,
-                                x,
-                                float(pd_diff[y, x]),
-                                float(pd_base_full[y, x]),
-                                float(pd_avg[y, x]),
-                                float(counts[y, x]) if "counts" in locals() else None,
-                            ]
+    if not latency_mode:
+        try:
+            if pd_base_full is not None and mask_bg is not None:
+                edge_mask_global = None
+                pd_diff = (pd_avg - pd_base_full).astype(np.float64, copy=False)
+                bg_mask = mask_bg.astype(bool, copy=False)
+                if pd_diff.shape == bg_mask.shape and np.any(bg_mask):
+                    edge_mask_global = bg_mask & (counts <= 1.0000001)
+                    if edge_mask_global is not None and np.any(edge_mask_global):
+                        mism = edge_mask_global & (np.abs(pd_diff) > 1e-9)
+                        if np.any(mism):
+                            pd_avg = pd_avg.copy()
+                            pd_avg[mism] = pd_base_full[mism]
+                            pd_diff = (pd_avg - pd_base_full).astype(np.float64, copy=False)
+                            bg_edge_clamp_global = int(np.count_nonzero(mism))
+                    diff_bg = np.abs(pd_diff[bg_mask])
+                    info_out["bg_diff_abs_mean"] = float(np.mean(diff_bg))
+                    info_out["bg_diff_abs_p90"] = float(np.quantile(diff_bg, 0.90))
+                    info_out["bg_diff_abs_max"] = float(np.max(diff_bg))
+                    base_bg = pd_base_full[bg_mask].astype(np.float64, copy=False)
+                    denom = float(np.linalg.norm(base_bg) + 1e-12)
+                    info_out["bg_diff_l2_rel"] = float(np.linalg.norm(diff_bg) / denom)
+                    try:
+                        k = 20
+                        flat_idx = np.argpartition(-diff_bg, min(k, diff_bg.size - 1))[:k]
+                        ys, xs = np.where(bg_mask)
+                        top = []
+                        for i in flat_idx:
+                            y = int(ys[int(i)])
+                            x = int(xs[int(i)])
+                            top.append(
+                                [
+                                    y,
+                                    x,
+                                    float(pd_diff[y, x]),
+                                    float(pd_base_full[y, x]),
+                                    float(pd_avg[y, x]),
+                                    float(counts[y, x]) if "counts" in locals() else None,
+                                ]
+                            )
+                        top.sort(key=lambda t: abs(t[2]), reverse=True)
+                        info_out["bg_diff_top_coords"] = top
+                    except Exception:
+                        pass
+                    if "counts" in locals():
+                        cnt_bg = counts[bg_mask]
+                        info_out["bg_overlap_count_min"] = (
+                            float(np.min(cnt_bg)) if cnt_bg.size else None
                         )
-                    # Sort by absolute difference descending for readability
-                    top.sort(key=lambda t: abs(t[2]), reverse=True)
-                    info_out["bg_diff_top_coords"] = top
-                except Exception:
-                    pass
-                # Overlap counts coverage on background
-                if "counts" in locals():
-                    cnt_bg = counts[bg_mask]
-                    info_out["bg_overlap_count_min"] = (
-                        float(np.min(cnt_bg)) if cnt_bg.size else None
-                    )
-                    info_out["bg_overlap_count_max"] = (
-                        float(np.max(cnt_bg)) if cnt_bg.size else None
-                    )
-                    info_out["bg_overlap_count_mean"] = (
-                        float(np.mean(cnt_bg)) if cnt_bg.size else None
-                    )
-                    info_out["bg_overlap_any_zero"] = (
-                        bool(np.any(cnt_bg <= 0)) if cnt_bg.size else False
-                    )
-                    # Variant: restrict stats to pixels with counts >= 2 to avoid edge artifacts
-                    submask = np.zeros_like(bg_mask, dtype=bool)
-                    submask[bg_mask] = cnt_bg >= 2
-                    info_out["bg_counts_ge2_fraction"] = (
-                        float(np.mean(submask)) if submask.size else None
-                    )
-                    if np.any(submask):
-                        v_base = float(np.var(pd_base_full[submask]))
-                        v_stap = float(np.var(pd_avg[submask]))
-                        info_out["bg_var_ratio_pre_counts_ge2"] = v_stap / max(v_base, 1e-12)
-
-                # Ring vs far-background comparison to localize differences
-                def _dilate(mask: np.ndarray, r: int) -> np.ndarray:
-                    out = mask.copy()
-                    for _ in range(max(1, int(r))):
-                        acc = out.copy()
-                        for dy in (-1, 0, 1):
-                            for dx in (-1, 0, 1):
-                                if dy == 0 and dx == 0:
-                                    continue
-                                acc |= np.roll(np.roll(out, dy, axis=0), dx, axis=1)
-                        out = acc
-                    return out
-
-                if mask_flow is not None and mask_flow.shape == bg_mask.shape:
-                    rf = int(max(2, min(pd_avg.shape) // 32))
-                    ring = _dilate(mask_flow.astype(bool, copy=False), rf) & ~mask_flow.astype(
-                        bool, copy=False
-                    )
-                    far_bg = bg_mask & ~ring
-
-                    def _safe_var(arr, m):
-                        xs = arr[m]
-                        return float(np.var(xs)) if xs.size else None
-
-                    info_out["bg_ring_var"] = _safe_var(pd_avg, bg_mask & ring)
-                    info_out["bg_ring_var_base"] = _safe_var(pd_base_full, bg_mask & ring)
-                    info_out["bg_far_var"] = _safe_var(pd_avg, far_bg)
-                    info_out["bg_far_var_base"] = _safe_var(pd_base_full, far_bg)
-                    # Ratios (if both sides available)
-                    if (
-                        info_out["bg_ring_var"] is not None
-                        and info_out["bg_ring_var_base"] is not None
-                    ):
-                        info_out["bg_ring_var_ratio"] = info_out["bg_ring_var"] / max(
-                            info_out["bg_ring_var_base"], 1e-12
+                        info_out["bg_overlap_count_max"] = (
+                            float(np.max(cnt_bg)) if cnt_bg.size else None
                         )
-                    if (
-                        info_out["bg_far_var"] is not None
-                        and info_out["bg_far_var_base"] is not None
-                    ):
-                        info_out["bg_far_var_ratio"] = info_out["bg_far_var"] / max(
-                            info_out["bg_far_var_base"], 1e-12
+                        info_out["bg_overlap_count_mean"] = (
+                            float(np.mean(cnt_bg)) if cnt_bg.size else None
                         )
-    except Exception as exc:
-        bg_diag_error = repr(exc)
+                        info_out["bg_overlap_any_zero"] = (
+                            bool(np.any(cnt_bg <= 0)) if cnt_bg.size else False
+                        )
+                        submask = np.zeros_like(bg_mask, dtype=bool)
+                        submask[bg_mask] = cnt_bg >= 2
+                        info_out["bg_counts_ge2_fraction"] = (
+                            float(np.mean(submask)) if submask.size else None
+                        )
+                        if np.any(submask):
+                            v_base = float(np.var(pd_base_full[submask]))
+                            v_stap = float(np.var(pd_avg[submask]))
+                            info_out["bg_var_ratio_pre_counts_ge2"] = v_stap / max(v_base, 1e-12)
+
+                    def _dilate(mask: np.ndarray, r: int) -> np.ndarray:
+                        out = mask.copy()
+                        for _ in range(max(1, int(r))):
+                            acc = out.copy()
+                            for dy in (-1, 0, 1):
+                                for dx in (-1, 0, 1):
+                                    if dy == 0 and dx == 0:
+                                        continue
+                                    acc |= np.roll(np.roll(out, dy, axis=0), dx, axis=1)
+                            out = acc
+                        return out
+
+                    if mask_flow is not None and mask_flow.shape == bg_mask.shape:
+                        rf = int(max(2, min(pd_avg.shape) // 32))
+                        ring = _dilate(mask_flow.astype(bool, copy=False), rf) & ~mask_flow.astype(
+                            bool, copy=False
+                        )
+                        far_bg = bg_mask & ~ring
+
+                        def _safe_var(arr, m):
+                            xs = arr[m]
+                            return float(np.var(xs)) if xs.size else None
+
+                        info_out["bg_ring_var"] = _safe_var(pd_avg, bg_mask & ring)
+                        info_out["bg_ring_var_base"] = _safe_var(pd_base_full, bg_mask & ring)
+                        info_out["bg_far_var"] = _safe_var(pd_avg, far_bg)
+                        info_out["bg_far_var_base"] = _safe_var(pd_base_full, far_bg)
+                        if (
+                            info_out["bg_ring_var"] is not None
+                            and info_out["bg_ring_var_base"] is not None
+                        ):
+                            info_out["bg_ring_var_ratio"] = info_out["bg_ring_var"] / max(
+                                info_out["bg_ring_var_base"], 1e-12
+                            )
+                        if (
+                            info_out["bg_far_var"] is not None
+                            and info_out["bg_far_var_base"] is not None
+                        ):
+                            info_out["bg_far_var_ratio"] = info_out["bg_far_var"] / max(
+                                info_out["bg_far_var_base"], 1e-12
+                            )
+        except Exception as exc:
+            bg_diag_error = repr(exc)
 
     bg_var_ratio_final: float | None = None
     if (
@@ -12135,6 +12185,17 @@ def write_acceptance_bundle(
             tile_stride,
             tile_mode=band_ratio_tile_mode_norm,
         )
+    adaptive_guard_feature_map: np.ndarray | None = None
+    if use_whitened_ratio and base_br_recorder is not None:
+        try:
+            adaptive_guard_feature_map = _tile_scores_to_map(
+                np.asarray(base_br_recorder.rg_raw, dtype=np.float32),
+                pd_base.shape,
+                tile_hw,
+                tile_stride,
+            )
+        except Exception:
+            adaptive_guard_feature_map = None
 
     band_ratio_spec_meta = dict(band_ratio_spec)
 
@@ -12234,6 +12295,9 @@ def write_acceptance_bundle(
             debug_samples: int,
             debug_coords: Sequence[tuple[int, int]] | None,
             run_ka: bool,
+            conditional_mask_flow: np.ndarray | None = None,
+            conditional_mask_bg: np.ndarray | None = None,
+            conditional_enable_override: bool | None = None,
         ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
             stage_cm = nullcontext()
             if stap_cuda_event_timing is not None:
@@ -12286,9 +12350,19 @@ def write_acceptance_bundle(
                     stap_device=stap_device_resolved,
                     tile_batch=tile_batch_size,
                     pd_base_full=pd_base,
-                    mask_flow=mask_flow_cond,
-                    mask_bg=mask_bg_cond,
-                    conditional_enable=cond_enabled,
+                    mask_flow=(
+                        conditional_mask_flow
+                        if conditional_mask_flow is not None
+                        else mask_flow_cond
+                    ),
+                    mask_bg=(
+                        conditional_mask_bg if conditional_mask_bg is not None else mask_bg_cond
+                    ),
+                    conditional_enable=(
+                        bool(conditional_enable_override)
+                        if conditional_enable_override is not None
+                        else cond_enabled
+                    ),
                     ka_mode=ka_mode_norm if (ka_active and run_ka) else "none",
                     ka_prior_library=ka_prior_library if (ka_active and run_ka) else None,
                     ka_opts=ka_opts_dict if (ka_active and run_ka) else None,
@@ -12328,26 +12402,149 @@ def write_acceptance_bundle(
                     pass
             return pd_out, score_out, info_out
 
+        def _merge_branch_info(
+            primary_info: dict[str, Any],
+            secondary_info: dict[str, Any] | None,
+        ) -> dict[str, Any]:
+            merged = dict(primary_info or {})
+            if not secondary_info:
+                return merged
+            for key in ("stap_extract_ms", "stap_batch_proc_ms", "stap_post_ms", "stap_total_ms"):
+                v0 = float(merged.get(key, 0.0) or 0.0)
+                v1 = float(secondary_info.get(key, 0.0) or 0.0)
+                if v0 or v1:
+                    merged[key] = v0 + v1
+            stage0 = merged.get("stap_cuda_stage_ms")
+            stage1 = secondary_info.get("stap_cuda_stage_ms")
+            if isinstance(stage0, dict) or isinstance(stage1, dict):
+                stage_sum: dict[str, float] = {}
+                for stage_map in (stage0, stage1):
+                    if not isinstance(stage_map, dict):
+                        continue
+                    for skey, sval in stage_map.items():
+                        try:
+                            stage_sum[str(skey)] = stage_sum.get(str(skey), 0.0) + float(sval)
+                        except Exception:
+                            pass
+                if stage_sum:
+                    merged["stap_cuda_stage_ms"] = stage_sum
+                    merged["stap_cuda_stage_total_ms"] = float(sum(stage_sum.values()))
+            for key in ("stap_cuda_max_memory_allocated_mb", "stap_cuda_max_memory_reserved_mb"):
+                vals = []
+                for source in (merged, secondary_info):
+                    try:
+                        val = source.get(key)
+                    except Exception:
+                        val = None
+                    if val is None:
+                        continue
+                    try:
+                        vals.append(float(val))
+                    except Exception:
+                        pass
+                if vals:
+                    merged[key] = max(vals)
+            merged["stap_fast_path_used"] = bool(
+                merged.get("stap_fast_path_used", False)
+                or secondary_info.get("stap_fast_path_used", False)
+            )
+            return merged
+
         core_variant = (
             "msd_ratio" if stap_detector_variant_norm == "hybrid_rescue" else stap_detector_variant_norm
         )
-        pd_stap, stap_scores, stap_info = _run_stap_once(
-            detector_variant=str(core_variant),
-            whiten_gamma=float(stap_whiten_gamma),
-            recorder=stap_br_recorder,
-            debug_samples=int(stap_debug_samples),
-            debug_coords=stap_debug_tile_coords,
-            run_ka=True,
-        )
-        if stap_detector_variant_norm == "hybrid_rescue":
-            _pd_rescue, rescue_scores, rescue_info = _run_stap_once(
+        if (
+            stap_detector_variant_norm == "hybrid_rescue"
+            and hybrid_variant_label == "adaptive_guard"
+            and hybrid_rule_cfg is not None
+            and adaptive_guard_feature_map is not None
+        ):
+            pd_stap, stap_scores, rescue_info = _run_stap_once(
                 detector_variant="unwhitened_ratio",
                 whiten_gamma=0.0,
                 recorder=None,
-                debug_samples=0,
-                debug_coords=None,
+                debug_samples=int(stap_debug_samples),
+                debug_coords=stap_debug_tile_coords,
                 run_ka=False,
             )
+            choose_advanced = _hybrid_choose_advanced_mask(
+                adaptive_guard_feature_map,
+                direction=str(hybrid_rule_cfg.get("direction", ">=")),
+                threshold=float(hybrid_rule_cfg.get("threshold", 0.0)),
+                prefer_advanced_on_invalid=True,
+            )
+            rescue_scores = stap_scores.copy()
+            rescue_pd = pd_stap.copy()
+            rescue_info = dict(rescue_info or {})
+            rescue_mask = (~choose_advanced).astype(np.bool_, copy=False)
+            hybrid_stats = {
+                "feature": str(hybrid_rule_cfg.get("feature", "base_guard_frac_map")),
+                "direction": str(hybrid_rule_cfg.get("direction", ">=")),
+                "threshold": float(hybrid_rule_cfg.get("threshold", 0.0)),
+                "prefer_advanced_on_invalid": True,
+                "advanced_fraction": float(np.mean(choose_advanced)) if choose_advanced.size else None,
+                "rescue_fraction": float(np.mean(rescue_mask)) if rescue_mask.size else None,
+                "rescue_pixels": int(np.count_nonzero(rescue_mask)),
+                "advanced_pixels": int(np.count_nonzero(choose_advanced)),
+            }
+            promote_fraction = float(hybrid_stats["advanced_fraction"] or 0.0)
+            promote_info: dict[str, Any] | None = None
+            if bool(np.any(choose_advanced)):
+                pd_promote, score_promote, promote_info = _run_stap_once(
+                    detector_variant="msd_ratio",
+                    whiten_gamma=float(stap_whiten_gamma),
+                    recorder=stap_br_recorder,
+                    debug_samples=0,
+                    debug_coords=None,
+                    run_ka=True,
+                    conditional_mask_flow=choose_advanced,
+                    conditional_mask_bg=~choose_advanced,
+                    conditional_enable_override=True,
+                )
+                pd_stap = np.where(choose_advanced, pd_promote, rescue_pd).astype(
+                    np.float32, copy=False
+                )
+                stap_scores = np.where(choose_advanced, score_promote, rescue_scores).astype(
+                    np.float32, copy=False
+                )
+                stap_info = _merge_branch_info(rescue_info, promote_info)
+            else:
+                stap_info = dict(rescue_info)
+            hybrid_rescue_mask = rescue_mask
+            stap_info["hybrid_rescue"] = {
+                "enabled": True,
+                "rule": dict(hybrid_rule_cfg or {}),
+                "stats": hybrid_stats,
+                "advanced_detector_variant": "msd_ratio",
+                "advanced_whiten_gamma": float(stap_whiten_gamma),
+                "rescue_detector_variant": "unwhitened_ratio",
+                "rescue_whiten_gamma": 0.0,
+                "rescue_condR_median": rescue_info.get("median_condR"),
+                "rescue_cond_loaded_median": rescue_info.get("median_cond_loaded"),
+                "promote_fraction": promote_fraction,
+                "promote_active": bool(np.any(choose_advanced)),
+            }
+            stap_info["detector_variant_effective"] = str(hybrid_variant_label or "hybrid_rescue")
+            stap_info["hybrid_rescue_mask_fraction"] = hybrid_stats.get("rescue_fraction")
+            stap_info["adaptive_guard_promote_fraction"] = promote_fraction
+        else:
+            pd_stap, stap_scores, stap_info = _run_stap_once(
+                detector_variant=str(core_variant),
+                whiten_gamma=float(stap_whiten_gamma),
+                recorder=stap_br_recorder,
+                debug_samples=int(stap_debug_samples),
+                debug_coords=stap_debug_tile_coords,
+                run_ka=True,
+            )
+            if stap_detector_variant_norm == "hybrid_rescue":
+                _pd_rescue, rescue_scores, rescue_info = _run_stap_once(
+                    detector_variant="unwhitened_ratio",
+                    whiten_gamma=0.0,
+                    recorder=None,
+                    debug_samples=0,
+                    debug_coords=None,
+                    run_ka=False,
+                )
         stap_info["stap_input_source"] = stap_input_source
         stap_info["stap_ms"] = float(1000.0 * (time.perf_counter() - t_stap_start))
         baseline_filtered_cube = None
@@ -12482,7 +12679,7 @@ def write_acceptance_bundle(
             stap_gamma_flow_map = np.full_like(pd_base, np.nan, dtype=np.float32)
             stap_gamma_perp_map = np.full_like(pd_base, np.nan, dtype=np.float32)
 
-    if stap_detector_variant_norm == "hybrid_rescue":
+    if stap_detector_variant_norm == "hybrid_rescue" and hybrid_variant_label != "adaptive_guard":
         feature_name = str((hybrid_rule_cfg or {}).get("feature", "base_guard_frac_map"))
         feature_map = {
             "base_guard_frac_map": base_guard_frac_map,
