@@ -143,6 +143,18 @@ _HYBRID_RESCUE_RULES: dict[str, dict[str, object]] = {
             "meaningful structured clutter."
         ),
     },
+    "guard_promote_tile_v1": {
+        "feature": "base_guard_frac_map",
+        "direction": ">=",
+        "threshold": 0.1453727245330811,
+        "aggregation": "tile_mean",
+        "prefer_advanced_on_invalid": False,
+        "description": (
+            "Use the unwhitened matched-subspace score by default and promote whole tiles onto "
+            "the advanced whitened branch only when the tile-mean baseline guard-energy fraction "
+            "indicates meaningful structured clutter."
+        ),
+    },
 }
 
 
@@ -189,6 +201,48 @@ def _hybrid_choose_advanced_mask(
     else:
         choose_advanced = choose_advanced & finite
     return choose_advanced.astype(np.bool_, copy=False)
+
+
+def _hybrid_choose_advanced_tile_mask(
+    feature_map: np.ndarray,
+    *,
+    tile_hw: tuple[int, int],
+    stride: int,
+    direction: str,
+    threshold: float,
+    reduction: str = "mean",
+    prefer_advanced_on_invalid: bool = False,
+) -> tuple[np.ndarray, np.ndarray]:
+    feat = np.asarray(feature_map, dtype=np.float32)
+    reduction_norm = str(reduction or "mean").strip().lower()
+    reduction_norm = {"tile_mean": "mean", "tile_max": "max"}.get(reduction_norm, reduction_norm)
+    if reduction_norm not in {"mean", "max"}:
+        raise ValueError(
+            f"Unsupported hybrid tile reduction {reduction!r}; expected 'mean' or 'max'."
+        )
+    tile_scores: list[float] = []
+    for y0, x0 in _tile_iter(feat.shape, tile_hw, stride):
+        tile = feat[y0 : y0 + tile_hw[0], x0 : x0 + tile_hw[1]]
+        finite = np.isfinite(tile)
+        if not np.any(finite):
+            promote = bool(prefer_advanced_on_invalid)
+        else:
+            vals = np.asarray(tile[finite], dtype=np.float32)
+            stat = float(np.max(vals)) if reduction_norm == "max" else float(np.mean(vals))
+            if str(direction).strip() == "<=":
+                promote = stat <= float(threshold)
+            elif str(direction).strip() == ">=":
+                promote = stat >= float(threshold)
+            else:
+                raise ValueError(
+                    f"Unsupported hybrid rescue direction {direction!r}; expected '<=' or '>='."
+                )
+        tile_scores.append(1.0 if promote else 0.0)
+    tile_promote = np.asarray(tile_scores, dtype=np.float32) > 0.5
+    choose_advanced = (
+        _tile_scores_to_map(tile_promote.astype(np.float32), feat.shape, tile_hw, stride) > 0.0
+    )
+    return choose_advanced.astype(np.bool_, copy=False), tile_promote.astype(np.bool_, copy=False)
 
 
 def _apply_hybrid_rescue_score_map(
@@ -6759,6 +6813,7 @@ def _stap_pd(
     pd_base_full: np.ndarray | None = None,
     mask_flow: np.ndarray | None = None,
     mask_bg: np.ndarray | None = None,
+    conditional_tile_gate: np.ndarray | None = None,
     conditional_enable: bool = True,
     ka_mode: str = "none",
     ka_prior_library: np.ndarray | torch.Tensor | None = None,
@@ -6824,6 +6879,12 @@ def _stap_pd(
     score = np.zeros((H, W), dtype=np.float64)
     counts = np.zeros((H, W), dtype=np.float64)
     score_counts = np.zeros((H, W), dtype=np.float64)
+    tile_flow_min_frac_env = os.getenv("STAP_CONDITIONAL_TILE_MIN_FRAC", "").strip()
+    try:
+        tile_flow_min_frac = float(tile_flow_min_frac_env) if tile_flow_min_frac_env else 0.0
+    except Exception:
+        tile_flow_min_frac = 0.0
+    tile_flow_min_frac = float(min(max(tile_flow_min_frac, 0.0), 1.0))
     tile_infos: list[dict] = []
     motion_basis_geom_np: np.ndarray | None = None
     if (
@@ -6941,6 +7002,18 @@ def _stap_pd(
             for x0 in range(0, W - tw + 1, stride):
                 coords_ordered.append((0.0, y0, x0))
     total_tiles = len(coords_ordered)
+    tile_gate_flat_np: np.ndarray | None = None
+    tile_gate_by_coord: dict[tuple[int, int], bool] | None = None
+    if conditional_tile_gate is not None:
+        tile_gate_flat_np = np.asarray(conditional_tile_gate, dtype=bool).reshape(-1)
+        if tile_gate_flat_np.size != total_tiles:
+            raise ValueError(
+                f"conditional_tile_gate size mismatch: {tile_gate_flat_np.size} vs {total_tiles}"
+            )
+        tile_gate_by_coord = {
+            (int(y0), int(x0)): bool(tile_gate_flat_np[idx])
+            for idx, (_cov, y0, x0) in enumerate(coords_ordered)
+        }
     t0_stap = time.perf_counter()
     capture_indices: set[int] = set()
     if debug_max_samples > 0 and total_tiles > 0:
@@ -7171,7 +7244,10 @@ def _stap_pd(
         flow_cov_ratio = None
         if mask_flow is not None:
             flow_mask_tile = mask_flow[y0 : y0 + th, x0 : x0 + tw]
-            tile_has_flow = bool(flow_mask_tile.any())
+            if tile_flow_min_frac > 0.0:
+                tile_has_flow = bool(float(np.mean(flow_mask_tile)) >= tile_flow_min_frac)
+            else:
+                tile_has_flow = bool(flow_mask_tile.any())
             flow_cov_ratio = float(flow_mask_tile.sum()) / float(flow_mask_tile.size)
         base_tile_cached = (
             pd_base_full[y0 : y0 + th, x0 : x0 + tw] if pd_base_full is not None else None
@@ -7835,7 +7911,12 @@ def _stap_pd(
                             .unfold(1, tw, stride)
                             .contiguous()
                         )
-                        tile_has_flow = flow_tiles.any(dim=(2, 3))  # (nY,nX)
+                        if tile_flow_min_frac > 0.0:
+                            tile_has_flow = flow_tiles.to(dtype=torch.float32).mean(dim=(2, 3)) >= float(
+                                tile_flow_min_frac
+                            )
+                        else:
+                            tile_has_flow = flow_tiles.any(dim=(2, 3))  # (nY,nX)
                     bg_tiles = None
                     tile_is_bg = None
                     if mask_bg is not None:
@@ -7952,7 +8033,13 @@ def _stap_pd(
                     if stap_stage_ctx is not None
                     else nullcontext()
                 ):
-                    if conditional_enable and tile_has_flow_flat is not None:
+                    if conditional_enable and tile_gate_flat_np is not None:
+                        tile_gate_flat_t = torch.as_tensor(
+                            tile_gate_flat_np, dtype=torch.bool, device=dev
+                        )
+                        active_idx_all = tile_gate_flat_t.nonzero(as_tuple=False).flatten()
+                        stap_tiles_skipped_flow0 = int((~tile_gate_flat_t).sum().item())
+                    elif conditional_enable and tile_has_flow_flat is not None:
                         active_idx_all = tile_has_flow_flat.nonzero(as_tuple=False).flatten()
                         stap_tiles_skipped_flow0 = int((~tile_has_flow_flat).sum().item())
                     else:
@@ -8284,7 +8371,12 @@ def _stap_pd(
                     counts_t = _fold(ones)
 
                     # Score counts follow conditional gating (skipped tiles do not contribute).
-                    if conditional_enable and tile_has_flow is not None:
+                    if conditional_enable and tile_gate_flat_np is not None:
+                        tile_gate_t = torch.as_tensor(
+                            tile_gate_flat_np, dtype=torch.float32, device=dev
+                        )
+                        score_active = tile_gate_t.view(B_total, 1, 1).expand(B_total, th, tw)
+                    elif conditional_enable and tile_has_flow is not None:
                         score_active = (
                             tile_has_flow.to(dtype=torch.float32)
                             .view(B_total, 1, 1)
@@ -8329,7 +8421,24 @@ def _stap_pd(
             # we can safely fall back to the baseline PD map for this tile and
             # skip STAP entirely. When debug capture is requested for a tile,
             # do not skip: run the normal STAP path so debug_samples are populated.
-            if conditional_enable and mask_flow is not None:
+            if conditional_enable and tile_gate_by_coord is not None:
+                if not bool(tile_gate_by_coord.get(coord, False)) and not capture_requested:
+                    base_tile = None
+                    if pd_base_full is not None:
+                        base_tile = pd_base_full[y0 : y0 + th, x0 : x0 + tw]
+                    else:
+                        t0_ext = time.perf_counter()
+                        cube_tmp = Icube[:, y0 : y0 + th, x0 : x0 + tw]
+                        t_extract += time.perf_counter() - t0_ext
+                        base_tile = np.mean(np.abs(cube_tmp) ** 2, axis=0)
+                    pd[y0 : y0 + th, x0 : x0 + tw] += base_tile
+                    counts[y0 : y0 + th, x0 : x0 + tw] += 1.0
+                    stap_tiles_skipped_flow0 += 1
+                    tile_counter += 1
+                    if tile_debug_limit is not None and tile_counter >= int(tile_debug_limit):
+                        break
+                    continue
+            elif conditional_enable and mask_flow is not None:
                 flow_mask_tile = mask_flow[y0 : y0 + th, x0 : x0 + tw]
                 if not bool(flow_mask_tile.any()) and not capture_requested:
                     base_tile = None
@@ -12299,7 +12408,7 @@ def write_acceptance_bundle(
     hybrid_variant_label: str | None = None
     if stap_detector_variant_norm == "hybrid_rescue":
         if variant_requested_norm in {"adaptive_guard", "adaptive_guard_v1", "guard_promote"}:
-            hybrid_rule_cfg = _normalize_hybrid_rescue_rule("guard_promote_v1")
+            hybrid_rule_cfg = _normalize_hybrid_rescue_rule("guard_promote_tile_v1")
             hybrid_variant_label = "adaptive_guard"
         else:
             hybrid_rule_cfg = _normalize_hybrid_rescue_rule(hybrid_rescue_rule)
@@ -12364,6 +12473,7 @@ def write_acceptance_bundle(
             run_ka: bool,
             conditional_mask_flow: np.ndarray | None = None,
             conditional_mask_bg: np.ndarray | None = None,
+            conditional_tile_gate: np.ndarray | None = None,
             conditional_enable_override: bool | None = None,
         ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
             stage_cm = nullcontext()
@@ -12425,6 +12535,7 @@ def write_acceptance_bundle(
                     mask_bg=(
                         conditional_mask_bg if conditional_mask_bg is not None else mask_bg_cond
                     ),
+                    conditional_tile_gate=conditional_tile_gate,
                     conditional_enable=(
                         bool(conditional_enable_override)
                         if conditional_enable_override is not None
@@ -12534,11 +12645,16 @@ def write_acceptance_bundle(
                 debug_coords=stap_debug_tile_coords,
                 run_ka=False,
             )
-            choose_advanced = _hybrid_choose_advanced_mask(
+            choose_advanced, promote_tiles = _hybrid_choose_advanced_tile_mask(
                 adaptive_guard_feature_map,
+                tile_hw=tile_hw,
+                stride=tile_stride,
                 direction=str(hybrid_rule_cfg.get("direction", ">=")),
                 threshold=float(hybrid_rule_cfg.get("threshold", 0.0)),
-                prefer_advanced_on_invalid=True,
+                reduction=str(hybrid_rule_cfg.get("aggregation", "mean")),
+                prefer_advanced_on_invalid=bool(
+                    hybrid_rule_cfg.get("prefer_advanced_on_invalid", False)
+                ),
             )
             rescue_scores = stap_scores.copy()
             rescue_pd = pd_stap.copy()
@@ -12548,22 +12664,33 @@ def write_acceptance_bundle(
                 "feature": str(hybrid_rule_cfg.get("feature", "base_guard_frac_map")),
                 "direction": str(hybrid_rule_cfg.get("direction", ">=")),
                 "threshold": float(hybrid_rule_cfg.get("threshold", 0.0)),
-                "prefer_advanced_on_invalid": True,
+                "aggregation": str(hybrid_rule_cfg.get("aggregation", "mean")),
+                "prefer_advanced_on_invalid": bool(
+                    hybrid_rule_cfg.get("prefer_advanced_on_invalid", False)
+                ),
                 "advanced_fraction": float(np.mean(choose_advanced)) if choose_advanced.size else None,
                 "rescue_fraction": float(np.mean(rescue_mask)) if rescue_mask.size else None,
                 "rescue_pixels": int(np.count_nonzero(rescue_mask)),
                 "advanced_pixels": int(np.count_nonzero(choose_advanced)),
+                "advanced_tile_fraction": (
+                    float(np.mean(promote_tiles)) if promote_tiles.size else None
+                ),
+                "rescue_tile_fraction": (
+                    float(np.mean(~promote_tiles)) if promote_tiles.size else None
+                ),
+                "advanced_tiles": int(np.count_nonzero(promote_tiles)),
+                "rescue_tiles": int(np.count_nonzero(~promote_tiles)),
             }
             promote_fraction = float(hybrid_stats["advanced_fraction"] or 0.0)
             promote_info: dict[str, Any] | None = None
             if bool(np.any(choose_advanced)):
-                # Keep the promoted specialist branch on the historical Gram
-                # projection path. The standalone long-Lt specialist can use a
-                # faster exact auto-selection, but adaptive_guard should retain
-                # its existing promoted-branch behavior unless explicitly
-                # overridden by the caller.
+                # Keep the promoted specialist branch on the faster exact dual
+                # projector unless the caller explicitly overrides the band
+                # projection mode. This preserves exact detector math while
+                # avoiding the pathological Gram-path slowdown seen on sparse
+                # promoted workloads.
                 with _temporary_environ(
-                    {"STAP_BAND_PROJECT_MODE": os.getenv("STAP_BAND_PROJECT_MODE") or "gram"}
+                    {"STAP_BAND_PROJECT_MODE": os.getenv("STAP_BAND_PROJECT_MODE") or "dual"}
                 ):
                     pd_promote, score_promote, promote_info = _run_stap_once(
                         detector_variant="msd_ratio",
@@ -12574,6 +12701,7 @@ def write_acceptance_bundle(
                         run_ka=True,
                         conditional_mask_flow=choose_advanced,
                         conditional_mask_bg=~choose_advanced,
+                        conditional_tile_gate=promote_tiles,
                         conditional_enable_override=True,
                     )
                 pd_stap = np.where(choose_advanced, pd_promote, rescue_pd).astype(
@@ -12596,6 +12724,36 @@ def write_acceptance_bundle(
                 "rescue_whiten_gamma": 0.0,
                 "rescue_condR_median": rescue_info.get("median_condR"),
                 "rescue_cond_loaded_median": rescue_info.get("median_cond_loaded"),
+                "rescue_timing_ms": {
+                    "stap_total_ms": float(rescue_info.get("stap_total_ms", 0.0) or 0.0),
+                    "stap_batch_proc_ms": float(
+                        rescue_info.get("stap_batch_proc_ms", 0.0) or 0.0
+                    ),
+                    "stap_extract_ms": float(rescue_info.get("stap_extract_ms", 0.0) or 0.0),
+                    "stap_post_ms": float(rescue_info.get("stap_post_ms", 0.0) or 0.0),
+                    "stap_fast_active_tile_fraction": rescue_info.get(
+                        "stap_fast_active_tile_fraction"
+                    ),
+                    "stap_fast_chunk_count": rescue_info.get("stap_fast_chunk_count"),
+                },
+                "promote_timing_ms": (
+                    {
+                        "stap_total_ms": float(promote_info.get("stap_total_ms", 0.0) or 0.0),
+                        "stap_batch_proc_ms": float(
+                            promote_info.get("stap_batch_proc_ms", 0.0) or 0.0
+                        ),
+                        "stap_extract_ms": float(
+                            promote_info.get("stap_extract_ms", 0.0) or 0.0
+                        ),
+                        "stap_post_ms": float(promote_info.get("stap_post_ms", 0.0) or 0.0),
+                        "stap_fast_active_tile_fraction": promote_info.get(
+                            "stap_fast_active_tile_fraction"
+                        ),
+                        "stap_fast_chunk_count": promote_info.get("stap_fast_chunk_count"),
+                    }
+                    if promote_info is not None
+                    else None
+                ),
                 "promote_fraction": promote_fraction,
                 "promote_active": bool(np.any(choose_advanced)),
             }

@@ -226,7 +226,7 @@ def main() -> None:
             "'whitened_power' is total whitened slow-time power without Doppler band partition; "
             "'unwhitened_ratio' keeps the same flow-band partition but disables covariance whitening; "
             "'hybrid_rescue' keeps the advanced whitened score except on pixels rescued by a fixed baseline-feature rule; "
-            "'adaptive_guard' keeps the unwhitened score by default and promotes clutter-heavy pixels onto the "
+            "'adaptive_guard' keeps the unwhitened score by default and promotes clutter-heavy tiles onto the "
             "advanced whitened branch."
         ),
     )
@@ -234,7 +234,13 @@ def main() -> None:
         "--hybrid-rescue-rule",
         type=str,
         default="guard_frac_v1",
-        choices=["guard_frac_v1", "alias_rescue_v1", "band_ratio_v1", "guard_promote_v1"],
+        choices=[
+            "guard_frac_v1",
+            "alias_rescue_v1",
+            "band_ratio_v1",
+            "guard_promote_v1",
+            "guard_promote_tile_v1",
+        ],
         help=(
             "Pixelwise routing rule used when --stap-detector-variant=hybrid_rescue. "
             "Rules are fixed from the Shin routing analysis and use baseline telemetry only."
@@ -431,7 +437,7 @@ def main() -> None:
         }
         _save_mask_debug(out_root / f"{seq_slug}__mask_debug", tube.I_ref_norm, tube.mask_flow, tube.mask_bg)
     effective_hybrid_rule = (
-        "guard_promote_v1"
+        "guard_promote_tile_v1"
         if str(args.stap_detector_variant).strip().lower()
         in {"adaptive_guard", "adaptive_guard_v1", "guard_promote"}
         else str(args.hybrid_rescue_rule)

@@ -132,6 +132,65 @@ def build_temporal_hankels_batch(
     return S, R_scm
 
 
+def build_temporal_hankels_unfold_batch(
+    cube_B_T_hw: np.ndarray | "torch.Tensor",
+    Lt: int,
+    *,
+    center: bool = True,
+    device: str | None = None,
+    dtype: "torch.dtype" = None,
+) -> "torch.Tensor":
+    """
+    Batched Hankel construction for direct-score paths in native unfold layout.
+
+    Returns
+    -------
+    S_unfold : (B, N, H, W, Lt) tensor
+        Native unfold-view layout before flattening.
+    """
+    if torch is None:  # pragma: no cover - torch unavailable
+        raise ImportError("torch is required for temporal Hankel helpers")
+    x = torch.as_tensor(cube_B_T_hw)
+    if dtype is not None:
+        x = x.to(dtype=dtype)
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    x = x.to(device)
+    if x.ndim == 3:
+        x = x.unsqueeze(0)
+    _B, T, h, w = x.shape
+    if Lt < 2 or Lt >= T:
+        raise ValueError(f"Need 2 <= Lt < T (got Lt={Lt}, T={T})")
+
+    S = x.unfold(dimension=1, size=Lt, step=1)
+
+    stride_env = os.getenv("STAP_SNAPSHOT_STRIDE", "").strip()
+    max_env = os.getenv("STAP_MAX_SNAPSHOTS", "").strip()
+    try:
+        stride = int(stride_env) if stride_env else 1
+    except ValueError:
+        stride = 1
+    if stride < 1:
+        stride = 1
+    if stride > 1 and int(S.shape[1]) > int(stride):
+        S = S[:, ::stride, :, :, :].contiguous()
+    try:
+        max_snaps = int(max_env) if max_env else None
+    except ValueError:
+        max_snaps = None
+    if max_snaps is not None and max_snaps > 0 and S.shape[1] > max_snaps:
+        N_full = int(S.shape[1])
+        idx = torch.linspace(
+            0, N_full - 1, steps=int(max_snaps), device=S.device, dtype=torch.long
+        )
+        S = S.index_select(1, idx).contiguous()
+
+    if center:
+        S = S - S.mean(dim=1, keepdim=True)
+
+    return S
+
+
 def build_temporal_hankels_flat_batch(
     cube_B_T_hw: np.ndarray | "torch.Tensor",
     Lt: int,
@@ -151,16 +210,19 @@ def build_temporal_hankels_flat_batch(
     N, H, W : int
         Snapshot count and spatial tile shape needed to reshape detector outputs.
     """
-    S = _prepare_temporal_hankel_stack(
+    S = build_temporal_hankels_unfold_batch(
         cube_B_T_hw,
         Lt,
         center=center,
         device=device,
         dtype=dtype,
     )
-    B, Lt, N, h, w = S.shape
-    S_flat = S.permute(0, 1, 3, 4, 2).contiguous().view(B, Lt, -1)
-    return S_flat, int(N), int(h), int(w)
+    B = int(S.shape[0])
+    N = int(S.shape[1])
+    h = int(S.shape[2])
+    w = int(S.shape[3])
+    S_flat = S.permute(0, 4, 2, 3, 1).contiguous().view(B, Lt, -1)
+    return S_flat, N, int(h), int(w)
 
 
 def robust_temporal_cov_batch(

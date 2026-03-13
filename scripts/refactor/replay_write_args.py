@@ -39,7 +39,7 @@ def build_write_acceptance_kwargs(
 ) -> dict[str, Any]:
     stap_detector_variant = str(getattr(args, "stap_detector_variant", "msd_ratio"))
     effective_hybrid_rule = (
-        "guard_promote_v1"
+        "guard_promote_tile_v1"
         if stap_detector_variant.strip().lower()
         in {"adaptive_guard", "adaptive_guard_v1", "guard_promote"}
         else str(getattr(args, "hybrid_rescue_rule", "guard_frac_v1"))
