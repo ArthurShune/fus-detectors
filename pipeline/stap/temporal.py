@@ -3527,9 +3527,21 @@ def _band_energy_whitened_batched(
             ridge_vec: torch.Tensor
 
             if not mode_pf and not mode_dual and not mode_gram:
-                # Auto selection: when K is large relative to Lt, avoid the
-                # K×K solve by using the mathematically equivalent dual form.
+                # Auto selection:
+                # - Use the historical KxK Gram solve by default.
+                # - Prefer the exact dual form for long-Lt CUDA workloads with
+                #   very wide RHS matrices, where the Lt x Lt solve is
+                #   materially faster than the K x K projection path.
+                P_i = int(Sw.shape[-1])
                 mode_dual = bool(K > Lt_m)
+                if (
+                    not mode_dual
+                    and bool(Sw.is_cuda)
+                    and int(Lt_m) >= 32
+                    and int(P_i) >= 2048
+                    and int(K) >= 12
+                ):
+                    mode_dual = True
 
             if mode_dual:
                 # Dual/Woodbury form:

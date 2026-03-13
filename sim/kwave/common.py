@@ -12557,17 +12557,25 @@ def write_acceptance_bundle(
             promote_fraction = float(hybrid_stats["advanced_fraction"] or 0.0)
             promote_info: dict[str, Any] | None = None
             if bool(np.any(choose_advanced)):
-                pd_promote, score_promote, promote_info = _run_stap_once(
-                    detector_variant="msd_ratio",
-                    whiten_gamma=float(stap_whiten_gamma),
-                    recorder=stap_br_recorder,
-                    debug_samples=0,
-                    debug_coords=None,
-                    run_ka=True,
-                    conditional_mask_flow=choose_advanced,
-                    conditional_mask_bg=~choose_advanced,
-                    conditional_enable_override=True,
-                )
+                # Keep the promoted specialist branch on the historical Gram
+                # projection path. The standalone long-Lt specialist can use a
+                # faster exact auto-selection, but adaptive_guard should retain
+                # its existing promoted-branch behavior unless explicitly
+                # overridden by the caller.
+                with _temporary_environ(
+                    {"STAP_BAND_PROJECT_MODE": os.getenv("STAP_BAND_PROJECT_MODE") or "gram"}
+                ):
+                    pd_promote, score_promote, promote_info = _run_stap_once(
+                        detector_variant="msd_ratio",
+                        whiten_gamma=float(stap_whiten_gamma),
+                        recorder=stap_br_recorder,
+                        debug_samples=0,
+                        debug_coords=None,
+                        run_ka=True,
+                        conditional_mask_flow=choose_advanced,
+                        conditional_mask_bg=~choose_advanced,
+                        conditional_enable_override=True,
+                    )
                 pd_stap = np.where(choose_advanced, pd_promote, rescue_pd).astype(
                     np.float32, copy=False
                 )
