@@ -141,7 +141,7 @@ def _render_tex(out_tex: Path, rows: list[ScenarioRow], *, preset_name: str) -> 
                 f"\\caption{{Steady-state latency summary for preset \\texttt{{{preset_name}}} on an "
                 "NVIDIA GeForce RTX 4080 SUPER 16GB. Times are means over windows/frames 2..N, "
                 "exclude disk I/O, and time the frozen product-path detector hierarchy rather than "
-                "the older specialist-path timing configuration.}}"
+                "the older specialist-path timing configuration.}"
             ),
             "\\label{tab:latency_summary_4080super_product}",
             "\\end{table}",
@@ -208,6 +208,7 @@ def main() -> None:
     # head, exact zero-motion bypass, and a fixed conditional tile threshold.
     brain_env = dict(env)
     brain_env["STAP_CONDITIONAL_TILE_MIN_FRAC"] = "0.40"
+    brain_env["STAP_FAST_CUDA_GRAPH"] = "0"
     brain_rows: list[ScenarioRow] = []
     for profile in ("Brain-OpenSkull", "Brain-AliasContract", "Brain-SkullOR"):
         profile_slug = profile.lower().replace("-", "_")
