@@ -55,6 +55,7 @@ try:
         project_out_motion_whitened,
         projector_from_tones,
         split_fd_grid_by_motion,
+        stap_cuda_event_timing,
         stap_stage_ctx,
         stap_temporal_core_batched,
     )
@@ -80,6 +81,7 @@ except ModuleNotFoundError:
     projector_from_tones = None  # type: ignore[assignment]
     stap_temporal_core_batched = None  # type: ignore[assignment]
     pd_temporal_core_batched = None  # type: ignore[assignment]
+    stap_cuda_event_timing = None  # type: ignore[assignment]
     stap_stage_ctx = None  # type: ignore[assignment]
     choose_lt_from_coherence = None  # type: ignore[assignment]
     choose_fd_grid_auto = None  # type: ignore[assignment]
@@ -6888,6 +6890,10 @@ def _stap_pd(
         remaining_coord_requests = set(capture_coord_requests)
     tile_counter = 0
     stap_tiles_skipped_flow0 = 0
+    stap_fast_active_tile_count = 0
+    stap_fast_chunk_count = 0
+    stap_fast_chunk_size_sum = 0
+    stap_fast_chunk_size_max = 0
     bg_edge_clamp_total = 0
     psd_freq_cache: np.ndarray | None = None
     bg_psd_accum: np.ndarray | None = None
@@ -7561,8 +7567,15 @@ def _stap_pd(
         nonlocal tile_batch_items, tile_positions, tile_capture_flags
         nonlocal tile_capture_coord_flags, tile_batch_indices, t_batch_proc, t_post
         nonlocal stap_fast_any
+        nonlocal stap_fast_active_tile_count, stap_fast_chunk_count
+        nonlocal stap_fast_chunk_size_sum, stap_fast_chunk_size_max
         if not tile_batch_items:
             return
+        batch_items_n = int(len(tile_batch_items))
+        stap_fast_active_tile_count += batch_items_n
+        stap_fast_chunk_count += 1
+        stap_fast_chunk_size_sum += batch_items_n
+        stap_fast_chunk_size_max = max(stap_fast_chunk_size_max, batch_items_n)
         # When KA gating is enabled, we must run the per-tile STAP kernel with a
         # tile-specific gate payload so that KA is actually localized in score
         # space. In that regime we bypass the batched core and call `process_tile`
@@ -7870,6 +7883,7 @@ def _stap_pd(
                         stap_tiles_skipped_flow0 = int((~tile_has_flow_flat).sum().item())
                     else:
                         active_idx_all = torch.arange(B_total, device=dev, dtype=torch.long)
+                    stap_fast_active_tile_count = int(active_idx_all.numel())
 
                 stap_fast_any = False
                 tile_infos = []
@@ -7881,6 +7895,10 @@ def _stap_pd(
                     idx = active_idx_all[start : start + target_tiles]
                     if idx.numel() == 0:
                         continue
+                    chunk_size = int(idx.numel())
+                    stap_fast_chunk_count += 1
+                    stap_fast_chunk_size_sum += chunk_size
+                    stap_fast_chunk_size_max = max(stap_fast_chunk_size_max, chunk_size)
                     y_inds = idx // int(nX)
                     x_inds = idx % int(nX)
 
@@ -10507,8 +10525,25 @@ def _stap_pd(
     info_out["stap_fast_forced"] = bool(
         any(info.get("stap_fast_forced", False) for info in tile_infos)
     )
+    info_out["stap_fast_cuda_graph"] = bool(
+        any(info.get("stap_fast_cuda_graph", False) for info in tile_infos)
+    )
     info_out["stap_tile_statistic_used"] = bool(
         any(info.get("stap_tile_statistic_used", False) for info in tile_infos)
+    )
+    info_out["stap_tile_batch_size"] = int(tile_batch_size)
+    info_out["stap_fast_active_tile_count"] = int(stap_fast_active_tile_count)
+    info_out["stap_fast_active_tile_fraction"] = (
+        float(stap_fast_active_tile_count) / float(total_tiles)
+        if total_tiles > 0
+        else 0.0
+    )
+    info_out["stap_fast_chunk_count"] = int(stap_fast_chunk_count)
+    info_out["stap_fast_chunk_size_max"] = int(stap_fast_chunk_size_max)
+    info_out["stap_fast_chunk_size_mean"] = (
+        float(stap_fast_chunk_size_sum) / float(stap_fast_chunk_count)
+        if stap_fast_chunk_count > 0
+        else 0.0
     )
     info_out["detector_variant"] = str(det_variant)
     info_out["whiten_gamma"] = float(whiten_gamma)
@@ -12200,57 +12235,98 @@ def write_acceptance_bundle(
             debug_coords: Sequence[tuple[int, int]] | None,
             run_ka: bool,
         ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
-            return _stap_pd(
-                stap_input_cube,
-                tile_hw=tile_hw,
-                stride=tile_stride,
-                Lt=Lt,
-                prf_hz=prf_hz,
-                diag_load=diag_load,
-                cov_train_trim_q=float(stap_cov_train_trim_q),
-                estimator=cov_estimator,
-                huber_c=huber_c,
-                mvdr_load_mode=mvdr_load_mode,
-                mvdr_auto_kappa=mvdr_auto_kappa,
-                constraint_ridge=constraint_ridge,
-                fd_span_mode=fd_mode,
-                fd_span_rel=fd_span_rel,
-                fd_fixed_span_hz=fd_fixed_span_hz,
-                constraint_mode=constraint_mode,
-                grid_step_rel=grid_step_rel,
-                min_pts=fd_min_pts,
-                max_pts=fd_max_pts,
-                fd_min_abs_hz=fd_min_abs_hz,
-                msd_lambda=msd_lambda,
-                detector_variant=detector_variant,
-                whiten_gamma=whiten_gamma,
-                msd_ridge=msd_ridge,
-                msd_agg_mode=msd_agg_mode,
-                msd_ratio_rho=msd_ratio_rho,
-                motion_half_span_rel=motion_half_span_rel,
-                msd_contrast_alpha=msd_contrast_alpha,
-                debug_max_samples=debug_samples,
-                debug_tile_coords=debug_coords,
-                stap_device=stap_device_resolved,
-                tile_batch=tile_batch_size,
-                pd_base_full=pd_base,
-                mask_flow=mask_flow_cond,
-                mask_bg=mask_bg_cond,
-                conditional_enable=cond_enabled,
-                ka_mode=ka_mode_norm if (ka_active and run_ka) else "none",
-                ka_prior_library=ka_prior_library if (ka_active and run_ka) else None,
-                ka_opts=ka_opts_dict if (ka_active and run_ka) else None,
-                alias_psd_select_enable=alias_psd_select_enable,
-                alias_psd_select_ratio_thresh=alias_psd_select_ratio_thresh,
-                alias_psd_select_bins=alias_psd_select_bins,
-                psd_telemetry=psd_telemetry,
-                psd_tapers=psd_tapers,
-                psd_bandwidth=psd_bandwidth,
-                band_ratio_recorder=recorder,
-                feasibility_mode=feas_mode,
-                band_ratio_spec=band_ratio_spec_meta,
-                tile_debug_limit=tile_debug_limit,
+            stage_cm = nullcontext()
+            if stap_cuda_event_timing is not None:
+                stage_cm = stap_cuda_event_timing()
+            cuda_mem_enabled = bool(
+                torch is not None
+                and bool(getattr(torch.cuda, "is_available", lambda: False)())
+                and str(stap_device_resolved).lower().startswith("cuda")
+                and os.getenv("STAP_CUDA_EVENT_TIMING", "").strip().lower()
+                in {"1", "true", "yes", "on"}
             )
+            if cuda_mem_enabled:
+                try:
+                    torch.cuda.synchronize()
+                    torch.cuda.reset_peak_memory_stats()
+                except Exception:
+                    cuda_mem_enabled = False
+            with stage_cm as cuda_stage_timer:
+                pd_out, score_out, info_out = _stap_pd(
+                    stap_input_cube,
+                    tile_hw=tile_hw,
+                    stride=tile_stride,
+                    Lt=Lt,
+                    prf_hz=prf_hz,
+                    diag_load=diag_load,
+                    cov_train_trim_q=float(stap_cov_train_trim_q),
+                    estimator=cov_estimator,
+                    huber_c=huber_c,
+                    mvdr_load_mode=mvdr_load_mode,
+                    mvdr_auto_kappa=mvdr_auto_kappa,
+                    constraint_ridge=constraint_ridge,
+                    fd_span_mode=fd_mode,
+                    fd_span_rel=fd_span_rel,
+                    fd_fixed_span_hz=fd_fixed_span_hz,
+                    constraint_mode=constraint_mode,
+                    grid_step_rel=grid_step_rel,
+                    min_pts=fd_min_pts,
+                    max_pts=fd_max_pts,
+                    fd_min_abs_hz=fd_min_abs_hz,
+                    msd_lambda=msd_lambda,
+                    detector_variant=detector_variant,
+                    whiten_gamma=whiten_gamma,
+                    msd_ridge=msd_ridge,
+                    msd_agg_mode=msd_agg_mode,
+                    msd_ratio_rho=msd_ratio_rho,
+                    motion_half_span_rel=motion_half_span_rel,
+                    msd_contrast_alpha=msd_contrast_alpha,
+                    debug_max_samples=debug_samples,
+                    debug_tile_coords=debug_coords,
+                    stap_device=stap_device_resolved,
+                    tile_batch=tile_batch_size,
+                    pd_base_full=pd_base,
+                    mask_flow=mask_flow_cond,
+                    mask_bg=mask_bg_cond,
+                    conditional_enable=cond_enabled,
+                    ka_mode=ka_mode_norm if (ka_active and run_ka) else "none",
+                    ka_prior_library=ka_prior_library if (ka_active and run_ka) else None,
+                    ka_opts=ka_opts_dict if (ka_active and run_ka) else None,
+                    alias_psd_select_enable=alias_psd_select_enable,
+                    alias_psd_select_ratio_thresh=alias_psd_select_ratio_thresh,
+                    alias_psd_select_bins=alias_psd_select_bins,
+                    psd_telemetry=psd_telemetry,
+                    psd_tapers=psd_tapers,
+                    psd_bandwidth=psd_bandwidth,
+                    band_ratio_recorder=recorder,
+                    feasibility_mode=feas_mode,
+                    band_ratio_spec=band_ratio_spec_meta,
+                    tile_debug_limit=tile_debug_limit,
+                )
+            if cuda_stage_timer is not None and hasattr(cuda_stage_timer, "summary_ms"):
+                try:
+                    stage_summary = cuda_stage_timer.summary_ms()
+                except Exception:
+                    stage_summary = {}
+                if stage_summary:
+                    info_out["stap_cuda_stage_ms"] = {
+                        str(k): float(v) for k, v in sorted(stage_summary.items())
+                    }
+                    info_out["stap_cuda_stage_total_ms"] = float(
+                        sum(float(v) for v in stage_summary.values())
+                    )
+            if cuda_mem_enabled:
+                try:
+                    torch.cuda.synchronize()
+                    info_out["stap_cuda_max_memory_allocated_mb"] = float(
+                        torch.cuda.max_memory_allocated() / (1024.0 * 1024.0)
+                    )
+                    info_out["stap_cuda_max_memory_reserved_mb"] = float(
+                        torch.cuda.max_memory_reserved() / (1024.0 * 1024.0)
+                    )
+                except Exception:
+                    pass
+            return pd_out, score_out, info_out
 
         core_variant = (
             "msd_ratio" if stap_detector_variant_norm == "hybrid_rescue" else stap_detector_variant_norm
