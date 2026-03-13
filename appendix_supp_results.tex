@@ -9,7 +9,7 @@ Quantitative ROC claims are restricted to regimes with independent labels (simul
 Operating points are reported under prespecified settings by selecting thresholds on labeled (or structurally labeled) $H_0$ sets at target FPR and evaluating TPR on the corresponding $H_1$ set; the empirically supported floor $fpr_{\min}=1/n_{\mathrm{neg}}$ is reported.
 Uncertainty is quantified at the natural unit of variation (windows for the labeled brain simulations; frames for cine acquisitions) rather than treating pooled pixels as independent samples.
 Conditional execution is treated as a changed method and is reported only with explicit leakage controls.
-For Twinkling sequences, PRF is treated as an explicit experimental assumption (frozen overrides) and band-discretization sentinels force conservative behavior when discretized bands are invalid.
+For Twinkling sequences, PRF is fixed once per sequence family using source-paper values where available and explicit frozen overrides otherwise; band-discretization sentinels force conservative behavior when discretized bands are invalid.
 When KA is enabled, it is shrink-only and preserves a protected do-not-penalize set (scores unchanged on high-confidence flow locations); labeled ROC reporting uses the pre-KA STAP score.
 \end{minipage}}
 \end{center}
@@ -17,7 +17,7 @@ When KA is enabled, it is shrink-only and preserves a protected do-not-penalize 
 \paragraph{Where to find what.}
 \begin{itemize}[nosep]
   \item Full ROC curve shapes for labeled regimes: Figure~\ref{fig:brain_kwave_roc_curves} (labeled brain simulations) and Figure~\ref{fig:twinkling_gammex_structural_roc_curves} (Gammex).
-  \item STAP-only ablation and PRF override sensitivity (Gammex): Figure~\ref{fig:twinkling_gammex_ablation_prf_sensitivity}.
+  \item STAP-only ablation and PRF sensitivity sanity check (Gammex): Figure~\ref{fig:twinkling_gammex_ablation_prf_sensitivity}.
   \item Conditional-execution leakage ablation (open-skull pilot): Table~\ref{tab:condstap_leakage_ablation}.
   \item Prespecified-setting sensitivity sweep (open-skull pilot; $\lambda$, tile size, $L_t$): Figure~\ref{fig:brain_openskull_profile_sensitivity}.
   \item Frozen threshold sensitivity around the finalized adaptive and KA thresholds: Tables~\ref{tab:adaptive_tau_sensitivity} and \ref{tab:ka_cflow_sensitivity}.
@@ -202,21 +202,21 @@ For the adaptive variant, Table~\ref{tab:adaptive_tau_sensitivity} evaluates the
   \end{center}
 }
 
-\subsection{STAP-only ablation and PRF override sensitivity (Gammex)}
-To isolate the role of the STAP core from baseline prefiltering, we run a small STAP-only ablation on the Gammex flow phantom by applying STAP directly to raw (registered) CFM IQ without the SVD band-pass baseline. We also provide a small PRF override sensitivity check on the along view to assess brittleness to the frozen PRF assumption required by Twinkling metadata limitations. The main text cites the TPR@$10^{-3}$ endpoints from this audit as a bounded fairness sanity check; the full figure below shows the paired first-20-frame comparison and PRF-override panel.
+\subsection{STAP-only ablation and PRF sensitivity sanity check (Gammex)}
+To isolate the role of the STAP core from baseline prefiltering, we run a small STAP-only ablation on the Gammex flow phantom by applying STAP directly to raw (registered) CFM IQ without the SVD band-pass baseline. We also provide a small PRF sensitivity check on the along view to assess whether the reported structural behavior is brittle to modest perturbations of the frozen sequence-level PRF setting. The main text cites the TPR@$10^{-3}$ endpoints from this audit as a bounded fairness sanity check; the full figure below shows the paired first-20-frame comparison and PRF-sensitivity panel.
 
 \ifSTAPSUPPLEMENTONLY
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{figs/paper/twinkling_gammex_ablation_prf_sensitivity.pdf}
-\caption{Gammex flow phantom: (left) STAP-only ablation comparing the standard baseline SVD band-pass + STAP pipeline to STAP-only on raw IQ (first 20 cine frames; both views). (right) PRF override sensitivity on the along view (first 20 cine frames). Points show TPR at a fixed FPR target of $10^{-3}$ with 95\% frame-bootstrap CIs under the structural tube masks. This is a low-cost sanity audit of the frozen PRF/band discretization, not a tuned performance sweep.}
+\caption{Gammex flow phantom: (left) STAP-only ablation comparing the standard baseline SVD band-pass + STAP pipeline to STAP-only on raw IQ (first 20 cine frames; both views). (right) PRF sensitivity on the along view (first 20 cine frames). Points show TPR at a fixed FPR target of $10^{-3}$ with 95\% frame-bootstrap CIs under the structural tube masks. This is a low-cost robustness check around the frozen PRF/band discretization, not a tuned performance sweep.}
 \label{fig:twinkling_gammex_ablation_prf_sensitivity}
 \end{figure}
 \else
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{figs/paper/twinkling_gammex_ablation_prf_sensitivity.pdf}
-\caption{Gammex flow phantom: (left) STAP-only ablation comparing the standard baseline SVD band-pass + STAP pipeline to STAP-only on raw IQ (first 20 cine frames; both views). (right) PRF override sensitivity on the along view (first 20 cine frames). Points show TPR at a fixed FPR target of $10^{-3}$ with 95\% frame-bootstrap CIs under the structural tube masks. This is a low-cost sanity audit of the frozen PRF/band discretization, not a tuned performance sweep.}
+\caption{Gammex flow phantom: (left) STAP-only ablation comparing the standard baseline SVD band-pass + STAP pipeline to STAP-only on raw IQ (first 20 cine frames; both views). (right) PRF sensitivity on the along view (first 20 cine frames). Points show TPR at a fixed FPR target of $10^{-3}$ with 95\% frame-bootstrap CIs under the structural tube masks. This is a low-cost robustness check around the frozen PRF/band discretization, not a tuned performance sweep.}
 \label{fig:twinkling_gammex_ablation_prf_sensitivity}
 \end{figure}
 \fi
