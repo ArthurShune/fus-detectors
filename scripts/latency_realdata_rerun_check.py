@@ -463,6 +463,9 @@ def _run_gammex(args: argparse.Namespace) -> Dict[str, Any]:
                 stap_conditional_enable=(str(args.stap_conditional).strip().lower() == "on"),
                 stap_device=str(args.stap_device),
                 run_stap=True,
+                defer_raw_pd_base=(
+                    str(args.baseline_type).strip().lower() in {"raw", "none", "identity"}
+                ),
                 score_ka_v2_enable=False,
                 meta_extra=meta_extra,
             )

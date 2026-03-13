@@ -316,6 +316,7 @@ class _StapFastCudaGraphEntry:
 
 _STAP_FAST_CUDA_GRAPH_CACHE: Dict[tuple, _StapFastCudaGraphEntry] = {}
 _STAP_FAST_CUDA_GRAPH_FAILED: set[tuple] = set()
+_STAP_FOLD_COUNTS_CACHE: Dict[tuple, "torch.Tensor"] = {}
 
 
 def _stap_fast_cuda_graph_mode() -> str:
@@ -7015,6 +7016,14 @@ def _stap_pd(
             for idx, (_cov, y0, x0) in enumerate(coords_ordered)
         }
     t0_stap = time.perf_counter()
+    pd_base_was_provided = pd_base_full is not None
+    pd_base_generated_cpu: np.ndarray | None = None
+    if pd_base_full is None and not (
+        os.getenv("STAP_TILING_UNFOLD", "").strip().lower() in {"1", "true", "yes", "on"}
+    ):
+        pd_base_generated_cpu = np.mean((np.abs(Icube) ** 2).astype(np.float32), axis=0).astype(
+            np.float32, copy=False
+        )
     capture_indices: set[int] = set()
     if debug_max_samples > 0 and total_tiles > 0:
         capture_count = min(debug_max_samples, total_tiles)
@@ -7249,8 +7258,9 @@ def _stap_pd(
             else:
                 tile_has_flow = bool(flow_mask_tile.any())
             flow_cov_ratio = float(flow_mask_tile.sum()) / float(flow_mask_tile.size)
+        base_source_map = pd_base_full if pd_base_full is not None else pd_base_generated_cpu
         base_tile_cached = (
-            pd_base_full[y0 : y0 + th, x0 : x0 + tw] if pd_base_full is not None else None
+            base_source_map[y0 : y0 + th, x0 : x0 + tw] if base_source_map is not None else None
         )
         pd_metric_raw = None
         if base_tile_cached is not None:
@@ -7863,6 +7873,7 @@ def _stap_pd(
     used_unfold_tiling = False
     use_unfold_env = os.getenv("STAP_TILING_UNFOLD", "").strip().lower() in {"1", "true", "yes", "on"}
     unfold_error: str | None = None
+    info_out_unfold: dict[str, float] = {}
     unfold_eligible = (
         use_unfold_env
         and torch is not None
@@ -7884,6 +7895,7 @@ def _stap_pd(
             if nY > 0 and nX > 0:
                 dev = device_resolved
 
+                t0_unfold_prep = time.perf_counter()
                 with (
                     stap_stage_ctx("stap:tiling:prep")
                     if stap_stage_ctx is not None
@@ -7927,6 +7939,7 @@ def _stap_pd(
                             .contiguous()
                         )
                         tile_is_bg = bg_tiles.all(dim=(2, 3))  # (nY,nX)
+                t_unfold_prep_total = time.perf_counter() - t0_unfold_prep
 
                 # Prepare per-tile patch buffers for overlap-add reconstruction.
                 # Keep these float32: overlap counts are small and the final maps
@@ -8050,6 +8063,8 @@ def _stap_pd(
                 tile_infos = []
                 t_core_total = 0.0
                 t_post_total = 0.0
+                t_unfold_fold_total = 0.0
+                t_unfold_to_cpu_total = 0.0
 
                 # Core compute + telemetry per chunk.
                 for start in range(0, int(active_idx_all.numel()), target_tiles):
@@ -8352,6 +8367,7 @@ def _stap_pd(
                     out = F.fold(cols, output_size=(H, W), kernel_size=(th, tw), stride=stride)
                     return out[0, 0]
 
+                t0_fold = time.perf_counter()
                 with (
                     stap_stage_ctx("stap:tiling:fold")
                     if stap_stage_ctx is not None
@@ -8367,8 +8383,22 @@ def _stap_pd(
                         pd_patches = torch.where(bg_flat_all, base_flat_all, pd_patches)
 
                     # Counts are independent of conditional gating (baseline fallback still adds).
-                    ones = torch.ones((B_total, th, tw), dtype=torch.float32, device=dev)
-                    counts_t = _fold(ones)
+                    counts_cache_key = (
+                        str(dev),
+                        int(H),
+                        int(W),
+                        int(th),
+                        int(tw),
+                        int(stride),
+                        "float32",
+                    )
+                    counts_t = _STAP_FOLD_COUNTS_CACHE.get(counts_cache_key)
+                    if counts_t is None:
+                        ones = torch.ones((B_total, th, tw), dtype=torch.float32, device=dev)
+                        counts_t = _fold(ones)
+                        _STAP_FOLD_COUNTS_CACHE[counts_cache_key] = counts_t
+                    else:
+                        counts_t = counts_t.to(device=dev)
 
                     # Score counts follow conditional gating (skipped tiles do not contribute).
                     if conditional_enable and tile_gate_flat_np is not None:
@@ -8376,20 +8406,23 @@ def _stap_pd(
                             tile_gate_flat_np, dtype=torch.float32, device=dev
                         )
                         score_active = tile_gate_t.view(B_total, 1, 1).expand(B_total, th, tw)
+                        score_counts_t = _fold(score_active)
                     elif conditional_enable and tile_has_flow is not None:
                         score_active = (
                             tile_has_flow.to(dtype=torch.float32)
                             .view(B_total, 1, 1)
                             .expand(B_total, th, tw)
                         )
+                        score_counts_t = _fold(score_active)
                     else:
-                        score_active = ones
-                    score_counts_t = _fold(score_active)
+                        score_counts_t = counts_t
 
                     pd_t = _fold(pd_patches)
                     score_t = _fold(score_flat_all)
+                t_unfold_fold_total += time.perf_counter() - t0_fold
 
                 # Bring sums and counts back to NumPy for the remainder of `_stap_pd`.
+                t0_to_cpu = time.perf_counter()
                 with (
                     stap_stage_ctx("stap:tiling:to_cpu")
                     if stap_stage_ctx is not None
@@ -8399,16 +8432,33 @@ def _stap_pd(
                     score = score_t.detach().cpu().numpy().astype(np.float64, copy=False)
                     counts = counts_t.detach().cpu().numpy().astype(np.float64, copy=False)
                     score_counts = score_counts_t.detach().cpu().numpy().astype(np.float64, copy=False)
+                    if pd_base_full is None:
+                        pd_base_generated_cpu = (
+                            base_pd_t.detach().cpu().numpy().astype(np.float32, copy=False)
+                        )
+                        pd_base_full = pd_base_generated_cpu
+                t_unfold_to_cpu_total += time.perf_counter() - t0_to_cpu
 
                 t_batch_proc = t_core_total
                 t_post = t_post_total
                 t_extract = 0.0
+                info_out_unfold = {
+                    "stap_unfold_prep_ms": float(1000.0 * t_unfold_prep_total),
+                    "stap_unfold_fold_ms": float(1000.0 * t_unfold_fold_total),
+                    "stap_unfold_to_cpu_ms": float(1000.0 * t_unfold_to_cpu_total),
+                }
                 used_unfold_tiling = True
         except Exception as exc:
             unfold_error = repr(exc)
             used_unfold_tiling = False
 
     if not used_unfold_tiling:
+        if pd_base_full is None and pd_base_generated_cpu is None:
+            pd_base_generated_cpu = np.mean((np.abs(Icube) ** 2).astype(np.float32), axis=0).astype(
+                np.float32, copy=False
+            )
+        if pd_base_full is None and pd_base_generated_cpu is not None:
+            pd_base_full = pd_base_generated_cpu
         if torch is not None and isinstance(Icube, torch.Tensor):
             Icube = Icube.detach().cpu().numpy()
         for _cov_flow, y0, x0 in coords_ordered:
@@ -8426,6 +8476,8 @@ def _stap_pd(
                     base_tile = None
                     if pd_base_full is not None:
                         base_tile = pd_base_full[y0 : y0 + th, x0 : x0 + tw]
+                    elif pd_base_generated_cpu is not None:
+                        base_tile = pd_base_generated_cpu[y0 : y0 + th, x0 : x0 + tw]
                     else:
                         t0_ext = time.perf_counter()
                         cube_tmp = Icube[:, y0 : y0 + th, x0 : x0 + tw]
@@ -8444,6 +8496,8 @@ def _stap_pd(
                     base_tile = None
                     if pd_base_full is not None:
                         base_tile = pd_base_full[y0 : y0 + th, x0 : x0 + tw]
+                    elif pd_base_generated_cpu is not None:
+                        base_tile = pd_base_generated_cpu[y0 : y0 + th, x0 : x0 + tw]
                     else:
                         t0_ext = time.perf_counter()
                         cube_tmp = Icube[:, y0 : y0 + th, x0 : x0 + tw]
@@ -8496,6 +8550,47 @@ def _stap_pd(
 
     counts[counts == 0.0] = 1.0
     score_counts[score_counts == 0.0] = 1.0
+
+    latency_minimal_telemetry = bool(
+        latency_mode
+        and os.getenv("STAP_FAST_TELEMETRY", "").strip().lower() in {"", "0", "false", "no", "off"}
+    )
+    latency_ratios_with_cov: list[tuple[float | None, float | None]] | None = None
+    latency_tile_bg_var_vals: list[float] | None = None
+    latency_tile_info_count = int(len(tile_infos))
+    latency_fast_flags: dict[str, object] | None = None
+    if latency_minimal_telemetry:
+        latency_ratios_with_cov = [
+            (
+                info.get("flow_mu_ratio"),
+                info.get("flow_coverage"),
+            )
+            for info in tile_infos
+            if not info.get("fallback") and info.get("flow_mu_ratio") is not None
+        ]
+        latency_tile_bg_var_vals = [
+            float(info.get("bg_var_inflation"))
+            for info in tile_infos
+            if not info.get("fallback") and info.get("bg_var_inflation") is not None
+            and np.isfinite(info.get("bg_var_inflation"))
+        ]
+        latency_fast_flags = {
+            "fallback_count": int(sum(1 for info in tile_infos if info.get("fallback"))),
+            "total_tiles": latency_tile_info_count,
+            "stap_fast_path_used": bool(stap_fast_any),
+            "stap_fast_attempted": bool(
+                any(info.get("stap_fast_attempted", False) for info in tile_infos)
+            ),
+            "stap_fast_failed": bool(any(info.get("stap_fast_failed", False) for info in tile_infos)),
+            "stap_fast_forced": bool(any(info.get("stap_fast_forced", False) for info in tile_infos)),
+            "stap_fast_cuda_graph": bool(
+                any(info.get("stap_fast_cuda_graph", False) for info in tile_infos)
+            ),
+            "stap_tile_statistic_used": bool(
+                any(info.get("stap_tile_statistic_used", False) for info in tile_infos)
+            ),
+        }
+        tile_infos = []
 
     Lt_vals = [info["Lt"] for info in tile_infos if not info.get("fallback") and "Lt" in info]
     cond_vals = [
@@ -9876,6 +9971,8 @@ def _stap_pd(
         "stap_device": device_resolved,
         "debug_samples": debug_payloads,
     }
+    if info_out_unfold:
+        info_out.update(info_out_unfold)
     info_out.update(_operator_metric_stats(tile_infos))
     if ka_operator_flags:
         info_out["ka_operator_feasible_fraction"] = float(np.mean(ka_operator_flags))
@@ -10307,14 +10404,18 @@ def _stap_pd(
             info_out["debug_coords_missing"] = [
                 [int(y0), int(x0)] for y0, x0 in sorted(remaining_coord_requests)
             ]
-    ratios_with_cov = [
-        (
-            info.get("flow_mu_ratio"),
-            info.get("flow_coverage"),
-        )
-        for info in tile_infos
-        if not info.get("fallback") and info.get("flow_mu_ratio") is not None
-    ]
+    ratios_with_cov = (
+        latency_ratios_with_cov
+        if latency_ratios_with_cov is not None
+        else [
+            (
+                info.get("flow_mu_ratio"),
+                info.get("flow_coverage"),
+            )
+            for info in tile_infos
+            if not info.get("fallback") and info.get("flow_mu_ratio") is not None
+        ]
+    )
     ratios_array = np.array(
         [float(r[0]) for r in ratios_with_cov if r[0] is not None], dtype=float
     )
@@ -10490,12 +10591,19 @@ def _stap_pd(
     bg_var_ratio_pre: float | None = None
     bg_var_ratio_post: float | None = None
     bg_var_base_pre: float | None = None
-    tile_bg_var_vals = [
-        info.get("bg_var_inflation")
-        for info in tile_infos
-        if not info.get("fallback") and info.get("bg_var_inflation") is not None
-    ]
-    tile_bg_var_vals = [float(v) for v in tile_bg_var_vals if np.isfinite(v)]
+    tile_bg_var_vals = (
+        list(latency_tile_bg_var_vals)
+        if latency_tile_bg_var_vals is not None
+        else [
+            float(v)
+            for v in [
+                info.get("bg_var_inflation")
+                for info in tile_infos
+                if not info.get("fallback") and info.get("bg_var_inflation") is not None
+            ]
+            if np.isfinite(v)
+        ]
+    )
     tile_bg_p90 = (
         float(np.quantile(tile_bg_var_vals, 0.9))
         if len(tile_bg_var_vals) >= 2
@@ -10774,6 +10882,8 @@ def _stap_pd(
     info_out["detector_variant"] = str(det_variant)
     info_out["whiten_gamma"] = float(whiten_gamma)
     info_out["cov_train_trim_q"] = float(cov_train_trim_q or 0.0)
+    if latency_fast_flags:
+        info_out.update(latency_fast_flags)
     first_err = None
     for info in tile_infos:
         err = info.get("stap_fast_error")
@@ -10781,6 +10891,8 @@ def _stap_pd(
             first_err = err
             break
     info_out["stap_fast_error"] = first_err
+    if (not pd_base_was_provided) and pd_base_generated_cpu is not None:
+        info_out["_pd_base_map_generated"] = pd_base_generated_cpu
 
     if psd_telemetry and psd_freq_cache is not None and bg_psd_accum is not None:
         if bg_psd_count > 0:
