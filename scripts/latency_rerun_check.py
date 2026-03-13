@@ -270,6 +270,96 @@ def _print_latency_windows(label: str, teles: List[Dict], *, t_data_ms: float | 
     print(f"  per_window_stap_total_ms: {stap_ms}")
 
 
+def _mean_stage_map(teles: List[Dict]) -> Dict[str, float]:
+    acc: Dict[str, List[float]] = {}
+    for tele in teles:
+        stage_map = tele.get("stap_cuda_stage_ms")
+        if not isinstance(stage_map, dict):
+            continue
+        for key, value in stage_map.items():
+            try:
+                acc.setdefault(str(key), []).append(float(value))
+            except Exception:
+                pass
+    return {key: float(sum(vals) / float(len(vals))) for key, vals in acc.items() if vals}
+
+
+def _mean_scalar(teles: List[Dict], key: str) -> float | None:
+    vals: List[float] = []
+    for tele in teles:
+        try:
+            if key in tele:
+                vals.append(float(tele[key]))
+        except Exception:
+            pass
+    if not vals:
+        return None
+    return float(sum(vals) / float(len(vals)))
+
+
+def _print_cuda_profile(label: str, teles: List[Dict]) -> None:
+    if not teles:
+        return
+    steady = teles[1:] if len(teles) > 1 else teles
+    stage_mean = _mean_stage_map(steady)
+    if not stage_mean:
+        return
+    print(f"\n[{label} steady CUDA profile]")
+    top_level_keys = [
+        "stap:tiling:prep",
+        "stap:tiling:cube_unfold",
+        "stap:tiling:active_index",
+        "stap:tiling:gather",
+        "stap:core",
+        "stap:tiling:fold",
+        "stap:tiling:to_cpu",
+    ]
+    core_keys = [
+        "stap:hankel",
+        "stap:covariance:train_trim",
+        "stap:covariance",
+        "stap:shrinkage",
+        "stap:lambda",
+        "stap:fd_grid",
+        "stap:constraints",
+        "stap:band_energy",
+        "stap:aggregate",
+        "stap:telemetry",
+    ]
+    top_present = [(k, stage_mean[k]) for k in top_level_keys if k in stage_mean]
+    if top_present:
+        print("  top_level_ms:")
+        for key, value in top_present:
+            print(f"    {key}: {value:.3f}")
+    core_present = [(k, stage_mean[k]) for k in core_keys if k in stage_mean]
+    if core_present:
+        print("  core_substage_ms:")
+        for key, value in core_present:
+            print(f"    {key}: {value:.3f}")
+    other = [
+        (key, value)
+        for key, value in stage_mean.items()
+        if key not in set(top_level_keys) and key not in set(core_keys)
+    ]
+    other.sort(key=lambda kv: kv[1], reverse=True)
+    if other:
+        print("  other_top_ms:")
+        for key, value in other[:8]:
+            print(f"    {key}: {value:.3f}")
+    for scalar_key in (
+        "stap_cuda_max_memory_allocated_mb",
+        "stap_cuda_max_memory_reserved_mb",
+        "stap_fast_active_tile_fraction",
+        "stap_fast_chunk_size_mean",
+        "stap_fast_chunk_size_max",
+        "stap_fast_chunk_count",
+    ):
+        val = _mean_scalar(steady, scalar_key)
+        if val is None:
+            continue
+        print(f"  {scalar_key}: {val:.3f}")
+
+
 def _compare_maps(
     a_bundle: Path,
     b_bundle: Path,
@@ -557,6 +647,23 @@ def parse_args() -> argparse.Namespace:
             "'on' skips tiles outside a proxy flow mask."
         ),
     )
+    ap.add_argument(
+        "--profile-cuda-stages",
+        action="store_true",
+        help=(
+            "Enable CUDA-event stage profiling inside the STAP fast path and print "
+            "steady-state stage, memory, and batch summaries."
+        ),
+    )
+    ap.add_argument(
+        "--profile-optimized-no-cuda-graph",
+        action="store_true",
+        help=(
+            "Run an additional optimized-style replay with CUDA graphs disabled. "
+            "Useful for exposing the internal fast-path core split that graph replay "
+            "otherwise collapses into a single 'stap:core' bucket."
+        ),
+    )
     return ap.parse_args()
 
 
@@ -608,6 +715,9 @@ def main() -> None:
         # Opt-in steady-state CUDA warmup for latency profiling.
         legacy_env["CUDA_WARMUP_HEAVY"] = "1"
         opt_env["CUDA_WARMUP_HEAVY"] = "1"
+    if args.profile_cuda_stages:
+        legacy_env["STAP_CUDA_EVENT_TIMING"] = "1"
+        opt_env["STAP_CUDA_EVENT_TIMING"] = "1"
 
     legacy_out = args.out_root / "legacy"
     opt_out = args.out_root / "optimized"
@@ -668,6 +778,8 @@ def main() -> None:
 
     _print_latency_windows("legacy", tele_legacy_list, t_data_ms=t_data_ms)
     _print_latency_windows("optimized", tele_opt_list, t_data_ms=t_data_ms)
+    _print_cuda_profile("legacy", tele_legacy_list)
+    _print_cuda_profile("optimized", tele_opt_list)
 
     compare_files = ["pd_base.npy", "pd_stap.npy", "score_stap.npy", "stap_score_map.npy"]
     if len(legacy_bundles) != len(opt_bundles):
@@ -702,6 +814,7 @@ def main() -> None:
             env_overrides=tile_stat_env,
         )
         _print_latency_windows("tile_statistic", tele_tile_list, t_data_ms=t_data_ms)
+        _print_cuda_profile("tile_statistic", tele_tile_list)
         # Note: tile-statistic mode intentionally produces different score maps and is
         # NOT ROC-equivalent to the manuscript detector (ratio-of-means vs nonlinear
         # per-snapshot aggregation). It is kept only as a latency experiment and is
@@ -741,8 +854,42 @@ def main() -> None:
             env_overrides=reg_torch_env,
         )
         _print_latency_windows("baseline_reg_torch", tele_reg_list, t_data_ms=t_data_ms)
+        _print_cuda_profile("baseline_reg_torch", tele_reg_list)
         # Note: torch registration can produce slightly different registered
         # cubes vs the NumPy path, so we do not enforce parity here.
+
+    if args.profile_optimized_no_cuda_graph:
+        opt_nograph_env = dict(opt_env)
+        opt_nograph_env["STAP_FAST_CUDA_GRAPH"] = "0"
+        opt_nograph_out = args.out_root / "optimized_nograph_profile"
+        nograph_bundles, tele_nograph_list = _run_replay(
+            src=args.src,
+            out_dir=opt_nograph_out,
+            profile=args.profile,
+            stap_profile=args.stap_profile,
+            stap_device=args.stap_device,
+            stap_debug_samples=args.stap_debug_samples,
+            window_length=args.window_length,
+            window_offset=window_offsets,
+            baseline=args.baseline,
+            baseline_support=args.baseline_support,
+            extra_replay_args=extra_replay_args,
+            env_overrides=opt_nograph_env,
+        )
+        _print_latency_windows("optimized_nograph_profile", tele_nograph_list, t_data_ms=t_data_ms)
+        _print_cuda_profile("optimized_nograph_profile", tele_nograph_list)
+        if len(opt_bundles) != len(nograph_bundles):
+            raise RuntimeError(
+                "Optimized vs optimized_nograph_profile bundle count mismatch: "
+                f"{len(opt_bundles)} vs {len(nograph_bundles)}"
+            )
+        for ob, nb in zip(opt_bundles, nograph_bundles):
+            if ob.name != nb.name:
+                raise RuntimeError(
+                    f"Optimized/optimized_nograph_profile bundle name mismatch: {ob.name} vs {nb.name}"
+                )
+            _compare_maps(ob, nb, compare_files, rtol=float(args.rtol), atol=float(args.atol))
+        print("\n[parity] OK (optimized vs optimized_nograph_profile maps match within tolerance).")
 
 
 if __name__ == "__main__":

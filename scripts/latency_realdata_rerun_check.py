@@ -143,6 +143,85 @@ def _print_cold_steady(label: str, teles: List[Dict[str, Any]], *, keys: List[st
             print(f"  {k}: {m}")
 
 
+def _mean_stage_map(teles: List[Dict[str, Any]]) -> Dict[str, float]:
+    acc: Dict[str, List[float]] = {}
+    for tele in teles:
+        stage_map = tele.get("stap_cuda_stage_ms")
+        if not isinstance(stage_map, dict):
+            continue
+        for key, value in stage_map.items():
+            try:
+                acc.setdefault(str(key), []).append(float(value))
+            except Exception:
+                pass
+    return {key: float(sum(vals) / float(len(vals))) for key, vals in acc.items() if vals}
+
+
+def _print_cuda_profile(label: str, teles: List[Dict[str, Any]]) -> None:
+    if not teles:
+        return
+    steady = teles[1:] if len(teles) > 1 else teles
+    stage_mean = _mean_stage_map(steady)
+    print(f"\n[{label} steady CUDA profile]")
+    if stage_mean:
+        top_level_keys = [
+            "stap:tiling:prep",
+            "stap:tiling:cube_unfold",
+            "stap:tiling:active_index",
+            "stap:tiling:gather",
+            "stap:core",
+            "stap:tiling:fold",
+            "stap:tiling:to_cpu",
+        ]
+        core_keys = [
+            "stap:hankel",
+            "stap:covariance:train_trim",
+            "stap:covariance",
+            "stap:shrinkage",
+            "stap:lambda",
+            "stap:fd_grid",
+            "stap:constraints",
+            "stap:band_energy",
+            "stap:aggregate",
+            "stap:telemetry",
+        ]
+        top_present = [(k, stage_mean[k]) for k in top_level_keys if k in stage_mean]
+        if top_present:
+            print("  top_level_ms:")
+            for key, value in top_present:
+                print(f"    {key}: {value:.3f}")
+        core_present = [(k, stage_mean[k]) for k in core_keys if k in stage_mean]
+        if core_present:
+            print("  core_substage_ms:")
+            for key, value in core_present:
+                print(f"    {key}: {value:.3f}")
+    else:
+        fallback_keys = [
+            "stap_hankel_ms_mean",
+            "stap_cov_ms_mean",
+            "stap_shrink_ms_mean",
+            "stap_fdgrid_ms_mean",
+            "stap_msd_ms_mean",
+        ]
+        fallback_present = [(k, _mean_over(steady, k)) for k in fallback_keys]
+        fallback_present = [(k, v) for k, v in fallback_present if v is not None]
+        if fallback_present:
+            print("  tile_phase_mean_ms:")
+            for key, value in fallback_present:
+                print(f"    {key}: {value:.3f}")
+    for scalar_key in (
+        "stap_cuda_max_memory_allocated_mb",
+        "stap_cuda_max_memory_reserved_mb",
+        "stap_fast_active_tile_fraction",
+        "stap_fast_chunk_size_mean",
+        "stap_fast_chunk_size_max",
+        "stap_fast_chunk_count",
+    ):
+        m = _mean_over(steady, scalar_key)
+        if m is not None:
+            print(f"  {scalar_key}: {m:.3f}")
+
+
 def _stride_auto(H: int, W: int, tile_hw: Tuple[int, int], *, max_stride: int, min_tiles: int) -> int:
     th, tw = int(tile_hw[0]), int(tile_hw[1])
     if H < th or W < tw:
@@ -238,6 +317,8 @@ def _run_shin(args: argparse.Namespace) -> Dict[str, Any]:
     keys = ["baseline_ms", "reg_ms", "svd_ms", "stap_ms", "stap_fast_path_used", "tile_count"]
     _print_cold_steady("shin stap_full", tele_full, keys=keys)
     _print_cold_steady("shin stap_conditional", tele_cond, keys=keys)
+    _print_cuda_profile("shin stap_full", tele_full)
+    _print_cuda_profile("shin stap_conditional", tele_cond)
 
     base_steady_ms = _mean_over(tele_full[1:] if len(tele_full) > 1 else tele_full, "baseline_ms")
     stap_full_steady_ms = _mean_over(tele_full[1:] if len(tele_full) > 1 else tele_full, "stap_ms")
@@ -362,6 +443,7 @@ def _run_gammex(args: argparse.Namespace) -> Dict[str, Any]:
 
         keys = ["baseline_ms", "svd_ms", "stap_ms", "stap_fast_path_used", "tile_count"]
         _print_cold_steady(f"gammex {view_name}", teles, keys=keys)
+        _print_cuda_profile(f"gammex {view_name}", teles)
         base_steady_ms = _mean_over(teles[1:], "baseline_ms")
         stap_steady_ms = _mean_over(teles[1:], "stap_ms")
         return {
@@ -423,6 +505,12 @@ def main() -> None:
         default=None,
         help="Optional override for STAP tile batch size (sets STAP_TILE_BATCH).",
     )
+    ap.add_argument(
+        "--profile-cuda-stages",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable CUDA-event stage profiling inside the STAP fast path (default: %(default)s).",
+    )
 
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -479,6 +567,8 @@ def main() -> None:
     ap_g.add_argument("--alias-width-hz", type=float, default=250.0)
 
     args = ap.parse_args()
+    if bool(args.profile_cuda_stages):
+        os.environ["STAP_CUDA_EVENT_TIMING"] = "1"
 
     if args.cmd == "shin":
         summary = _run_shin(args)
@@ -491,4 +581,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
