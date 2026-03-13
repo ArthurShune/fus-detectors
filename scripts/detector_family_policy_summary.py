@@ -57,13 +57,12 @@ def _build_tex(rows: list[dict[str, Any]]) -> str:
     lines.append("\\hline")
     lines.append("\\end{tabular}")
     lines.append(
-        "\\caption{Detector-family policy implied by the current evidence. The simpler band-limited "
-        "matched-subspace detector is the fixed deployed default because it remains strongest on the prespecified "
-        "held-out structural benchmark across all tested fixed profiles. The frozen guard-triggered adaptive mode "
-        "is the adaptive deployment product because it preserves the fixed-head "
-        "behavior in cleaner regimes while selectively turning on whitening in clutter-heavier ones. The fully "
-        "whitened STAP-inspired mode is retained as a specialist setting where full whitening still earns its "
-        "complexity.}"
+        "\\caption{Detector-family hierarchy implied by the current evidence. The simpler band-limited "
+        "matched-subspace detector is the fixed default because it remains strongest on the prespecified "
+        "held-out structural benchmark across all tested fixed profiles. The prespecified guard-triggered adaptive "
+        "variant preserves that fixed-head behavior in cleaner regimes while selectively turning on whitening in "
+        "clutter-heavier ones. The fully whitened STAP-inspired variant is retained for settings where full "
+        "whitening still earns its complexity.}"
     )
     lines.append("\\label{tab:detector_family_policy}")
     lines.append("\\end{table}")
@@ -125,7 +124,7 @@ def main() -> None:
     )
     rows.append(
         {
-            "regime": "Frozen adaptive deployment mode across labeled/open audits",
+            "regime": "Prespecified adaptive variant across labeled and open-data audits",
             "preferred_head": "adaptive_guard",
             "preferred_head_tex": "Guard-triggered adaptive mode",
             "anchor": (
@@ -142,15 +141,15 @@ def main() -> None:
                 f"mean promoted fraction = {_fmt3(adaptive_sc['shin']['mean_whiten_fraction'])} (Shin) and "
                 f"{_fmt3(adaptive_sc['across']['mean_whiten_fraction'])} (across-view Gammex)"
             ),
-            "interpretation": "Preferred frozen adaptive product when one adaptive score is desired without abandoning the fixed-head behavior in cleaner regimes.",
-            "interpretation_tex": "Preferred frozen adaptive product when one adaptive score is desired without abandoning the fixed-head behavior in cleaner regimes.",
+            "interpretation": "Preferred adaptive variant when one adaptive score is desired without abandoning the fixed-head behavior in cleaner regimes.",
+            "interpretation_tex": "Preferred adaptive variant when one adaptive score is desired without abandoning the fixed-head behavior in cleaner regimes.",
         }
     )
     rows.append(
         {
             "regime": "Structurally labeled Gammex phantom (across-view)",
             "preferred_head": "msd_ratio_specialist",
-            "preferred_head_tex": "Fully whitened specialist mode (\\texttt{msd\\_ratio})",
+            "preferred_head_tex": "Fully whitened covariance-adaptive variant",
             "anchor": (
                 f"TPR@1e-3: {_fmt3(gammex_u['tpr@1e-3_mean'])} -> {_fmt3(gammex_h['tpr@1e-3_mean'])}"
             ),
@@ -158,15 +157,15 @@ def main() -> None:
                 f"Across-view TPR@$10^{{-3}}$: {_fmt3(gammex_u['tpr@1e-3_mean'])} "
                 f"$\\rightarrow$ {_fmt3(gammex_h['tpr@1e-3_mean'])}"
             ),
-            "interpretation": "Use the fully whitened specialist when maximizing whitening gain matters more than preserving default-like behavior.",
-            "interpretation_tex": "Use the fully whitened specialist when maximizing whitening gain matters more than preserving default-like behavior.",
+            "interpretation": "Use the fully whitened variant when maximizing whitening gain matters more than preserving default-like behavior.",
+            "interpretation_tex": "Use the fully whitened variant when maximizing whitening gain matters more than preserving default-like behavior.",
         }
     )
     rows.append(
         {
             "regime": "Held-out same-residual functional audit",
             "preferred_head": "msd_ratio_specialist",
-            "preferred_head_tex": "Fully whitened specialist mode (\\texttt{msd\\_ratio})",
+            "preferred_head_tex": "Fully whitened covariance-adaptive variant",
             "anchor": (
                 f"Positive in {_fmt_winloss(sum(float(r['delta_selection_b_minus_a']) > 0 for r in mobile_stap), sum(float(r['delta_selection_b_minus_a']) < 0 for r in mobile_stap))} "
                 f"mobile families for direct STAP readout and {_fmt_winloss(sum(float(r['delta_selection_b_minus_a']) > 0 for r in intra_stap_pd), sum(float(r['delta_selection_b_minus_a']) < 0 for r in intra_stap_pd))} "
@@ -177,8 +176,8 @@ def main() -> None:
                 f"mobile families (direct STAP readout) and {_fmt_winloss(sum(float(r['delta_selection_b_minus_a']) > 0 for r in intra_stap_pd), sum(float(r['delta_selection_b_minus_a']) < 0 for r in intra_stap_pd))} "
                 f"intra-operative families (PD-after-STAP)"
             ),
-            "interpretation": "Keep the fully whitened specialist for function-priority audits even though it is not the structural default.",
-            "interpretation_tex": "Keep the fully whitened specialist for function-priority audits even though it is not the structural default.",
+            "interpretation": "Keep the fully whitened variant for function-priority analyses even though it is not the structural default.",
+            "interpretation_tex": "Keep the fully whitened variant for function-priority analyses even though it is not the structural default.",
         }
     )
 
