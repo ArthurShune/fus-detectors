@@ -732,7 +732,7 @@ def main() -> None:
     opt_env = {
         "STAP_TILING_UNFOLD": "1",
         "MC_SVD_TORCH": "1",
-        "MC_SVD_REG_TORCH": "0",
+        "MC_SVD_REG_TORCH": "1",
         "MC_SVD_TORCH_RETURN_CUBE": "1",
         "STAP_FAST_PATH": "1",
         "STAP_FAST_PD_ONLY": "1",
