@@ -102,7 +102,7 @@ def parse_args() -> argparse.Namespace:
             "'whitened_power' is total whitened slow-time power (no Doppler band partition); "
             "'unwhitened_ratio' disables covariance whitening (R=I) while keeping the same band partition; "
             "'hybrid_rescue' runs the advanced whitened score with an unwhitened rescue branch on selected pixels; "
-            "'adaptive_guard' uses the unwhitened score by default and promotes pixels onto the advanced "
+            "'adaptive_guard' uses the unwhitened score by default and promotes clutter-heavy tiles onto the advanced "
             "whitened branch when baseline guard energy indicates structured clutter."
         ),
     )
@@ -110,7 +110,13 @@ def parse_args() -> argparse.Namespace:
         "--hybrid-rescue-rule",
         type=str,
         default="guard_frac_v1",
-        choices=["guard_frac_v1", "alias_rescue_v1", "band_ratio_v1", "guard_promote_v1"],
+        choices=[
+            "guard_frac_v1",
+            "alias_rescue_v1",
+            "band_ratio_v1",
+            "guard_promote_v1",
+            "guard_promote_tile_v1",
+        ],
         help=(
             "Pixelwise routing rule for --stap-detector-variant=hybrid_rescue. "
             "The rule uses baseline telemetry to decide where to keep the whitened score "

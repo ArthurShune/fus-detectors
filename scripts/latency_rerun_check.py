@@ -557,7 +557,13 @@ def parse_args() -> argparse.Namespace:
         "--hybrid-rescue-rule",
         type=str,
         default="guard_promote_v1",
-        choices=["guard_frac_v1", "alias_rescue_v1", "band_ratio_v1", "guard_promote_v1"],
+        choices=[
+            "guard_frac_v1",
+            "alias_rescue_v1",
+            "band_ratio_v1",
+            "guard_promote_v1",
+            "guard_promote_tile_v1",
+        ],
         help="Frozen routing rule used by hybrid/adaptive detector variants (default: %(default)s).",
     )
     ap.add_argument(

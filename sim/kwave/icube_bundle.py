@@ -195,7 +195,7 @@ def write_acceptance_bundle_from_icube(
     hybrid_variant_label: str | None = None
     if stap_detector_variant_norm == "hybrid_rescue":
         if variant_requested_norm in {"adaptive_guard", "adaptive_guard_v1", "guard_promote"}:
-            hybrid_rule_cfg = kw._normalize_hybrid_rescue_rule("guard_promote_v1")
+            hybrid_rule_cfg = kw._normalize_hybrid_rescue_rule("guard_promote_tile_v1")
             hybrid_variant_label = "adaptive_guard"
         else:
             hybrid_rule_cfg = kw._normalize_hybrid_rescue_rule(hybrid_rescue_rule)
@@ -515,6 +515,7 @@ def write_acceptance_bundle_from_icube(
             recorder: kw.BandRatioRecorder | None,
             conditional_mask_flow: np.ndarray | None = None,
             conditional_mask_bg: np.ndarray | None = None,
+            conditional_tile_gate: np.ndarray | None = None,
             conditional_enable_override: bool | None = None,
         ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
             return kw._stap_pd(
@@ -551,6 +552,7 @@ def write_acceptance_bundle_from_icube(
                 pd_base_full=pd_base,
                 mask_flow=conditional_mask_flow if conditional_mask_flow is not None else mask_flow,
                 mask_bg=conditional_mask_bg if conditional_mask_bg is not None else mask_bg,
+                conditional_tile_gate=conditional_tile_gate,
                 conditional_enable=(
                     bool(conditional_enable_override)
                     if conditional_enable_override is not None
@@ -615,11 +617,16 @@ def write_acceptance_bundle_from_icube(
                 whiten_gamma=0.0,
                 recorder=None,
             )
-            choose_advanced = kw._hybrid_choose_advanced_mask(
+            choose_advanced, promote_tiles = kw._hybrid_choose_advanced_tile_mask(
                 base_guard_frac_map,
+                tile_hw=tile_hw,
+                stride=tile_stride,
                 direction=str((hybrid_rule_cfg or {}).get("direction", ">=")),
                 threshold=float((hybrid_rule_cfg or {}).get("threshold", 0.0)),
-                prefer_advanced_on_invalid=True,
+                reduction=str((hybrid_rule_cfg or {}).get("aggregation", "mean")),
+                prefer_advanced_on_invalid=bool(
+                    (hybrid_rule_cfg or {}).get("prefer_advanced_on_invalid", False)
+                ),
             )
             rescue_scores = stap_scores.copy()
             rescue_pd = pd_stap.copy()
@@ -628,22 +635,37 @@ def write_acceptance_bundle_from_icube(
                 "feature": str((hybrid_rule_cfg or {}).get("feature", "base_guard_frac_map")),
                 "direction": str((hybrid_rule_cfg or {}).get("direction", ">=")),
                 "threshold": float((hybrid_rule_cfg or {}).get("threshold", 0.0)),
-                "prefer_advanced_on_invalid": True,
+                "aggregation": str((hybrid_rule_cfg or {}).get("aggregation", "mean")),
+                "prefer_advanced_on_invalid": bool(
+                    (hybrid_rule_cfg or {}).get("prefer_advanced_on_invalid", False)
+                ),
                 "advanced_fraction": float(np.mean(choose_advanced)) if choose_advanced.size else None,
                 "rescue_fraction": float(np.mean(rescue_mask)) if rescue_mask.size else None,
                 "rescue_pixels": int(np.count_nonzero(rescue_mask)),
                 "advanced_pixels": int(np.count_nonzero(choose_advanced)),
+                "advanced_tile_fraction": (
+                    float(np.mean(promote_tiles)) if promote_tiles.size else None
+                ),
+                "rescue_tile_fraction": (
+                    float(np.mean(~promote_tiles)) if promote_tiles.size else None
+                ),
+                "advanced_tiles": int(np.count_nonzero(promote_tiles)),
+                "rescue_tiles": int(np.count_nonzero(~promote_tiles)),
             }
             promote_fraction = float(hybrid_stats["advanced_fraction"] or 0.0)
             if bool(np.any(choose_advanced)):
-                pd_promote, score_promote, promote_info = _run_stap_once(
-                    detector_variant="msd_ratio",
-                    whiten_gamma=float(core_gamma),
-                    recorder=stap_br_recorder,
-                    conditional_mask_flow=choose_advanced,
-                    conditional_mask_bg=~choose_advanced,
-                    conditional_enable_override=True,
-                )
+                with kw._temporary_environ(
+                    {"STAP_BAND_PROJECT_MODE": os.getenv("STAP_BAND_PROJECT_MODE") or "dual"}
+                ):
+                    pd_promote, score_promote, promote_info = _run_stap_once(
+                        detector_variant="msd_ratio",
+                        whiten_gamma=float(core_gamma),
+                        recorder=stap_br_recorder,
+                        conditional_mask_flow=choose_advanced,
+                        conditional_mask_bg=~choose_advanced,
+                        conditional_tile_gate=promote_tiles,
+                        conditional_enable_override=True,
+                    )
                 pd_stap = np.where(choose_advanced, pd_promote, rescue_pd).astype(
                     np.float32, copy=False
                 )
@@ -664,6 +686,36 @@ def write_acceptance_bundle_from_icube(
                 "rescue_whiten_gamma": 0.0,
                 "rescue_condR_median": rescue_info.get("median_condR"),
                 "rescue_cond_loaded_median": rescue_info.get("median_cond_loaded"),
+                "rescue_timing_ms": {
+                    "stap_total_ms": float(rescue_info.get("stap_total_ms", 0.0) or 0.0),
+                    "stap_batch_proc_ms": float(
+                        rescue_info.get("stap_batch_proc_ms", 0.0) or 0.0
+                    ),
+                    "stap_extract_ms": float(rescue_info.get("stap_extract_ms", 0.0) or 0.0),
+                    "stap_post_ms": float(rescue_info.get("stap_post_ms", 0.0) or 0.0),
+                    "stap_fast_active_tile_fraction": rescue_info.get(
+                        "stap_fast_active_tile_fraction"
+                    ),
+                    "stap_fast_chunk_count": rescue_info.get("stap_fast_chunk_count"),
+                },
+                "promote_timing_ms": (
+                    {
+                        "stap_total_ms": float(promote_info.get("stap_total_ms", 0.0) or 0.0),
+                        "stap_batch_proc_ms": float(
+                            promote_info.get("stap_batch_proc_ms", 0.0) or 0.0
+                        ),
+                        "stap_extract_ms": float(
+                            promote_info.get("stap_extract_ms", 0.0) or 0.0
+                        ),
+                        "stap_post_ms": float(promote_info.get("stap_post_ms", 0.0) or 0.0),
+                        "stap_fast_active_tile_fraction": promote_info.get(
+                            "stap_fast_active_tile_fraction"
+                        ),
+                        "stap_fast_chunk_count": promote_info.get("stap_fast_chunk_count"),
+                    }
+                    if promote_info is not None
+                    else None
+                ),
                 "promote_fraction": promote_fraction,
                 "promote_active": bool(np.any(choose_advanced)),
             }
@@ -1086,7 +1138,7 @@ def write_acceptance_bundle_from_icube(
             score_stap_definition_vnext = (
                 "score_stap_preka is an adaptive detector-family score: the unwhitened flow-band "
                 "matched-subspace ratio is used by default, with promotion onto the advanced "
-                "Huber-whitened matched-subspace score on pixels selected by a fixed baseline "
+                "Huber-whitened matched-subspace score on tiles selected by a fixed baseline "
                 "guard-energy rule. score_stap equals score_stap_preka unless a score-space "
                 "KA veto is applied."
             )

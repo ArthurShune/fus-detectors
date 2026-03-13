@@ -20,7 +20,7 @@ from pipeline.stap.robust_cov import robust_covariance
 from pipeline.stap.temporal_shared import (
     build_fd_grid_flow_band,
     build_fd_grid_span,
-    build_temporal_hankels_flat_batch,
+    build_temporal_hankels_unfold_batch,
     build_temporal_hankels_batch,
     robust_temporal_cov_batch,
     shrinkage_alpha_for_kappa_batch,
@@ -71,6 +71,7 @@ _STAP_CUDA_STAGE_TIMER: contextvars.ContextVar[_StapCudaStageTimer | None] = con
 
 _STAP_TILE_STATISTIC_WARNED = False
 _UNWHITENED_PROJECTOR_CACHE: dict[tuple, torch.Tensor] = {}
+_UNWHITENED_PROJECTOR_BASIS_CACHE: dict[tuple, torch.Tensor] = {}
 _FD_GRID_CACHE: dict[tuple, tuple[np.ndarray, dict, str, tuple[float, float] | None]] = {}
 _CONSTRAINT_CACHE: dict[tuple, torch.Tensor] = {}
 
@@ -3743,6 +3744,7 @@ def _band_energy_unwhitened_batched(
     C_t: torch.Tensor,
     *,
     projector: Optional[torch.Tensor] = None,
+    basis: Optional[torch.Tensor] = None,
     ridge: float = 0.10,
     device: Optional[str] = None,
     dtype: torch.dtype = torch.complex64,
@@ -3778,15 +3780,22 @@ def _band_energy_unwhitened_batched(
     S_flat = S.permute(0, 1, 3, 4, 2).contiguous().view(Bsz, Lt_dim, -1)
     sw_pow_flat = torch.sum(S_flat.conj() * S_flat, dim=1).real
 
+    Qf = basis.to(device=device, dtype=work_dtype) if basis is not None else None
     Pf = projector.to(device=device, dtype=work_dtype) if projector is not None else None
-    if Pf is None:
+    if Qf is None and Pf is None:
         with _prof_ctx("stap:band_energy:project:chol_Gram"):
             Pf = _build_unwhitened_projector_exact(Ct, ridge=float(ridge)).to(
                 device=device, dtype=work_dtype
             )
     with _prof_ctx("stap:band_energy:project:gram_solve"):
-        proj = torch.matmul(Pf.unsqueeze(0), S_flat)
-        T_band_flat = torch.sum(S_flat.conj() * proj, dim=1).real
+        if Qf is not None and Qf.numel() != 0:
+            coeff = torch.matmul(Qf.conj().transpose(-2, -1).unsqueeze(0), S_flat)
+            T_band_flat = torch.sum(coeff.conj() * coeff, dim=1).real
+        elif Qf is not None:
+            T_band_flat = torch.zeros_like(sw_pow_flat)
+        else:
+            proj = torch.matmul(Pf.unsqueeze(0), S_flat)
+            T_band_flat = torch.sum(S_flat.conj() * proj, dim=1).real
 
     T_band = torch.clamp(T_band_flat, min=0.0).view(Bsz, N, h, w)
     sw_pow = torch.clamp(sw_pow_flat, min=eps).view(Bsz, N, h, w)
@@ -3801,6 +3810,7 @@ def _band_energy_unwhitened_flat_batched(
     w: int,
     C_t: torch.Tensor,
     projector: Optional[torch.Tensor] = None,
+    basis: Optional[torch.Tensor] = None,
     ridge: float = 0.10,
     device: Optional[str] = None,
     dtype: torch.dtype = torch.complex64,
@@ -3824,19 +3834,73 @@ def _band_energy_unwhitened_flat_batched(
 
     sw_pow_flat = torch.sum(S_work.conj() * S_work, dim=1).real
 
+    Qf = basis.to(device=device, dtype=work_dtype) if basis is not None else None
     Pf = projector.to(device=device, dtype=work_dtype) if projector is not None else None
-    if Pf is None:
+    if Qf is None and Pf is None:
         with _prof_ctx("stap:band_energy:project:chol_Gram"):
             Pf = _build_unwhitened_projector_exact(Ct, ridge=float(ridge)).to(
                 device=device, dtype=work_dtype
             )
     with _prof_ctx("stap:band_energy:project:gram_solve"):
-        proj = torch.matmul(Pf.unsqueeze(0), S_work)
-        T_band_flat = torch.sum(S_work.conj() * proj, dim=1).real
+        if Qf is not None and Qf.numel() != 0:
+            coeff = torch.matmul(Qf.conj().transpose(-2, -1).unsqueeze(0), S_work)
+            T_band_flat = torch.sum(coeff.conj() * coeff, dim=1).real
+        elif Qf is not None:
+            T_band_flat = torch.zeros_like(sw_pow_flat)
+        else:
+            proj = torch.matmul(Pf.unsqueeze(0), S_work)
+            T_band_flat = torch.sum(S_work.conj() * proj, dim=1).real
 
     T_band = torch.clamp(T_band_flat, min=0.0).view(Bsz, N, h, w)
     sw_pow = torch.clamp(sw_pow_flat, min=eps).view(Bsz, N, h, w)
     return T_band, sw_pow
+
+
+def _band_energy_unwhitened_unfold_batched(
+    S_unfold: torch.Tensor,
+    *,
+    C_t: torch.Tensor,
+    projector: Optional[torch.Tensor] = None,
+    basis: Optional[torch.Tensor] = None,
+    ridge: float = 0.10,
+    device: Optional[str] = None,
+    dtype: torch.dtype = torch.complex64,
+    eps: float = 1e-10,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Exact unwhitened band-energy on the native unfold layout (B,N,H,W,Lt).
+    """
+    if device is None:
+        device = S_unfold.device
+
+    prec = os.getenv("STAP_BAND_PRECISION", "").strip().lower()
+    work_dtype = torch.complex128 if prec == "fp64" else dtype
+
+    S_work = S_unfold.to(device=device, dtype=work_dtype)
+    Ct = C_t.to(device=device, dtype=work_dtype)
+    if Ct.numel() == 0:
+        zeros = torch.zeros(S_work.shape[:-1], dtype=torch.float32, device=device)
+        return zeros, zeros
+
+    sw_pow = torch.sum(S_work.conj() * S_work, dim=-1).real
+    Qf = basis.to(device=device, dtype=work_dtype) if basis is not None else None
+    Pf = projector.to(device=device, dtype=work_dtype) if projector is not None else None
+    if Qf is None and Pf is None:
+        with _prof_ctx("stap:band_energy:project:chol_Gram"):
+            Pf = _build_unwhitened_projector_exact(Ct, ridge=float(ridge)).to(
+                device=device, dtype=work_dtype
+            )
+    with _prof_ctx("stap:band_energy:project:gram_solve"):
+        if Qf is not None and Qf.numel() != 0:
+            coeff = torch.matmul(S_work, Qf)
+            T_band = torch.sum(coeff.conj() * coeff, dim=-1).real
+        elif Qf is not None:
+            T_band = torch.zeros_like(sw_pow)
+        else:
+            proj = torch.matmul(S_work, Pf)
+            T_band = torch.sum(S_work.conj() * proj, dim=-1).real
+
+    return torch.clamp(T_band, min=0.0), torch.clamp(sw_pow, min=eps)
 
 
 def _direct_detector_infos_from_outputs(
@@ -4018,11 +4082,23 @@ def _direct_unwhitened_detector_batched(
         round(float(msd_ridge), 6),
     )
     Pf_cached = _UNWHITENED_PROJECTOR_CACHE.get(projector_key)
-    if Pf_cached is None or str(Pf_cached.device) != str(device) or Pf_cached.dtype != S_B_Lt_N_hw.dtype:
+    Qf_cached = _UNWHITENED_PROJECTOR_BASIS_CACHE.get(projector_key)
+    cache_miss = (
+        Pf_cached is None
+        or Qf_cached is None
+        or str(Pf_cached.device) != str(device)
+        or Pf_cached.dtype != S_B_Lt_N_hw.dtype
+        or str(Qf_cached.device) != str(device)
+        or Qf_cached.dtype != S_B_Lt_N_hw.dtype
+    )
+    if cache_miss:
         Pf_cached = _build_unwhitened_projector_exact(Ct, ridge=float(msd_ridge)).to(
             device=device, dtype=S_B_Lt_N_hw.dtype
         )
+        Qf_cached, _, _ = _orthonormal_basis_from_projector(Pf_cached)
+        Qf_cached = Qf_cached.to(device=device, dtype=S_B_Lt_N_hw.dtype).contiguous()
         _UNWHITENED_PROJECTOR_CACHE[projector_key] = Pf_cached
+        _UNWHITENED_PROJECTOR_BASIS_CACHE[projector_key] = Qf_cached
 
     t4 = time.perf_counter()
     with _prof_ctx("stap:band_energy:snapshots"):
@@ -4030,6 +4106,7 @@ def _direct_unwhitened_detector_batched(
             S_B_Lt_N_hw,
             Ct,
             projector=Pf_cached,
+            basis=Qf_cached,
             ridge=msd_ridge,
             device=device,
             dtype=S_B_Lt_N_hw.dtype,
@@ -4180,11 +4257,23 @@ def _direct_unwhitened_detector_flat_batched(
         round(float(msd_ridge), 6),
     )
     Pf_cached = _UNWHITENED_PROJECTOR_CACHE.get(projector_key)
-    if Pf_cached is None or str(Pf_cached.device) != str(device) or Pf_cached.dtype != S_flat.dtype:
+    Qf_cached = _UNWHITENED_PROJECTOR_BASIS_CACHE.get(projector_key)
+    cache_miss = (
+        Pf_cached is None
+        or Qf_cached is None
+        or str(Pf_cached.device) != str(device)
+        or Pf_cached.dtype != S_flat.dtype
+        or str(Qf_cached.device) != str(device)
+        or Qf_cached.dtype != S_flat.dtype
+    )
+    if cache_miss:
         Pf_cached = _build_unwhitened_projector_exact(Ct, ridge=float(msd_ridge)).to(
             device=device, dtype=S_flat.dtype
         )
+        Qf_cached, _, _ = _orthonormal_basis_from_projector(Pf_cached)
+        Qf_cached = Qf_cached.to(device=device, dtype=S_flat.dtype).contiguous()
         _UNWHITENED_PROJECTOR_CACHE[projector_key] = Pf_cached
+        _UNWHITENED_PROJECTOR_BASIS_CACHE[projector_key] = Qf_cached
 
     t4 = time.perf_counter()
     with _prof_ctx("stap:band_energy:snapshots"):
@@ -4195,9 +4284,185 @@ def _direct_unwhitened_detector_flat_batched(
             w=int(w),
             C_t=Ct,
             projector=Pf_cached,
+            basis=Qf_cached,
             ridge=msd_ridge,
             device=device,
             dtype=S_flat.dtype,
+            eps=1e-10,
+        )
+    sw_pow_safe = torch.clamp(sw_pow, min=1e-10)
+    r_flow = torch.clamp(T_band / sw_pow_safe, min=0.0, max=1.0)
+    denom = torch.clamp(sw_pow_safe - T_band + float(msd_ratio_rho) * sw_pow_safe, min=1e-10)
+    ratio = torch.clamp(T_band / denom, min=0.0)
+    with _prof_ctx("stap:aggregate"):
+        band_frac_out = aggregate_over_snapshots_batched(r_flow, mode=msd_agg_mode).to(
+            dtype=torch.float32
+        )
+        ratio_out = aggregate_over_snapshots_batched(ratio, mode=msd_agg_mode).to(
+            dtype=torch.float32
+        )
+        pow_out = aggregate_over_snapshots_batched(sw_pow_safe, mode=msd_agg_mode).to(
+            dtype=torch.float32
+        )
+        score_out = pow_out if detector_variant == "whitened_power" else ratio_out
+    t_band = time.perf_counter() - t4
+
+    if telemetry_enabled:
+        infos = _direct_detector_infos_from_outputs(
+            band_frac_out,
+            score_out,
+            Lt=Lt,
+            variant=str(detector_variant),
+            whiten_gamma=float(whiten_gamma),
+            cov_train_trim_q=float(cov_train_trim_q),
+            fd_grid=fd_grid,
+            fd_grid_source=fd_grid_source,
+            fd_meta=fd_meta,
+            flow_band_used=flow_band_used,
+            motion_half_span_hz=float(motion_half_span_hz),
+            cov_estimator=str(cov_estimator),
+            diag_load=float(diag_load),
+            msd_lambda_used=float(msd_lambda) if msd_lambda is not None else 0.0,
+            t_hankel=float(t_hankel),
+            t_fdgrid=float(t_fdgrid),
+            t_band=float(t_band),
+        )
+    else:
+        B = int(band_frac_out.shape[0])
+        infos = []
+        for _ in range(B):
+            infos.append(
+                {
+                    "detector_variant": str(detector_variant),
+                    "whiten_gamma": float(whiten_gamma),
+                    "cov_train_trim_q": float(cov_train_trim_q),
+                    "cond_R": float("nan"),
+                    "cond_loaded": float("nan"),
+                    "cov_rank_proxy": float("nan"),
+                    "gamma_flow": float("nan"),
+                    "gamma_perp": float("nan"),
+                    "stap_fast_direct_unwhitened": True,
+                    "stap_hankel_ms": float(1000.0 * t_hankel),
+                    "stap_cov_ms": 0.0,
+                    "stap_shrink_ms": 0.0,
+                    "stap_fdgrid_ms": float(1000.0 * t_fdgrid),
+                    "stap_msd_ms": float(1000.0 * t_band),
+                }
+            )
+
+    if return_torch:
+        return band_frac_out.detach(), score_out.detach(), infos
+    return (
+        band_frac_out.detach().cpu().numpy().astype(np.float32, copy=False),
+        score_out.detach().cpu().numpy().astype(np.float32, copy=False),
+        infos,
+    )
+
+
+def _direct_unwhitened_detector_unfold_batched(
+    S_unfold: torch.Tensor,
+    *,
+    prf_hz: float,
+    Lt: int,
+    diag_load: float,
+    cov_train_trim_q: float,
+    cov_estimator: str,
+    grid_step_rel: float,
+    fd_span_rel: Tuple[float, float],
+    min_pts: int,
+    max_pts: int,
+    fd_min_abs_hz: float,
+    motion_half_span_rel: Optional[float],
+    msd_ridge: float,
+    msd_agg_mode: str,
+    msd_ratio_rho: float,
+    msd_lambda: Optional[float],
+    detector_variant: str,
+    whiten_gamma: float,
+    fd_span_mode: str = "psd",
+    flow_band_hz: Optional[Tuple[float, float]] = None,
+    Ct_override: Optional[torch.Tensor] = None,
+    device: Optional[str] = None,
+    return_torch: bool = False,
+    telemetry_enabled: bool = True,
+    t_hankel: float = 0.0,
+) -> Tuple[np.ndarray | torch.Tensor, np.ndarray | torch.Tensor, List[dict]]:
+    if device is None:
+        device = S_unfold.device
+    N = int(S_unfold.shape[1])
+    h = int(S_unfold.shape[2])
+    w = int(S_unfold.shape[3])
+
+    motion_half_span_hz = 0.0
+    base = prf_hz / float(Lt)
+    if motion_half_span_rel is not None:
+        motion_half_span_hz = max(0.0, float(motion_half_span_rel) * base)
+    else:
+        motion_half_span_hz = 0.1 * base
+
+    t3 = time.perf_counter()
+    with _prof_ctx("stap:fd_grid"), _prof_ctx("stap:constraints"):
+        fd_grid, fd_meta, fd_grid_source, flow_band_used, Ct = _resolve_fd_grid_constraints_cached(
+            Lt=int(Lt),
+            prf_hz=float(prf_hz),
+            fd_span_mode=str(fd_span_mode),
+            flow_band_hz=flow_band_hz,
+            fd_span_rel=fd_span_rel,
+            grid_step_rel=float(grid_step_rel),
+            fd_min_abs_hz=float(fd_min_abs_hz),
+            min_pts=int(min_pts),
+            max_pts=int(max_pts),
+            motion_half_span_hz=float(motion_half_span_hz),
+            Ct_override=Ct_override,
+            device=device,
+            dtype=S_unfold.dtype,
+            constraint_mode="exp+deriv",
+        )
+    t_fdgrid = time.perf_counter() - t3
+
+    flow_band_key = None
+    if flow_band_used is not None:
+        flow_band_key = (round(float(flow_band_used[0]), 6), round(float(flow_band_used[1]), 6))
+    fd_grid_key = tuple(round(float(x), 6) for x in fd_grid.tolist())
+    projector_key = (
+        str(device),
+        str(S_unfold.dtype),
+        int(Lt),
+        round(float(prf_hz), 6),
+        fd_grid_source,
+        fd_grid_key,
+        flow_band_key,
+        round(float(msd_ridge), 6),
+    )
+    Pf_cached = _UNWHITENED_PROJECTOR_CACHE.get(projector_key)
+    Qf_cached = _UNWHITENED_PROJECTOR_BASIS_CACHE.get(projector_key)
+    cache_miss = (
+        Pf_cached is None
+        or Qf_cached is None
+        or str(Pf_cached.device) != str(device)
+        or Pf_cached.dtype != S_unfold.dtype
+        or str(Qf_cached.device) != str(device)
+        or Qf_cached.dtype != S_unfold.dtype
+    )
+    if cache_miss:
+        Pf_cached = _build_unwhitened_projector_exact(Ct, ridge=float(msd_ridge)).to(
+            device=device, dtype=S_unfold.dtype
+        )
+        Qf_cached, _, _ = _orthonormal_basis_from_projector(Pf_cached)
+        Qf_cached = Qf_cached.to(device=device, dtype=S_unfold.dtype).contiguous()
+        _UNWHITENED_PROJECTOR_CACHE[projector_key] = Pf_cached
+        _UNWHITENED_PROJECTOR_BASIS_CACHE[projector_key] = Qf_cached
+
+    t4 = time.perf_counter()
+    with _prof_ctx("stap:band_energy:snapshots"):
+        T_band, sw_pow = _band_energy_unwhitened_unfold_batched(
+            S_unfold,
+            C_t=Ct,
+            projector=Pf_cached,
+            basis=Qf_cached,
+            ridge=msd_ridge,
+            device=device,
+            dtype=S_unfold.dtype,
             eps=1e-10,
         )
     sw_pow_safe = torch.clamp(sw_pow, min=1e-10)
@@ -5640,15 +5905,12 @@ def stap_temporal_core_batched(
     if whiten_gamma <= 1e-8:
         t0 = time.perf_counter()
         with _prof_ctx("stap:hankel"):
-            S_flat, N_direct, h_direct, w_direct = build_temporal_hankels_flat_batch(
+            S_unfold = build_temporal_hankels_unfold_batch(
                 cube_batch_T_hw, Lt, center=True, device=device, dtype=cube_batch_T_hw.dtype
             )
         t_hankel = time.perf_counter() - t0
-        return _direct_unwhitened_detector_flat_batched(
-            S_flat,
-            N=int(N_direct),
-            h=int(h_direct),
-            w=int(w_direct),
+        return _direct_unwhitened_detector_unfold_batched(
+            S_unfold,
             prf_hz=float(prf_hz),
             Lt=int(Lt),
             diag_load=float(diag_load),
@@ -6245,15 +6507,12 @@ def pd_temporal_core_batched(
     t0 = time.perf_counter()
     if whiten_gamma <= 1e-8:
         with _prof_ctx("stap:hankel"):
-            S_flat, N_direct, h_direct, w_direct = build_temporal_hankels_flat_batch(
+            S_unfold = build_temporal_hankels_unfold_batch(
                 cube_batch_T_hw, Lt, center=True, device=device, dtype=cube_batch_T_hw.dtype
             )
         t_hankel = time.perf_counter() - t0
-        return _direct_unwhitened_detector_flat_batched(
-            S_flat,
-            N=int(N_direct),
-            h=int(h_direct),
-            w=int(w_direct),
+        return _direct_unwhitened_detector_unfold_batched(
+            S_unfold,
             prf_hz=float(prf_hz),
             Lt=int(Lt),
             diag_load=float(diag_load),
