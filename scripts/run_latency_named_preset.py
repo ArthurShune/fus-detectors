@@ -56,7 +56,11 @@ def _brain_summary(out_root: Path, profile: str, budget_s: float) -> ScenarioRow
     baseline_s = _mean([float(t.get("baseline_ms", 0.0)) / 1000.0 for t in teles[1:]])
     detector_s = _mean([float(t.get("stap_total_ms", 0.0)) / 1000.0 for t in teles[1:]])
     return ScenarioRow(
-        scenario=profile,
+        scenario={
+            "Brain-OpenSkull": "Open-skull surface-artifact stress test (64-frame window)",
+            "Brain-AliasContract": "Alias-dominant positive control (64-frame window)",
+            "Brain-SkullOR": "Structured-clutter leakage stress test (64-frame window)",
+        }.get(profile, profile),
         baseline_s=baseline_s,
         detector_s=detector_s,
         total_s=baseline_s + detector_s,
@@ -72,7 +76,7 @@ def _shin_summary(out_root: Path, budget_s: float) -> ScenarioRow:
     baseline_s = _mean([float(t.get("baseline_ms", 0.0)) / 1000.0 for t in teles[1:]])
     detector_s = _mean([float(t.get("stap_total_ms", 0.0)) / 1000.0 for t in teles[1:]])
     return ScenarioRow(
-        scenario="Shin rat-brain IQ sequence",
+        scenario="Shin rat-brain real-IQ audit (128-frame window)",
         baseline_s=baseline_s,
         detector_s=detector_s,
         total_s=baseline_s + detector_s,
@@ -136,8 +140,8 @@ def _render_tex(out_tex: Path, rows: list[ScenarioRow], *, preset_name: str) -> 
             (
                 f"\\caption{{Steady-state latency summary for preset \\texttt{{{preset_name}}} on an "
                 "NVIDIA GeForce RTX 4080 SUPER 16GB. Times are means over windows/frames 2..N, "
-                "exclude disk I/O, and use the frozen product-path detector hierarchy rather than "
-                "the older full-whitening-heavy benchmark path.}}"
+                "exclude disk I/O, and time the frozen product-path detector hierarchy rather than "
+                "the older specialist-path timing configuration.}}"
             ),
             "\\label{tab:latency_summary_4080super_product}",
             "\\end{table}",
@@ -290,13 +294,13 @@ def main() -> None:
     gammex_along = _gammex_view_summary(
         gammex_out,
         "along_linear17",
-        "Gammex along (linear17 @ PRF 2500; per cine frame)",
+        "Gammex flow phantom, along view (17-shot cine frame)",
         budget_s=(17.0 / 2500.0),
     )
     gammex_across = _gammex_view_summary(
         gammex_out,
         "across_linear17",
-        "Gammex across (linear17 @ PRF 2500; per cine frame)",
+        "Gammex flow phantom, across view (17-shot cine frame)",
         budget_s=(17.0 / 2500.0),
     )
 
