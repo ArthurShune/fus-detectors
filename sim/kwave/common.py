@@ -12107,6 +12107,18 @@ def write_acceptance_bundle(
                 max_iters=int(rpca_max_iters),
                 return_filtered_cube=False,
             )
+    elif baseline_type_norm in {"raw", "none", "identity"}:
+        t_baseline_raw = time.perf_counter()
+        pd_base = np.mean((np.abs(Icube) ** 2).astype(np.float32), axis=0).astype(
+            np.float32, copy=False
+        )
+        baseline_telemetry = {
+            "baseline_type": baseline_type_norm,
+            "svd_rank_removed": 0,
+            "baseline_ms": float(1000.0 * (time.perf_counter() - t_baseline_raw)),
+        }
+        baseline_filtered_cube = None
+        baseline_filtered_cube_for_br = None
     else:
         if use_whitened_ratio:
             raise ValueError("Whitened band-ratio scoring requires mc_svd baseline.")
