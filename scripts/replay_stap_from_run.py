@@ -11,6 +11,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import sys
 import time
 from pathlib import Path
 
@@ -952,6 +953,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    reg_override_disable = "--reg-disable" in sys.argv
+    reg_override_enable = "--reg-enable" in sys.argv
     custom_stap_overrides = {
         "diag_load": args.diag_load,
         "stap_cov_trim_q": args.stap_cov_trim_q,
@@ -963,6 +966,10 @@ def main() -> None:
     }
 
     apply_brain_profile_defaults(args)
+    if reg_override_disable:
+        args.reg_enable = False
+    elif reg_override_enable:
+        args.reg_enable = True
     apply_stap_profile_defaults(args)
     if bool(args.allow_custom_stap_hyperparams):
         for key, value in custom_stap_overrides.items():

@@ -147,3 +147,27 @@ def test_fastpath_fractional_whitening_smoke():
     assert np.isfinite(band_mid).all()
     assert np.isfinite(score_mid).all()
     assert all(float(item["whiten_gamma"]) == pytest.approx(0.5) for item in info_mid)
+
+
+@pytest.mark.skipif(torch is None, reason="torch not available")
+def test_flat_hankel_helper_matches_full_hankel_layout():
+    from pipeline.stap.temporal_shared import (
+        build_temporal_hankels_batch,
+        build_temporal_hankels_flat_batch,
+    )
+
+    rng = np.random.default_rng(3)
+    B, T, h, w = 2, 14, 4, 4
+    cube_np = (rng.standard_normal((B, T, h, w)) + 1j * rng.standard_normal((B, T, h, w))).astype(
+        np.complex64
+    )
+
+    S_full, _ = build_temporal_hankels_batch(cube_np, 6, center=True, device="cpu")
+    S_flat, N, h_out, w_out = build_temporal_hankels_flat_batch(
+        cube_np, 6, center=True, device="cpu"
+    )
+
+    assert (N, h_out, w_out) == (S_full.shape[2], S_full.shape[3], S_full.shape[4])
+    S_full_flat = S_full.permute(0, 1, 3, 4, 2).contiguous().view(B, 6, -1)
+    assert S_flat.shape == S_full_flat.shape
+    assert torch.allclose(S_flat, S_full_flat, rtol=1e-6, atol=1e-7)

@@ -20,6 +20,7 @@ from pipeline.stap.robust_cov import robust_covariance
 from pipeline.stap.temporal_shared import (
     build_fd_grid_flow_band,
     build_fd_grid_span,
+    build_temporal_hankels_flat_batch,
     build_temporal_hankels_batch,
     robust_temporal_cov_batch,
     shrinkage_alpha_for_kappa_batch,
@@ -70,6 +71,8 @@ _STAP_CUDA_STAGE_TIMER: contextvars.ContextVar[_StapCudaStageTimer | None] = con
 
 _STAP_TILE_STATISTIC_WARNED = False
 _UNWHITENED_PROJECTOR_CACHE: dict[tuple, torch.Tensor] = {}
+_FD_GRID_CACHE: dict[tuple, tuple[np.ndarray, dict, str, tuple[float, float] | None]] = {}
+_CONSTRAINT_CACHE: dict[tuple, torch.Tensor] = {}
 
 
 def _warn_tile_statistic_experimental() -> None:
@@ -85,6 +88,122 @@ def _warn_tile_statistic_experimental() -> None:
         UserWarning,
         stacklevel=2,
     )
+
+
+def _rounded_float_key(value: float | None, *, digits: int = 8) -> float | None:
+    if value is None:
+        return None
+    return round(float(value), digits)
+
+
+def _rounded_seq_key(values: Sequence[float] | None, *, digits: int = 8) -> tuple[float, ...] | None:
+    if values is None:
+        return None
+    return tuple(round(float(v), digits) for v in values)
+
+
+def _resolve_fd_grid_constraints_cached(
+    *,
+    Lt: int,
+    prf_hz: float,
+    fd_span_mode: str,
+    flow_band_hz: Optional[Tuple[float, float]],
+    fd_span_rel: Tuple[float, float],
+    grid_step_rel: float,
+    fd_min_abs_hz: float,
+    min_pts: int,
+    max_pts: int,
+    motion_half_span_hz: float,
+    Ct_override: Optional[torch.Tensor],
+    device: torch.device | str,
+    dtype: torch.dtype,
+    constraint_mode: str = "exp+deriv",
+) -> tuple[np.ndarray, dict, str, tuple[float, float] | None, torch.Tensor]:
+    fd_mode = str(fd_span_mode or "psd").strip().lower()
+    flow_band_used: Tuple[float, float] | None = None
+    grid_key = (
+        int(Lt),
+        _rounded_float_key(prf_hz),
+        fd_mode,
+        _rounded_seq_key(flow_band_hz),
+        _rounded_seq_key(fd_span_rel),
+        _rounded_float_key(grid_step_rel),
+        _rounded_float_key(fd_min_abs_hz),
+        int(min_pts),
+        int(max_pts),
+        _rounded_float_key(motion_half_span_hz),
+    )
+    cached_grid = _FD_GRID_CACHE.get(grid_key)
+    if cached_grid is None:
+        fd_grid_source = "span"
+        if fd_mode in {"flow_band", "band"} and flow_band_hz is not None:
+            try:
+                flow_band_used = (float(flow_band_hz[0]), float(flow_band_hz[1]))
+            except Exception:
+                flow_band_used = None
+            if flow_band_used is not None:
+                fd_grid, fd_meta = build_fd_grid_flow_band(
+                    prf_hz,
+                    Lt,
+                    flow_band_used,
+                    motion_half_span_hz=float(motion_half_span_hz),
+                    min_pts=min_pts,
+                    max_pts=max_pts,
+                )
+                fd_grid_source = "flow_band"
+            else:
+                fd_grid, fd_meta = build_fd_grid_span(
+                    prf_hz,
+                    Lt,
+                    fd_span_rel=fd_span_rel,
+                    grid_step_rel=grid_step_rel,
+                    fd_min_abs_hz=fd_min_abs_hz,
+                    min_pts=min_pts,
+                    max_pts=max_pts,
+                )
+        else:
+            fd_grid, fd_meta = build_fd_grid_span(
+                prf_hz,
+                Lt,
+                fd_span_rel=fd_span_rel,
+                grid_step_rel=grid_step_rel,
+                fd_min_abs_hz=fd_min_abs_hz,
+                min_pts=min_pts,
+                max_pts=max_pts,
+            )
+        cached_grid = (
+            np.asarray(fd_grid, dtype=np.float64),
+            dict(fd_meta),
+            str(fd_grid_source),
+            flow_band_used,
+        )
+        _FD_GRID_CACHE[grid_key] = cached_grid
+
+    fd_grid_np, fd_meta, fd_grid_source, flow_band_used = cached_grid
+    if Ct_override is not None:
+        Ct = Ct_override.to(device=device, dtype=dtype)
+        return fd_grid_np.copy(), dict(fd_meta), str(fd_grid_source), flow_band_used, Ct
+
+    constraint_key = (
+        str(device),
+        str(dtype),
+        str(constraint_mode),
+        int(Lt),
+        _rounded_float_key(prf_hz),
+        _rounded_seq_key(fd_grid_np),
+    )
+    Ct = _CONSTRAINT_CACHE.get(constraint_key)
+    if Ct is None:
+        Ct = bandpass_constraints_temporal(
+            Lt,
+            prf_hz,
+            fd_grid_hz=fd_grid_np.tolist(),
+            device=device,
+            dtype=dtype,
+            mode=str(constraint_mode),
+        )
+        _CONSTRAINT_CACHE[constraint_key] = Ct
+    return fd_grid_np.copy(), dict(fd_meta), str(fd_grid_source), flow_band_used, Ct
 
 
 def _normalize_detector_variant(detector_variant: str | None) -> str:
@@ -3662,6 +3781,52 @@ def _band_energy_unwhitened_batched(
     return T_band, sw_pow
 
 
+def _band_energy_unwhitened_flat_batched(
+    S_flat: torch.Tensor,
+    *,
+    N: int,
+    h: int,
+    w: int,
+    C_t: torch.Tensor,
+    projector: Optional[torch.Tensor] = None,
+    ridge: float = 0.10,
+    device: Optional[str] = None,
+    dtype: torch.dtype = torch.complex64,
+    eps: float = 1e-10,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Exact band-energy computation for direct paths that already have flattened snapshots.
+    """
+    if device is None:
+        device = S_flat.device
+
+    prec = os.getenv("STAP_BAND_PRECISION", "").strip().lower()
+    work_dtype = torch.complex128 if prec == "fp64" else dtype
+
+    S_work = S_flat.to(device=device, dtype=work_dtype)
+    Ct = C_t.to(device=device, dtype=work_dtype)
+    Bsz, _, _ = S_work.shape
+    if Ct.numel() == 0:
+        zeros = torch.zeros((Bsz, N, h, w), dtype=torch.float32, device=device)
+        return zeros, zeros
+
+    sw_pow_flat = torch.sum(S_work.conj() * S_work, dim=1).real
+
+    Pf = projector.to(device=device, dtype=work_dtype) if projector is not None else None
+    if Pf is None:
+        with _prof_ctx("stap:band_energy:project:chol_Gram"):
+            Pf = _build_unwhitened_projector_exact(Ct, ridge=float(ridge)).to(
+                device=device, dtype=work_dtype
+            )
+    with _prof_ctx("stap:band_energy:project:gram_solve"):
+        proj = torch.matmul(Pf.unsqueeze(0), S_work)
+        T_band_flat = torch.sum(S_work.conj() * proj, dim=1).real
+
+    T_band = torch.clamp(T_band_flat, min=0.0).view(Bsz, N, h, w)
+    sw_pow = torch.clamp(sw_pow_flat, min=eps).view(Bsz, N, h, w)
+    return T_band, sw_pow
+
+
 def _direct_detector_infos_from_outputs(
     band_frac_out: torch.Tensor,
     score_out: torch.Tensor,
@@ -3806,61 +3971,25 @@ def _direct_unwhitened_detector_batched(
     else:
         motion_half_span_hz = 0.1 * base
 
-    t_fdgrid = 0.0
-    fd_mode = str(fd_span_mode or "psd").strip().lower()
-    fd_grid_source = "span"
-    flow_band_used: Tuple[float, float] | None = None
     t3 = time.perf_counter()
-    with _prof_ctx("stap:fd_grid"):
-        if fd_mode in {"flow_band", "band"} and flow_band_hz is not None:
-            try:
-                flow_band_used = (float(flow_band_hz[0]), float(flow_band_hz[1]))
-            except Exception:
-                flow_band_used = None
-            if flow_band_used is not None:
-                fd_grid, fd_meta = build_fd_grid_flow_band(
-                    prf_hz,
-                    Lt,
-                    flow_band_used,
-                    motion_half_span_hz=float(motion_half_span_hz),
-                    min_pts=min_pts,
-                    max_pts=max_pts,
-                )
-                fd_grid_source = "flow_band"
-            else:
-                fd_grid, fd_meta = build_fd_grid_span(
-                    prf_hz,
-                    Lt,
-                    fd_span_rel=fd_span_rel,
-                    grid_step_rel=grid_step_rel,
-                    fd_min_abs_hz=fd_min_abs_hz,
-                    min_pts=min_pts,
-                    max_pts=max_pts,
-                )
-        else:
-            fd_grid, fd_meta = build_fd_grid_span(
-                prf_hz,
-                Lt,
-                fd_span_rel=fd_span_rel,
-                grid_step_rel=grid_step_rel,
-                fd_min_abs_hz=fd_min_abs_hz,
-                min_pts=min_pts,
-                max_pts=max_pts,
-            )
+    with _prof_ctx("stap:fd_grid"), _prof_ctx("stap:constraints"):
+        fd_grid, fd_meta, fd_grid_source, flow_band_used, Ct = _resolve_fd_grid_constraints_cached(
+            Lt=int(Lt),
+            prf_hz=float(prf_hz),
+            fd_span_mode=str(fd_span_mode),
+            flow_band_hz=flow_band_hz,
+            fd_span_rel=fd_span_rel,
+            grid_step_rel=float(grid_step_rel),
+            fd_min_abs_hz=float(fd_min_abs_hz),
+            min_pts=int(min_pts),
+            max_pts=int(max_pts),
+            motion_half_span_hz=float(motion_half_span_hz),
+            Ct_override=Ct_override,
+            device=device,
+            dtype=S_B_Lt_N_hw.dtype,
+            constraint_mode="exp+deriv",
+        )
     t_fdgrid = time.perf_counter() - t3
-
-    with _prof_ctx("stap:constraints"):
-        if Ct_override is not None:
-            Ct = Ct_override.to(device=device, dtype=S_B_Lt_N_hw.dtype)
-        else:
-            Ct = bandpass_constraints_temporal(
-                Lt,
-                prf_hz,
-                fd_grid_hz=fd_grid.tolist(),
-                device=device,
-                dtype=S_B_Lt_N_hw.dtype,
-                mode="exp+deriv",
-            )
 
     flow_band_key = None
     if flow_band_used is not None:
@@ -3892,6 +4021,171 @@ def _direct_unwhitened_detector_batched(
             ridge=msd_ridge,
             device=device,
             dtype=S_B_Lt_N_hw.dtype,
+            eps=1e-10,
+        )
+    sw_pow_safe = torch.clamp(sw_pow, min=1e-10)
+    r_flow = torch.clamp(T_band / sw_pow_safe, min=0.0, max=1.0)
+    denom = torch.clamp(sw_pow_safe - T_band + float(msd_ratio_rho) * sw_pow_safe, min=1e-10)
+    ratio = torch.clamp(T_band / denom, min=0.0)
+    with _prof_ctx("stap:aggregate"):
+        band_frac_out = aggregate_over_snapshots_batched(r_flow, mode=msd_agg_mode).to(
+            dtype=torch.float32
+        )
+        ratio_out = aggregate_over_snapshots_batched(ratio, mode=msd_agg_mode).to(
+            dtype=torch.float32
+        )
+        pow_out = aggregate_over_snapshots_batched(sw_pow_safe, mode=msd_agg_mode).to(
+            dtype=torch.float32
+        )
+        score_out = pow_out if detector_variant == "whitened_power" else ratio_out
+    t_band = time.perf_counter() - t4
+
+    if telemetry_enabled:
+        infos = _direct_detector_infos_from_outputs(
+            band_frac_out,
+            score_out,
+            Lt=Lt,
+            variant=str(detector_variant),
+            whiten_gamma=float(whiten_gamma),
+            cov_train_trim_q=float(cov_train_trim_q),
+            fd_grid=fd_grid,
+            fd_grid_source=fd_grid_source,
+            fd_meta=fd_meta,
+            flow_band_used=flow_band_used,
+            motion_half_span_hz=float(motion_half_span_hz),
+            cov_estimator=str(cov_estimator),
+            diag_load=float(diag_load),
+            msd_lambda_used=float(msd_lambda) if msd_lambda is not None else 0.0,
+            t_hankel=float(t_hankel),
+            t_fdgrid=float(t_fdgrid),
+            t_band=float(t_band),
+        )
+    else:
+        B = int(band_frac_out.shape[0])
+        infos = []
+        for _ in range(B):
+            infos.append(
+                {
+                    "detector_variant": str(detector_variant),
+                    "whiten_gamma": float(whiten_gamma),
+                    "cov_train_trim_q": float(cov_train_trim_q),
+                    "cond_R": float("nan"),
+                    "cond_loaded": float("nan"),
+                    "cov_rank_proxy": float("nan"),
+                    "gamma_flow": float("nan"),
+                    "gamma_perp": float("nan"),
+                    "stap_fast_direct_unwhitened": True,
+                    "stap_hankel_ms": float(1000.0 * t_hankel),
+                    "stap_cov_ms": 0.0,
+                    "stap_shrink_ms": 0.0,
+                    "stap_fdgrid_ms": float(1000.0 * t_fdgrid),
+                    "stap_msd_ms": float(1000.0 * t_band),
+                }
+            )
+
+    if return_torch:
+        return band_frac_out.detach(), score_out.detach(), infos
+    return (
+        band_frac_out.detach().cpu().numpy().astype(np.float32, copy=False),
+        score_out.detach().cpu().numpy().astype(np.float32, copy=False),
+        infos,
+    )
+
+
+def _direct_unwhitened_detector_flat_batched(
+    S_flat: torch.Tensor,
+    *,
+    N: int,
+    h: int,
+    w: int,
+    prf_hz: float,
+    Lt: int,
+    diag_load: float,
+    cov_train_trim_q: float,
+    cov_estimator: str,
+    grid_step_rel: float,
+    fd_span_rel: Tuple[float, float],
+    min_pts: int,
+    max_pts: int,
+    fd_min_abs_hz: float,
+    motion_half_span_rel: Optional[float],
+    msd_ridge: float,
+    msd_agg_mode: str,
+    msd_ratio_rho: float,
+    msd_lambda: Optional[float],
+    detector_variant: str,
+    whiten_gamma: float,
+    fd_span_mode: str = "psd",
+    flow_band_hz: Optional[Tuple[float, float]] = None,
+    Ct_override: Optional[torch.Tensor] = None,
+    device: Optional[str] = None,
+    return_torch: bool = False,
+    telemetry_enabled: bool = True,
+    t_hankel: float = 0.0,
+) -> Tuple[np.ndarray | torch.Tensor, np.ndarray | torch.Tensor, List[dict]]:
+    if device is None:
+        device = S_flat.device
+
+    motion_half_span_hz = 0.0
+    base = prf_hz / float(Lt)
+    if motion_half_span_rel is not None:
+        motion_half_span_hz = max(0.0, float(motion_half_span_rel) * base)
+    else:
+        motion_half_span_hz = 0.1 * base
+
+    t3 = time.perf_counter()
+    with _prof_ctx("stap:fd_grid"), _prof_ctx("stap:constraints"):
+        fd_grid, fd_meta, fd_grid_source, flow_band_used, Ct = _resolve_fd_grid_constraints_cached(
+            Lt=int(Lt),
+            prf_hz=float(prf_hz),
+            fd_span_mode=str(fd_span_mode),
+            flow_band_hz=flow_band_hz,
+            fd_span_rel=fd_span_rel,
+            grid_step_rel=float(grid_step_rel),
+            fd_min_abs_hz=float(fd_min_abs_hz),
+            min_pts=int(min_pts),
+            max_pts=int(max_pts),
+            motion_half_span_hz=float(motion_half_span_hz),
+            Ct_override=Ct_override,
+            device=device,
+            dtype=S_flat.dtype,
+            constraint_mode="exp+deriv",
+        )
+    t_fdgrid = time.perf_counter() - t3
+
+    flow_band_key = None
+    if flow_band_used is not None:
+        flow_band_key = (round(float(flow_band_used[0]), 6), round(float(flow_band_used[1]), 6))
+    fd_grid_key = tuple(round(float(x), 6) for x in fd_grid.tolist())
+    projector_key = (
+        str(device),
+        str(S_flat.dtype),
+        int(Lt),
+        round(float(prf_hz), 6),
+        fd_grid_source,
+        fd_grid_key,
+        flow_band_key,
+        round(float(msd_ridge), 6),
+    )
+    Pf_cached = _UNWHITENED_PROJECTOR_CACHE.get(projector_key)
+    if Pf_cached is None or str(Pf_cached.device) != str(device) or Pf_cached.dtype != S_flat.dtype:
+        Pf_cached = _build_unwhitened_projector_exact(Ct, ridge=float(msd_ridge)).to(
+            device=device, dtype=S_flat.dtype
+        )
+        _UNWHITENED_PROJECTOR_CACHE[projector_key] = Pf_cached
+
+    t4 = time.perf_counter()
+    with _prof_ctx("stap:band_energy:snapshots"):
+        T_band, sw_pow = _band_energy_unwhitened_flat_batched(
+            S_flat,
+            N=int(N),
+            h=int(h),
+            w=int(w),
+            C_t=Ct,
+            projector=Pf_cached,
+            ridge=msd_ridge,
+            device=device,
+            dtype=S_flat.dtype,
             eps=1e-10,
         )
     sw_pow_safe = torch.clamp(sw_pow, min=1e-10)
@@ -5331,16 +5625,18 @@ def stap_temporal_core_batched(
     t_fdgrid = 0.0
     t_msd = 0.0
 
-    t0 = time.perf_counter()
-    with _prof_ctx("stap:hankel"):
-        S_B_Lt_N_hw, R_scm = build_temporal_hankels_batch(
-            cube_batch_T_hw, Lt, center=True, device=device, dtype=cube_batch_T_hw.dtype
-        )
-    t_hankel = time.perf_counter() - t0
-
     if whiten_gamma <= 1e-8:
-        return _direct_unwhitened_detector_batched(
-            S_B_Lt_N_hw,
+        t0 = time.perf_counter()
+        with _prof_ctx("stap:hankel"):
+            S_flat, N_direct, h_direct, w_direct = build_temporal_hankels_flat_batch(
+                cube_batch_T_hw, Lt, center=True, device=device, dtype=cube_batch_T_hw.dtype
+            )
+        t_hankel = time.perf_counter() - t0
+        return _direct_unwhitened_detector_flat_batched(
+            S_flat,
+            N=int(N_direct),
+            h=int(h_direct),
+            w=int(w_direct),
             prf_hz=float(prf_hz),
             Lt=int(Lt),
             diag_load=float(diag_load),
@@ -5366,6 +5662,13 @@ def stap_temporal_core_batched(
             telemetry_enabled=telemetry_enabled,
             t_hankel=float(t_hankel),
         )
+
+    t0 = time.perf_counter()
+    with _prof_ctx("stap:hankel"):
+        S_B_Lt_N_hw, R_scm = build_temporal_hankels_batch(
+            cube_batch_T_hw, Lt, center=True, device=device, dtype=cube_batch_T_hw.dtype
+        )
+    t_hankel = time.perf_counter() - t0
 
     B, _, N, h, w = S_B_Lt_N_hw.shape
     # Match the manuscript baseline snapshot flattening order (h,w,N) to avoid
@@ -5562,59 +5865,24 @@ def stap_temporal_core_batched(
         motion_half_span_hz = 0.1 * base
 
     t3 = time.perf_counter()
-    fd_mode = str(fd_span_mode or "psd").strip().lower()
-    fd_grid_source = "span"
-    flow_band_used: Tuple[float, float] | None = None
-    with _prof_ctx("stap:fd_grid"):
-        if fd_mode in {"flow_band", "band"} and flow_band_hz is not None:
-            try:
-                flow_band_used = (float(flow_band_hz[0]), float(flow_band_hz[1]))
-            except Exception:
-                flow_band_used = None
-            if flow_band_used is not None:
-                fd_grid, fd_meta = build_fd_grid_flow_band(
-                    prf_hz,
-                    Lt,
-                    flow_band_used,
-                    motion_half_span_hz=float(motion_half_span_hz),
-                    min_pts=min_pts,
-                    max_pts=max_pts,
-                )
-                fd_grid_source = "flow_band"
-            else:
-                fd_grid, fd_meta = build_fd_grid_span(
-                    prf_hz,
-                    Lt,
-                    fd_span_rel=fd_span_rel,
-                    grid_step_rel=grid_step_rel,
-                    fd_min_abs_hz=fd_min_abs_hz,
-                    min_pts=min_pts,
-                    max_pts=max_pts,
-                )
-        else:
-            fd_grid, fd_meta = build_fd_grid_span(
-                prf_hz,
-                Lt,
-                fd_span_rel=fd_span_rel,
-                grid_step_rel=grid_step_rel,
-                fd_min_abs_hz=fd_min_abs_hz,
-                min_pts=min_pts,
-                max_pts=max_pts,
-            )
+    with _prof_ctx("stap:fd_grid"), _prof_ctx("stap:constraints"):
+        fd_grid, fd_meta, fd_grid_source, flow_band_used, Ct = _resolve_fd_grid_constraints_cached(
+            Lt=int(Lt),
+            prf_hz=float(prf_hz),
+            fd_span_mode=str(fd_span_mode),
+            flow_band_hz=flow_band_hz,
+            fd_span_rel=fd_span_rel,
+            grid_step_rel=float(grid_step_rel),
+            fd_min_abs_hz=float(fd_min_abs_hz),
+            min_pts=int(min_pts),
+            max_pts=int(max_pts),
+            motion_half_span_hz=float(motion_half_span_hz),
+            Ct_override=Ct_override,
+            device=device,
+            dtype=R_hat.dtype,
+            constraint_mode="exp+deriv",
+        )
     t_fdgrid = time.perf_counter() - t3
-
-    with _prof_ctx("stap:constraints"):
-        if Ct_override is not None:
-            Ct = Ct_override.to(device=device, dtype=R_hat.dtype)
-        else:
-            Ct = bandpass_constraints_temporal(
-                Lt,
-                prf_hz,
-                fd_grid_hz=fd_grid.tolist(),
-                device=device,
-                dtype=R_hat.dtype,
-                mode="exp+deriv",
-            )
 
     # Batched band-energy computation (PD-focused fast path)
     t4 = time.perf_counter()
@@ -5963,14 +6231,17 @@ def pd_temporal_core_batched(
     t_band = 0.0
 
     t0 = time.perf_counter()
-    S_B_Lt_N_hw, R_scm = build_temporal_hankels_batch(
-        cube_batch_T_hw, Lt, center=True, device=device, dtype=cube_batch_T_hw.dtype
-    )
-    t_hankel = time.perf_counter() - t0
-
     if whiten_gamma <= 1e-8:
-        return _direct_unwhitened_detector_batched(
-            S_B_Lt_N_hw,
+        with _prof_ctx("stap:hankel"):
+            S_flat, N_direct, h_direct, w_direct = build_temporal_hankels_flat_batch(
+                cube_batch_T_hw, Lt, center=True, device=device, dtype=cube_batch_T_hw.dtype
+            )
+        t_hankel = time.perf_counter() - t0
+        return _direct_unwhitened_detector_flat_batched(
+            S_flat,
+            N=int(N_direct),
+            h=int(h_direct),
+            w=int(w_direct),
             prf_hz=float(prf_hz),
             Lt=int(Lt),
             diag_load=float(diag_load),
@@ -5996,6 +6267,11 @@ def pd_temporal_core_batched(
             telemetry_enabled=telemetry_enabled,
             t_hankel=float(t_hankel),
         )
+
+    S_B_Lt_N_hw, R_scm = build_temporal_hankels_batch(
+        cube_batch_T_hw, Lt, center=True, device=device, dtype=cube_batch_T_hw.dtype
+    )
+    t_hankel = time.perf_counter() - t0
 
     B, _, N, h, w = S_B_Lt_N_hw.shape
     # Match the manuscript baseline snapshot flattening order (h,w,N) to avoid
@@ -6173,60 +6449,24 @@ def pd_temporal_core_batched(
 
     # Build a single band grid and constraint matrix for PD.
     t3 = time.perf_counter()
-    fd_mode = str(fd_span_mode or "psd").strip().lower()
-    fd_grid_source = "span"
-    flow_band_used: Tuple[float, float] | None = None
-    with _prof_ctx("stap:fd_grid"):
-        if fd_mode in {"flow_band", "band"} and flow_band_hz is not None:
-            try:
-                flow_band_used = (float(flow_band_hz[0]), float(flow_band_hz[1]))
-            except Exception:
-                flow_band_used = None
-            if flow_band_used is not None:
-                fd_grid, fd_meta = build_fd_grid_flow_band(
-                    prf_hz,
-                    Lt,
-                    flow_band_used,
-                    motion_half_span_hz=float(motion_half_span_hz),
-                    min_pts=min_pts,
-                    max_pts=max_pts,
-                )
-                fd_grid_source = "flow_band"
-            else:
-                fd_grid, fd_meta = build_fd_grid_span(
-                    prf_hz,
-                    Lt,
-                    fd_span_rel=fd_span_rel,
-                    grid_step_rel=grid_step_rel,
-                    fd_min_abs_hz=fd_min_abs_hz,
-                    min_pts=min_pts,
-                    max_pts=max_pts,
-                )
-        else:
-            fd_grid, fd_meta = build_fd_grid_span(
-                prf_hz,
-                Lt,
-                fd_span_rel=fd_span_rel,
-                grid_step_rel=grid_step_rel,
-                fd_min_abs_hz=fd_min_abs_hz,
-                min_pts=min_pts,
-                max_pts=max_pts,
-            )
+    with _prof_ctx("stap:fd_grid"), _prof_ctx("stap:constraints"):
+        fd_grid, fd_meta, fd_grid_source, flow_band_used, Ct = _resolve_fd_grid_constraints_cached(
+            Lt=int(Lt),
+            prf_hz=float(prf_hz),
+            fd_span_mode=str(fd_span_mode),
+            flow_band_hz=flow_band_hz,
+            fd_span_rel=fd_span_rel,
+            grid_step_rel=float(grid_step_rel),
+            fd_min_abs_hz=float(fd_min_abs_hz),
+            min_pts=int(min_pts),
+            max_pts=int(max_pts),
+            motion_half_span_hz=float(motion_half_span_hz),
+            Ct_override=Ct_override,
+            device=device,
+            dtype=R_hat.dtype,
+            constraint_mode="exp+deriv",
+        )
     t_fdgrid = time.perf_counter() - t3
-
-    # Constraints for the entire band (no motion/alias split in this PD-only mode).
-    with _prof_ctx("stap:constraints"):
-        if Ct_override is not None:
-            Ct = Ct_override.to(device=device, dtype=R_hat.dtype)
-        else:
-            Ct = bandpass_constraints_temporal(
-                Lt,
-                prf_hz,
-                fd_grid_hz=fd_grid.tolist(),
-                device=device,
-                dtype=R_hat.dtype,
-                mode="exp+deriv",
-            )
 
     # Compute per-snapshot band energy and total whitened power, then aggregate.
     t4 = time.perf_counter()
