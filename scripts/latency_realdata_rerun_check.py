@@ -370,6 +370,7 @@ def _run_gammex(args: argparse.Namespace) -> Dict[str, Any]:
         par_path: Path,
         dat_path: Path,
         frames_spec: str,
+        tile_stride_override: int | None,
         expected_stride: int | None,
     ) -> Dict[str, Any]:
         par_dict = parse_rawbcf_par(par_path)
@@ -382,9 +383,16 @@ def _run_gammex(args: argparse.Namespace) -> Dict[str, Any]:
         H = int(par.cfm_beam_samples)
         W = int(par.num_cfm_beams)
         tile_hw = (int(args.tile_h), int(args.tile_w))
-        tile_stride = _stride_auto(
-            H, W, tile_hw, max_stride=int(args.tile_stride_auto_max), min_tiles=int(args.tile_stride_auto_min_tiles)
-        )
+        if tile_stride_override is not None:
+            tile_stride = int(tile_stride_override)
+        else:
+            tile_stride = _stride_auto(
+                H,
+                W,
+                tile_hw,
+                max_stride=int(args.tile_stride_auto_max),
+                min_tiles=int(args.tile_stride_auto_min_tiles),
+            )
         if expected_stride is not None and int(tile_stride) != int(expected_stride):
             raise RuntimeError(
                 f"{view_name}: auto stride mismatch (got {tile_stride}, expected {expected_stride})."
@@ -452,7 +460,7 @@ def _run_gammex(args: argparse.Namespace) -> Dict[str, Any]:
                 hybrid_rescue_rule=str(args.hybrid_rescue_rule),
                 mask_flow_override=mask_flow,
                 mask_bg_override=mask_bg,
-                stap_conditional_enable=False,
+                stap_conditional_enable=(str(args.stap_conditional).strip().lower() == "on"),
                 stap_device=str(args.stap_device),
                 run_stap=True,
                 score_ka_v2_enable=False,
@@ -484,7 +492,12 @@ def _run_gammex(args: argparse.Namespace) -> Dict[str, Any]:
         par_path=along_dir / "RawBCFCine.par",
         dat_path=along_dir / "RawBCFCine.dat",
         frames_spec=str(args.frames_along),
-        expected_stride=6,
+        tile_stride_override=(
+            int(args.along_tile_stride) if args.along_tile_stride is not None else None
+        ),
+        expected_stride=(
+            None if args.along_tile_stride is not None else 6
+        ),
     )
     across_par = across_dir / "RawBCFCine_08062017_145434_17.par"
     across_dat = across_dir / "RawBCFCine_08062017_145434_17.dat"
@@ -494,7 +507,12 @@ def _run_gammex(args: argparse.Namespace) -> Dict[str, Any]:
         par_path=across_par,
         dat_path=across_dat,
         frames_spec=str(args.frames_across),
-        expected_stride=4,
+        tile_stride_override=(
+            int(args.across_tile_stride) if args.across_tile_stride is not None else None
+        ),
+        expected_stride=(
+            None if args.across_tile_stride is not None else 4
+        ),
     )
     return {"regime": "Gammex flow phantom", "along": along, "across": across}
 
@@ -598,6 +616,18 @@ def main() -> None:
     ap_g.add_argument("--tile-w", type=int, default=8)
     ap_g.add_argument("--tile-stride-auto-max", type=int, default=6)
     ap_g.add_argument("--tile-stride-auto-min-tiles", type=int, default=500)
+    ap_g.add_argument(
+        "--along-tile-stride",
+        type=int,
+        default=None,
+        help="Optional fixed along-view tile stride override (default: auto with expected stride 6).",
+    )
+    ap_g.add_argument(
+        "--across-tile-stride",
+        type=int,
+        default=None,
+        help="Optional fixed across-view tile stride override (default: auto with expected stride 4).",
+    )
     ap_g.add_argument("--diag-load", type=float, default=0.07)
     ap_g.add_argument("--cov-estimator", type=str, default="tyler_pca")
     ap_g.add_argument("--baseline-type", type=str, default="svd_bandpass")
@@ -606,6 +636,13 @@ def main() -> None:
     ap_g.add_argument("--score-mode", type=str, default="msd", choices=["pd", "msd", "band_ratio"])
     ap_g.add_argument("--mask-mode", type=str, default="bmode_tube", choices=["none", "bmode_tube"])
     ap_g.add_argument("--mask-ref-frames", type=str, default="0:20")
+    ap_g.add_argument(
+        "--stap-conditional",
+        type=str,
+        default="off",
+        choices=["off", "on"],
+        help="Whether to enable conditional execution for the phantom latency run (default: off).",
+    )
     # Gammex bands (stap_fus_methodology.tex)
     ap_g.add_argument("--flow-low-hz", type=float, default=150.0)
     ap_g.add_argument("--flow-high-hz", type=float, default=450.0)
