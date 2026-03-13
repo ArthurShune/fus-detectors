@@ -93,7 +93,7 @@ This document contains appendices for the main paper (derivations, diagnostic pa
 \begin{abstract}
 Functional ultrasound and ultrafast Doppler pipelines remain vulnerable to nuisance-driven false positives in the extreme score tail, even after conventional clutter suppression. Those rare false positives can distort vascular maps and reduce confidence precisely in the operating region where readers most care about trustworthiness.
 
-We propose a post-beamformed, tile-local detector family that brings a STAP-inspired detector viewpoint into beamformed fUS slow-time data. Its simplest form uses band-limited matched-subspace scoring after ordinary residualization. A prespecified guard-triggered adaptive variant keeps that score by default and promotes clutter-heavy pixels onto a whitened branch only when residual guard-band energy indicates localized structured nuisance, while a fully whitened STAP-inspired variant is retained for regimes in which full covariance adaptation is preferable. We also introduce an optional knowledge-aided shrinkage layer that can downweight high-risk regions without increasing any detector score. Conditional execution is evaluated as a separate decision-rule variant rather than as a free acceleration.
+We propose a post-beamformed, tile-local detector family that brings a STAP-inspired detector viewpoint into beamformed fUS slow-time data. Its simplest form uses band-limited matched-subspace scoring after ordinary residualization. A prespecified guard-triggered adaptive variant keeps that score by default and promotes clutter-heavy pixels onto a whitened branch only when residual guard-band energy indicates localized structured nuisance, while a fully whitened STAP-inspired variant is retained for regimes in which full covariance adaptation is preferable. We also introduce an optional shrink-only penalty layer, guided by band-energy cues and conservative vessel-proxy protection masks, that can downweight high-risk regions without increasing any detector score. Conditional execution is evaluated as a separate decision-rule variant rather than as a free acceleration.
 
 Quantitative detection claims are restricted to datasets with independent labels: labeled k-Wave brain simulations, a structurally labeled flow phantom, and a clinically anchored SIMUS/PyMUST moving-scatterer benchmark. On the labeled brain stress tests and the structurally labeled phantom, this detector family retains nonzero sensitivity at operating points where several power-Doppler-style baselines collapse. On the clinically anchored structural benchmark, the strongest fixed head is the simpler band-limited matched-subspace score on the prespecified residual families. The guard-triggered adaptive variant preserves that structural behavior while recovering part of the clutter-related whitening gain in the phantom and bounded real-IQ map-hygiene evaluations, and the fully whitened variant remains useful in structured-clutter stress tests, the across-view phantom, and the held-out functional audit.
 
@@ -126,7 +126,7 @@ Figure~\ref{fig:leading_structural_fidelity} provides a motivating qualitative e
 \label{fig:leading_structural_fidelity}
 \end{figure}
 
-Optionally, we add a conservative shrink-only regularization layer (knowledge aid) that compresses extreme-tail artifacts without score inflation: post-regularization scores are pointwise non-increasing, and an explicit do-not-penalize protected set is preserved (details in the Supplementary Material).
+Optionally, we add a conservative shrink-only regularization layer, guided by vessel-proxy protection masks and local band-energy cues, that compresses extreme-tail artifacts without score inflation: post-regularization scores are pointwise non-increasing, and an explicit do-not-penalize protected set is preserved (details in the Supplementary Material).
 
 \paragraph{What this paper contributes.}
 The contribution of this paper is not a new clutter filter in isolation, but bringing a STAP-inspired detector viewpoint into post-beamformed fUS: a nuisance-aware detector family centered on band-limited matched-subspace scoring, with a prespecified adaptive rule and local covariance whitening where that extra complexity is justified.
@@ -150,7 +150,7 @@ The current evidence supports a three-part detector hierarchy rather than a sing
 Claims are stratified by data regime and summarized in Table~\ref{tab:claims_discipline}. Quantitative detection efficacy is limited to regimes with independent $H_1/H_0$ labels; unlabeled in-vivo IQ and PD-only datasets are used only for bounded robustness and translation audits.
 
 \paragraph{Organization.}
-Section~\ref{sec:background-problem} defines the detection problem and score taxonomy. Section~\ref{sec:method} presents the localized detector and summarizes the optional shrink-only KA regularization (full KA details are provided in the Supplementary Material). Section~\ref{sec:experimental-design} describes the prespecified operating settings and integrity controls. Section~\ref{sec:results} reports results, followed by discussion and conclusion.
+Section~\ref{sec:background-problem} defines the detection problem and score taxonomy. Section~\ref{sec:method} presents the localized detector and summarizes the optional shrink-only penalty layer (related later to knowledge-aided processing in radar terminology; full details are provided in the Supplementary Material). Section~\ref{sec:experimental-design} describes the prespecified operating settings and integrity controls. Section~\ref{sec:results} reports results, followed by discussion and conclusion.
 
 \section{Background and Problem Formulation}
 \label{sec:background-problem}
@@ -223,7 +223,7 @@ $\mathrm{PD}^{\uparrow}$ (display PD), masks & PD display/proxy map and derived 
 Relative to a conventional ultrafast Doppler pipeline, the proposed detector family changes the final scoring stage rather than replacing upstream clutter suppression. After forming a residual slow-time signal, we score its energy inside a prespecified flow subspace rather than using only aggregate Doppler power. The simplest fixed head uses that score without local whitening, a prespecified adaptive variant promotes clutter-heavy pixels onto a whitened branch only when guard-band evidence warrants it, and a fully whitened variant is retained for regimes where stronger local adaptation is beneficial. The goal is not simply to increase vessel conspicuity, but to reduce nuisance-driven high scores in operating regions where false positives matter.
 
 \paragraph{Radar terms translated into ultrasound terms.}
-We retain a few radar-inspired abbreviations because they compactly describe the design logic, but in this paper they refer to specific post-beamformed ultrasound operations. In radar terms, the fully whitened branch with the optional penalty layer is closest to knowledge-aided STAP; in ultrasound terms, it is a tile-local covariance-adaptive matched filter with an optional heuristic penalty map. ``STAP'' refers to tile-local covariance adaptation in slow time, i.e.\ optional local whitening of beamformed residual snapshots before matched-subspace scoring. ``CFAR'' refers to how operating points are set, namely empirical threshold calibration on labeled background or nuisance tails rather than an analytic radar-style false-alarm law. ``KA'' refers to a heuristic score penalty based on auxiliary band-energy features, implemented here only as a shrink-only regularizer that can suppress high-risk tiles but never amplify them. These are therefore ultrasound-specific detector components, not a literal port of classical radar processing blocks.
+We retain a few radar-inspired abbreviations because they compactly describe the design logic, but in this paper they refer to specific post-beamformed ultrasound operations. For readers coming from ultrasound rather than radar, the fixed head can be read simply as a local band-limited flow detector, the adaptive branch as tile-local covariance whitening that turns on only in clutter-heavy regions, and the optional penalty layer as a conservative vessel-proxy masking rule that can only shrink scores. In radar terms, the fully whitened branch with the optional penalty layer is closest to knowledge-aided STAP; in ultrasound terms, it is a tile-local covariance-adaptive matched filter with an optional heuristic penalty map. ``STAP'' refers to tile-local covariance adaptation in slow time, i.e.\ optional local whitening of beamformed residual snapshots before matched-subspace scoring. ``CFAR'' refers to how operating points are set, namely empirical threshold calibration on labeled background or nuisance tails rather than an analytic radar-style false-alarm law. ``KA'' refers to a heuristic score penalty based on auxiliary band-energy features and vessel-proxy masks, implemented here only as a shrink-only regularizer that can suppress high-risk tiles but never amplify them. These are therefore ultrasound-specific detector components, not a literal port of classical radar processing blocks.
 
 \paragraph{Pipeline overview.}
 \begin{enumerate}[nosep,leftmargin=1.6em,label=\arabic*.]
@@ -231,7 +231,7 @@ We retain a few radar-inspired abbreviations because they compactly describe the
   \item For each tile $\Omega_i$: form slow-time snapshots $\{x_{i,k}\}_{k=1}^K$ via spatial sampling and, optionally, a sliding-window temporal embedding (Hankel matrix construction), estimate conditioned covariance $R_i$, and either keep the raw snapshots or whiten them as $y_{i,k}=R_i^{-1/2}x_{i,k}$.
   \item Compute a matched-subspace ratio score (ACE/MSD-style) on the chosen tile representation, e.g.\ $S_{\mathrm{stap,pre}}(i)=\frac{1}{K}\sum_k \frac{y_{i,k}\Hh \Pf\, y_{i,k}}{y_{i,k}\Hh (I-\Pf)\, y_{i,k}+\rho\, y_{i,k}\Hh y_{i,k}+\epsilon}$, and aggregate over overlapping tiles to obtain $S_{\mathrm{stap,pre}}(y,x)$. Setting $R_i=I$ recovers the simpler band-limited matched-subspace fixed head.
   \item If the adaptive variant is used, retain the fixed head by default and promote pixels onto the whitened branch only where a prespecified guard-band clutter feature exceeds a fixed threshold.
-  \item If KA enabled: compute a deterministic, shrink-only weight $w(i)\in(0,1]$ from auxiliary band-energy statistics and proxy-support features (details in the Supplementary Material), preserve a protected do-not-penalize set (scores unchanged), and output $S_{\mathrm{stap,post}}(y,x)=w\,S_{\mathrm{stap,pre}}(y,x)$. Else, $S_{\mathrm{stap,post}}(y,x)=S_{\mathrm{stap,pre}}(y,x)$.
+  \item If the optional penalty layer is enabled: compute a deterministic, shrink-only weight $w(i)\in(0,1]$ from auxiliary band-energy statistics and vessel-proxy support features (details in the Supplementary Material), preserve a protected do-not-penalize set (scores unchanged), and output $S_{\mathrm{stap,post}}(y,x)=w\,S_{\mathrm{stap,pre}}(y,x)$. Else, $S_{\mathrm{stap,post}}(y,x)=S_{\mathrm{stap,pre}}(y,x)$.
 \end{enumerate}
 \noindent In practical terms, the method asks a local question after ordinary clutter suppression: within a small spatial neighborhood, does the remaining slow-time activity look more like microvascular flow or more like locally structured nuisance? A STAP-only ablation on phantom data is provided in \SuppOrApp{app:supp-results}.
 
@@ -368,7 +368,7 @@ and a deterministic flow-support proxy $c_f(i)\in[0,1]$ to define conservative b
 \]
 These quantities are used only to decide whether shrinkage is warranted and where it may be applied; they are not used as class labels for ROC reporting.
 \paragraph{Shrink-only mapping (guarantee).}
-We implement knowledge aid via a bounded weight $w(i)\in(0,1]$ applied in score space:
+We implement the optional penalty layer (knowledge aid in radar terminology) via a bounded weight $w(i)\in(0,1]$ applied in score space:
 \[
   S_{\mathrm{stap,post}}(i)=w(i)\,S_{\mathrm{stap,pre}}(i),\qquad w(i)\in(0,1].
 \]
@@ -439,7 +439,7 @@ The numerical settings in this pipeline do not all play the same role, and they 
 
 \subsection{Integrity checks and deterministic sentinels}
 
-This work is a reproducible processing pipeline (decode $\rightarrow$ baseline $\rightarrow$ STAP score $\rightarrow$ optional KA regularization). Several practical pathologies can invalidate tail-rate reporting or spuriously activate the KA layer (e.g.\ missing acquisition metadata, coarse short-ensemble band discretization, proxy-mask circularity, or compute-gating leakage). We therefore enforce deterministic, label-free integrity checks that either (i) record provenance and proceed conservatively or (ii) disable KA ($w\equiv 1$) with an explicit reason label. A concise checklist (and where each sentinel is logged) is provided in \SuppOrApp{app:failure-modes}.
+This work is a reproducible processing pipeline (decode $\rightarrow$ baseline $\rightarrow$ detector score $\rightarrow$ optional shrink-only penalty layer). Several practical pathologies can invalidate tail-rate reporting or spuriously activate the penalty layer (e.g.\ missing acquisition metadata, coarse short-ensemble band discretization, proxy-mask circularity, or compute-gating leakage). We therefore enforce deterministic, label-free integrity checks that either (i) record provenance and proceed conservatively or (ii) disable the penalty layer ($w\equiv 1$) with an explicit reason label. A concise checklist (and where each safeguard is logged) is provided in \SuppOrApp{app:failure-modes}.
 
 \subsection{Regimes and claim scope}
 \label{sec:results-overview}
@@ -1242,14 +1242,39 @@ Ward, J.
 \ifSTAPPAPERONLY\else
 \appendix
 
+\section{Appendix guide and terminology translation}
+\label{app:appendix-guide}
+
+The appendices collect formal detector derivations, robustness audits, and reproducibility details. Because some parts of the method borrow terminology from radar and detection theory, Table~\ref{tab:appendix_translation} gives a plain-language translation before the formal development. Readers interested mainly in clinical interpretation can use this table as a guide and then read only the appendices most relevant to their question.
+
+\begin{table}[t]
+\centering
+\small
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{P{3.2cm} P{8.1cm} P{5.4cm}}
+\hline
+Term in the paper & Plain-language meaning in ultrasound terms & Where it is developed \\
+\hline
+STAP-inspired whitening & Tile-local slow-time covariance whitening applied before matched-subspace scoring. & Appendix~\ref{app:ka-contract-theory} \\
+Adaptive guard rule & A conservative switch that keeps the simple detector by default and turns on whitening only where guard-band clutter evidence is strong. & Main text Section~\ref{sec:method}; Supplementary Material \\
+KA / shrink-only penalty layer & A conservative score penalty map driven by band-energy cues and vessel-proxy protection masks; it can reduce scores but never increase them. & Appendix~\ref{app:ka-contract-theory}; Supplementary Material \\
+CFAR-style calibration & Background-tail threshold setting based on empirical negative-score distributions rather than analytic scanner-time formulas. & Main text Section~\ref{sec:eval}; Supplementary Material \\
+Safeguards & Automatic checks that disable the optional penalty layer or force conservative behavior when metadata, band geometry, or proxy information are unreliable. & Appendix~\ref{app:failure-modes} \\
+\hline
+\end{tabular}
+}
+\caption{Plain-language appendix guide. This table is intended as a reader map for fUS, neuroscience, and clinically oriented readers before the appendices turn to formal notation.}
+\label{tab:appendix_translation}
+\end{table}
+
 \input{appendix_ka_contract_theory.tex}
 
 \input{appendix_supp_results.tex}
 
-\section{Integrity checks and regime sentinels}
+\section{Practical safeguards and audit checks}
 \label{app:failure-modes}
 
-We implement a reproducible processing pipeline (decode $\rightarrow$ baseline $\rightarrow$ STAP score $\rightarrow$ spatial-spectral features $\rightarrow$ optional KA regularization) and treat tail-regime validity as part of the experimental design. This appendix enumerates common pitfalls (metadata ambiguity, discretization artifacts, proxy-mask circularity, and compute-gating leakage) and the deterministic, label-free sentinels used to detect them. When a sentinel triggers, we either record provenance and proceed conservatively or force $\phi_i\in\mathcal{R}_0$ (uninformative prior; $w\equiv 1$) with an explicit reason label so that ``KA off'' is an auditable success mode under flat or non-actionable evidence.
+We implement a reproducible processing pipeline (decode $\rightarrow$ baseline $\rightarrow$ detector score $\rightarrow$ spatial-spectral features $\rightarrow$ optional shrink-only penalty layer) and treat tail-regime validity as part of the experimental design. This appendix lists practical failure modes that matter for interpretation, together with deterministic label-free checks that either record provenance or force conservative behavior. When a safeguard triggers, we either proceed with explicit provenance or disable the optional penalty layer ($w\equiv 1$) with an explicit reason label, so that ``penalty layer off'' is an auditable success mode under flat or non-actionable evidence.
 
 \begin{table}[t]
 \centering
@@ -1257,7 +1282,7 @@ We implement a reproducible processing pipeline (decode $\rightarrow$ baseline $
 \resizebox{\linewidth}{!}{%
 \begin{tabular}{P{4.4cm} P{6.6cm} P{7.7cm}}
 \hline
-Pitfall (what can go wrong) & Why it matters & Mitigation sentinel (what we enforce and where it is logged) \\
+Pitfall (what can go wrong) & Why it matters & Mitigation / where it is logged \\
 \hline
 Vendor raw-container decode ambiguity (header sizing, line ordering, beam/shot layout) & A mis-decode can silently invalidate structural masks and invalidate Doppler scores and band-energy statistics. & Decoder sanity checks reconstruct B-mode and compare to dataset screenshots; ordering/coherence checks validate CFM layout. Summaries are provided in \SuppOrApp{app:twinkling_prf_decode}. \\
 Missing or incorrect Doppler PRF (Twinkling metadata does not reliably store PRF) & PRF determines discrete band binning and peak-occupancy statistics; wrong PRF can make Pf/Pa empty or overlapping under short ensembles, creating misleading ``actionability''. & PRF is treated as an explicit, frozen experimental assumption per sequence family (\SuppOrApp{app:twinkling_prf_decode}) and recorded in bundle metadata. If binned Pf/Pa are empty/overlap, we force $\phi_i\in\mathcal{R}_0$ with an explicit reason. \\
@@ -1268,7 +1293,7 @@ Conditional execution (compute gating) changes the decision rule & Same-window p
 \hline
 \end{tabular}
 }
-\caption{Integrity checks and regime sentinels. Each sentinel is deterministic and label-free; it either records provenance/QC metrics or forces conservative KA behavior (e.g.\ $\phi_i\in\mathcal{R}_0$, $w\equiv 1$) with an explicit reason label.}
+\caption{Practical safeguards and audit checks. Each check is deterministic and label-free; it either records provenance/QC metrics or forces conservative penalty-layer behavior (e.g.\ $\phi_i\in\mathcal{R}_0$, $w\equiv 1$) with an explicit reason label.}
 \label{tab:failure_modes_sentinels}
 \end{table}
 
@@ -1691,6 +1716,7 @@ A global band--constant transform with $Q$ cannot improve ROC if applied everywh
 \end{itemize}
 
 We define localization based on a combination of alias metrics, flow coverage, depth, PD, and registration. This supplements G--1/G--2 with a generalized alias score $m_{\mathrm{alias}}$ from Section~\ref{sec:regime}.
+In plain language, the optional penalty layer is allowed to act only in tiles that look clutter-heavy and not vessel-dominant; otherwise it stays off and leaves the detector score unchanged.
 
 \subsection{G--1: Alias--dominant tile selection}
 
