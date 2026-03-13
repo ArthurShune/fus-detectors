@@ -117,6 +117,7 @@ def write_acceptance_bundle_from_icube(
     score_ka_v2_enable: bool = False,
     score_ka_v2_mode: str = "safety",  # safety|uplift|auto
     run_stap: bool = True,
+    defer_raw_pd_base: bool = False,
     feasibility_mode: kw.FeasibilityMode = "legacy",
     meta_extra: dict[str, Any] | None = None,
 ) -> dict[str, str]:
@@ -217,6 +218,14 @@ def write_acceptance_bundle_from_icube(
     # ---- Baseline PD ----
     baseline_type_norm = (baseline_type or "").strip().lower()
     baseline_device = "cuda" if (kw._resolve_stap_device(stap_device).startswith("cuda")) else "cpu"
+    raw_pd_base_deferred = bool(
+        defer_raw_pd_base
+        and run_stap
+        and baseline_type_norm in {"raw", "none", "identity"}
+        and mask_flow_override is not None
+        and mask_bg_override is not None
+    )
+
     if baseline_type_norm == "mc_svd":
         pd_base, baseline_telemetry, baseline_filtered_cube = kw._baseline_pd_mcsvd(
             Icube,
@@ -322,10 +331,13 @@ def write_acceptance_bundle_from_icube(
             upsample=max(1, int(reg_subpixel)),
             ref_strategy=reg_reference,
         )
-        pd_base = (np.mean(np.abs(reg_cube) ** 2, axis=0)).astype(np.float32, copy=False)
+        pd_base = None
+        if not raw_pd_base_deferred:
+            pd_base = (np.mean(np.abs(reg_cube) ** 2, axis=0)).astype(np.float32, copy=False)
         baseline_filtered_cube = reg_cube
         baseline_telemetry = dict(tele_reg or {})
         baseline_telemetry["baseline_type"] = "raw"
+        baseline_telemetry["baseline_pd_deferred"] = bool(raw_pd_base_deferred)
         baseline_telemetry["baseline_ms"] = float(1000.0 * (time.perf_counter() - t0_raw))
     elif baseline_type_norm in {"svd_bandpass", "svd_range", "ulm_svd"}:
         if svd_keep_min is None:
@@ -385,7 +397,10 @@ def write_acceptance_bundle_from_icube(
             "Use mc_svd, svd_similarity, local_svd, adaptive_local_svd, raw/none, svd_bandpass, rpca, or hosvd."
         )
 
-    H, W = pd_base.shape
+    if pd_base is not None:
+        H, W = pd_base.shape
+    else:
+        _t, H, W = baseline_filtered_cube.shape
     tile_count = kw._tile_count((H, W), tile_hw, tile_stride)
 
     # ---- Additional baseline score maps (standard Doppler short-ensemble scores) ----
@@ -396,20 +411,6 @@ def write_acceptance_bundle_from_icube(
     # score_base_kasai: log |lag-1 autocorrelation| ("Kasai power"; right-tail).
     score_base_pdlog: np.ndarray | None = None
     score_base_kasai: np.ndarray | None = None
-    try:
-        eps = 1e-12
-        score_base_pdlog = np.log(pd_base.astype(np.float64, copy=False) + eps).astype(
-            np.float32, copy=False
-        )
-        if baseline_filtered_cube is not None and baseline_filtered_cube.shape[0] >= 2:
-            y = baseline_filtered_cube.astype(np.complex64, copy=False)
-            r1 = np.sum(y[1:] * np.conj(y[:-1]), axis=0).astype(np.complex64, copy=False)
-            score_base_kasai = np.log(np.abs(r1).astype(np.float64, copy=False) + eps).astype(
-                np.float32, copy=False
-            )
-    except Exception:
-        score_base_pdlog = None
-        score_base_kasai = None
 
     # ---- Masks ----
     mask_flow_default, mask_bg_default = _default_masks_generic(H, W)
@@ -436,6 +437,10 @@ def write_acceptance_bundle_from_icube(
             "override_bg_coverage": float(mask_bg.mean()),
         }
     else:
+        if pd_base is None:
+            raise RuntimeError(
+                "Deferred raw baseline PD requires explicit flow/background mask overrides."
+            )
         mask_flow, mask_bg, flow_mask_stats = kw._resolve_flow_mask(
             pd_base,
             mask_flow_default,
@@ -825,6 +830,26 @@ def write_acceptance_bundle_from_icube(
         stap_info["band_ratio_mt_params"] = mt_meta
         baseline_telemetry.setdefault("band_ratio_mt_params", mt_meta)
         stap_info["stap_ms"] = float(1000.0 * (time.time() - t_stap_start))
+        if pd_base is None:
+            pd_base_generated = stap_info.pop("_pd_base_map_generated", None)
+            if pd_base_generated is None:
+                raise RuntimeError("Deferred raw baseline PD was requested but STAP did not return a base map.")
+            pd_base = np.asarray(pd_base_generated, dtype=np.float32)
+        if score_base_pdlog is None:
+            try:
+                eps = 1e-12
+                score_base_pdlog = np.log(pd_base.astype(np.float64, copy=False) + eps).astype(
+                    np.float32, copy=False
+                )
+                if baseline_filtered_cube is not None and baseline_filtered_cube.shape[0] >= 2:
+                    y = baseline_filtered_cube.astype(np.complex64, copy=False)
+                    r1 = np.sum(y[1:] * np.conj(y[:-1]), axis=0).astype(np.complex64, copy=False)
+                    score_base_kasai = np.log(np.abs(r1).astype(np.float64, copy=False) + eps).astype(
+                        np.float32, copy=False
+                    )
+            except Exception:
+                score_base_pdlog = None
+                score_base_kasai = None
         stap_info["flow_mask_stats"] = flow_mask_stats
         stap_info["stap_conditional_enable"] = bool(stap_conditional_enable)
         stap_tile_scores, stap_br_stats = stap_br_recorder.finalize()
