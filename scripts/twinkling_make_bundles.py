@@ -164,6 +164,33 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--huber-c",
+        type=float,
+        default=5.0,
+        help="Huber covariance tuning constant when --cov-estimator=huber (default: 5.0).",
+    )
+    parser.add_argument(
+        "--stap-cov-trim-q",
+        type=float,
+        default=0.0,
+        help=(
+            "Trim the top-q fraction of highest-energy slow-time snapshots from covariance "
+            "training before whitening (default: 0.0)."
+        ),
+    )
+    parser.add_argument(
+        "--mvdr-auto-kappa",
+        type=float,
+        default=120.0,
+        help="Target condition number for auto diagonal loading (default: 120).",
+    )
+    parser.add_argument(
+        "--constraint-ridge",
+        type=float,
+        default=0.18,
+        help="Ridge added to the flow-subspace Gram system (default: 0.18).",
+    )
+    parser.add_argument(
         "--stap-conditional-enable",
         action="store_true",
         help="Enable conditional STAP (compute heuristic). Default is off for structural-mask runs.",
@@ -186,6 +213,40 @@ def main() -> None:
         help=(
             "Primary score family used for contract gating / optional score-space KA "
             "(default: pd). Use 'msd' to have KA act on score_stap_preka."
+        ),
+    )
+    parser.add_argument(
+        "--stap-detector-variant",
+        type=str,
+        default="msd_ratio",
+        choices=["msd_ratio", "whitened_power", "unwhitened_ratio", "hybrid_rescue", "adaptive_guard"],
+        help=(
+            "Detector statistic exported as score_stap_preka.npy (default: msd_ratio). "
+            "'msd_ratio' is the whitened matched-subspace ratio; "
+            "'whitened_power' is total whitened slow-time power without Doppler band partition; "
+            "'unwhitened_ratio' keeps the same flow-band partition but disables covariance whitening; "
+            "'hybrid_rescue' keeps the advanced whitened score except on pixels rescued by a fixed baseline-feature rule; "
+            "'adaptive_guard' keeps the unwhitened score by default and promotes clutter-heavy pixels onto the "
+            "advanced whitened branch."
+        ),
+    )
+    parser.add_argument(
+        "--hybrid-rescue-rule",
+        type=str,
+        default="guard_frac_v1",
+        choices=["guard_frac_v1", "alias_rescue_v1", "band_ratio_v1", "guard_promote_v1"],
+        help=(
+            "Pixelwise routing rule used when --stap-detector-variant=hybrid_rescue. "
+            "Rules are fixed from the Shin routing analysis and use baseline telemetry only."
+        ),
+    )
+    parser.add_argument(
+        "--stap-whiten-gamma",
+        type=float,
+        default=1.0,
+        help=(
+            "Fractional whitening exponent for the STAP-family detector. "
+            "gamma=0 is unwhitened; gamma=1 is the full STAP score."
         ),
     )
     parser.add_argument(
@@ -345,6 +406,10 @@ def main() -> None:
         tile_stride_policy = "auto_max_stride"
     diag_load = float(args.diag_load)
     cov_estimator = str(args.cov_estimator)
+    huber_c = float(args.huber_c)
+    stap_cov_trim_q = float(args.stap_cov_trim_q)
+    mvdr_auto_kappa = float(args.mvdr_auto_kappa)
+    constraint_ridge = float(args.constraint_ridge)
 
     mask_flow_override = None
     mask_bg_override = None
@@ -365,6 +430,12 @@ def main() -> None:
             "qc": tube.qc,
         }
         _save_mask_debug(out_root / f"{seq_slug}__mask_debug", tube.I_ref_norm, tube.mask_flow, tube.mask_bg)
+    effective_hybrid_rule = (
+        "guard_promote_v1"
+        if str(args.stap_detector_variant).strip().lower()
+        in {"adaptive_guard", "adaptive_guard_v1", "guard_promote"}
+        else str(args.hybrid_rescue_rule)
+    )
     written: list[str] = []
     for frame_idx in frame_indices:
         frame = read_rawbcf_frame(dat_path, par, int(frame_idx))
@@ -392,8 +463,15 @@ def main() -> None:
             tile_stride=tile_stride,
             Lt=Lt,
             diag_load=diag_load,
+            stap_cov_train_trim_q=stap_cov_trim_q,
             cov_estimator=cov_estimator,
+            huber_c=huber_c,
+            mvdr_auto_kappa=mvdr_auto_kappa,
+            constraint_ridge=constraint_ridge,
             score_mode=str(args.score_mode),
+            stap_detector_variant=str(args.stap_detector_variant),
+            stap_whiten_gamma=float(args.stap_whiten_gamma),
+            hybrid_rescue_rule=effective_hybrid_rule,
             baseline_type=str(args.baseline_type),
             svd_energy_frac=float(args.svd_energy_frac),
             svd_keep_min=int(args.svd_keep_min),
@@ -427,8 +505,15 @@ def main() -> None:
         if tile_stride_auto_max is not None
         else None,
         "diag_load": float(diag_load),
+        "stap_cov_train_trim_q": float(stap_cov_trim_q),
         "cov_estimator": str(cov_estimator),
+        "huber_c": float(huber_c),
+        "mvdr_auto_kappa": float(mvdr_auto_kappa),
+        "constraint_ridge": float(constraint_ridge),
         "score_mode": str(args.score_mode),
+        "stap_detector_variant": str(args.stap_detector_variant),
+        "stap_whiten_gamma": float(args.stap_whiten_gamma),
+        "hybrid_rescue_rule": effective_hybrid_rule,
         "score_ka_v2_enable": bool(args.score_ka_v2_enable),
         "score_ka_v2_mode": str(args.score_ka_v2_mode),
         "baseline_type": str(args.baseline_type),

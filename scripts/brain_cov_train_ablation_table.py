@@ -206,10 +206,11 @@ def _render_table_tex(
     lines.append("\\end{tabular}%")
     lines.append("}")
     lines.append(
-        "\\caption{Covariance-training trim ablation on Brain-* regimes. "
+        "\\caption{Covariance-training trim ablation on the earlier Tyler-whitened labeled-brain stress-test profile. "
         "We compare the default STAP covariance training (all Hankel snapshots) "
         "to a trimmed variant that excludes the top-q highest-energy snapshots "
         "from the tile-local covariance estimator (q=0.05). "
+        "The two column groups correspond to an open-skull surface-artifact stress test and a structured-clutter leakage stress test. "
         "Entries are within-window TPR medians (IQR) over five disjoint 64-frame windows, "
         "reported at strict-tail FPR targets $\\alpha\\in\\{10^{-4},3\\times 10^{-4},10^{-3}\\}$.}"
     )
@@ -225,9 +226,8 @@ def main() -> None:
     alphas = [float(x) for x in args.alphas.split(",") if x.strip()]
 
     regimes = [
-        ("open", "OpenSkull"),
-        ("aliascontract", "AliasContract"),
-        ("skullor", "SkullOR"),
+        ("open", "\\shortstack{Open-skull surface-\\\\artifact stress test}"),
+        ("skullor", "\\shortstack{Structured-clutter\\\\leakage stress test}"),
     ]
     methods = ["STAP (default)", "STAP (cov-trim q=0.05)"]
     method_display = {

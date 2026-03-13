@@ -119,9 +119,8 @@ def _method_display() -> dict[str, str]:
 
 def _regime_order() -> list[tuple[str, str]]:
     return [
-        ("open", "OpenSkull"),
-        ("aliascontract", "AliasContract"),
-        ("skullor", "SkullOR"),
+        ("open", "\\shortstack{Open-skull surface-\\\\artifact stress test}"),
+        ("skullor", "\\shortstack{Structured-clutter\\\\leakage stress test}"),
     ]
 
 
@@ -194,10 +193,11 @@ def _render_table_tex(
     lines.append("\\end{tabular}%")
     lines.append("}")
     lines.append(
-        "\\caption{Detector ablations on Brain-* regimes (MC--SVD residual, fixed profile). "
+        "\\caption{Detector ablations on labeled brain simulation stress tests (MC--SVD residual, prespecified settings). "
         "All rows share the identical MC--SVD residual cube and differ only in the detector statistic: "
         "baseline PD, total power after tile-local whitening (no Doppler band partition), "
         "matched-subspace ratio without whitening (R=I), and the full STAP whitened matched-subspace ratio. "
+        "The two column groups correspond to an open-skull surface-artifact stress test and a structured-clutter leakage stress test. "
         "Numbers are medians (IQR) over five disjoint 64-frame windows (offsets 0/64/128/192/256).}"
     )
     lines.append("\\label{tab:brain_detector_ablation}")

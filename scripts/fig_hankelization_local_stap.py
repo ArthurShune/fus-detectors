@@ -169,7 +169,7 @@ def main() -> int:
         r = Rectangle((x, y), w, h, facecolor="#f6f6f6", edgecolor="black", linewidth=1.0)
         ax.add_patch(r)
         _add_text(ax, x + 0.12, y + h - 0.18, title, size=9.0, ha="left", va="top", weight="bold")
-        _add_text(ax, x + w / 2, y + h / 2 - 0.05, body, size=8.6, ha="center", va="center")
+        _add_text(ax, x + w / 2, y + h / 2 - 0.10, body, size=8.6, ha="center", va="center")
         return r
 
     x0 = 5.2
@@ -202,7 +202,7 @@ def main() -> int:
     # Arrow from tile to extract (local STAP)
     tile_anchor = (u2[0] + 0.05, u2[1] - 0.1)
     extract_anchor = (x0 - 0.15, 2.95 + bh / 2)
-    _arrow(ax, tile_anchor[0], tile_anchor[1], extract_anchor[0], extract_anchor[1], text="local STAP", text_offset=(0.0, 0.22))
+    _arrow(ax, tile_anchor[0], tile_anchor[1], extract_anchor[0], extract_anchor[1], text="local STAP", text_offset=(-0.05, 0.34))
 
     fig.savefig(out_path, bbox_inches="tight", format="pdf")
     plt.close(fig)

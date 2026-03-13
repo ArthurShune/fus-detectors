@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Plot ROC-style curves (TPR vs FPR) for labeled Brain-* k-Wave regimes.
+Plot ROC-style curves (TPR vs FPR) for labeled k-Wave brain stress tests.
 
 This is a "curve credibility" companion to the strict low-FPR operating-point
 tables in the main paper. We summarize the ROC shape by aggregating over the
@@ -76,7 +76,7 @@ def _summarize_windows(
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Plot k-Wave Brain-* ROC curves (median+IQR over windows).")
+    ap = argparse.ArgumentParser(description="Plot k-Wave brain stress-test ROC curves (median+IQR over windows).")
     ap.add_argument(
         "--runs-root",
         type=Path,
@@ -98,7 +98,7 @@ def main() -> None:
 
     regimes = [
         (
-            "Brain-OpenSkull",
+            "Open-skull surface-artifact\nstress test",
             "open_seed1",
             runs_root / "open_seed1_mcsvd_full",
             runs_root / "open_seed1_svd_similarity_full",
@@ -107,16 +107,7 @@ def main() -> None:
             runs_root / "open_seed1_hosvd_full",
         ),
         (
-            "Brain-AliasContract",
-            "aliascontract_seed2",
-            runs_root / "aliascontract_seed2_mcsvd_full",
-            runs_root / "aliascontract_seed2_svd_similarity_full",
-            runs_root / "aliascontract_seed2_local_svd_full",
-            runs_root / "aliascontract_seed2_rpca_full",
-            runs_root / "aliascontract_seed2_hosvd_full",
-        ),
-        (
-            "Brain-SkullOR",
+            "Structured-clutter\nleakage stress test",
             "skullor_seed2",
             runs_root / "skullor_seed2_mcsvd_full",
             runs_root / "skullor_seed2_svd_similarity_full",
@@ -157,7 +148,7 @@ def main() -> None:
         "stap": "#1f77b4",
     }
 
-    fig, axes = plt.subplots(1, 3, figsize=(13.2, 4.0), constrained_layout=True)
+    fig, axes = plt.subplots(1, 2, figsize=(9.2, 4.0), constrained_layout=True)
     if not isinstance(axes, np.ndarray):
         axes = np.asarray([axes])
 
@@ -217,7 +208,7 @@ def main() -> None:
             st_med,
             color=colors["stap"],
             linewidth=1.8,
-            label="STAP (pre-KA) on MC--SVD",
+            label="STAP on MC--SVD residual",
         )
         ax.fill_between(fpr_grid, st_q25, st_q75, color=colors["stap"], alpha=0.14, linewidth=0)
 
@@ -253,7 +244,7 @@ def main() -> None:
             pass
 
     axes[0].legend(loc="lower right", frameon=False, ncol=1)
-    fig.suptitle("Labeled k-Wave Brain-* ROC curves (median and IQR over 5 disjoint windows)")
+    fig.suptitle("Labeled brain-simulation ROC curves (median and IQR over 5 disjoint windows)")
 
     fig.savefig(out_pdf, bbox_inches="tight", pad_inches=0.06)
     if bool(args.also_png):
