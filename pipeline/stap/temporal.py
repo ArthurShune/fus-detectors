@@ -69,6 +69,7 @@ _STAP_CUDA_STAGE_TIMER: contextvars.ContextVar[_StapCudaStageTimer | None] = con
 )
 
 _STAP_TILE_STATISTIC_WARNED = False
+_UNWHITENED_PROJECTOR_CACHE: dict[tuple, torch.Tensor] = {}
 
 
 def _warn_tile_statistic_experimental() -> None:
@@ -265,6 +266,34 @@ def projector_from_tones(C: torch.Tensor, gram_ridge: float = 1e-6) -> torch.Ten
     Pf = C @ W
     Pf = 0.5 * (Pf + Pf.conj().transpose(-2, -1))
     return Pf
+
+
+def _build_unwhitened_projector_exact(Ct: torch.Tensor, *, ridge: float) -> torch.Tensor:
+    """
+    Build the exact unwhitened band projector used by the historical direct path.
+
+    This matches the original fixed-band projector math:
+      Pf = C (C^H C + ridge I)^{-1} C^H
+    with the same scale-aware ridge logic as the older implementation.
+    """
+    CtH = Ct.conj().transpose(-2, -1)
+    Gram = CtH @ Ct
+    ridge_eff = float(ridge)
+    if ridge_eff > 0.0:
+        try:
+            evals = torch.linalg.eigvalsh(Gram).real
+            evals = torch.clamp(evals, min=1e-12)
+            evals_max = evals.max()
+        except RuntimeError:
+            evals_max = torch.tensor(1.0, device=Ct.device, dtype=torch.float32)
+        ridge_scale = float(evals_max.item()) if float(evals_max.item()) < 1.0 else 1.0
+        Gram = Gram + (ridge_eff * ridge_scale) * torch.eye(
+            Gram.shape[-1], dtype=Gram.dtype, device=Gram.device
+        )
+    Lg = torch.linalg.cholesky(Gram)
+    A = torch.linalg.solve_triangular(Lg, CtH, upper=False)
+    Pf = Ct @ torch.linalg.solve_triangular(Lg.conj().transpose(-2, -1), A, upper=True)
+    return 0.5 * (Pf + Pf.conj().transpose(-2, -1))
 
 
 def equalize_pf_trace(
@@ -3582,6 +3611,7 @@ def _band_energy_unwhitened_batched(
     S_B_Lt_N_hw: torch.Tensor,
     C_t: torch.Tensor,
     *,
+    projector: Optional[torch.Tensor] = None,
     ridge: float = 0.10,
     device: Optional[str] = None,
     dtype: torch.dtype = torch.complex64,
@@ -3617,50 +3647,15 @@ def _band_energy_unwhitened_batched(
     S_flat = S.permute(0, 1, 3, 4, 2).contiguous().view(Bsz, Lt_dim, -1)
     sw_pow_flat = torch.sum(S_flat.conj() * S_flat, dim=1).real
 
-    Kc = int(Ct.shape[-1])
-    Lt_dim = int(Ct.shape[-2])
-    if Kc > Lt_dim:
+    Pf = projector.to(device=device, dtype=work_dtype) if projector is not None else None
+    if Pf is None:
         with _prof_ctx("stap:band_energy:project:chol_Gram"):
-            Q, R = torch.linalg.qr(Ct, mode="reduced")
-            if R.numel() == 0:
-                B = int(S.shape[0])
-                N = int(S.shape[2])
-                zeros = torch.zeros((B, N, h, w), dtype=torch.float32, device=device)
-                return zeros, torch.clamp(sw_pow_flat, min=eps).view(B, N, h, w)
-            diag_abs = torch.abs(torch.diagonal(R, dim1=-2, dim2=-1))
-            sigma_max = torch.clamp(torch.max(diag_abs), min=1e-12)
-            rel_tol = max(1e-5, float(ridge))
-            keep = diag_abs >= (rel_tol * sigma_max)
-            if not bool(torch.any(keep)):
-                keep = diag_abs >= torch.max(diag_abs)
-            Q = Q[:, keep]
-        with _prof_ctx("stap:band_energy:project:gram_solve"):
-            z = torch.matmul(Q.conj().transpose(-2, -1).unsqueeze(0), S_flat)
-            T_band_flat = torch.sum(z.conj() * z, dim=1).real
-    else:
-        CtH = Ct.conj().transpose(-2, -1)
-        Gram = CtH @ Ct
-        ridge_eff = float(ridge)
-        if ridge_eff > 0.0:
-            try:
-                evals = torch.linalg.eigvalsh(Gram).real
-                evals = torch.clamp(evals, min=1e-12)
-                evals_max = evals.max()
-            except RuntimeError:
-                evals_max = torch.tensor(1.0, device=Ct.device, dtype=torch.float32)
-            ridge_scale = float(evals_max.item()) if float(evals_max.item()) < 1.0 else 1.0
-            Gram = Gram + (ridge_eff * ridge_scale) * torch.eye(
-                Gram.shape[-1], dtype=Gram.dtype, device=Gram.device
+            Pf = _build_unwhitened_projector_exact(Ct, ridge=float(ridge)).to(
+                device=device, dtype=work_dtype
             )
-
-        with _prof_ctx("stap:band_energy:project:chol_Gram"):
-            Lg = torch.linalg.cholesky(Gram)
-        with _prof_ctx("stap:band_energy:project:gram_solve"):
-            A = torch.linalg.solve_triangular(Lg, CtH, upper=False)
-            Pf = Ct @ torch.linalg.solve_triangular(Lg.conj().transpose(-2, -1), A, upper=True)
-            Pf = 0.5 * (Pf + Pf.conj().transpose(-2, -1))
-            proj = torch.matmul(Pf.unsqueeze(0), S_flat)
-            T_band_flat = torch.sum(S_flat.conj() * proj, dim=1).real
+    with _prof_ctx("stap:band_energy:project:gram_solve"):
+        proj = torch.matmul(Pf.unsqueeze(0), S_flat)
+        T_band_flat = torch.sum(S_flat.conj() * proj, dim=1).real
 
     T_band = torch.clamp(T_band_flat, min=0.0).view(Bsz, N, h, w)
     sw_pow = torch.clamp(sw_pow_flat, min=eps).view(Bsz, N, h, w)
@@ -3867,11 +3862,33 @@ def _direct_unwhitened_detector_batched(
                 mode="exp+deriv",
             )
 
+    flow_band_key = None
+    if flow_band_used is not None:
+        flow_band_key = (round(float(flow_band_used[0]), 6), round(float(flow_band_used[1]), 6))
+    fd_grid_key = tuple(round(float(x), 6) for x in fd_grid.tolist())
+    projector_key = (
+        str(device),
+        str(S_B_Lt_N_hw.dtype),
+        int(Lt),
+        round(float(prf_hz), 6),
+        fd_grid_source,
+        fd_grid_key,
+        flow_band_key,
+        round(float(msd_ridge), 6),
+    )
+    Pf_cached = _UNWHITENED_PROJECTOR_CACHE.get(projector_key)
+    if Pf_cached is None or str(Pf_cached.device) != str(device) or Pf_cached.dtype != S_B_Lt_N_hw.dtype:
+        Pf_cached = _build_unwhitened_projector_exact(Ct, ridge=float(msd_ridge)).to(
+            device=device, dtype=S_B_Lt_N_hw.dtype
+        )
+        _UNWHITENED_PROJECTOR_CACHE[projector_key] = Pf_cached
+
     t4 = time.perf_counter()
     with _prof_ctx("stap:band_energy:snapshots"):
         T_band, sw_pow = _band_energy_unwhitened_batched(
             S_B_Lt_N_hw,
             Ct,
+            projector=Pf_cached,
             ridge=msd_ridge,
             device=device,
             dtype=S_B_Lt_N_hw.dtype,
