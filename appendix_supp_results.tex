@@ -20,6 +20,7 @@ When KA is enabled, it is shrink-only and preserves a protected do-not-penalize 
   \item STAP-only ablation and PRF override sensitivity (Gammex): Figure~\ref{fig:twinkling_gammex_ablation_prf_sensitivity}.
   \item Conditional-execution leakage ablation (open-skull pilot): Table~\ref{tab:condstap_leakage_ablation}.
   \item Prespecified-setting sensitivity sweep (open-skull pilot; $\lambda$, tile size, $L_t$): Figure~\ref{fig:brain_openskull_profile_sensitivity}.
+  \item Frozen threshold sensitivity around the finalized adaptive and KA thresholds: Tables~\ref{tab:adaptive_tau_sensitivity} and \ref{tab:ka_cflow_sensitivity}.
   \item Shin proxy-metric comparisons, runtime, and measured rigid-motion telemetry: Figure~\ref{fig:shin_baseline_matrix_proxy_metrics} and Figure~\ref{fig:shin_motion_telemetry}.
   \item Corrected SIMUS/PyMUST moving-scatterer benchmark and same-residual score comparison: Tables~\ref{tab:simus_frozen_benchmark_v1p2} and \ref{tab:simus_symmetric_pipeline_v1p2}.
   \item Clinically anchored SIMUS-ClinUtility-v2 structural/functional checkpoint and compact real-data translation audit: Tables~\ref{tab:simus_v2_structural_latency}, \ref{tab:simus_v2_functional_latency}, and \ref{tab:realdata_detector_head_audit}.
@@ -170,6 +171,36 @@ Because the detector relies on covariance whitening, a natural concern is sensit
 \caption{Open-skull pilot parameter-sensitivity sweep. Left: covariance diagonal loading $\lambda$ (conditioning). Middle: tile size (stride chosen to approximately preserve overlap fraction relative to the default $8\times 8$/stride-3 setting). Right: slow-time aperture $L_t$. Points show within-window TPR medians with IQR error bars over five disjoint 64-frame windows at strict-tail operating points $\alpha\in\{10^{-4},3\times 10^{-4},10^{-3}\}$.}
 \label{fig:brain_openskull_profile_sensitivity}
 \end{figure}
+
+\subsection{Sensitivity of the finalized adaptive and KA thresholds}
+\label{app:param-threshold-sensitivity}
+An obvious overfitting concern is that the adaptive guard threshold $\tau_g$ and the KA flow-support proxy threshold $c_{\mathrm{flow}}$ might have been tuned so tightly that small perturbations would materially change the reported detector behavior. We therefore perturb each finalized threshold by $\pm 10\%$ while leaving the rest of the pipeline fixed.
+
+For the adaptive variant, Table~\ref{tab:adaptive_tau_sensitivity} evaluates the frozen tile-mean guard threshold around the deployed value on representative regimes spanning labeled brain stress tests, a structurally labeled phantom, and the Shin real-IQ corroboration. For the KA layer, Table~\ref{tab:ka_cflow_sensitivity} recomputes the shrink-only calculi audit after perturbing $c_{\mathrm{flow}}$ by $\pm 10\%$ on the same frozen bundles. In both cases the behavior changes smoothly rather than collapsing: the labeled-brain TPRs are unchanged at the reported precision, the real-IQ and phantom endpoints shift modestly, and the calculi KA layer preserves both its activation pattern and exact protected-set invariance.
+
+\IfFileExists{reports/adaptive_tau_sensitivity_table.tex}{%
+  \input{reports/adaptive_tau_sensitivity_table.tex}%
+}{%
+  \begin{center}
+  \refstepcounter{table}\label{tab:adaptive_tau_sensitivity}%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/adaptive_tau_sensitivity_table.tex}.\\
+    Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/final_parameter_sensitivity_tables.py}.
+  \end{minipage}}
+  \end{center}
+}
+
+\IfFileExists{reports/ka_cflow_sensitivity_table.tex}{%
+  \input{reports/ka_cflow_sensitivity_table.tex}%
+}{%
+  \begin{center}
+  \refstepcounter{table}\label{tab:ka_cflow_sensitivity}%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/ka_cflow_sensitivity_table.tex}.\\
+    Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/final_parameter_sensitivity_tables.py}.
+  \end{minipage}}
+  \end{center}
+}
 
 \subsection{STAP-only ablation and PRF override sensitivity (Gammex)}
 To isolate the role of the STAP core from baseline prefiltering, we run a small STAP-only ablation on the Gammex flow phantom by applying STAP directly to raw (registered) CFM IQ without the SVD band-pass baseline. We also provide a small PRF override sensitivity check on the along view to assess brittleness to the frozen PRF assumption required by Twinkling metadata limitations. The main text cites the TPR@$10^{-3}$ endpoints from this audit as a bounded fairness sanity check; the full figure below shows the paired first-20-frame comparison and PRF-override panel.
