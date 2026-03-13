@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Plot structural-label ROC curves on the Twinkling Gammex flow phantom views.
+Plot strict low-FPR operating-point curves on the Gammex flow phantom views.
 
-We read the pooled ROC summaries produced by scripts/twinkling_eval_structural.py
-with a dense --fprs grid and optional frame-bootstrap CIs.
-
-This figure is intended as credibility scaffolding for the main text's strict
-low-FPR operating-point tables: it shows the full curve shape on a log-FPR axis.
+The current phantom story is a same-residual score decomposition rather than a
+"full ROC" result. This figure therefore focuses on the strict low-FPR region
+actually used in the main text and shows the reported operating points for the
+baseline PD score, whitened power, unwhitened matched-subspace ratio, and the
+full whitened matched-subspace STAP score.
 """
 
 from __future__ import annotations
@@ -59,16 +59,40 @@ def _method_curve(md: dict[str, Any]) -> tuple[np.ndarray, np.ndarray, np.ndarra
 def main() -> None:
     ap = argparse.ArgumentParser(description="Plot Gammex structural-label ROC curves from pooled summaries.")
     ap.add_argument(
-        "--along-summary-json",
+        "--along-stap-summary-json",
         type=Path,
-        default=Path("reports/twinkling_gammex_alonglinear17_prf2500_str6_msd_ka_roc_curve_summary.json"),
-        help="Along-view pooled summary JSON (default: %(default)s).",
+        default=Path("reports/twinkling_gammex_alonglinear17_prf2500_str6_msd_nomotion_ref_fast_f020_structural_summary.json"),
+        help="Along-view STAP summary JSON (default: %(default)s).",
     )
     ap.add_argument(
-        "--across-summary-json",
+        "--across-stap-summary-json",
         type=Path,
-        default=Path("reports/twinkling_gammex_across17_prf2500_str4_msd_ka_roc_curve_summary.json"),
-        help="Across-view pooled summary JSON (default: %(default)s).",
+        default=Path("reports/twinkling_gammex_across17_prf2500_str4_msd_nomotion_ref_fast_f020_structural_summary.json"),
+        help="Across-view STAP summary JSON (default: %(default)s).",
+    )
+    ap.add_argument(
+        "--along-whitened-power-summary-json",
+        type=Path,
+        default=Path("reports/twinkling_gammex_alonglinear17_prf2500_str6_whitened_power_structural_summary.json"),
+        help="Along-view whitened-power summary JSON (default: %(default)s).",
+    )
+    ap.add_argument(
+        "--across-whitened-power-summary-json",
+        type=Path,
+        default=Path("reports/twinkling_gammex_across17_prf2500_str4_whitened_power_structural_summary.json"),
+        help="Across-view whitened-power summary JSON (default: %(default)s).",
+    )
+    ap.add_argument(
+        "--along-unwhitened-summary-json",
+        type=Path,
+        default=Path("reports/twinkling_gammex_alonglinear17_prf2500_str6_unwhitened_ratio_structural_summary.json"),
+        help="Along-view unwhitened-ratio summary JSON (default: %(default)s).",
+    )
+    ap.add_argument(
+        "--across-unwhitened-summary-json",
+        type=Path,
+        default=Path("reports/twinkling_gammex_across17_prf2500_str4_unwhitened_ratio_structural_summary.json"),
+        help="Across-view unwhitened-ratio summary JSON (default: %(default)s).",
     )
     ap.add_argument(
         "--out-pdf",
@@ -79,8 +103,12 @@ def main() -> None:
     ap.add_argument("--also-png", action="store_true", help="Also write a PNG next to the PDF.")
     args = ap.parse_args()
 
-    along = _load_json(Path(args.along_summary_json))
-    across = _load_json(Path(args.across_summary_json))
+    along_stap = _load_json(Path(args.along_stap_summary_json))
+    across_stap = _load_json(Path(args.across_stap_summary_json))
+    along_wp = _load_json(Path(args.along_whitened_power_summary_json))
+    across_wp = _load_json(Path(args.across_whitened_power_summary_json))
+    along_uw = _load_json(Path(args.along_unwhitened_summary_json))
+    across_uw = _load_json(Path(args.across_unwhitened_summary_json))
 
     def _get_methods(rep: dict[str, Any]) -> dict[str, Any]:
         pooled = rep.get("pooled_roc") or {}
@@ -89,15 +117,24 @@ def main() -> None:
             raise SystemExit(f"No pooled_roc.methods found in {rep.get('root', '<unknown>')}")
         return methods  # type: ignore[return-value]
 
-    along_methods = _get_methods(along)
-    across_methods = _get_methods(across)
+    along_methods = {
+        "baseline_pd": _get_methods(along_stap)["base"],
+        "whitened_power": _get_methods(along_wp)["stap_preka"],
+        "unwhitened_ratio": _get_methods(along_uw)["stap_preka"],
+        "stap_preka": _get_methods(along_stap)["stap_preka"],
+    }
+    across_methods = {
+        "baseline_pd": _get_methods(across_stap)["base"],
+        "whitened_power": _get_methods(across_wp)["stap_preka"],
+        "unwhitened_ratio": _get_methods(across_uw)["stap_preka"],
+        "stap_preka": _get_methods(across_stap)["stap_preka"],
+    }
 
-    # Plot order + labels. We plot STAP pre-KA (primary detector) and baseline comparators.
     order = [
-        ("base", r"Baseline (power Doppler)"),
-        ("base_pdlog", r"Baseline (log power Doppler)"),
-        ("base_kasai", r"Baseline (Kasai lag-1)"),
-        ("stap_preka", r"STAP (matched-subspace, pre-KA)"),
+        ("baseline_pd", r"Baseline (power Doppler)"),
+        ("whitened_power", r"Whitened power"),
+        ("unwhitened_ratio", r"Unwhitened ratio"),
+        ("stap_preka", r"STAP (matched-subspace)"),
     ]
 
     try:
@@ -119,16 +156,19 @@ def main() -> None:
     )
 
     styles = {
-        "base": dict(color="#666666", linewidth=1.5, linestyle="-"),
-        "base_pdlog": dict(color="#999999", linewidth=1.2, linestyle="--"),
-        "base_kasai": dict(color="#aaaaaa", linewidth=1.2, linestyle=":"),
-        "stap_preka": dict(color="#1f77b4", linewidth=1.9, linestyle="-"),
+        "baseline_pd": dict(color="#666666", linewidth=1.6, linestyle="-", marker="o", markersize=4.5),
+        "whitened_power": dict(color="#ff7f0e", linewidth=1.9, linestyle="-", marker="o", markersize=4.5),
+        "unwhitened_ratio": dict(color="#9467bd", linewidth=1.6, linestyle="-", marker="o", markersize=4.5),
+        "stap_preka": dict(color="#1f77b4", linewidth=2.0, linestyle="-", marker="o", markersize=4.8),
     }
 
     fig, axes = plt.subplots(1, 2, figsize=(12.8, 4.2), constrained_layout=True)
     axA, axB = axes
 
     def _plot(ax, methods: dict[str, Any], title: str) -> None:
+        panel_xmins: list[float] = []
+        panel_xmaxs: list[float] = []
+        panel_ymax = 0.0
         for key, label in order:
             md = methods.get(key)
             if not isinstance(md, dict):
@@ -138,23 +178,32 @@ def main() -> None:
                 continue
             st = styles.get(key, dict(color="#000000", linewidth=1.2, linestyle="-"))
             ax.plot(x, y, label=label, **st)
+            panel_xmins.append(float(np.min(x)))
+            panel_xmaxs.append(float(np.max(x)))
+            panel_ymax = max(panel_ymax, float(np.max(y)))
+            if yhi is not None:
+                panel_ymax = max(panel_ymax, float(np.nanmax(yhi)))
             if ylo is not None and yhi is not None and key == "stap_preka":
                 ax.fill_between(x, ylo, yhi, color=st["color"], alpha=0.14, linewidth=0)
 
         ax.set_xscale("log")
-        ax.set_xlim(1e-6, 1.0)
-        ax.set_ylim(-0.02, 1.02)
+        if panel_xmins and panel_xmaxs:
+            x_lo = max(5e-5, min(panel_xmins) * 0.8)
+            x_hi = min(2e-3, max(panel_xmaxs) * 1.25)
+            ax.set_xlim(x_lo, x_hi)
+        upper = min(1.0, max(0.06, panel_ymax * 1.18))
+        ax.set_ylim(-0.01 * upper, upper)
         ax.grid(True, alpha=0.3)
         ax.set_title(title)
         ax.set_xlabel("FPR")
+        ax.ticklabel_format(axis="y", style="plain")
 
         for x in (1e-4, 3e-4, 1e-3):
             ax.axvline(x, color="#000000", alpha=0.10, linewidth=0.8)
 
-    _plot(axA, along_methods, "Gammex (along view; structural labels)")
-    _plot(axB, across_methods, "Gammex (across view; structural labels)")
+    _plot(axA, along_methods, "Along view")
+    _plot(axB, across_methods, "Across view")
     axA.set_ylabel("TPR")
-    axB.set_yticklabels([])
 
     axA.legend(loc="lower right", frameon=False, ncol=1)
 
@@ -170,4 +219,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

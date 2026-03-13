@@ -80,7 +80,7 @@ def _plot_panel(
     ax.text(
         0.02,
         0.02,
-        (rf"$n_0$={n_bg}, $n_1$={n_flow}\n$\max(H_1)$={max_flow:.3g}" if np.isfinite(max_flow) else rf"$n_0$={n_bg}, $n_1$={n_flow}"),
+        (f"n0={n_bg}, n1={n_flow}\nmax(H1)={max_flow:.3g}" if np.isfinite(max_flow) else f"n0={n_bg}, n1={n_flow}"),
         transform=ax.transAxes,
         ha="left",
         va="bottom",
@@ -88,6 +88,8 @@ def _plot_panel(
         bbox=dict(boxstyle="round,pad=0.25", facecolor="white", alpha=0.85, edgecolor="0.85"),
     )
 
+    tau_lines: list[tuple[float, float, float]] = []
+    summary_bits: list[str] = []
     for j, a in enumerate(alphas):
         tau, fpr_realized = _right_tail_threshold(bg, a)
         tau_plot = float(max(tau, eps_x))
@@ -95,19 +97,32 @@ def _plot_panel(
 
         ax.axvline(tau_plot, color="k", linestyle="--", linewidth=1.0)
         ax.plot([tau_plot], [max(tpr, y_floor)], marker="o", markersize=4.0, color="k", zorder=5)
+        tau_lines.append((tau_plot, fpr_realized, tpr))
+        summary_bits.append(rf"$\alpha={a:g}$: TPR$\approx${tpr:.3g}")
 
-        # Place label using axis-fraction y (stable on log y).
+    for j, (tau_plot, _fpr_realized, _tpr) in enumerate(tau_lines):
         ax.text(
             tau_plot,
-            0.06 + 0.13 * j,
-            rf"$\tau_{{{a:g}}}$ (FPR$\approx${fpr_realized:.3g}, TPR$\approx${tpr:.3g})",
+            0.94 - 0.10 * j,
+            rf"$\tau_{{{alphas[j]:g}}}$",
             rotation=90,
-            va="bottom",
-            ha="right",
+            va="top",
+            ha="center",
             fontsize=9,
             transform=ax.get_xaxis_transform(),
-            bbox=dict(boxstyle="round,pad=0.18", facecolor="white", alpha=0.75, edgecolor="0.85"),
+            bbox=dict(boxstyle="round,pad=0.12", facecolor="white", alpha=0.75, edgecolor="0.85"),
         )
+
+    ax.text(
+        0.02,
+        0.98,
+        "\n".join(summary_bits),
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        fontsize=8.5,
+        bbox=dict(boxstyle="round,pad=0.22", facecolor="white", alpha=0.85, edgecolor="0.85"),
+    )
 
     ax.set_title(title)
     ax.set_xscale("log")
@@ -116,11 +131,18 @@ def _plot_panel(
     ax.set_ylabel(r"tail probability $\mathbb{P}\{S\geq \tau\}$")
     ax.grid(True, which="both", alpha=0.25)
 
+    positive_scores = np.concatenate([x_bg, x_flow, np.asarray([t[0] for t in tau_lines], dtype=np.float64)])
+    positive_scores = positive_scores[np.isfinite(positive_scores) & (positive_scores > eps_x)]
+    if positive_scores.size > 0:
+        x_lo = float(max(eps_x, np.min(positive_scores) * 0.3))
+        x_hi = float(np.max(positive_scores) * 1.35)
+        ax.set_xlim(x_lo, x_hi)
+
 
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(
         description=(
-            "Generate a representative Brain-* tail-collapse visual showing how PD-after-filter baselines can "
+            "Generate a representative labeled-brain tail-collapse visual showing how PD-after-filter baselines can "
             "separate at relaxed operating points while collapsing at strict-tail thresholds due to an extreme "
             "background right tail."
         )

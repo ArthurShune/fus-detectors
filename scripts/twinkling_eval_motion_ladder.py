@@ -561,11 +561,12 @@ def main() -> None:
             fprs = list(map(float, args.fprs))
             amps_arr = np.array(amps, dtype=np.float64)
             ncols = len(fprs)
-            fig, axes = plt.subplots(1, ncols, figsize=(4.0 * ncols, 3.3), sharey=False)
+            fig, axes = plt.subplots(1, ncols, figsize=(4.3 * ncols, 3.5), sharey=False)
             if ncols == 1:
                 axes = [axes]
             for j, alpha in enumerate(fprs):
                 ax = axes[j]
+                panel_max = 0.0
                 for method, label in (("base", "Baseline"), ("stap_preka", "STAP")):
                     tprs: list[float] = []
                     yerr_lo: list[float] = []
@@ -599,6 +600,12 @@ def main() -> None:
                         yerr_hi.append(max(0.0, hi - y))
 
                     y = np.array(tprs, dtype=np.float64)
+                    if y.size > 0:
+                        finite_y = y[np.isfinite(y)]
+                        if finite_y.size > 0:
+                            panel_max = max(panel_max, float(np.max(finite_y)))
+                    if yerr_hi:
+                        panel_max = max(panel_max, float(np.nanmax(np.asarray(tprs, dtype=np.float64) + np.asarray(yerr_hi, dtype=np.float64))))
                     if bootstrap_n > 0:
                         yerr = np.vstack([np.array(yerr_lo, dtype=np.float64), np.array(yerr_hi, dtype=np.float64)])
                         ax.errorbar(amps_arr, y, yerr=yerr, marker="o", capsize=2, label=label)
@@ -606,7 +613,9 @@ def main() -> None:
                         ax.plot(amps_arr, y, marker="o", label=label)
                 ax.set_title(f"TPR @ FPR={alpha:g}")
                 ax.set_xlabel("Within-ensemble motion amp (px)")
-                ax.set_ylim(-0.02, 1.02)
+                upper = max(1e-4, panel_max * 1.25)
+                ax.set_ylim(-0.03 * upper, upper)
+                ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
                 ax.grid(True, alpha=0.3)
                 if j == 0:
                     ax.set_ylabel("TPR (structural mask)")

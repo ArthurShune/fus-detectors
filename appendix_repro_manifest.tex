@@ -7,10 +7,10 @@ The manifest lists the minimal set of commands/outputs needed to reproduce the m
 Run \path{PYTHONPATH=. conda run -n stap-fus python scripts/generate_repro_manifest.py} to refresh this manifest.
 
 \paragraph{Repository state.}
-Public repository: \path{https://github.com/ArthurShune/stap-for-fus.git}.
+Public repository: \path{git@github.com:ArthurShune/stap-for-fus.git}.
 Release tag: (not recorded; set \texttt{STAP\_FUS\_RELEASE\_TAG} or create a git tag).
-Commit: \texttt{168b542} (full: \texttt{168b542591}\allowbreak\texttt{b2fccecf23}\allowbreak\texttt{012165638f}\allowbreak\texttt{0c1e97905e}); branch: \texttt{main}; dirty: \texttt{false}.
-Dirty details: non-ignored paths=0, ignored build products=0.
+Commit: \texttt{50a1833} (full: \texttt{50a1833724}\allowbreak\texttt{ca41ee8e3f}\allowbreak\texttt{c4563a337a}\allowbreak\texttt{d1be975c24}); branch: \texttt{main}; dirty: \texttt{true}.
+Dirty details: non-ignored paths=8, ignored build products=4.
 Note: dirty status ignores common LaTeX build products (e.g., \texttt{*.aux, *.log, *.out, *.fls, *.fdb\_latexmk, *.synctex.gz, *.pdf}).
 For archival reproducibility, generate this manifest from a clean, tagged release commit (\texttt{dirty=false}) and record the public repository URL and tag.
 
@@ -900,11 +900,11 @@ PYTHONPATH=. python scripts/mace_vascular_pixel_eval.py \
       \item \path{figs/paper/}\allowbreak\path{mace_atlas_overlay.png}
     \end{itemize}
     \endgroup
-    Notes: Overlays atlas ROIs and atlas.Vascular contours on mean PD for representative planes (sanity check of Transformation.mat alignment).
+    Notes: Overlays atlas ROIs and atlas.Vascular contours on the anatomical reference volume for representative planes (sanity check of Transformation.mat alignment).
 {\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python scripts/mace_atlas_overlay_fig.py \
-  --scan-name scan1 \
+  --scan-name scan_anatomy \
   --plane-indices 5 10 15 \
   --out-png figs/paper/mace_atlas_overlay.png
 \end{verbatim}
@@ -1109,7 +1109,7 @@ PYTHONPATH=. python scripts/twinkling_decode_sanity.py \
   \item \textbf{Gammex flow phantom structural ROC (along-linear17, PRF=2500)}
     Paper refs:
     \begin{itemize}[nosep,leftmargin=0em,label={}]
-      \item Twinkling section: Table (structural ROC)
+      \item Twinkling section: Figure (structural evaluation masks)
       \item Figure: \path{twinkling_gammex_along_mask_overlay.png}
     \end{itemize}
     Outputs:
@@ -1157,7 +1157,7 @@ PYTHONPATH=. python scripts/fig_twinkling_mask_overlay.py \
   \item \textbf{Gammex flow phantom structural ROC (across-linear17, PRF=2500)}
     Paper refs:
     \begin{itemize}[nosep,leftmargin=0em,label={}]
-      \item Twinkling section: Table (structural ROC)
+      \item Twinkling section: Figure (structural evaluation masks)
       \item Figure: \path{twinkling_gammex_across_mask_overlay.png}
     \end{itemize}
     Outputs:
@@ -1203,6 +1203,98 @@ PYTHONPATH=. python scripts/fig_twinkling_mask_overlay.py \
   --mask-bg $MASK_GLOB/mask_bg.png \
   --out figs/paper/twinkling_gammex_across_mask_overlay.png \
   --min-width 780 --dpi 300
+\end{verbatim}
+}
+
+  \item \textbf{Gammex same-residual detector-component sweep (along/across; no KA)}
+    (paper refs: Twinkling section: Table (structural ROC)).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{runs/real/}\allowbreak\path{twinkling_gammex_alonglinear17_prf2500_str6_}\allowbreak\path{msd_ratio_fast/}
+      \item \path{runs/real/}\allowbreak\path{twinkling_gammex_alonglinear17_prf2500_str6_}\allowbreak\path{whitened_power/}
+      \item \path{runs/real/}\allowbreak\path{twinkling_gammex_alonglinear17_prf2500_str6_}\allowbreak\path{unwhitened_ratio/}
+      \item \path{runs/real/}\allowbreak\path{twinkling_gammex_across17_prf2500_str4_msd_}\allowbreak\path{ratio_fast/}
+      \item \path{runs/real/}\allowbreak\path{twinkling_gammex_across17_prf2500_str4_}\allowbreak\path{whitened_power/}
+      \item \path{runs/real/}\allowbreak\path{twinkling_gammex_across17_prf2500_str4_}\allowbreak\path{unwhitened_ratio/}
+      \item \path{reports/}\allowbreak\path{twinkling_gammex_alonglinear17_prf2500_str6_}\allowbreak\path{msd_ratio_fast_structural_summary.json}
+      \item \path{reports/}\allowbreak\path{twinkling_gammex_alonglinear17_prf2500_str6_}\allowbreak\path{whitened_power_structural_summary.json}
+      \item \path{reports/}\allowbreak\path{twinkling_gammex_alonglinear17_prf2500_str6_}\allowbreak\path{unwhitened_ratio_structural_summary.json}
+      \item \path{reports/}\allowbreak\path{twinkling_gammex_across17_prf2500_str4_msd_}\allowbreak\path{ratio_fast_structural_summary.json}
+      \item \path{reports/}\allowbreak\path{twinkling_gammex_across17_prf2500_str4_}\allowbreak\path{whitened_power_structural_summary.json}
+      \item \path{reports/}\allowbreak\path{twinkling_gammex_across17_prf2500_str4_}\allowbreak\path{unwhitened_ratio_structural_summary.json}
+      \item \path{reports/}\allowbreak\path{twinkling_gammex_detector_ablation.csv}
+      \item \path{reports/}\allowbreak\path{twinkling_gammex_detector_ablation.json}
+      \item \path{reports/}\allowbreak\path{twinkling_gammex_detector_ablation_table.tex}
+    \end{itemize}
+    \endgroup
+    Notes: Same-residual fairness audit for the main Gammex table. Detector-variant ablations require the batched fast STAP core (set STAP\_FAST\_PATH=1); only the detector head changes across rows.
+{\footnotesize
+\begin{verbatim}
+SEQ_BASE="data/twinkling_artifact/Flow in Gammex phantom"
+ALONG_SEQ="$SEQ_BASE/Flow in Gammex phantom (along - linear probe)"
+ACROSS_SEQ="$SEQ_BASE/Flow in Gammex phantom (across - linear probe)"
+ACROSS_DAT="$ACROSS_SEQ/RawBCFCine_08062017_145434_17.dat"
+ACROSS_PAR="$ACROSS_SEQ/RawBCFCine_08062017_145434_17.par"
+
+for VARIANT in msd_ratio whitened_power unwhitened_ratio; do
+  TAG="$VARIANT"
+  if [ "$VARIANT" = "msd_ratio" ]; then TAG="${VARIANT}_fast"; fi
+  OUT_ROOT="runs/real/twinkling_gammex_alonglinear17_prf2500_str6_${TAG}"
+  STAP_FAST_PATH=1 PYTHONPATH=. python scripts/twinkling_make_bundles.py \
+    --seq-dir "$ALONG_SEQ" \
+    --out-root "$OUT_ROOT" \
+    --frames 0:85 \
+    --prf-hz 2500 --Lt 16 \
+    --tile-hw 8 8 --tile-stride 6 \
+    --cov-estimator tyler_pca --diag-load 0.07 \
+    --baseline-type svd_bandpass --svd-keep-min 2 --svd-keep-max 17 \
+    --score-mode msd --stap-detector-variant "$VARIANT"
+  PYTHONPATH=. python scripts/twinkling_eval_structural.py \
+    --root "$OUT_ROOT" \
+    --out-csv "reports/twinkling_gammex_alonglinear17_prf2500_str6_${TAG}_structural.csv" \
+    --out-summary-json \
+      "reports/twinkling_gammex_alonglinear17_prf2500_str6_${TAG}_structural_summary.json"
+done
+
+for VARIANT in msd_ratio whitened_power unwhitened_ratio; do
+  TAG="$VARIANT"
+  if [ "$VARIANT" = "msd_ratio" ]; then TAG="${VARIANT}_fast"; fi
+  OUT_ROOT="runs/real/twinkling_gammex_across17_prf2500_str4_${TAG}"
+  STAP_FAST_PATH=1 PYTHONPATH=. python scripts/twinkling_make_bundles.py \
+    --seq-dir "$ACROSS_SEQ" \
+    --dat-path "$ACROSS_DAT" \
+    --par-path "$ACROSS_PAR" \
+    --out-root "$OUT_ROOT" \
+    --frames 0:200 \
+    --prf-hz 2500 --Lt 16 \
+    --tile-hw 8 8 --tile-stride 4 \
+    --cov-estimator tyler_pca --diag-load 0.07 \
+    --baseline-type svd_bandpass --svd-keep-min 2 --svd-keep-max 17 \
+    --score-mode msd --stap-detector-variant "$VARIANT"
+  PYTHONPATH=. python scripts/twinkling_eval_structural.py \
+    --root "$OUT_ROOT" \
+    --out-csv "reports/twinkling_gammex_across17_prf2500_str4_${TAG}_structural.csv" \
+    --out-summary-json \
+      "reports/twinkling_gammex_across17_prf2500_str4_${TAG}_structural_summary.json"
+done
+
+PYTHONPATH=. python scripts/twinkling_gammex_detector_ablation_table.py \
+  --along-default \
+    reports/twinkling_gammex_alonglinear17_prf2500_str6_msd_ratio_fast_structural_summary.json \
+  --along-whitened-power \
+    reports/twinkling_gammex_alonglinear17_prf2500_str6_whitened_power_structural_summary.json \
+  --along-unwhitened-ratio \
+    reports/twinkling_gammex_alonglinear17_prf2500_str6_unwhitened_ratio_structural_summary.json \
+  --across-default \
+    reports/twinkling_gammex_across17_prf2500_str4_msd_ratio_fast_structural_summary.json \
+  --across-whitened-power \
+    reports/twinkling_gammex_across17_prf2500_str4_whitened_power_structural_summary.json \
+  --across-unwhitened-ratio \
+    reports/twinkling_gammex_across17_prf2500_str4_unwhitened_ratio_structural_summary.json \
+  --out-csv reports/twinkling_gammex_detector_ablation.csv \
+  --out-json reports/twinkling_gammex_detector_ablation.json \
+  --out-tex reports/twinkling_gammex_detector_ablation_table.tex
 \end{verbatim}
 }
 

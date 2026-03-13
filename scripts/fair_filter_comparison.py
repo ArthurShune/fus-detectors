@@ -540,7 +540,14 @@ def _run_replay_generation(
     offsets: Sequence[int],
     stap_device: str,
     stap_detector_variant: str = "msd_ratio",
+    stap_whiten_gamma: float = 1.0,
+    hybrid_rescue_rule: str = "guard_frac_v1",
     stap_cov_trim_q: float = 0.0,
+    diag_load: float | None = None,
+    cov_estimator: str | None = None,
+    huber_c: float | None = None,
+    mvdr_auto_kappa: float | None = None,
+    constraint_ridge: float | None = None,
     synth_amp_jitter: float | None,
     synth_phase_jitter: float | None,
     synth_noise_level: float | None,
@@ -573,6 +580,10 @@ def _run_replay_generation(
         stap_device,
         "--stap-detector-variant",
         str(stap_detector_variant),
+        "--stap-whiten-gamma",
+        str(float(stap_whiten_gamma)),
+        "--hybrid-rescue-rule",
+        str(hybrid_rescue_rule),
         "--stap-cov-trim-q",
         str(float(stap_cov_trim_q or 0.0)),
         # Disable per-window debug tile capture so batched CUDA fast paths remain eligible.
@@ -586,6 +597,18 @@ def _run_replay_generation(
         "--time-window-length",
         str(window_length),
     ]
+    if any(v is not None for v in (diag_load, cov_estimator, huber_c, mvdr_auto_kappa, constraint_ridge)):
+        cmd += ["--allow-custom-stap-hyperparams"]
+    if diag_load is not None:
+        cmd += ["--diag-load", str(float(diag_load))]
+    if cov_estimator is not None:
+        cmd += ["--cov-estimator", str(cov_estimator)]
+    if huber_c is not None:
+        cmd += ["--huber-c", str(float(huber_c))]
+    if mvdr_auto_kappa is not None:
+        cmd += ["--mvdr-auto-kappa", str(float(mvdr_auto_kappa))]
+    if constraint_ridge is not None:
+        cmd += ["--constraint-ridge", str(float(constraint_ridge))]
     if synth_amp_jitter is not None:
         cmd += ["--synth-amp-jitter", str(float(synth_amp_jitter))]
     if synth_phase_jitter is not None:
@@ -1174,6 +1197,7 @@ def _run_matrix_mode(args: argparse.Namespace) -> List[Dict[str, Any]]:
                         offsets=missing,
                         stap_device=args.stap_device,
                         stap_detector_variant=str(getattr(cfg, "detector_variant", "msd_ratio")),
+                        stap_whiten_gamma=float(getattr(cfg, "whiten_gamma", 1.0) or 1.0),
                         stap_cov_trim_q=float(getattr(cfg, "stap_cov_trim_q", 0.0) or 0.0),
                         synth_amp_jitter=args.matrix_synth_amp_jitter,
                         synth_phase_jitter=args.matrix_synth_phase_jitter,

@@ -113,10 +113,18 @@ def _method_order() -> list[str]:
 
 def _regime_order() -> list[tuple[str, str]]:
     return [
-        ("open", "OpenSkull"),
-        ("aliascontract", "AliasContract"),
-        ("skullor", "SkullOR"),
+        ("open", "\\shortstack{Open-skull surface-\\\\artifact stress test}"),
+        ("skullor", "\\shortstack{Structured-clutter\\\\leakage stress test}"),
     ]
+
+
+def _method_display() -> dict[str, str]:
+    return {
+        "RPCA+PD (paired)": "PD on RPCA residual",
+        "RPCA+STAP (paired; pre-KA)": "STAP on RPCA residual",
+        "HOSVD+PD (paired)": "PD on HOSVD residual",
+        "HOSVD+STAP (paired; pre-KA)": "STAP on HOSVD residual",
+    }
 
 
 def _render_table_tex(
@@ -124,6 +132,7 @@ def _render_table_tex(
     out_path: Path,
     cell_map: dict[tuple[str, str, float], tuple[float, float, float]],
     methods: list[str],
+    method_display: dict[str, str],
     regimes: list[tuple[str, str]],
     fprs: list[float],
 ) -> None:
@@ -179,7 +188,7 @@ def _render_table_tex(
     lines.append("\\hline")
 
     for method in methods:
-        row = [method]
+        row = [method_display.get(method, method)]
         for regime_key, _ in regimes:
             for a in fprs:
                 row.append(_cell(regime_key, method, float(a)))
@@ -188,8 +197,9 @@ def _render_table_tex(
     lines.append("\\end{tabular}%")
     lines.append("}")
     lines.append(
-        "\\caption{Detector-swap fairness check on Brain-* regimes: PD vs matched-subspace STAP detector scores "
+        "\\caption{Detector-swap fairness check on labeled brain simulation stress tests: PD vs matched-subspace STAP detector scores "
         "computed on the \\emph{same} residual produced by a competing clutter filter (paired bundles). "
+        "The two column groups correspond to an open-skull surface-artifact stress test and a structured-clutter leakage stress test. "
         "Numbers are medians (IQR) over five disjoint 64-frame windows (offsets 0/64/128/192/256).}"
     )
     lines.append("\\label{tab:brain_detector_swap}")
@@ -203,6 +213,7 @@ def main() -> None:
     rows: list[dict[str, Any]] = json.loads(args.fair_matrix_json.read_text(encoding="utf-8"))
     fprs = [float(x) for x in args.fprs]
     methods = _method_order()
+    method_display = _method_display()
     regimes = _regime_order()
 
     # Collect per-window TPRs.
@@ -256,7 +267,14 @@ def main() -> None:
     args.out_json.write_text(json.dumps([asdict(c) for c in cells], indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     # Write LaTeX table.
-    _render_table_tex(out_path=args.out_tex, cell_map=cell_map, methods=methods, regimes=regimes, fprs=fprs)
+    _render_table_tex(
+        out_path=args.out_tex,
+        cell_map=cell_map,
+        methods=methods,
+        method_display=method_display,
+        regimes=regimes,
+        fprs=fprs,
+    )
     print(f"[brain_detector_swap_table] wrote {args.out_csv}, {args.out_json}, {args.out_tex}")
 
 

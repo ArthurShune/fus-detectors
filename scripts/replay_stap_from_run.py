@@ -64,6 +64,14 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     ap.add_argument(
+        "--allow-custom-stap-hyperparams",
+        action="store_true",
+        help=(
+            "When used with --stap-profile clinical, preserve explicit CLI covariance/load "
+            "hyperparameters instead of forcing the clinical preset values."
+        ),
+    )
+    ap.add_argument(
         "--profile",
         type=str,
         default=None,
@@ -86,12 +94,35 @@ def parse_args() -> argparse.Namespace:
         "--stap-detector-variant",
         type=str,
         default="msd_ratio",
-        choices=["msd_ratio", "whitened_power", "unwhitened_ratio"],
+        choices=["msd_ratio", "whitened_power", "unwhitened_ratio", "hybrid_rescue", "adaptive_guard"],
         help=(
             "Detector statistic exported as score_stap_preka.npy. "
             "'msd_ratio' (default) is the whitened matched-subspace ratio; "
             "'whitened_power' is total whitened slow-time power (no Doppler band partition); "
-            "'unwhitened_ratio' disables covariance whitening (R=I) while keeping the same band partition."
+            "'unwhitened_ratio' disables covariance whitening (R=I) while keeping the same band partition; "
+            "'hybrid_rescue' runs the advanced whitened score with an unwhitened rescue branch on selected pixels; "
+            "'adaptive_guard' uses the unwhitened score by default and promotes pixels onto the advanced "
+            "whitened branch when baseline guard energy indicates structured clutter."
+        ),
+    )
+    ap.add_argument(
+        "--hybrid-rescue-rule",
+        type=str,
+        default="guard_frac_v1",
+        choices=["guard_frac_v1", "alias_rescue_v1", "band_ratio_v1", "guard_promote_v1"],
+        help=(
+            "Pixelwise routing rule for --stap-detector-variant=hybrid_rescue. "
+            "The rule uses baseline telemetry to decide where to keep the whitened score "
+            "and where to rescue with the unwhitened matched-subspace score."
+        ),
+    )
+    ap.add_argument(
+        "--stap-whiten-gamma",
+        type=float,
+        default=1.0,
+        help=(
+            "Fractional whitening exponent for the STAP-family detector. "
+            "gamma=0 gives the unwhitened ratio, gamma=1 the current full STAP score."
         ),
     )
     ap.add_argument(
@@ -921,9 +952,21 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    custom_stap_overrides = {
+        "diag_load": args.diag_load,
+        "stap_cov_trim_q": args.stap_cov_trim_q,
+        "cov_estimator": args.cov_estimator,
+        "huber_c": args.huber_c,
+        "constraint_ridge": args.constraint_ridge,
+        "mvdr_auto_kappa": args.mvdr_auto_kappa,
+        "mvdr_load_mode": args.mvdr_load_mode,
+    }
 
     apply_brain_profile_defaults(args)
     apply_stap_profile_defaults(args)
+    if bool(args.allow_custom_stap_hyperparams):
+        for key, value in custom_stap_overrides.items():
+            setattr(args, key, value)
 
     run_cuda_warmup(args)
 

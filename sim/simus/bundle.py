@@ -112,6 +112,8 @@ def bundle_profile_kwargs(profile: str, *, T: int, baseline_type: str) -> dict[s
         "msd_agg_mode": "median",
         "msd_ratio_rho": 0.05,
         "msd_contrast_alpha": 0.6,
+        "stap_detector_variant": "msd_ratio",
+        "stap_whiten_gamma": 1.0,
         "motion_half_span_rel": 0.25,
         "baseline_type": str(baseline_type),
         "reg_enable": True,

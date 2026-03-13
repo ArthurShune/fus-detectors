@@ -119,6 +119,33 @@ def _normalize_detector_variant(detector_variant: str | None) -> str:
     return v
 
 
+def _normalize_whiten_gamma(
+    whiten_gamma: float | None,
+    *,
+    detector_variant: str,
+) -> float:
+    """
+    Normalize the fractional-whitening exponent.
+
+    `gamma=0` recovers the identity-whitened detector family, while `gamma=1`
+    recovers the current fully whitened STAP score. The explicit unwhitened
+    detector variant always forces `gamma=0` so historical ablation labels keep
+    their exact meaning.
+    """
+    variant = _normalize_detector_variant(detector_variant)
+    if variant == "unwhitened_ratio":
+        return 0.0
+    if whiten_gamma is None:
+        return 1.0
+    try:
+        gamma = float(whiten_gamma)
+    except Exception as exc:  # pragma: no cover - defensive
+        raise ValueError(f"Invalid whiten_gamma={whiten_gamma!r}") from exc
+    if not math.isfinite(gamma):
+        raise ValueError(f"whiten_gamma must be finite, got {gamma!r}")
+    return float(min(1.0, max(0.0, gamma)))
+
+
 @contextmanager
 def stap_cuda_event_timing(*, enabled: bool | None = None):
     """
@@ -3167,6 +3194,7 @@ def _band_energy_whitened_batched(
     C_t: torch.Tensor,
     lam_B: torch.Tensor,
     *,
+    whiten_gamma: float = 1.0,
     ridge: float = 0.10,
     ratio_rho: float = 0.0,
     kappa_target: float = 40.0,
@@ -3268,6 +3296,8 @@ def _band_energy_whitened_batched(
         zeros = torch.zeros((B, N, h, w), dtype=torch.float32, device=device)
         return zeros, zeros
 
+    whiten_gamma = float(min(1.0, max(0.0, float(whiten_gamma))))
+
     # Numerical hygiene: enforce Hermitian symmetry and robustify the
     # factorization so a single bad tile doesn't abort the whole batch.
     R = 0.5 * (R + R.conj().transpose(-2, -1))
@@ -3282,44 +3312,6 @@ def _band_energy_whitened_batched(
         except Exception:
             capturing = False
 
-    if capturing:
-        # CUDA-graph safe Cholesky: avoid `torch.linalg.cholesky` (non-capturable in
-        # some torch/CUDA builds) and avoid host-side branching on the `info` tensor.
-        with _prof_ctx("stap:band_energy:chol_R"):
-            L_ex, info = torch.linalg.cholesky_ex(R_lam)
-        diag = torch.real(torch.diagonal(R_lam, dim1=-2, dim2=-1)).to(dtype=torch.float32)
-        diag = torch.clamp(diag, min=1e-8)
-        L_diag = torch.diag_embed(torch.sqrt(diag)).to(dtype=work_dtype)
-        fail = (info != 0).view(B, 1, 1)
-        L = torch.where(fail, L_diag, L_ex)
-    else:
-        try:
-            with _prof_ctx("stap:band_energy:chol_R"):
-                L = torch.linalg.cholesky(R_lam)
-        except RuntimeError:
-            # Per-tile adaptive jitter (scaled by mu) fallback.
-            eye_b = torch.eye(Lt, dtype=work_dtype, device=device)
-            diag = torch.real(torch.diagonal(R_lam, dim1=-2, dim2=-1))
-            diag_scale = torch.mean(torch.abs(diag), dim=1) + 1e-12
-            jitter_mults = (0.0, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2, 1e-1, 1.0, 10.0)
-            L_list = []
-            for b in range(B):
-                Rb = R_lam[b]
-                Lb = None
-                for mult in jitter_mults:
-                    try:
-                        with _prof_ctx("stap:band_energy:chol_R"):
-                            Lb = torch.linalg.cholesky(Rb + (float(mult) * diag_scale[b]) * eye_b)
-                        break
-                    except RuntimeError:
-                        Lb = None
-                if Lb is None:
-                    # Last resort: diagonal approximation.
-                    d = torch.clamp(torch.real(torch.diagonal(Rb, dim1=-2, dim2=-1)), min=1e-8)
-                    Lb = torch.diag(torch.sqrt(d.to(dtype=torch.float32))).to(dtype=work_dtype)
-                L_list.append(Lb)
-            L = torch.stack(L_list, dim=0)
-
     # Whiten snapshots: reshape to (B, Lt, P) where P = N*h*w
     if S.ndim == 4:
         # (B, Lt, N, h) -> (B, Lt, N, h, 1) so downstream logic can stay uniform.
@@ -3329,48 +3321,15 @@ def _band_energy_whitened_batched(
     # baselines. This intentionally matches the historical (permute+view) layout
     # so downstream score maps remain bitwise-comparable across latency work.
     S_flat = S.permute(0, 1, 3, 4, 2).contiguous().view(Bsz, Lt_dim, -1)
-    Linv: torch.Tensor | None = None
-    with _prof_ctx("stap:band_energy:whiten_snapshots"):
-        # Whiten strategy for L^{-1} X (X is very wide when P=N*h*w is large).
-        #
-        # - direct: batched TRSM on the full RHS (L^{-1} X).
-        # - inv_gemm: compute L^{-1} once using TRSM on I (small RHS), then GEMM.
-        #
-        # For large Lt and wide RHS on CUDA, inv+GEMM is often faster.
-        solve_mode_env = os.getenv("STAP_BAND_SOLVE_MODE", "").strip().lower()
-        if not solve_mode_env or solve_mode_env == "auto":
-            # Match the Tyler fast-path heuristic: even for small Lt regimes,
-            # TRSM on a very wide RHS can be slower than (inv + GEMM) on CUDA.
-            Lt_i = int(Lt_dim)
-            P_i = int(S_flat.shape[-1])
-            rhs_wide = P_i >= 2 * Lt_i
-            use_inv_gemm = bool(S_flat.is_cuda) and rhs_wide and (Lt_i >= 32 or P_i >= 512)
-            solve_mode = "inv_gemm" if use_inv_gemm else "direct"
-        elif solve_mode_env in {"direct", "trsm", "solve", "triangular"}:
-            solve_mode = "direct"
-        elif solve_mode_env in {"inv", "invgemm", "inv_gemm", "gemm", "matmul"}:
-            solve_mode = "inv_gemm"
-        else:
-            raise ValueError(
-                f"Unknown STAP_BAND_SOLVE_MODE='{solve_mode_env}'. Expected auto|direct|inv_gemm."
-            )
-        if solve_mode == "inv_gemm":
-            # Reuse the already-allocated identity (avoids per-call torch.eye overhead).
-            eye_expand = eye.expand(Bsz, Lt_dim, Lt_dim)
-            Linv = torch.empty((Bsz, Lt_dim, Lt_dim), dtype=work_dtype, device=device)
-            torch.linalg.solve_triangular(L, eye_expand, upper=False, out=Linv)
-            Sw = torch.empty_like(S_flat)
-            torch.bmm(Linv, S_flat, out=Sw)
-        else:
-            Sw = torch.linalg.solve_triangular(L, S_flat, upper=False)
-
     # Whiten constraints: expand Ct across batch
     Ct_exp = Ct.unsqueeze(0).expand(Bsz, -1, -1)  # (B,Lt,K)
-    with _prof_ctx("stap:band_energy:whiten_constraints"):
-        if solve_mode == "inv_gemm" and Linv is not None:
-            Cw = torch.bmm(Linv, Ct_exp)
-        else:
-            Cw = torch.linalg.solve_triangular(L, Ct_exp, upper=False)
+    Sw, Cw = _fractional_whiten_pair_batched(
+        R_lam,
+        S_flat,
+        Ct_exp,
+        whiten_gamma=whiten_gamma,
+        eps=eps,
+    )
 
     # Total whitened power (used both for output and for the dual-form projector).
     sw_pow_flat = torch.sum(Sw.conj() * Sw, dim=1).real  # (B, P)
@@ -3617,6 +3576,118 @@ def _band_energy_whitened_batched(
     T_band = T_band_flat.view(Bsz, N, h, w)
     sw_pow = sw_pow_flat.view(Bsz, N, h, w)
     return T_band, sw_pow
+
+
+def _fractional_whiten_pair_batched(
+    R_lam: torch.Tensor,
+    S_flat: torch.Tensor,
+    C_exp: torch.Tensor,
+    *,
+    whiten_gamma: float,
+    eps: float = 1e-10,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Apply fractional whitening to snapshots and constraints.
+
+    `gamma=0` returns the inputs unchanged, while `gamma=1` applies the usual
+    Cholesky-based whitening. Intermediate values use the Hermitian eigendecomposition
+    to apply `R^{-gamma/2}` exactly.
+    """
+    gamma = float(whiten_gamma)
+    if gamma <= 1e-8:
+        return S_flat, C_exp
+
+    if gamma >= 1.0 - 1e-8:
+        Bsz, Lt_dim, _ = R_lam.shape
+        work_dtype = R_lam.dtype
+        device = R_lam.device
+        eye = torch.eye(Lt_dim, dtype=work_dtype, device=device).unsqueeze(0)
+        capturing = False
+        if bool(getattr(R_lam, "is_cuda", False)):
+            try:
+                capturing = bool(torch.cuda.is_current_stream_capturing())
+            except Exception:
+                capturing = False
+        if capturing:
+            with _prof_ctx("stap:band_energy:chol_R"):
+                L_ex, info = torch.linalg.cholesky_ex(R_lam)
+            diag = torch.real(torch.diagonal(R_lam, dim1=-2, dim2=-1)).to(dtype=torch.float32)
+            diag = torch.clamp(diag, min=1e-8)
+            L_diag = torch.diag_embed(torch.sqrt(diag)).to(dtype=work_dtype)
+            fail = (info != 0).view(Bsz, 1, 1)
+            L = torch.where(fail, L_diag, L_ex)
+        else:
+            try:
+                with _prof_ctx("stap:band_energy:chol_R"):
+                    L = torch.linalg.cholesky(R_lam)
+            except RuntimeError:
+                eye_b = eye[0]
+                diag = torch.real(torch.diagonal(R_lam, dim1=-2, dim2=-1))
+                diag_scale = torch.mean(torch.abs(diag), dim=1) + 1e-12
+                jitter_mults = (0.0, 1e-10, 1e-8, 1e-6, 1e-4, 1e-2, 1e-1, 1.0, 10.0)
+                L_list = []
+                for b in range(Bsz):
+                    Rb = R_lam[b]
+                    Lb = None
+                    for mult in jitter_mults:
+                        try:
+                            with _prof_ctx("stap:band_energy:chol_R"):
+                                Lb = torch.linalg.cholesky(
+                                    Rb + (float(mult) * diag_scale[b]) * eye_b
+                                )
+                            break
+                        except RuntimeError:
+                            Lb = None
+                    if Lb is None:
+                        d = torch.clamp(
+                            torch.real(torch.diagonal(Rb, dim1=-2, dim2=-1)), min=1e-8
+                        )
+                        Lb = torch.diag(torch.sqrt(d.to(dtype=torch.float32))).to(dtype=work_dtype)
+                    L_list.append(Lb)
+                L = torch.stack(L_list, dim=0)
+
+        Linv: torch.Tensor | None = None
+        with _prof_ctx("stap:band_energy:whiten_snapshots"):
+            solve_mode_env = os.getenv("STAP_BAND_SOLVE_MODE", "").strip().lower()
+            if not solve_mode_env or solve_mode_env == "auto":
+                Lt_i = int(S_flat.shape[1])
+                P_i = int(S_flat.shape[-1])
+                rhs_wide = P_i >= 2 * Lt_i
+                use_inv_gemm = bool(S_flat.is_cuda) and rhs_wide and (Lt_i >= 32 or P_i >= 512)
+                solve_mode = "inv_gemm" if use_inv_gemm else "direct"
+            elif solve_mode_env in {"direct", "trsm", "solve", "triangular"}:
+                solve_mode = "direct"
+            elif solve_mode_env in {"inv", "invgemm", "inv_gemm", "gemm", "matmul"}:
+                solve_mode = "inv_gemm"
+            else:
+                raise ValueError(
+                    f"Unknown STAP_BAND_SOLVE_MODE='{solve_mode_env}'. Expected auto|direct|inv_gemm."
+                )
+            if solve_mode == "inv_gemm":
+                eye_expand = eye.expand(Bsz, Lt_dim, Lt_dim)
+                Linv = torch.empty((Bsz, Lt_dim, Lt_dim), dtype=work_dtype, device=device)
+                torch.linalg.solve_triangular(L, eye_expand, upper=False, out=Linv)
+                Sw = torch.empty_like(S_flat)
+                torch.bmm(Linv, S_flat, out=Sw)
+            else:
+                Sw = torch.linalg.solve_triangular(L, S_flat, upper=False)
+        with _prof_ctx("stap:band_energy:whiten_constraints"):
+            if Linv is not None:
+                Cw = torch.bmm(Linv, C_exp)
+            else:
+                Cw = torch.linalg.solve_triangular(L, C_exp, upper=False)
+        return Sw, Cw
+
+    with _prof_ctx("stap:band_energy:fractional_whitening"):
+        evals, evecs = torch.linalg.eigh(R_lam)
+        evals = torch.clamp(torch.real(evals), min=float(eps))
+        gains = torch.pow(evals, -0.5 * gamma).to(dtype=R_lam.dtype)
+        Vh = evecs.conj().transpose(-2, -1)
+        S_proj = torch.bmm(Vh, S_flat)
+        C_proj = torch.bmm(Vh, C_exp)
+        Sw = torch.bmm(evecs, gains.unsqueeze(-1) * S_proj)
+        Cw = torch.bmm(evecs, gains.unsqueeze(-1) * C_proj)
+    return Sw, Cw
 
 
 def _band_energy_whitened_covonly_batched(
@@ -4818,6 +4889,7 @@ def stap_temporal_core_batched(
     msd_contrast_alpha: float,
     msd_lambda: Optional[float] = None,
     detector_variant: str = "msd_ratio",
+    whiten_gamma: float = 1.0,
     device: Optional[str] = None,
     use_ref_cov: bool = False,
     fd_span_mode: str = "psd",
@@ -4861,9 +4933,10 @@ def stap_temporal_core_batched(
         _warn_tile_statistic_experimental()
 
     variant = _normalize_detector_variant(detector_variant)
+    whiten_gamma = _normalize_whiten_gamma(whiten_gamma, detector_variant=variant)
     # The unwhitened detector ablation is implemented via the snapshot path
     # (identity whitening). Disable cov-only approximations in this mode.
-    if variant == "unwhitened_ratio":
+    if variant == "unwhitened_ratio" or whiten_gamma < 1.0 - 1e-8:
         tile_statistic = False
 
     # Fine-grained runtime breakdown (seconds) for profiling.
@@ -5009,6 +5082,8 @@ def stap_temporal_core_batched(
 
     eye = torch.eye(Lt, device=device, dtype=R_hat.dtype)
     # Per-tile lambda for MSD via conditioned_lambda.
+    ev_min_post_diag: torch.Tensor | None = None
+    ev_max_post_diag: torch.Tensor | None = None
     with _prof_ctx("stap:lambda"):
         kappa_msd = float(max(kappa_msd, 1.01))
         lam_init = float(msd_lambda) if msd_lambda is not None else float(diag_load)
@@ -5045,6 +5120,8 @@ def stap_temporal_core_batched(
             lam_out = torch.maximum(base, lam_needed)
             lam_msd_tensor = lam_out.to(R_hat.dtype)
             lam_needed_tensor = lam_needed.to(R_hat.dtype)
+            ev_min_post_diag = ev_min_post.to(dtype=torch.float32)
+            ev_max_post_diag = ev_max_post.to(dtype=torch.float32)
         elif conditioned_lambda_batch_shared is not None:
             # Preserve manuscript baseline behavior: compute per-tile loading via the
             # shared conditioned-lambda helper (no eigenvalue-bound shortcut).
@@ -5182,17 +5259,12 @@ def stap_temporal_core_batched(
             with _prof_ctx("stap:band_energy:snapshots"):
                 R_for_band = R_hat
                 lam_for_band = lam_msd_tensor
-                if variant == "unwhitened_ratio":
-                    eye_b = torch.eye(Lt, device=device, dtype=R_hat.dtype).unsqueeze(0).expand(
-                        B, Lt, Lt
-                    )
-                    R_for_band = eye_b
-                    lam_for_band = torch.zeros_like(lam_msd_tensor)
                 T_band, sw_pow = _band_energy_whitened_batched(
                     R_for_band,
                     S_B_Lt_N_hw,
                     Ct,
                     lam_for_band,
+                    whiten_gamma=whiten_gamma,
                     ridge=msd_ridge,
                     ratio_rho=msd_ratio_rho,
                     kappa_target=kappa_msd,
@@ -5220,26 +5292,19 @@ def stap_temporal_core_batched(
             pow_list = []
             det_list = []
             for b in range(B):
-                R_single = R_hat[b]
-                lam_abs = float(lam_msd_tensor[b].real.item())
-                if variant == "unwhitened_ratio":
-                    R_single = torch.eye(Lt, device=device, dtype=R_hat.dtype)
-                    lam_abs = 0.0
-                T_band_b, sw_pow_b = msd_snapshot_energies_batched(
-                    R_single,
-                    S_B_Lt_N_hw[b],
+                T_band_b, sw_pow_b = _band_energy_whitened_batched(
+                    R_hat[b : b + 1],
+                    S_B_Lt_N_hw[b : b + 1],
                     Ct,
-                    lam_abs=lam_abs,
-                    kappa_target=kappa_msd,
+                    lam_msd_tensor[b : b + 1],
+                    whiten_gamma=whiten_gamma,
                     ridge=msd_ridge,
                     ratio_rho=msd_ratio_rho,
-                    R0_prior=None,
-                    Cf_flow=None,
-                    ka_opts=None,
-                    ka_details=None,
                     device=device,
                     dtype=R_hat.dtype,
                 )
+                T_band_b = T_band_b[0]
+                sw_pow_b = sw_pow_b[0]
                 sw_pow_b_safe = torch.clamp(sw_pow_b, min=1e-10)
                 r_flow_b = torch.clamp(T_band_b / sw_pow_b_safe, min=0.0, max=1.0)
                 denom_b = torch.clamp(
@@ -5264,6 +5329,7 @@ def stap_temporal_core_batched(
         infos = [{} for _ in range(int(B))]
         for b, d in enumerate(infos):
             d["detector_variant"] = str(variant)
+            d["whiten_gamma"] = float(whiten_gamma)
             d["cov_train_trim_q"] = float(cov_train_trim_q)
             if k_eff is not None:
                 d["cov_train_trim_k_eff"] = int(k_eff[b].item())
@@ -5274,6 +5340,28 @@ def stap_temporal_core_batched(
         return band_frac_np, score_np, infos
 
     with _prof_ctx("stap:telemetry"):
+        if ev_min_post_diag is None or ev_max_post_diag is None:
+            eigvals_diag = torch.linalg.eigvalsh(R_hat).real
+            ev_min_post_diag = eigvals_diag[:, 0].to(dtype=torch.float32)
+            ev_max_post_diag = eigvals_diag[:, -1].to(dtype=torch.float32)
+        cond_eps = 1e-12
+        ev_min_np = ev_min_post_diag.detach().cpu().numpy()
+        ev_max_np = ev_max_post_diag.detach().cpu().numpy()
+        lam_cond_np = lam_msd_tensor.real.detach().cpu().numpy()
+        lam_need_np = lam_needed_tensor.real.detach().cpu().numpy()
+        mu_trace_np = mu_trace.detach().cpu().numpy() if mu_trace is not None else np.zeros((B,), dtype=np.float32)
+        trace_np = np.asarray(mu_trace_np, dtype=np.float64) * float(Lt)
+        cond_raw_np = np.where(
+            np.asarray(ev_min_np, dtype=np.float64) > cond_eps,
+            np.asarray(ev_max_np, dtype=np.float64) / np.maximum(np.asarray(ev_min_np, dtype=np.float64), cond_eps),
+            np.inf,
+        )
+        cond_loaded_np = (np.asarray(ev_max_np, dtype=np.float64) + np.asarray(lam_cond_np, dtype=np.float64)) / np.maximum(
+            np.asarray(ev_min_np, dtype=np.float64) + np.asarray(lam_cond_np, dtype=np.float64),
+            cond_eps,
+        )
+        cov_rank_proxy_np = trace_np / np.maximum(np.asarray(ev_max_np, dtype=np.float64), cond_eps)
+
         band_flat = band_frac_out.reshape(B, -1)
         vals_sorted, _ = torch.sort(band_flat, dim=1)
         K = int(vals_sorted.shape[1])
@@ -5291,12 +5379,36 @@ def stap_temporal_core_batched(
             frac = float(pos - i0)
             band_p90_t = (1.0 - frac) * vals_sorted[:, i0] + frac * vals_sorted[:, i1]
 
+        score_flat = score_out.reshape(B, -1)
+        score_sorted, _ = torch.sort(score_flat, dim=1)
+        Ks = int(score_sorted.shape[1])
+        if Ks <= 0:
+            score_q10_t = torch.zeros((B,), dtype=torch.float32, device=score_flat.device)
+            score_q50_t = score_q10_t
+            score_q90_t = score_q10_t
+        else:
+            def _interp_quantile(sorted_vals: torch.Tensor, q: float) -> torch.Tensor:
+                pos = q * float(Ks - 1)
+                i0 = int(math.floor(pos))
+                i1 = min(Ks - 1, i0 + 1)
+                frac = float(pos - i0)
+                return (1.0 - frac) * sorted_vals[:, i0] + frac * sorted_vals[:, i1]
+
+            score_q10_t = _interp_quantile(score_sorted, 0.10)
+            score_q50_t = _interp_quantile(score_sorted, 0.50)
+            score_q90_t = _interp_quantile(score_sorted, 0.90)
+
         flow_mean_t = band_flat.mean(dim=1)
         band_med = band_med_t.detach().cpu().numpy()
         band_p90 = band_p90_t.detach().cpu().numpy()
+        score_q10 = score_q10_t.detach().cpu().numpy()
+        score_q50 = score_q50_t.detach().cpu().numpy()
+        score_q90 = score_q90_t.detach().cpu().numpy()
+        score_mean = score_flat.mean(dim=1).detach().cpu().numpy()
+        score_var = score_flat.var(dim=1, unbiased=False).detach().cpu().numpy()
         flow_mean = flow_mean_t.detach().cpu().numpy()
-        lam_cond = lam_msd_tensor.real.detach().cpu().numpy()
-        lam_need = lam_needed_tensor.real.detach().cpu().numpy()
+        lam_cond = lam_cond_np
+        lam_need = lam_need_np
 
         if not return_torch:
             band_frac_np = band_frac_out.detach().cpu().numpy().astype(np.float32, copy=False)
@@ -5315,7 +5427,9 @@ def stap_temporal_core_batched(
                 {
                     "Lt": Lt,
                     "detector_variant": str(variant),
+                    "whiten_gamma": float(whiten_gamma),
                     "fd_grid_len": int(len(fd_grid)),
+                    "band_Kc": int(len(fd_grid)),
                     "fd_grid_source": str(fd_grid_source),
                     "span_hz": float(fd_meta.get("span_hz", 0.0)),
                     "grid_step_hz": float(fd_meta.get("grid_step_hz", 0.0)),
@@ -5330,11 +5444,24 @@ def stap_temporal_core_batched(
                     "cov_train_trim_k_eff": int(k_eff[b].item()) if k_eff is not None else None,
                     "motion_half_span_hz": float(motion_half_span_hz),
                     "msd_lambda": float(msd_lambda_base),
+                    "lambda_conditioned": float(lam_cond[b]),
+                    "lambda_condition_needed": float(lam_need[b]),
                     "msd_lambda_conditioned": float(lam_cond[b]),
                     "msd_lambda_needed": float(lam_need[b]),
+                    "cond_R": float(cond_raw_np[b]),
+                    "cond_loaded": float(cond_loaded_np[b]),
+                    "cov_trace": float(trace_np[b]),
+                    "cov_rank_proxy": float(cov_rank_proxy_np[b]),
+                    "diag_load_requested": float(diag_load),
                     "kc_flow_cap": int(len(fd_grid)),
                     "band_fraction_median": float(band_med[b]),
                     "band_fraction_p90": float(band_p90[b]),
+                    "band_fraction_q50": float(band_med[b]),
+                    "score_q10": float(score_q10[b]),
+                    "score_q50": float(score_q50[b]),
+                    "score_q90": float(score_q90[b]),
+                    "score_mean": float(score_mean[b]),
+                    "score_var": float(score_var[b]),
                     "flow_fraction_tile": flow,
                     "motion_fraction_tile": mot,
                     "alias_fraction_tile": alias,
@@ -5376,6 +5503,7 @@ def pd_temporal_core_batched(
     msd_contrast_alpha: float,
     msd_lambda: Optional[float] = None,
     detector_variant: str = "msd_ratio",
+    whiten_gamma: float = 1.0,
     device: Optional[str] = None,
     use_ref_cov: bool = False,
     fd_span_mode: str = "psd",
@@ -5407,9 +5535,10 @@ def pd_temporal_core_batched(
         _warn_tile_statistic_experimental()
 
     variant = _normalize_detector_variant(detector_variant)
+    whiten_gamma = _normalize_whiten_gamma(whiten_gamma, detector_variant=variant)
     # The unwhitened detector ablation is implemented via the snapshot path
     # (identity whitening). Disable cov-only approximations in this mode.
-    if variant == "unwhitened_ratio":
+    if variant == "unwhitened_ratio" or whiten_gamma < 1.0 - 1e-8:
         tile_statistic = False
 
     # Runtime breakdown (seconds) for profiling.
@@ -5542,6 +5671,8 @@ def pd_temporal_core_batched(
     eye = torch.eye(Lt, device=device, dtype=R_hat.dtype)
     kappa_msd = float(max(kappa_msd, 1.01))
     lam_init = float(msd_lambda) if msd_lambda is not None else float(diag_load)
+    ev_min_post_diag: torch.Tensor | None = None
+    ev_max_post_diag: torch.Tensor | None = None
     with _prof_ctx("stap:lambda"):
         if (
             ev_min_herm is not None
@@ -5570,6 +5701,8 @@ def pd_temporal_core_batched(
             lam_out = torch.maximum(base, lam_needed)
             lam_msd_tensor = lam_out.to(R_hat.dtype)
             lam_needed_tensor = lam_needed.to(R_hat.dtype)
+            ev_min_post_diag = ev_min_post.to(dtype=torch.float32)
+            ev_max_post_diag = ev_max_post.to(dtype=torch.float32)
         elif conditioned_lambda_batch_shared is not None:
             # Preserve manuscript baseline behavior: compute per-tile loading via the
             # shared conditioned-lambda helper (no eigenvalue-bound shortcut).
@@ -5702,17 +5835,12 @@ def pd_temporal_core_batched(
             # Use the same batched whitening + projection path as the full STAP fast core.
             R_for_band = R_hat
             lam_for_band = lam_msd_tensor
-            if variant == "unwhitened_ratio":
-                eye_b = torch.eye(Lt, device=device, dtype=R_hat.dtype).unsqueeze(0).expand(
-                    B, Lt, Lt
-                )
-                R_for_band = eye_b
-                lam_for_band = torch.zeros_like(lam_msd_tensor)
             T_band, sw_pow = _band_energy_whitened_batched(
                 R_for_band,
                 S_B_Lt_N_hw,
                 Ct,
                 lam_for_band,
+                whiten_gamma=whiten_gamma,
                 ridge=msd_ridge,
                 ratio_rho=msd_ratio_rho,
                 kappa_target=kappa_msd,
@@ -5739,6 +5867,7 @@ def pd_temporal_core_batched(
         infos = [{} for _ in range(int(B))]
         for b, d in enumerate(infos):
             d["detector_variant"] = str(variant)
+            d["whiten_gamma"] = float(whiten_gamma)
             d["cov_train_trim_q"] = float(cov_train_trim_q)
             if k_eff is not None:
                 d["cov_train_trim_k_eff"] = int(k_eff[b].item())
@@ -5748,6 +5877,27 @@ def pd_temporal_core_batched(
         score_np = score_out.detach().cpu().numpy().astype(np.float32, copy=False)
         return band_frac_np, score_np, infos
     with _prof_ctx("stap:telemetry"):
+        if ev_min_post_diag is None or ev_max_post_diag is None:
+            eigvals_diag = torch.linalg.eigvalsh(R_hat).real
+            ev_min_post_diag = eigvals_diag[:, 0].to(dtype=torch.float32)
+            ev_max_post_diag = eigvals_diag[:, -1].to(dtype=torch.float32)
+        cond_eps = 1e-12
+        ev_min_np = ev_min_post_diag.detach().cpu().numpy()
+        ev_max_np = ev_max_post_diag.detach().cpu().numpy()
+        lam_cond_np = lam_msd_tensor.real.detach().cpu().numpy()
+        lam_need_np = lam_needed_tensor.real.detach().cpu().numpy()
+        mu_trace_np = mu_trace.detach().cpu().numpy() if mu_trace is not None else np.zeros((B,), dtype=np.float32)
+        trace_np = np.asarray(mu_trace_np, dtype=np.float64) * float(Lt)
+        cond_raw_np = np.where(
+            np.asarray(ev_min_np, dtype=np.float64) > cond_eps,
+            np.asarray(ev_max_np, dtype=np.float64) / np.maximum(np.asarray(ev_min_np, dtype=np.float64), cond_eps),
+            np.inf,
+        )
+        cond_loaded_np = (np.asarray(ev_max_np, dtype=np.float64) + np.asarray(lam_cond_np, dtype=np.float64)) / np.maximum(
+            np.asarray(ev_min_np, dtype=np.float64) + np.asarray(lam_cond_np, dtype=np.float64),
+            cond_eps,
+        )
+        cov_rank_proxy_np = trace_np / np.maximum(np.asarray(ev_max_np, dtype=np.float64), cond_eps)
         band_flat = band_frac_out.reshape(B, -1)
         vals_sorted, _ = torch.sort(band_flat, dim=1)
         K = int(vals_sorted.shape[1])
@@ -5765,12 +5915,36 @@ def pd_temporal_core_batched(
             frac = float(pos - i0)
             band_p90_t = (1.0 - frac) * vals_sorted[:, i0] + frac * vals_sorted[:, i1]
 
+        score_flat = score_out.reshape(B, -1)
+        score_sorted, _ = torch.sort(score_flat, dim=1)
+        Ks = int(score_sorted.shape[1])
+        if Ks <= 0:
+            score_q10_t = torch.zeros((B,), dtype=torch.float32, device=score_flat.device)
+            score_q50_t = score_q10_t
+            score_q90_t = score_q10_t
+        else:
+            def _interp_quantile(sorted_vals: torch.Tensor, q: float) -> torch.Tensor:
+                pos = q * float(Ks - 1)
+                i0 = int(math.floor(pos))
+                i1 = min(Ks - 1, i0 + 1)
+                frac = float(pos - i0)
+                return (1.0 - frac) * sorted_vals[:, i0] + frac * sorted_vals[:, i1]
+
+            score_q10_t = _interp_quantile(score_sorted, 0.10)
+            score_q50_t = _interp_quantile(score_sorted, 0.50)
+            score_q90_t = _interp_quantile(score_sorted, 0.90)
+
         flow_mean_t = band_flat.mean(dim=1)
         band_med = band_med_t.detach().cpu().numpy()
         band_p90 = band_p90_t.detach().cpu().numpy()
+        score_q10 = score_q10_t.detach().cpu().numpy()
+        score_q50 = score_q50_t.detach().cpu().numpy()
+        score_q90 = score_q90_t.detach().cpu().numpy()
+        score_mean = score_flat.mean(dim=1).detach().cpu().numpy()
+        score_var = score_flat.var(dim=1, unbiased=False).detach().cpu().numpy()
         flow_mean = flow_mean_t.detach().cpu().numpy()
-        lam_cond = lam_msd_tensor.real.detach().cpu().numpy()
-        lam_need = lam_needed_tensor.real.detach().cpu().numpy()
+        lam_cond = lam_cond_np
+        lam_need = lam_need_np
 
         if not return_torch:
             band_frac_np = band_frac_out.detach().cpu().numpy().astype(np.float32, copy=False)
@@ -5784,7 +5958,9 @@ def pd_temporal_core_batched(
             info = {
                 "Lt": Lt,
                 "detector_variant": str(variant),
+                "whiten_gamma": float(whiten_gamma),
                 "fd_grid_len": int(len(fd_grid)),
+                "band_Kc": int(len(fd_grid)),
                 "fd_grid_source": str(fd_grid_source),
                 "span_hz": float(fd_meta.get("span_hz", 0.0)),
                 "grid_step_hz": float(fd_meta.get("grid_step_hz", 0.0)),
@@ -5799,11 +5975,24 @@ def pd_temporal_core_batched(
                 "cov_train_trim_k_eff": int(k_eff[b].item()) if k_eff is not None else None,
                 "motion_half_span_hz": float(motion_half_span_hz),
                 "msd_lambda": float(msd_lambda_base),
+                "lambda_conditioned": float(lam_cond[b]),
+                "lambda_condition_needed": float(lam_need[b]),
                 "msd_lambda_conditioned": float(lam_cond[b]),
                 "msd_lambda_needed": float(lam_need[b]),
+                "cond_R": float(cond_raw_np[b]),
+                "cond_loaded": float(cond_loaded_np[b]),
+                "cov_trace": float(trace_np[b]),
+                "cov_rank_proxy": float(cov_rank_proxy_np[b]),
+                "diag_load_requested": float(diag_load),
                 "kc_flow_cap": int(len(fd_grid)),
                 "band_fraction_median": float(band_med[b]),
                 "band_fraction_p90": float(band_p90[b]),
+                "band_fraction_q50": float(band_med[b]),
+                "score_q10": float(score_q10[b]),
+                "score_q50": float(score_q50[b]),
+                "score_q90": float(score_q90[b]),
+                "score_mean": float(score_mean[b]),
+                "score_var": float(score_var[b]),
                 "flow_fraction_tile": flow,
                 "motion_fraction_tile": 0.0,
                 "alias_fraction_tile": alias,

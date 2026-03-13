@@ -145,6 +145,65 @@ def test_tile_fallback_on_invalid_load_mode():
     assert info["score_mode"] in {"none", "msd"}
 
 
+def test_stap_gamma_zero_matches_unwhitened_ratio(monkeypatch):
+    np.random.seed(7)
+    T, h, w = 24, 8, 8
+    prf = 3000.0
+    cube = _tone_cube(T, h, w, prf, fd_hz=400.0, amp=1.5)
+    pd_base = _baseline_pd(cube, hp_modes=1)
+    monkeypatch.setenv("STAP_FAST_PATH", "1")
+
+    mask_flow = np.zeros((h, w), dtype=bool)
+    mask_flow[3:5, 3:5] = True
+    mask_bg = ~mask_flow
+
+    kwargs = dict(
+        tile_hw=(4, 4),
+        stride=4,
+        Lt=4,
+        prf_hz=prf,
+        diag_load=1e-2,
+        estimator="scm",
+        huber_c=5.0,
+        mvdr_load_mode="absolute",
+        mvdr_auto_kappa=40.0,
+        constraint_ridge=0.12,
+        fd_span_rel=(0.2, 0.8),
+        fd_fixed_span_hz=None,
+        constraint_mode="exp+deriv",
+        msd_lambda=2e-2,
+        msd_ridge=0.10,
+        msd_agg_mode="trim10",
+        msd_ratio_rho=0.0,
+        fd_span_mode="psd",
+        grid_step_rel=0.1,
+        min_pts=5,
+        max_pts=7,
+        pd_base_full=pd_base,
+        mask_flow=mask_flow,
+        mask_bg=mask_bg,
+        stap_device="cpu",
+    )
+
+    band_gamma0, score_gamma0, info_gamma0 = _stap_pd(
+        cube,
+        detector_variant="msd_ratio",
+        whiten_gamma=0.0,
+        **kwargs,
+    )
+    band_unwhitened, score_unwhitened, info_unwhitened = _stap_pd(
+        cube,
+        detector_variant="unwhitened_ratio",
+        whiten_gamma=1.0,
+        **kwargs,
+    )
+
+    np.testing.assert_allclose(band_gamma0, band_unwhitened, rtol=1e-6, atol=1e-7)
+    np.testing.assert_allclose(score_gamma0, score_unwhitened, rtol=1e-6, atol=1e-7)
+    assert float(info_gamma0["whiten_gamma"]) == 0.0
+    assert float(info_unwhitened["whiten_gamma"]) == 0.0
+
+
 def test_tile_aggregator_collects_telemetry(tmp_path):
     np.random.seed(1)
     T, H, W = 20, 8, 8

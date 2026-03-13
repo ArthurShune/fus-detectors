@@ -37,6 +37,13 @@ def build_write_acceptance_kwargs(
     hosvd_energy_fracs: tuple[float, float, float] | None,
     stap_conditional_mask: np.ndarray | None,
 ) -> dict[str, Any]:
+    stap_detector_variant = str(getattr(args, "stap_detector_variant", "msd_ratio"))
+    effective_hybrid_rule = (
+        "guard_promote_v1"
+        if stap_detector_variant.strip().lower()
+        in {"adaptive_guard", "adaptive_guard_v1", "guard_promote"}
+        else str(getattr(args, "hybrid_rescue_rule", "guard_frac_v1"))
+    )
     return {
         "out_root": out_root,
         "g": geom,
@@ -70,7 +77,9 @@ def build_write_acceptance_kwargs(
         "msd_ratio_rho": float(args.msd_ratio_rho),
         "motion_half_span_rel": motion_half_span,
         "msd_contrast_alpha": args.msd_contrast_alpha,
-        "stap_detector_variant": str(getattr(args, "stap_detector_variant", "msd_ratio")),
+        "stap_detector_variant": stap_detector_variant,
+        "stap_whiten_gamma": float(getattr(args, "stap_whiten_gamma", 1.0)),
+        "hybrid_rescue_rule": effective_hybrid_rule,
         "tile_debug_limit": args.tile_debug_limit,
         "alias_psd_select_enable": bool(args.alias_psd_select),
         "alias_psd_select_ratio_thresh": float(args.alias_psd_select_ratio),
@@ -184,4 +193,3 @@ def build_write_acceptance_kwargs(
         "micro_vessels": micro_vessels_arr,
         "alias_vessels": alias_vessels_arr,
     }
-

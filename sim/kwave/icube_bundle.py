@@ -52,6 +52,9 @@ def write_acceptance_bundle_from_icube(
     fd_max_pts: int = 11,
     fd_min_abs_hz: float = 0.0,
     msd_lambda: float | None = 0.05,
+    stap_detector_variant: str = "msd_ratio",
+    stap_whiten_gamma: float = 1.0,
+    hybrid_rescue_rule: str = "guard_frac_v1",
     msd_ridge: float = 0.10,
     msd_agg_mode: str = "median",
     msd_ratio_rho: float = 0.05,
@@ -164,6 +167,46 @@ def write_acceptance_bundle_from_icube(
         "alias_center_hz": float(band_ratio_alias_center_hz),
         "alias_width_hz": float(band_ratio_alias_width_hz),
     }
+    variant_requested_norm = str(stap_detector_variant or "msd_ratio").strip().lower()
+    stap_detector_variant_norm = {
+        "msd": "msd_ratio",
+        "ratio": "msd_ratio",
+        "default": "msd_ratio",
+        "stap": "msd_ratio",
+        "whitened_pd": "whitened_power",
+        "power": "whitened_power",
+        "raw": "unwhitened_ratio",
+        "unwhitened": "unwhitened_ratio",
+        "raw_ratio": "unwhitened_ratio",
+        "no_whiten": "unwhitened_ratio",
+        "msd_unwhitened": "unwhitened_ratio",
+        "hybrid": "hybrid_rescue",
+        "hybrid_rescue": "hybrid_rescue",
+        "adaptive_guard": "hybrid_rescue",
+        "adaptive_guard_v1": "hybrid_rescue",
+        "guard_promote": "hybrid_rescue",
+    }.get(variant_requested_norm, variant_requested_norm)
+    if stap_detector_variant_norm not in {"msd_ratio", "whitened_power", "unwhitened_ratio", "hybrid_rescue"}:
+        raise ValueError(
+            f"Unsupported stap_detector_variant={stap_detector_variant!r}. Expected 'msd_ratio', "
+            "'whitened_power', 'unwhitened_ratio', 'hybrid_rescue', or 'adaptive_guard'."
+        )
+    hybrid_rule_cfg = None
+    hybrid_variant_label: str | None = None
+    if stap_detector_variant_norm == "hybrid_rescue":
+        if variant_requested_norm in {"adaptive_guard", "adaptive_guard_v1", "guard_promote"}:
+            hybrid_rule_cfg = kw._normalize_hybrid_rescue_rule("guard_promote_v1")
+            hybrid_variant_label = "adaptive_guard"
+        else:
+            hybrid_rule_cfg = kw._normalize_hybrid_rescue_rule(hybrid_rescue_rule)
+            hybrid_variant_label = "hybrid_rescue"
+    if getattr(kw, "_normalize_whiten_gamma", None) is not None:
+        stap_whiten_gamma = kw._normalize_whiten_gamma(  # type: ignore[attr-defined]
+            stap_whiten_gamma,
+            detector_variant=("msd_ratio" if stap_detector_variant_norm == "hybrid_rescue" else stap_detector_variant_norm),
+        )
+    else:
+        stap_whiten_gamma = float(min(1.0, max(0.0, float(stap_whiten_gamma))))
     br_spec = kw.BandRatioSpec(
         flow_low_hz=float(band_ratio_spec["flow_low_hz"]),
         flow_high_hz=float(band_ratio_spec["flow_high_hz"]),
@@ -455,9 +498,71 @@ def write_acceptance_bundle_from_icube(
         tile_hw,
         tile_stride,
     ).astype(np.int16, copy=False)
+    stap_cond_loaded_map = np.full((H, W), np.nan, dtype=np.float32)
+    stap_cov_rank_proxy_map = np.full((H, W), np.nan, dtype=np.float32)
+    stap_flow_mu_ratio_map = np.full((H, W), np.nan, dtype=np.float32)
+    stap_bg_var_inflation_map = np.full((H, W), np.nan, dtype=np.float32)
+    stap_gamma_flow_map = np.full((H, W), np.nan, dtype=np.float32)
+    stap_gamma_perp_map = np.full((H, W), np.nan, dtype=np.float32)
 
     # ---- STAP PD + optional STAP band-ratio recorder ----
+    hybrid_rescue_mask: np.ndarray | None = None
     if run_stap:
+        def _run_stap_once(
+            *,
+            detector_variant: str,
+            whiten_gamma: float,
+            recorder: kw.BandRatioRecorder | None,
+        ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
+            return kw._stap_pd(
+                cube_for_stap,
+                tile_hw=tile_hw,
+                stride=tile_stride,
+                Lt=Lt,
+                prf_hz=prf_hz,
+                diag_load=diag_load,
+                cov_train_trim_q=stap_cov_train_trim_q,
+                estimator=cov_estimator,
+                huber_c=huber_c,
+                mvdr_load_mode=mvdr_load_mode,
+                mvdr_auto_kappa=mvdr_auto_kappa,
+                constraint_ridge=constraint_ridge,
+                fd_span_mode=fd_span_mode,
+                fd_span_rel=fd_span_rel,
+                fd_fixed_span_hz=fd_fixed_span_hz,
+                constraint_mode=constraint_mode,
+                grid_step_rel=grid_step_rel,
+                min_pts=fd_min_pts,
+                max_pts=fd_max_pts,
+                fd_min_abs_hz=fd_min_abs_hz,
+                msd_lambda=msd_lambda,
+                detector_variant=detector_variant,
+                whiten_gamma=whiten_gamma,
+                msd_ridge=msd_ridge,
+                msd_agg_mode=msd_agg_mode,
+                msd_ratio_rho=msd_ratio_rho,
+                motion_half_span_rel=motion_half_span_rel,
+                msd_contrast_alpha=msd_contrast_alpha,
+                stap_device=stap_device_resolved,
+                tile_batch=tile_batch_eff,
+                pd_base_full=pd_base,
+                mask_flow=mask_flow,
+                mask_bg=mask_bg,
+                conditional_enable=bool(stap_conditional_enable),
+                ka_mode="none",
+                ka_prior_library=None,
+                ka_opts=None,
+                alias_psd_select_enable=alias_psd_select_enable,
+                alias_psd_select_ratio_thresh=alias_psd_select_ratio_thresh,
+                alias_psd_select_bins=alias_psd_select_bins,
+                psd_telemetry=False,
+                psd_tapers=psd_tapers,
+                psd_bandwidth=psd_bandwidth,
+                band_ratio_recorder=recorder,
+                feasibility_mode=feas_mode,
+                band_ratio_spec=dict(band_ratio_spec),
+            )
+
         stap_br_recorder = kw.BandRatioRecorder(
             prf_hz,
             tile_count,
@@ -477,58 +582,102 @@ def write_acceptance_bundle_from_icube(
                     tile_batch_eff = tb
             except Exception:
                 pass
-        pd_stap, stap_scores, stap_info = kw._stap_pd(
-            cube_for_stap,
-            tile_hw=tile_hw,
-            stride=tile_stride,
-            Lt=Lt,
-            prf_hz=prf_hz,
-            diag_load=diag_load,
-            cov_train_trim_q=stap_cov_train_trim_q,
-            estimator=cov_estimator,
-            huber_c=huber_c,
-            mvdr_load_mode=mvdr_load_mode,
-            mvdr_auto_kappa=mvdr_auto_kappa,
-            constraint_ridge=constraint_ridge,
-            fd_span_mode=fd_span_mode,
-            fd_span_rel=fd_span_rel,
-            fd_fixed_span_hz=fd_fixed_span_hz,
-            constraint_mode=constraint_mode,
-            grid_step_rel=grid_step_rel,
-            min_pts=fd_min_pts,
-            max_pts=fd_max_pts,
-            fd_min_abs_hz=fd_min_abs_hz,
-            msd_lambda=msd_lambda,
-            msd_ridge=msd_ridge,
-            msd_agg_mode=msd_agg_mode,
-            msd_ratio_rho=msd_ratio_rho,
-            motion_half_span_rel=motion_half_span_rel,
-            msd_contrast_alpha=msd_contrast_alpha,
-            stap_device=stap_device_resolved,
-            tile_batch=tile_batch_eff,
-            pd_base_full=pd_base,
-            mask_flow=mask_flow,
-            mask_bg=mask_bg,
-            conditional_enable=bool(stap_conditional_enable),
-            ka_mode="none",
-            ka_prior_library=None,
-            ka_opts=None,
-            alias_psd_select_enable=alias_psd_select_enable,
-            alias_psd_select_ratio_thresh=alias_psd_select_ratio_thresh,
-            alias_psd_select_bins=alias_psd_select_bins,
-            psd_telemetry=False,
-            psd_tapers=psd_tapers,
-            psd_bandwidth=psd_bandwidth,
-            band_ratio_recorder=stap_br_recorder,
-            feasibility_mode=feas_mode,
-            band_ratio_spec=dict(band_ratio_spec),
+        core_variant = "msd_ratio" if stap_detector_variant_norm == "hybrid_rescue" else stap_detector_variant_norm
+        core_gamma = float(stap_whiten_gamma)
+        pd_stap, stap_scores, stap_info = _run_stap_once(
+            detector_variant=str(core_variant),
+            whiten_gamma=float(core_gamma),
+            recorder=stap_br_recorder,
         )
+        if stap_detector_variant_norm == "hybrid_rescue":
+            _pd_rescue, rescue_scores, rescue_info = _run_stap_once(
+                detector_variant="unwhitened_ratio",
+                whiten_gamma=0.0,
+                recorder=None,
+            )
+            feature_name = str(hybrid_rule_cfg["feature"]) if hybrid_rule_cfg is not None else "base_guard_frac_map"
+            feature_map = {
+                "base_guard_frac_map": base_guard_frac_map,
+                "base_m_alias_map": base_m_alias_map,
+                "base_band_ratio_map": base_band_ratio_map,
+                "base_peak_freq_map": base_peak_freq_map,
+            }.get(feature_name)
+            if feature_map is None:
+                raise ValueError(f"Unsupported hybrid rescue feature map {feature_name!r}")
+            stap_scores, hybrid_rescue_mask, hybrid_stats = kw._apply_hybrid_rescue_score_map(
+                stap_scores,
+                rescue_scores,
+                feature_name=feature_name,
+                feature_map=feature_map,
+                direction=str(hybrid_rule_cfg["direction"] if hybrid_rule_cfg is not None else ">="),
+                threshold=float(hybrid_rule_cfg["threshold"] if hybrid_rule_cfg is not None else 0.0),
+            )
+            stap_info["hybrid_rescue"] = {
+                "enabled": True,
+                "rule": dict(hybrid_rule_cfg or {}),
+                "stats": hybrid_stats,
+                "advanced_detector_variant": "msd_ratio",
+                "advanced_whiten_gamma": float(stap_whiten_gamma),
+                "rescue_detector_variant": "unwhitened_ratio",
+                "rescue_whiten_gamma": 0.0,
+                "rescue_condR_median": rescue_info.get("median_condR"),
+                "rescue_cond_loaded_median": rescue_info.get("median_cond_loaded"),
+            }
+            stap_info["detector_variant_effective"] = str(hybrid_variant_label or "hybrid_rescue")
+            stap_info["hybrid_rescue_mask_fraction"] = hybrid_stats.get("rescue_fraction")
+        tile_metric_maps = (
+            stap_info.pop("_tile_metric_maps", {}) if isinstance(stap_info, dict) else {}
+        )
+        tile_metric_map_errors = (
+            stap_info.pop("_tile_metric_map_errors", {}) if isinstance(stap_info, dict) else {}
+        )
+        if isinstance(stap_info, dict):
+            stap_info["tile_metric_map_keys"] = (
+                sorted(tile_metric_maps.keys()) if isinstance(tile_metric_maps, dict) else []
+            )
+            if isinstance(tile_metric_map_errors, dict) and tile_metric_map_errors:
+                stap_info["tile_metric_map_errors"] = dict(tile_metric_map_errors)
+            if isinstance(tile_metric_maps, dict):
+                for _k, _v in tile_metric_maps.items():
+                    try:
+                        stap_info[f"tile_metric_{_k}_finite"] = int(
+                            np.isfinite(np.asarray(_v, dtype=np.float32)).sum()
+                        )
+                    except Exception:
+                        stap_info[f"tile_metric_{_k}_finite"] = None
+        if isinstance(tile_metric_maps, dict) and tile_metric_maps:
+            try:
+                stap_cond_loaded_map = np.asarray(tile_metric_maps.get("cond_loaded"), dtype=np.float32)
+                stap_cov_rank_proxy_map = np.asarray(
+                    tile_metric_maps.get("cov_rank_proxy"), dtype=np.float32
+                )
+                stap_flow_mu_ratio_map = np.asarray(
+                    tile_metric_maps.get("flow_mu_ratio"), dtype=np.float32
+                )
+                stap_bg_var_inflation_map = np.asarray(
+                    tile_metric_maps.get("bg_var_inflation"), dtype=np.float32
+                )
+                stap_gamma_flow_map = np.asarray(
+                    tile_metric_maps.get("gamma_flow"), dtype=np.float32
+                )
+                stap_gamma_perp_map = np.asarray(
+                    tile_metric_maps.get("gamma_perp"), dtype=np.float32
+                )
+            except Exception:
+                stap_cond_loaded_map = np.full((H, W), np.nan, dtype=np.float32)
+                stap_cov_rank_proxy_map = np.full((H, W), np.nan, dtype=np.float32)
+                stap_flow_mu_ratio_map = np.full((H, W), np.nan, dtype=np.float32)
+                stap_bg_var_inflation_map = np.full((H, W), np.nan, dtype=np.float32)
+                stap_gamma_flow_map = np.full((H, W), np.nan, dtype=np.float32)
+                stap_gamma_perp_map = np.full((H, W), np.nan, dtype=np.float32)
         # _stap_pd may return ndarray-valued debug/gate payloads that are saved
         # separately in the main k-Wave acceptance harness. Drop them here to keep
         # meta.json JSON-serializable.
         stap_info.pop("_gate_mask_flow", None)
         stap_info.pop("_gate_mask_bg", None)
         stap_info["band_ratio_bands_hz"] = dict(band_ratio_spec)
+        stap_info["detector_variant"] = str(stap_detector_variant_norm)
+        stap_info["whiten_gamma"] = float(stap_whiten_gamma)
         stap_info["band_ratio_mode_requested"] = band_ratio_mode_norm
         stap_info["band_ratio_mode_effective"] = band_ratio_mode_norm
         stap_info["band_ratio_flavor"] = "whitened_mt_logratio" if use_whitened_ratio else "legacy"
@@ -555,6 +704,8 @@ def write_acceptance_bundle_from_icube(
             "stap_ms": 0.0,
             "flow_mask_stats": flow_mask_stats,
             "stap_conditional_enable": bool(stap_conditional_enable),
+            "detector_variant": str(stap_detector_variant_norm),
+            "whiten_gamma": float(stap_whiten_gamma),
             "band_ratio_bands_hz": dict(band_ratio_spec),
             "band_ratio_mode_requested": band_ratio_mode_norm,
             "band_ratio_mode_effective": band_ratio_mode_norm,
@@ -777,11 +928,92 @@ def write_acceptance_bundle_from_icube(
         _save("score_base_kasai", score_base_kasai.astype(np.float32, copy=False))
     _save("score_stap_preka", score_stap_preka_map.astype(np.float32, copy=False))
     _save("score_stap", score_stap_map.astype(np.float32, copy=False))
-    _save_text(
-        "score_name",
-        "score_name.txt",
-        "stap_score_v1: whitened flow matched-subspace ratio (right tail)\n",
-    )
+    if hybrid_rescue_mask is not None:
+        _save("hybrid_rescue_mask", hybrid_rescue_mask.astype(np.bool_, copy=False))
+    if stap_detector_variant_norm == "msd_ratio":
+        if stap_whiten_gamma <= 1e-8:
+            score_name_text = (
+                "stap_score_v1: unwhitened flow matched-subspace ratio (gamma=0; right tail)\n"
+            )
+            score_stap_definition_vnext = (
+                "score_stap_preka is the matched-subspace ratio computed without covariance "
+                "whitening (fractional whitening exponent gamma=0), using the same fixed Pf "
+                "subspace projection; score_stap equals score_stap_preka unless a score-space "
+                "KA veto is applied."
+            )
+        elif stap_whiten_gamma >= 1.0 - 1e-8:
+            score_name_text = "stap_score_v1: whitened flow matched-subspace ratio (right tail)\n"
+            score_stap_definition_vnext = (
+                "score_stap_preka is the STAP matched-subspace ratio computed from the "
+                "baseline-filtered IQ cube via local covariance whitening and fixed Pf "
+                "subspace projection; score_stap equals score_stap_preka unless a "
+                "score-space KA veto is applied."
+            )
+        else:
+            score_name_text = (
+                f"stap_score_v1: fractionally whitened flow matched-subspace ratio (gamma={stap_whiten_gamma:.2f}; right tail)\n"
+            )
+            score_stap_definition_vnext = (
+                "score_stap_preka is a matched-subspace ratio computed with fractional "
+                f"covariance whitening exponent gamma={stap_whiten_gamma:.3f}, interpolating "
+                "between the unwhitened detector (gamma=0) and the full STAP score (gamma=1); "
+                "score_stap equals score_stap_preka unless a score-space KA veto is applied."
+            )
+    elif stap_detector_variant_norm == "whitened_power":
+        if stap_whiten_gamma >= 1.0 - 1e-8:
+            score_name_text = (
+                "stap_score_v1: whitened total power (no band partition; right tail)\n"
+            )
+            score_stap_definition_vnext = (
+                "score_stap_preka is a detector ablation: total whitened slow-time power "
+                "computed by whitening snapshots with local R^{-1/2} and averaging ||y||^2 "
+                "(no Doppler band partition or Pf projection); score_stap equals score_stap_preka "
+                "unless a score-space KA veto is applied."
+            )
+        else:
+            score_name_text = (
+                f"stap_score_v1: fractionally whitened total power (gamma={stap_whiten_gamma:.2f}; right tail)\n"
+            )
+            score_stap_definition_vnext = (
+                "score_stap_preka is a detector ablation: total slow-time power after fractional "
+                f"covariance whitening exponent gamma={stap_whiten_gamma:.3f} (no Doppler band "
+                "partition or Pf projection); score_stap equals score_stap_preka unless a "
+                "score-space KA veto is applied."
+            )
+    elif stap_detector_variant_norm == "unwhitened_ratio":
+        score_name_text = (
+            "stap_score_v1: unwhitened flow matched-subspace ratio (no whitening; right tail)\n"
+        )
+        score_stap_definition_vnext = (
+            "score_stap_preka is a detector ablation: flow-band matched-subspace ratio "
+            "computed without covariance whitening (R=I), using the same fixed Pf "
+            "subspace projection; score_stap equals score_stap_preka unless a "
+            "score-space KA veto is applied."
+        )
+    else:
+        rule_name = str((hybrid_rule_cfg or {}).get("name", "guard_frac_v1"))
+        if hybrid_variant_label == "adaptive_guard":
+            score_name_text = (
+                f"stap_score_v1: adaptive guard-promoted matched-subspace score ({rule_name}; right tail)\n"
+            )
+            score_stap_definition_vnext = (
+                "score_stap_preka is an adaptive detector-family score: the unwhitened flow-band "
+                "matched-subspace ratio is used by default, with promotion onto the advanced "
+                "Huber-whitened matched-subspace score on pixels selected by a fixed baseline "
+                "guard-energy rule. score_stap equals score_stap_preka unless a score-space "
+                "KA veto is applied."
+            )
+        else:
+            score_name_text = (
+                f"stap_score_v1: hybrid rescue matched-subspace score ({rule_name}; right tail)\n"
+            )
+            score_stap_definition_vnext = (
+                "score_stap_preka is a hybrid detector-family score: the advanced Huber-whitened "
+                "matched-subspace score is used by default, with an unwhitened matched-subspace "
+                "rescue branch on pixels selected by a fixed baseline-feature rule. "
+                "score_stap equals score_stap_preka unless a score-space KA veto is applied."
+            )
+    _save_text("score_name", "score_name.txt", score_name_text)
     if pd_stap_pre_ka is not None:
         _save("pd_stap_pre_ka", pd_stap_pre_ka.astype(np.float32, copy=False))
         _save("score_pd_stap_pre_ka", (pd_stap_pre_ka).astype(np.float32, copy=False))
@@ -793,6 +1025,12 @@ def write_acceptance_bundle_from_icube(
     _save("base_peak_freq_map", base_peak_freq_map.astype(np.float32, copy=False))
     _save("base_peak_bin_map", base_peak_bin_map.astype(np.int16, copy=False))
     _save("stap_band_ratio_map", stap_band_ratio_map.astype(np.float32, copy=False))
+    _save("stap_cond_loaded_map", stap_cond_loaded_map.astype(np.float32, copy=False))
+    _save("stap_cov_rank_proxy_map", stap_cov_rank_proxy_map.astype(np.float32, copy=False))
+    _save("stap_flow_mu_ratio_map", stap_flow_mu_ratio_map.astype(np.float32, copy=False))
+    _save("stap_bg_var_inflation_map", stap_bg_var_inflation_map.astype(np.float32, copy=False))
+    _save("stap_gamma_flow_map", stap_gamma_flow_map.astype(np.float32, copy=False))
+    _save("stap_gamma_perp_map", stap_gamma_perp_map.astype(np.float32, copy=False))
     _save("base_score_map", pd_base.astype(np.float32, copy=False))
     _save("stap_score_map", stap_scores.astype(np.float32, copy=False))
     _save("stap_score_pool_map", stap_score_pool_map.astype(np.float32, copy=False))
@@ -803,6 +1041,65 @@ def write_acceptance_bundle_from_icube(
 
     telemetry_combined = dict(baseline_telemetry or {})
     telemetry_combined.update(stap_info)
+    telemetry_combined["stap_detector_variant"] = str(stap_detector_variant_norm)
+    telemetry_combined["stap_whiten_gamma"] = float(stap_whiten_gamma)
+    telemetry_combined["stap_cov_train_trim_q"] = float(stap_cov_train_trim_q)
+    if hybrid_rule_cfg is not None:
+        telemetry_combined["hybrid_rescue_rule"] = dict(hybrid_rule_cfg)
+
+    def _score_proxy_tail_stats(arr: np.ndarray) -> dict[str, float | int | None]:
+        arr = np.asarray(arr, dtype=np.float64)
+        flow_vals = arr[np.asarray(mask_flow, dtype=bool)]
+        bg_vals = arr[np.asarray(mask_bg, dtype=bool)]
+        flow_vals = flow_vals[np.isfinite(flow_vals)]
+        bg_vals = bg_vals[np.isfinite(bg_vals)]
+        out: dict[str, float | int | None] = {
+            "n_flow": int(flow_vals.size),
+            "n_bg": int(bg_vals.size),
+            "flow_q50": float(np.quantile(flow_vals, 0.50)) if flow_vals.size else None,
+            "flow_q90": float(np.quantile(flow_vals, 0.90)) if flow_vals.size else None,
+            "bg_q99": float(np.quantile(bg_vals, 0.99)) if bg_vals.size else None,
+            "bg_q999": float(np.quantile(bg_vals, 0.999)) if bg_vals.size else None,
+        }
+        if flow_vals.size and bg_vals.size:
+            neg_sorted = np.sort(bg_vals)
+            less = np.searchsorted(neg_sorted, flow_vals, side="left")
+            right = np.searchsorted(neg_sorted, flow_vals, side="right")
+            equal = right - less
+            out["auc_flow_bg"] = float(
+                (float(np.sum(less)) + 0.5 * float(np.sum(equal))) / float(flow_vals.size * bg_vals.size)
+            )
+            thr = float(np.quantile(bg_vals, 0.999))
+            out["thr_fpr1e3"] = thr
+            out["flow_hit_fpr1e3"] = float(np.mean(flow_vals >= thr))
+            out["flow_margin_q50_fpr1e3"] = (
+                None if out["flow_q50"] is None else float(out["flow_q50"]) - thr
+            )
+            out["flow_margin_q90_fpr1e3"] = (
+                None if out["flow_q90"] is None else float(out["flow_q90"]) - thr
+            )
+        else:
+            out["auc_flow_bg"] = None
+            out["thr_fpr1e3"] = None
+            out["flow_hit_fpr1e3"] = None
+            out["flow_margin_q50_fpr1e3"] = None
+            out["flow_margin_q90_fpr1e3"] = None
+        return out
+
+    proxy_score_tail_stats: dict[str, dict[str, float | int | None]] = {
+        "base_pd": _score_proxy_tail_stats(pd_base.astype(np.float32, copy=False)),
+        "stap_preka": _score_proxy_tail_stats(score_stap_preka_map.astype(np.float32, copy=False)),
+        "stap_post": _score_proxy_tail_stats(score_stap_map.astype(np.float32, copy=False)),
+    }
+    if score_base_pdlog is not None:
+        proxy_score_tail_stats["base_pdlog"] = _score_proxy_tail_stats(
+            score_base_pdlog.astype(np.float32, copy=False)
+        )
+    if score_base_kasai is not None:
+        proxy_score_tail_stats["base_kasai"] = _score_proxy_tail_stats(
+            score_base_kasai.astype(np.float32, copy=False)
+        )
+    telemetry_combined["proxy_score_tail_stats"] = proxy_score_tail_stats
 
     # ---- Meta ----
     meta: dict[str, Any] = {
@@ -817,7 +1114,12 @@ def write_acceptance_bundle_from_icube(
         "run_stap": bool(run_stap),
         "tile_hw": [int(tile_hw[0]), int(tile_hw[1])],
         "tile_stride": int(tile_stride),
-        "score_stats": {"mode": str((score_mode or "pd").strip().lower())},
+        "score_stats": {
+            "mode": str((score_mode or "pd").strip().lower()),
+            "stap_detector_variant": str(stap_detector_variant_norm),
+            "stap_whiten_gamma": float(stap_whiten_gamma),
+            "hybrid_rescue_rule": (dict(hybrid_rule_cfg) if hybrid_rule_cfg is not None else None),
+        },
         "stap_conditional_enable": bool(stap_conditional_enable),
         "score_vnext": {
             "score_files": {
@@ -834,12 +1136,10 @@ def write_acceptance_bundle_from_icube(
                 "baseline extras may include score_base_pdlog (log power Doppler) "
                 "and score_base_kasai (log |lag-1 autocorr|, Kasai power)."
             ),
-            "score_stap_definition": (
-                "score_stap_preka is the STAP matched-subspace ratio computed from the "
-                "baseline-filtered IQ cube via local covariance whitening and fixed Pf "
-                "subspace projection; score_stap equals score_stap_preka unless a "
-                "score-space KA veto is applied."
-            ),
+            "score_stap_definition": score_stap_definition_vnext,
+            "stap_detector_variant": str(stap_detector_variant_norm),
+            "stap_whiten_gamma": float(stap_whiten_gamma),
+            "hybrid_rescue_rule": (dict(hybrid_rule_cfg) if hybrid_rule_cfg is not None else None),
         },
         "pd_mode": {
             "pd_files": {
