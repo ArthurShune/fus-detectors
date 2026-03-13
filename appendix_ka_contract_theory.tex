@@ -3,25 +3,8 @@
 
 In this part we describe regime conditions and operator-level sufficient structure for a knowledge-aided (KA) temporal covariance transform layered on top of a baseline slow-time detector. The analysis is formulated in terms of abstract band projectors $(\Po,\Pf,\Pg,\Pa)$, alias features, and score distributions, and does not depend on any particular imaging modality. Only in later sections do we instantiate these conditions for functional ultrasound (fUS) brain imaging with concrete band choices, acquisition parameters, and baselines.
 
-\subsection*{How to read this appendix (plain-English map)}
-This appendix lists explicit preconditions under which the KA prior is allowed to modify scores; if any precondition fails, the prior is disabled ($w\equiv 1$; KA off). The labels below are grouped by purpose.
-
-\begin{table}[t]
-\centering
-\small
-\begin{tabular}{p{2.2cm} p{12.4cm}}
-\hline
-Label group & Plain-English meaning (what it checks) \\
-\hline
-R--* & Regime preconditions: do the bands exist, do risk features vary, and is there tail headroom worth regularizing? \\
-BG--* & Band geometry: after discretization, are Pf/guard/Pa non-empty and non-overlapping for the chosen (PRF, $T$)? \\
-OC--* & Operator/covariance constraints: KA can only apply bounded, bandwise structure without uncontrolled mixing or conditioning pathologies. \\
-G--* & Gating/localization: KA is allowed to act only where artifacts are likely and positives are unlikely (protected/do-not-penalize set preserved; scores unchanged). \\
-Safety--* & Safety guards: if any check indicates score inflation or loss of invariance, KA is forced off. \\
-\hline
-\end{tabular}
-\caption{Appendix label groups in plain English. Failing any condition triggers a conservative fallback ($w=1$), which is an intended success mode out of regime.}
-\end{table}
+\subsection*{How to read this appendix}
+A plain-language glossary for the appendix labels appears first in Appendix~\ref{app:appendix-guide}. This appendix then states the formal preconditions under which the optional shrink-only penalty layer is allowed to modify scores; if any precondition fails, the layer is disabled ($w\equiv 1$).
 
 \begin{figure}[t]
 \centering
