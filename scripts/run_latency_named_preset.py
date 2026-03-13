@@ -139,7 +139,7 @@ def _render_tex(out_tex: Path, rows: list[ScenarioRow], *, preset_name: str) -> 
             "}",
             (
                 "\\caption{Steady-state latency summary on an NVIDIA GeForce RTX 4080 SUPER 16GB "
-                "for the final detector hierarchy evaluated in this manuscript. Times are means over "
+                "for the final detector family evaluated in this manuscript. Times are means over "
                 "windows/frames 2..N, exclude disk I/O, and compare baseline and detector stages "
                 "under the reported detector configuration rather than under an earlier "
                 "whitening-heavy timing setup.}"
