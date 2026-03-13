@@ -24,6 +24,8 @@ from scipy.ndimage import binary_dilation, binary_erosion, convolve1d
 from scipy.signal import hilbert
 from scipy.signal.windows import dpss
 
+_FFT_SHIFT_GRID_CACHE: dict[tuple[int, int], tuple[np.ndarray, np.ndarray]] = {}
+
 try:
     import torch
 except Exception:  # pragma: no cover - torch optional
@@ -2538,14 +2540,21 @@ def _baseline_pd(Icube: np.ndarray, hp_modes: int = 1) -> np.ndarray:
 
 
 def _phasecorr_shift(
-    ref: np.ndarray, img: np.ndarray, upsample: int = 4
+    ref: np.ndarray,
+    img: np.ndarray,
+    upsample: int = 4,
+    *,
+    ref_fft: np.ndarray | None = None,
 ) -> tuple[float, float, float]:
     """Rigid sub-pixel shift between ref and img via phase correlation (dy, dx, psr)."""
-    ref_abs = np.abs(ref)
     img_abs = np.abs(img)
-    H, W = ref_abs.shape
-
-    F1 = np.fft.fft2(ref_abs)
+    if ref_fft is None:
+        ref_abs = np.abs(ref)
+        F1 = np.fft.fft2(ref_abs)
+        H, W = ref_abs.shape
+    else:
+        F1 = ref_fft
+        H, W = ref.shape
     F2 = np.fft.fft2(img_abs)
     eps = 1e-12
     cps = F1 * np.conj(F2)
@@ -2594,8 +2603,14 @@ def _phasecorr_shift(
 def _fft_shift_apply(img: np.ndarray, dy: float, dx: float) -> np.ndarray:
     """Apply fractional shift to a complex image via Fourier shift theorem."""
     H, W = img.shape
-    ky = np.fft.fftfreq(H)[:, None]
-    kx = np.fft.fftfreq(W)[None, :]
+    cache_key = (int(H), int(W))
+    cached = _FFT_SHIFT_GRID_CACHE.get(cache_key)
+    if cached is None:
+        ky = np.fft.fftfreq(H)[:, None]
+        kx = np.fft.fftfreq(W)[None, :]
+        _FFT_SHIFT_GRID_CACHE[cache_key] = (ky, kx)
+    else:
+        ky, kx = cached
     phase = np.exp(-2j * np.pi * (ky * dy + kx * dx))
     return np.fft.ifft2(np.fft.fft2(img) * phase).astype(np.complex64)
 
@@ -2634,6 +2649,12 @@ def _register_stack_phasecorr_torch(
     }
     if not reg_enable:
         return cube, telemetry
+
+    zero_shift_eps_env = os.getenv("MC_SVD_REG_ZERO_SHIFT_EPS", "").strip()
+    try:
+        zero_shift_eps = max(0.0, float(zero_shift_eps_env)) if zero_shift_eps_env else 1e-6
+    except Exception:
+        zero_shift_eps = 1e-6
 
     dev = cube.device
     if cube.dtype != torch.complex64:
@@ -2718,18 +2739,27 @@ def _register_stack_phasecorr_torch(
     if bool(fail.any()):
         dy = dy.masked_fill(fail, 0.0)
         dx = dx.masked_fill(fail, 0.0)
+    zero_mask = (dy.abs() <= float(zero_shift_eps)) & (dx.abs() <= float(zero_shift_eps))
+    if bool(zero_mask.any()):
+        dy = dy.masked_fill(zero_mask, 0.0)
+        dx = dx.masked_fill(zero_mask, 0.0)
 
     # Apply fractional shift to the complex frames using the Fourier shift theorem.
-    ky = torch.fft.fftfreq(H, device=dev, dtype=torch.float32).reshape(H, 1)
-    kx = torch.fft.fftfreq(W, device=dev, dtype=torch.float32).reshape(1, W)
-    dy_b = dy.reshape(T, 1, 1)
-    dx_b = dx.reshape(T, 1, 1)
-    phase_y = torch.exp((-2j * math.pi) * ky.unsqueeze(0) * dy_b)  # (T,H,1)
-    phase_x = torch.exp((-2j * math.pi) * kx.unsqueeze(0) * dx_b)  # (T,1,W)
-    cube_fft = torch.fft.fft2(cube)
-    cube_fft = cube_fft * phase_y
-    cube_fft = cube_fft * phase_x
-    reg_cube = torch.fft.ifft2(cube_fft).to(dtype=torch.complex64)
+    if bool(zero_mask.all()):
+        reg_cube = cube.to(dtype=torch.complex64)
+    else:
+        ky = torch.fft.fftfreq(H, device=dev, dtype=torch.float32).reshape(H, 1)
+        kx = torch.fft.fftfreq(W, device=dev, dtype=torch.float32).reshape(1, W)
+        reg_cube = cube.to(dtype=torch.complex64).clone()
+        nonzero_idx = (~zero_mask).nonzero(as_tuple=False).flatten()
+        dy_b = dy[nonzero_idx].reshape(-1, 1, 1)
+        dx_b = dx[nonzero_idx].reshape(-1, 1, 1)
+        phase_y = torch.exp((-2j * math.pi) * ky.unsqueeze(0) * dy_b)
+        phase_x = torch.exp((-2j * math.pi) * kx.unsqueeze(0) * dx_b)
+        cube_fft = torch.fft.fft2(cube[nonzero_idx])
+        cube_fft = cube_fft * phase_y
+        cube_fft = cube_fft * phase_x
+        reg_cube[nonzero_idx] = torch.fft.ifft2(cube_fft).to(dtype=torch.complex64)
 
     mags = torch.sqrt(dy * dy + dx * dx)
     failures = int(fail.sum().item()) if T else 0
@@ -2796,22 +2826,33 @@ def _register_stack_phasecorr(
     if not reg_enable:
         return cube, telemetry
 
+    zero_shift_eps_env = os.getenv("MC_SVD_REG_ZERO_SHIFT_EPS", "").strip()
+    try:
+        zero_shift_eps = max(0.0, float(zero_shift_eps_env)) if zero_shift_eps_env else 1e-6
+    except Exception:
+        zero_shift_eps = 1e-6
+
     if ref_strategy == "median":
         ref = np.median(np.abs(cube), axis=0).astype(np.float32)
     else:
         ref = np.abs(cube[0]).astype(np.float32)
 
+    ref_fft = np.fft.fft2(ref)
     shifts = []
     psr_vals: list[float] = []
     reg_cube = np.empty_like(cube)
     failures = 0
     for idx in range(T):
-        dy, dx, psr = _phasecorr_shift(ref, cube[idx], upsample=upsample)
+        dy, dx, psr = _phasecorr_shift(ref, cube[idx], upsample=upsample, ref_fft=ref_fft)
         psr_vals.append(float(psr) if np.isfinite(psr) else float("nan"))
         if not np.isfinite(psr) or psr < psr_thresh:
             dy = dx = 0.0
             failures += 1
-        reg_cube[idx] = _fft_shift_apply(cube[idx], dy, dx)
+        if abs(dy) <= zero_shift_eps and abs(dx) <= zero_shift_eps:
+            dy = dx = 0.0
+            reg_cube[idx] = cube[idx].astype(np.complex64, copy=False)
+        else:
+            reg_cube[idx] = _fft_shift_apply(cube[idx], dy, dx)
         shifts.append((dy, dx))
 
     mags = [math.hypot(dy, dx) for dy, dx in shifts]
@@ -7894,7 +7935,11 @@ def _stap_pd(
                 B_total = int(nY * nX)
                 band_frac_flat = band_frac_tiles.view(B_total, th, tw)
                 score_flat = score_tiles.view(B_total, th, tw)
-                base_tiles_f64 = base_tiles.to(dtype=torch.float64).view(B_total, th, tw)
+                base_tiles_f64 = (
+                    base_tiles.to(dtype=torch.float64).view(B_total, th, tw)
+                    if not latency_mode
+                    else None
+                )
                 flow_tiles_flat = flow_tiles.view(B_total, th, tw) if flow_tiles is not None else None
                 bg_tiles_flat = bg_tiles.view(B_total, th, tw) if bg_tiles is not None else None
                 tile_is_bg_flat = tile_is_bg.reshape(-1) if tile_is_bg is not None else None
@@ -7939,7 +7984,12 @@ def _stap_pd(
                     ):
                         cube_active = cube_tiles[:, y_inds, :, x_inds, :]  # (B,T,th,tw) contiguous via gather
                     graph_pad_env = os.getenv("STAP_FAST_CUDA_GRAPH_PAD", "").strip().lower()
-                    graph_pad_enabled = graph_pad_env in {"1", "true", "yes", "on"}
+                    if graph_pad_env:
+                        graph_pad_enabled = graph_pad_env in {"1", "true", "yes", "on"}
+                    else:
+                        graph_pad_enabled = bool(
+                            latency_mode and str(dev).lower().startswith("cuda")
+                        )
                     pad_to_batch = int(target_tiles) if graph_pad_enabled else int(chunk_size)
                     if pad_to_batch < int(chunk_size):
                         pad_to_batch = int(chunk_size)
@@ -8052,6 +8102,23 @@ def _stap_pd(
                     # ---- Per-tile info augmentation (vectorized stats; written into dicts) ----
                     t0_post = time.perf_counter()
                     if info_act is None:
+                        t_post_total += time.perf_counter() - t0_post
+                        continue
+                    if latency_mode:
+                        forced_fast_chunk = bool(str(dev).lower().startswith("cuda"))
+                        graph_used_chunk = bool(
+                            use_graph_unfold
+                            and _stap_fast_cuda_graph_enabled(batch_size=int(cube_active_run.shape[0]))
+                            and bool(getattr(cube_active_run, "is_cuda", False))
+                        )
+                        for info_tile in info_act:
+                            info_tile = dict(info_tile or {})
+                            info_tile.setdefault("stap_fast_path_used", True)
+                            info_tile.setdefault("stap_fast_attempted", True)
+                            info_tile.setdefault("stap_fast_failed", False)
+                            info_tile.setdefault("stap_fast_forced", forced_fast_chunk)
+                            info_tile.setdefault("stap_fast_cuda_graph", graph_used_chunk)
+                            tile_infos.append(info_tile)
                         t_post_total += time.perf_counter() - t0_post
                         continue
 

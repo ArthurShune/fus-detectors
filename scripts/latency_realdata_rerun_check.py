@@ -123,6 +123,12 @@ def _mean_over(entries: List[Dict[str, Any]], key: str) -> float | None:
     return float(sum(vals) / float(len(vals)))
 
 
+def _detector_time_key(entries: List[Dict[str, Any]]) -> str:
+    if any("stap_total_ms" in d for d in entries):
+        return "stap_total_ms"
+    return "stap_ms"
+
+
 def _print_cold_steady(label: str, teles: List[Dict[str, Any]], *, keys: List[str]) -> None:
     if not teles:
         raise ValueError(f"No telemetry entries for {label}")
@@ -317,15 +323,22 @@ def _run_shin(args: argparse.Namespace) -> Dict[str, Any]:
     tele_full = _run_variant(variant_root=run_root_full, conditional=False)
     tele_cond = _run_variant(variant_root=run_root_cond, conditional=True)
 
-    keys = ["baseline_ms", "reg_ms", "svd_ms", "stap_ms", "stap_fast_path_used", "tile_count"]
-    _print_cold_steady("shin stap_full", tele_full, keys=keys)
-    _print_cold_steady("shin stap_conditional", tele_cond, keys=keys)
+    detector_key_full = _detector_time_key(tele_full)
+    detector_key_cond = _detector_time_key(tele_cond)
+    keys_full = ["baseline_ms", "reg_ms", "svd_ms", detector_key_full, "stap_fast_path_used", "tile_count"]
+    keys_cond = ["baseline_ms", "reg_ms", "svd_ms", detector_key_cond, "stap_fast_path_used", "tile_count"]
+    _print_cold_steady("shin stap_full", tele_full, keys=keys_full)
+    _print_cold_steady("shin stap_conditional", tele_cond, keys=keys_cond)
     _print_cuda_profile("shin stap_full", tele_full)
     _print_cuda_profile("shin stap_conditional", tele_cond)
 
     base_steady_ms = _mean_over(tele_full[1:] if len(tele_full) > 1 else tele_full, "baseline_ms")
-    stap_full_steady_ms = _mean_over(tele_full[1:] if len(tele_full) > 1 else tele_full, "stap_ms")
-    stap_cond_steady_ms = _mean_over(tele_cond[1:] if len(tele_cond) > 1 else tele_cond, "stap_ms")
+    stap_full_steady_ms = _mean_over(
+        tele_full[1:] if len(tele_full) > 1 else tele_full, detector_key_full
+    )
+    stap_cond_steady_ms = _mean_over(
+        tele_cond[1:] if len(tele_cond) > 1 else tele_cond, detector_key_cond
+    )
 
     return {
         "regime": "Shin RatBrain Fig3",
@@ -447,11 +460,12 @@ def _run_gammex(args: argparse.Namespace) -> Dict[str, Any]:
             )
             teles.append(_load_telemetry(Path(paths["meta"])))
 
-        keys = ["baseline_ms", "svd_ms", "stap_ms", "stap_fast_path_used", "tile_count"]
+        detector_key = _detector_time_key(teles)
+        keys = ["baseline_ms", "svd_ms", detector_key, "stap_fast_path_used", "tile_count"]
         _print_cold_steady(f"gammex {view_name}", teles, keys=keys)
         _print_cuda_profile(f"gammex {view_name}", teles)
         base_steady_ms = _mean_over(teles[1:], "baseline_ms")
-        stap_steady_ms = _mean_over(teles[1:], "stap_ms")
+        stap_steady_ms = _mean_over(teles[1:], detector_key)
         return {
             "view": view_name,
             "frames": frame_indices,

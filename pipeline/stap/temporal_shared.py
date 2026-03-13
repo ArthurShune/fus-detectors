@@ -27,16 +27,16 @@ except Exception:  # pragma: no cover - during partial imports
     robust_covariance = None  # type: ignore
 
 
-def build_temporal_hankels_batch(
+def _prepare_temporal_hankel_stack(
     cube_B_T_hw: np.ndarray | "torch.Tensor",
     Lt: int,
     *,
     center: bool = True,
     device: str | None = None,
     dtype: "torch.dtype" = None,
-) -> Tuple["torch.Tensor", "torch.Tensor"]:
+) -> "torch.Tensor":
     """
-    Batched Hankel construction and pooled SCM covariance.
+    Batched Hankel construction in canonical `(B, Lt, N, H, W)` layout.
 
     Parameters
     ----------
@@ -47,7 +47,7 @@ def build_temporal_hankels_batch(
         Subtract per-row mean across Hankel columns.
     """
     if torch is None:  # pragma: no cover - torch unavailable
-        raise ImportError("torch is required for build_temporal_hankels_batch")
+        raise ImportError("torch is required for temporal Hankel helpers")
     x = torch.as_tensor(cube_B_T_hw)
     if dtype is not None:
         x = x.to(dtype=dtype)
@@ -95,11 +95,72 @@ def build_temporal_hankels_batch(
         S = S.index_select(2, idx).contiguous()
     if center:
         S = S - S.mean(dim=2, keepdim=True)
+    return S
+
+
+def build_temporal_hankels_batch(
+    cube_B_T_hw: np.ndarray | "torch.Tensor",
+    Lt: int,
+    *,
+    center: bool = True,
+    device: str | None = None,
+    dtype: "torch.dtype" = None,
+) -> Tuple["torch.Tensor", "torch.Tensor"]:
+    """
+    Batched Hankel construction and pooled SCM covariance.
+
+    Parameters
+    ----------
+    cube_B_T_hw : (B,T,H,W) array/tensor (B can be 1 for slow path).
+    Lt : int
+        Temporal aperture.
+    center : bool
+        Subtract per-row mean across Hankel columns.
+    """
+    S = _prepare_temporal_hankel_stack(
+        cube_B_T_hw,
+        Lt,
+        center=center,
+        device=device,
+        dtype=dtype,
+    )
+    B, Lt, _, _, _ = S.shape
 
     # SCM pooled per tile: flatten spatial + snapshot dims
     S_flat = S.permute(0, 1, 3, 4, 2).contiguous().view(B, Lt, -1)
     R_scm = torch.matmul(S_flat, S_flat.conj().transpose(-2, -1)) / float(S_flat.shape[-1])
     return S, R_scm
+
+
+def build_temporal_hankels_flat_batch(
+    cube_B_T_hw: np.ndarray | "torch.Tensor",
+    Lt: int,
+    *,
+    center: bool = True,
+    device: str | None = None,
+    dtype: "torch.dtype" = None,
+) -> Tuple["torch.Tensor", int, int, int]:
+    """
+    Batched Hankel construction for direct-score paths that only need flattened snapshots.
+
+    Returns
+    -------
+    S_flat : (B, Lt, H*W*N) tensor
+        Flattened snapshots using the same historical `(H, W, N)` order as the
+        full fast-path helpers.
+    N, H, W : int
+        Snapshot count and spatial tile shape needed to reshape detector outputs.
+    """
+    S = _prepare_temporal_hankel_stack(
+        cube_B_T_hw,
+        Lt,
+        center=center,
+        device=device,
+        dtype=dtype,
+    )
+    B, Lt, N, h, w = S.shape
+    S_flat = S.permute(0, 1, 3, 4, 2).contiguous().view(B, Lt, -1)
+    return S_flat, int(N), int(h), int(w)
 
 
 def robust_temporal_cov_batch(
