@@ -541,6 +541,26 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--stap-device", type=str, default="cuda")
     ap.add_argument("--stap-debug-samples", type=int, default=0)
     ap.add_argument(
+        "--stap-detector-variant",
+        type=str,
+        default="adaptive_guard",
+        choices=["msd_ratio", "whitened_power", "unwhitened_ratio", "hybrid_rescue", "adaptive_guard"],
+        help="Detector-family mode to replay/profile (default: %(default)s).",
+    )
+    ap.add_argument(
+        "--stap-whiten-gamma",
+        type=float,
+        default=1.0,
+        help="Whitening exponent for msd_ratio / hybrid specialist branch (default: %(default)s).",
+    )
+    ap.add_argument(
+        "--hybrid-rescue-rule",
+        type=str,
+        default="guard_promote_v1",
+        choices=["guard_frac_v1", "alias_rescue_v1", "band_ratio_v1", "guard_promote_v1"],
+        help="Frozen routing rule used by hybrid/adaptive detector variants (default: %(default)s).",
+    )
+    ap.add_argument(
         "--baseline",
         type=str,
         default="mc_svd",
@@ -677,6 +697,16 @@ def main() -> None:
         extra_replay_args.append("--stap-conditional-enable")
     else:
         extra_replay_args.append("--stap-conditional-disable")
+    extra_replay_args.extend(
+        [
+            "--stap-detector-variant",
+            str(args.stap_detector_variant),
+            "--stap-whiten-gamma",
+            str(float(args.stap_whiten_gamma)),
+            "--hybrid-rescue-rule",
+            str(args.hybrid_rescue_rule),
+        ]
+    )
     extra_replay_args.extend(shlex.split(str(args.replay_extra or "").strip()))
 
     # Force debug off in both modes; debug capture disables fast paths by design.
@@ -692,6 +722,8 @@ def main() -> None:
         # Ensure fast path is enabled for both variants (replay may already set defaults).
         "STAP_FAST_PATH": "1",
         "STAP_FAST_PD_ONLY": "1",
+        "STAP_FAST_TELEMETRY": "0",
+        "STAP_LATENCY_MODE": "1",
         # Force CUDA-graph capture OFF for legacy timings, regardless of caller env.
         # (Optimized timings should measure replay/steady-state and exclude capture
         # cold effects via windows 2..N.)
@@ -704,6 +736,9 @@ def main() -> None:
         "MC_SVD_TORCH_RETURN_CUBE": "1",
         "STAP_FAST_PATH": "1",
         "STAP_FAST_PD_ONLY": "1",
+        "STAP_FAST_TELEMETRY": "0",
+        "STAP_LATENCY_MODE": "1",
+        "STAP_FAST_CUDA_GRAPH_PAD": "1",
         # Force CUDA-graph capture ON for optimized timings, regardless of caller env.
         "STAP_FAST_CUDA_GRAPH": "1",
     }

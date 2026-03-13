@@ -513,6 +513,9 @@ def write_acceptance_bundle_from_icube(
             detector_variant: str,
             whiten_gamma: float,
             recorder: kw.BandRatioRecorder | None,
+            conditional_mask_flow: np.ndarray | None = None,
+            conditional_mask_bg: np.ndarray | None = None,
+            conditional_enable_override: bool | None = None,
         ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
             return kw._stap_pd(
                 cube_for_stap,
@@ -546,9 +549,13 @@ def write_acceptance_bundle_from_icube(
                 stap_device=stap_device_resolved,
                 tile_batch=tile_batch_eff,
                 pd_base_full=pd_base,
-                mask_flow=mask_flow,
-                mask_bg=mask_bg,
-                conditional_enable=bool(stap_conditional_enable),
+                mask_flow=conditional_mask_flow if conditional_mask_flow is not None else mask_flow,
+                mask_bg=conditional_mask_bg if conditional_mask_bg is not None else mask_bg,
+                conditional_enable=(
+                    bool(conditional_enable_override)
+                    if conditional_enable_override is not None
+                    else bool(stap_conditional_enable)
+                ),
                 ka_mode="none",
                 ka_prior_library=None,
                 ka_opts=None,
@@ -562,6 +569,24 @@ def write_acceptance_bundle_from_icube(
                 feasibility_mode=feas_mode,
                 band_ratio_spec=dict(band_ratio_spec),
             )
+
+        def _merge_branch_info(
+            primary_info: dict[str, Any],
+            secondary_info: dict[str, Any] | None,
+        ) -> dict[str, Any]:
+            merged = dict(primary_info or {})
+            if not secondary_info:
+                return merged
+            for key in ("stap_extract_ms", "stap_batch_proc_ms", "stap_post_ms", "stap_total_ms"):
+                v0 = float(merged.get(key, 0.0) or 0.0)
+                v1 = float(secondary_info.get(key, 0.0) or 0.0)
+                if v0 or v1:
+                    merged[key] = v0 + v1
+            merged["stap_fast_path_used"] = bool(
+                merged.get("stap_fast_path_used", False)
+                or secondary_info.get("stap_fast_path_used", False)
+            )
+            return merged
 
         stap_br_recorder = kw.BandRatioRecorder(
             prf_hz,
@@ -584,34 +609,51 @@ def write_acceptance_bundle_from_icube(
                 pass
         core_variant = "msd_ratio" if stap_detector_variant_norm == "hybrid_rescue" else stap_detector_variant_norm
         core_gamma = float(stap_whiten_gamma)
-        pd_stap, stap_scores, stap_info = _run_stap_once(
-            detector_variant=str(core_variant),
-            whiten_gamma=float(core_gamma),
-            recorder=stap_br_recorder,
-        )
-        if stap_detector_variant_norm == "hybrid_rescue":
-            _pd_rescue, rescue_scores, rescue_info = _run_stap_once(
+        if stap_detector_variant_norm == "hybrid_rescue" and hybrid_variant_label == "adaptive_guard":
+            pd_stap, stap_scores, rescue_info = _run_stap_once(
                 detector_variant="unwhitened_ratio",
                 whiten_gamma=0.0,
                 recorder=None,
             )
-            feature_name = str(hybrid_rule_cfg["feature"]) if hybrid_rule_cfg is not None else "base_guard_frac_map"
-            feature_map = {
-                "base_guard_frac_map": base_guard_frac_map,
-                "base_m_alias_map": base_m_alias_map,
-                "base_band_ratio_map": base_band_ratio_map,
-                "base_peak_freq_map": base_peak_freq_map,
-            }.get(feature_name)
-            if feature_map is None:
-                raise ValueError(f"Unsupported hybrid rescue feature map {feature_name!r}")
-            stap_scores, hybrid_rescue_mask, hybrid_stats = kw._apply_hybrid_rescue_score_map(
-                stap_scores,
-                rescue_scores,
-                feature_name=feature_name,
-                feature_map=feature_map,
-                direction=str(hybrid_rule_cfg["direction"] if hybrid_rule_cfg is not None else ">="),
-                threshold=float(hybrid_rule_cfg["threshold"] if hybrid_rule_cfg is not None else 0.0),
+            choose_advanced = kw._hybrid_choose_advanced_mask(
+                base_guard_frac_map,
+                direction=str((hybrid_rule_cfg or {}).get("direction", ">=")),
+                threshold=float((hybrid_rule_cfg or {}).get("threshold", 0.0)),
+                prefer_advanced_on_invalid=True,
             )
+            rescue_scores = stap_scores.copy()
+            rescue_pd = pd_stap.copy()
+            rescue_mask = (~choose_advanced).astype(np.bool_, copy=False)
+            hybrid_stats = {
+                "feature": str((hybrid_rule_cfg or {}).get("feature", "base_guard_frac_map")),
+                "direction": str((hybrid_rule_cfg or {}).get("direction", ">=")),
+                "threshold": float((hybrid_rule_cfg or {}).get("threshold", 0.0)),
+                "prefer_advanced_on_invalid": True,
+                "advanced_fraction": float(np.mean(choose_advanced)) if choose_advanced.size else None,
+                "rescue_fraction": float(np.mean(rescue_mask)) if rescue_mask.size else None,
+                "rescue_pixels": int(np.count_nonzero(rescue_mask)),
+                "advanced_pixels": int(np.count_nonzero(choose_advanced)),
+            }
+            promote_fraction = float(hybrid_stats["advanced_fraction"] or 0.0)
+            if bool(np.any(choose_advanced)):
+                pd_promote, score_promote, promote_info = _run_stap_once(
+                    detector_variant="msd_ratio",
+                    whiten_gamma=float(core_gamma),
+                    recorder=stap_br_recorder,
+                    conditional_mask_flow=choose_advanced,
+                    conditional_mask_bg=~choose_advanced,
+                    conditional_enable_override=True,
+                )
+                pd_stap = np.where(choose_advanced, pd_promote, rescue_pd).astype(
+                    np.float32, copy=False
+                )
+                stap_scores = np.where(choose_advanced, score_promote, rescue_scores).astype(
+                    np.float32, copy=False
+                )
+                stap_info = _merge_branch_info(rescue_info, promote_info)
+            else:
+                stap_info = dict(rescue_info)
+            hybrid_rescue_mask = rescue_mask
             stap_info["hybrid_rescue"] = {
                 "enabled": True,
                 "rule": dict(hybrid_rule_cfg or {}),
@@ -622,9 +664,54 @@ def write_acceptance_bundle_from_icube(
                 "rescue_whiten_gamma": 0.0,
                 "rescue_condR_median": rescue_info.get("median_condR"),
                 "rescue_cond_loaded_median": rescue_info.get("median_cond_loaded"),
+                "promote_fraction": promote_fraction,
+                "promote_active": bool(np.any(choose_advanced)),
             }
             stap_info["detector_variant_effective"] = str(hybrid_variant_label or "hybrid_rescue")
             stap_info["hybrid_rescue_mask_fraction"] = hybrid_stats.get("rescue_fraction")
+            stap_info["adaptive_guard_promote_fraction"] = promote_fraction
+        else:
+            pd_stap, stap_scores, stap_info = _run_stap_once(
+                detector_variant=str(core_variant),
+                whiten_gamma=float(core_gamma),
+                recorder=stap_br_recorder,
+            )
+            if stap_detector_variant_norm == "hybrid_rescue":
+                _pd_rescue, rescue_scores, rescue_info = _run_stap_once(
+                    detector_variant="unwhitened_ratio",
+                    whiten_gamma=0.0,
+                    recorder=None,
+                )
+                feature_name = str(hybrid_rule_cfg["feature"]) if hybrid_rule_cfg is not None else "base_guard_frac_map"
+                feature_map = {
+                    "base_guard_frac_map": base_guard_frac_map,
+                    "base_m_alias_map": base_m_alias_map,
+                    "base_band_ratio_map": base_band_ratio_map,
+                    "base_peak_freq_map": base_peak_freq_map,
+                }.get(feature_name)
+                if feature_map is None:
+                    raise ValueError(f"Unsupported hybrid rescue feature map {feature_name!r}")
+                stap_scores, hybrid_rescue_mask, hybrid_stats = kw._apply_hybrid_rescue_score_map(
+                    stap_scores,
+                    rescue_scores,
+                    feature_name=feature_name,
+                    feature_map=feature_map,
+                    direction=str(hybrid_rule_cfg["direction"] if hybrid_rule_cfg is not None else ">="),
+                    threshold=float(hybrid_rule_cfg["threshold"] if hybrid_rule_cfg is not None else 0.0),
+                )
+                stap_info["hybrid_rescue"] = {
+                    "enabled": True,
+                    "rule": dict(hybrid_rule_cfg or {}),
+                    "stats": hybrid_stats,
+                    "advanced_detector_variant": "msd_ratio",
+                    "advanced_whiten_gamma": float(stap_whiten_gamma),
+                    "rescue_detector_variant": "unwhitened_ratio",
+                    "rescue_whiten_gamma": 0.0,
+                    "rescue_condR_median": rescue_info.get("median_condR"),
+                    "rescue_cond_loaded_median": rescue_info.get("median_cond_loaded"),
+                }
+                stap_info["detector_variant_effective"] = str(hybrid_variant_label or "hybrid_rescue")
+                stap_info["hybrid_rescue_mask_fraction"] = hybrid_stats.get("rescue_fraction")
         tile_metric_maps = (
             stap_info.pop("_tile_metric_maps", {}) if isinstance(stap_info, dict) else {}
         )
