@@ -232,7 +232,7 @@ def main() -> None:
             "--stap-conditional",
             "on",
             "--window-offsets",
-            "0,64,128",
+            "0,64,128,192,256",
             "--tile-batch",
             "512",
             "--replay-extra=--reg-disable",

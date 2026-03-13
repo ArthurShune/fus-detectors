@@ -652,54 +652,14 @@ This tail-dominance failure mode motivates both the strict low-FPR operating dis
 \end{figure}
 
 \paragraph{Latency and conditional execution.}
-We also report representative runtimes for baseline clutter suppression and STAP under a conservative fixed operating profile (tile geometry, slow-time aperture $L_t$, and covariance-conditioning targets fixed \emph{a priori}). Conditional execution changes the decision rule by deciding which tiles receive the adaptive detector; we therefore evaluate it as a separate method variant rather than as a simple acceleration of the same detector. In practice it reduces runtime by skipping the STAP stage on tiles with negligible proxy flow support and reverting to the baseline score there, but that speedup can change operating characteristics, so we require explicit leakage controls when reporting it. Unless otherwise stated, conditional execution uses a \emph{disjoint-window} proxy mask for detection reporting (mask derived from one window and applied to a disjoint window) to avoid same-window proxy leakage.
+We also report representative runtimes for the \emph{frozen product-path} detector hierarchy rather than for the older specialist-path timing configuration. In that preset, the labeled-brain stress tests use the simple unwhitened matched-subspace default with conditional execution, the Shin real-IQ audit uses the frozen \emph{adaptive-guard} mode, and Gammex uses the short-ensemble raw-baseline plus unwhitened matched-subspace head. Conditional execution still changes the decision rule by deciding which tiles receive the adaptive detector; we therefore treat it as part of a fixed deployment preset rather than as a cost-free acceleration of the same method. Unless otherwise stated, any conditional-execution reporting uses the same leakage-controlled, disjoint-window proxy discipline as the detection results.
 
-\noindent Latency is measured by replaying multiple windows or frames in a single GPU process and reporting \emph{steady-state} means over windows/frames 2..N. The first replay window/frame is excluded because it includes one-time startup overheads. We time the baseline and STAP stages separately (excluding disk I/O), and ``Total'' reports baseline+STAP wall time. These timings are conservative upper bounds for the detector family because they time the more expensive adaptive-whitening path rather than the simpler default head that sets $R_i=I$. The main paper reports only this steady-state pathway; lower-level implementation details are kept in the Supplementary Material.
+\noindent Latency is measured by replaying multiple windows or frames in a single GPU process and reporting \emph{steady-state} means over windows/frames 2..N. The first replay window/frame is excluded because it includes one-time startup overheads. We time the baseline and detector stages separately (excluding disk I/O), and ``Total'' reports baseline+detector wall time. ``Budget'' denotes the acquired slow-time duration of the corresponding ensemble: $64/1500\approx 42.7$~ms for the brain windows, $128/1000=128$~ms for Shin, and $17/2500=6.8$~ms for the Gammex cines. The reported real-time factor (RTF) is therefore $\text{Total}/\text{Budget}$.
 
-\begin{table}[ht]
-\centering
-\small
-\resizebox{\linewidth}{!}{%
-\begin{tabular}{P{6.2cm} c c c c c}
-\hline
-Scenario & Baseline (s) & STAP full (s) & Total full (s) & STAP conditional (s) & Total conditional (s) \\
-\hline
-Open-skull brain simulation (64-frame window) & $0.718$ & $0.513$ & $1.231$ & $0.264$ & $0.982$ \\
-Alias-dominant brain simulation (64-frame window) & $0.634$ & $0.555$ & $1.189$ & $0.333$ & $0.967$ \\
-Structured-clutter brain simulation (64-frame window) & $0.617$ & $0.553$ & $1.170$ & $0.314$ & $0.931$ \\
-Shin rat-brain IQ sequence (PRF 1000; 128-frame window; $L_t=64$) & $0.051$ & $0.939$ & $0.990$ & $0.440$ & $0.491$ \\
-Gammex along (linear17 @ PRF 2500; per cine frame) & $0.012$ & $0.246$ & $0.258$ & \textemdash & \textemdash \\
-Gammex across (linear17 @ PRF 2500; per cine frame) & $0.005$ & $0.105$ & $0.110$ & \textemdash & \textemdash \\
-\hline
-\end{tabular}
-}
-\caption{Steady-state latency summary on a laptop-class GPU (excludes disk I/O). Times are means over windows/frames 2..N from a single replay process; the first replay window/frame is excluded as startup overhead. ``Total'' reports baseline+STAP wall time. Hardware: NVIDIA GeForce RTX 3050 6GB Laptop GPU. Conditional execution is not reported for structurally labeled Gammex bundles.}
-\label{tab:latency_summary}
-\end{table}
-
-\begin{table}[ht]
-\centering
-\small
-\resizebox{\linewidth}{!}{%
-\begin{tabular}{P{6.2cm} c c c c c}
-\hline
-Scenario & Baseline (s) & STAP full (s) & Total full (s) & STAP conditional (s) & Total conditional (s) \\
-\hline
-Open-skull brain simulation (64-frame window) & $0.230$ & $0.538$ & $0.768$ & $0.334$ & $0.556$ \\
-Alias-dominant brain simulation (64-frame window) & $0.235$ & $0.544$ & $0.779$ & $0.372$ & $0.607$ \\
-Structured-clutter brain simulation (64-frame window) & $0.242$ & $0.542$ & $0.783$ & $0.374$ & $0.607$ \\
-Shin rat-brain IQ sequence (PRF 1000; 128-frame window; $L_t=64$) & $0.020$ & $0.154$ & $0.174$ & $0.116$ & $0.136$ \\
-Gammex along (linear17 @ PRF 2500; per cine frame) & $0.007$ & $0.053$ & $0.060$ & \textemdash & \textemdash \\
-Gammex across (linear17 @ PRF 2500; per cine frame) & $0.001$ & $0.019$ & $0.020$ & \textemdash & \textemdash \\
-\hline
-\end{tabular}
-}
-\caption{Same steady-state latency protocol as Table~\ref{tab:latency_summary}, rerun on a workstation-class GPU. Entries report means over windows/frames 2..N, excluding disk I/O and the first replay window/frame. Hardware: NVIDIA GeForce RTX 4080 SUPER 16GB. Conditional execution is not reported for structurally labeled Gammex bundles.}
-\label{tab:latency_summary_4080super}
-\end{table}
+\input{reports/latency_named_preset_rtx4080_prf_product_v1_table.tex}
 
 \paragraph{Portable-workstation feasibility (tempered).}
-A common critique of covariance-adaptive STAP is that local covariance conditioning and the associated matrix factorizations/inversions are prohibitively expensive when applied densely across an image grid. Tables~\ref{tab:latency_summary} and~\ref{tab:latency_summary_4080super} show that, with a batched GPU implementation and steady-state reporting, the labeled brain simulation scenarios and Gammex phantom regimes run in sub-second baseline+STAP wall time on both tested GPUs (the labeled brain simulations total $\approx0.77$--$0.78$~s on RTX~4080~SUPER), while the Shin rat-brain IQ sequence runs in $\approx0.17$~s total on RTX~4080~SUPER under the same protocol.\footnote{Latency is reported from steady-state replay (windows/frames 2..N) and excludes startup overhead and disk I/O. For context, a 64-frame Doppler window at PRF $1500$~Hz corresponds to $64/1500\approx 43$~ms of acquired slow-time data, and a 128-frame window at PRF $1000$~Hz corresponds to $128$~ms. The present Python prototype therefore does not yet achieve real-time throughput at the full acquisition PRF, but it establishes practical feasibility on commodity laptop/workstation GPUs and motivates further optimization and tighter scanner integration.} These results suggest that tile-local covariance adaptation need not require server-class hardware, but they also highlight that throughput remains strongly dataset-dependent and should be interpreted with the explicit decision-rule caveats of conditional execution.
+A common critique of covariance-adaptive fUS scoring is that local covariance conditioning and the associated matrix factorizations are prohibitively expensive when applied densely across an image grid. Table~\ref{tab:latency_summary_4080super_product} shows that, once the detector family is timed in its frozen product-path hierarchy rather than in a whitening-heavy research configuration, the picture is substantially better on an RTX~4080~SUPER. All three labeled-brain stress tests run below the full acquisition-PRF budget (RTF $0.92$--$0.95$), and the Shin rat-brain real-IQ audit also remains below budget (RTF $\approx 0.79$). The Gammex across-view is similarly below budget (RTF $\approx 0.86$). The only remaining miss is the Gammex along-view (RTF $\approx 1.12$), where the detector stage itself is already essentially at the 6.8~ms cine-frame budget and the residual overrun comes from the raw-baseline bookkeeping path.\footnote{Latency is reported from steady-state replay (windows/frames 2..N) and excludes startup overhead and disk I/O. The named preset reported in Table~\ref{tab:latency_summary_4080super_product} is intentionally deployment-oriented: it times the fixed detector hierarchy that would actually be shipped, rather than a single worst-case specialist mode run everywhere.} These results suggest that nuisance-aware matched-subspace scoring need not require server-class hardware, but they also highlight that throughput remains regime-dependent and should be interpreted with the explicit decision-rule caveats of conditional execution and detector selection.
 
 \noindent A leakage ablation confirms that conditional execution can inflate apparent performance under same-window proxy gating, while leakage-controlled gating yields a small TPR decrease (order $10^{-3}$) at the target FPRs. We therefore treat conditional execution as a distinct decision rule rather than a cost-free speedup and place the full open-skull leakage table with bootstrap intervals in the \SuppOrApp{app:supp-results}.
 
