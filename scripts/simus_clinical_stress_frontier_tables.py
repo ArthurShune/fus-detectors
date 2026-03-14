@@ -93,7 +93,7 @@ def _provenance_table() -> str:
         [
             r"\hline",
             r"\end{tabular}",
-            r"\caption{Literature-grounded stress axes used in the held-out reduced-grid SIMUS frontier audit. These perturbations are intended to approximate clinically relevant nuisance pressure, not to claim one-to-one replay of any single in vivo acquisition.}",
+            r"\caption{Literature-grounded stress axes used in the held-out paper-tier SIMUS stress confirmation. The paper-tier confirmation fixes attention to the residualizer families that dominated the preliminary reduced-grid sweep (RPCA and adaptive-global SVD), then reruns those clinically motivated perturbations on the held-out paper-tier mobile setting. These perturbations are intended to approximate clinically relevant nuisance pressure, not to claim one-to-one replay of any single in vivo acquisition.}",
             r"\label{tab:simus_clinical_stress_frontier_provenance}",
             r"\end{table}",
             "",
@@ -140,7 +140,7 @@ def _headline_table(rows: list[dict[str, str]]) -> str:
             r"\hline",
             r"\end{tabular}%",
             r"}",
-            r"\caption{Held-out reduced-grid SIMUS stress frontier on the mobile setting. For each stress level we report the strongest public comparator stack and the strongest detector-family stack on the held-out evaluation seed. These rows are intended as stress-frontier evidence for clinically motivated pulsation and short-ensemble pressure, not as a replacement for the main prespecified structural benchmark in the main paper.}",
+            r"\caption{Held-out paper-tier SIMUS stress confirmation on the mobile setting, restricted to the strongest residualizer families identified by the preliminary reduced-grid frontier (RPCA and adaptive-global SVD). For each stress level we report the strongest public comparator stack and the strongest detector-family stack on the held-out evaluation seed. These rows are intended as stress-frontier evidence for clinically motivated pulsation and short-ensemble pressure, not as a replacement for the main prespecified structural benchmark in the main paper.}",
             r"\label{tab:simus_stress_frontier_headline}",
             r"\end{table*}",
             "",
@@ -151,10 +151,26 @@ def _headline_table(rows: list[dict[str, str]]) -> str:
 
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Generate journal-style tables for the SIMUS stress frontier audit.")
-    ap.add_argument("--cardiac-json", type=Path, default=Path("reports/simus_clinical_stress_frontier_cardiac.json"))
-    ap.add_argument("--cardiac-csv", type=Path, default=Path("reports/simus_clinical_stress_frontier_cardiac.csv"))
-    ap.add_argument("--short-json", type=Path, default=Path("reports/simus_clinical_stress_frontier_short.json"))
-    ap.add_argument("--short-csv", type=Path, default=Path("reports/simus_clinical_stress_frontier_short.csv"))
+    ap.add_argument(
+        "--cardiac-json",
+        type=Path,
+        default=Path("reports/simus_clinical_stress_frontier_cardiac_eval_paper_targeted.json"),
+    )
+    ap.add_argument(
+        "--cardiac-csv",
+        type=Path,
+        default=Path("reports/simus_clinical_stress_frontier_cardiac_eval_paper_targeted.csv"),
+    )
+    ap.add_argument(
+        "--short-json",
+        type=Path,
+        default=Path("reports/simus_clinical_stress_frontier_short_eval_paper_targeted.json"),
+    )
+    ap.add_argument(
+        "--short-csv",
+        type=Path,
+        default=Path("reports/simus_clinical_stress_frontier_short_eval_paper_targeted.csv"),
+    )
     ap.add_argument(
         "--out-provenance",
         type=Path,
