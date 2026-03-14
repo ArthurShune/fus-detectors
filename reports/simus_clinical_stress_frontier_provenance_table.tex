@@ -1,0 +1,15 @@
+\begin{table}[t]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}P{2.8cm} P{4.8cm} P{5.0cm}@{}}
+\hline
+Stress axis & Supplementary perturbation used here & Literature grounding \\
+\hline
+Cardiac-like pulsation\\\cite{BarangerAdaptiveSVD2018} & Reference: 1.0x cardiac amplitude at 1.30 Hz; Moderate: 2.0x cardiac amplitude at 1.30 Hz; Hard: 3.0x cardiac amplitude at 1.30 Hz & Stress axis motivated by neonatal and open-skull reports of cardiac-like tissue pulsation broadening the low-frequency tissue spectrum. \\
+Short ensemble\\\cite{Imbault2017,Soloukey2020FUSAwake,MobileFUS2025} & Reference: 64 frames (42.7 ms); Moderate: 48 frames (32.0 ms); Hard: 32 frames (21.3 ms) & Stress axis motivated by clinically constrained acquisitions in which shorter ensembles are used to limit motion corruption or workflow burden. \\
+\hline
+\end{tabular}
+\caption{Literature-grounded stress axes used in the held-out reduced-grid SIMUS frontier audit. These perturbations are intended to approximate clinically relevant nuisance pressure, not to claim one-to-one replay of any single in vivo acquisition.}
+\label{tab:simus_clinical_stress_frontier_provenance}
+\end{table}
