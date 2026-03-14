@@ -6,8 +6,8 @@
 \hline
 Stress axis & Supplementary perturbation used here & Literature grounding \\
 \hline
-Cardiac-like pulsation\\\cite{BarangerAdaptiveSVD2018} & Reference: 1.0x cardiac amplitude at 1.30 Hz; Moderate: 2.0x cardiac amplitude at 1.30 Hz; Hard: 3.0x cardiac amplitude at 1.30 Hz & Stress axis motivated by neonatal and open-skull reports of cardiac-like tissue pulsation broadening the low-frequency tissue spectrum. \\
-Short ensemble\\\cite{Imbault2017,Soloukey2020FUSAwake,MobileFUS2025} & Reference: 64 frames (42.7 ms); Moderate: 48 frames (32.0 ms); Hard: 32 frames (21.3 ms) & Stress axis motivated by clinically constrained acquisitions in which shorter ensembles are used to limit motion corruption or workflow burden. \\
+Cardiac-like pulsation\\\cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018} & Reference: 1.0x cardiac amplitude at 1.30 Hz; Moderate: 2.0x cardiac amplitude at 1.30 Hz; Hard: 3.0x cardiac amplitude at 1.30 Hz & Stress axis motivated by cardiac-like tissue pulsation broadening the low-frequency tissue spectrum in neonatal and open-skull fUS, with Demen\'e et al. identifying roughly 1--10 mm/s tissue motion as the critical operating regime for SVD clutter filtering. \\
+Short ensemble\\\cite{Imbault2017,Soloukey2020FUSAwake,MobileFUS2025} & Reference: 64 frames (42.7 ms); Moderate: 48 frames (32.0 ms); Hard: 32 frames (21.3 ms) & Stress axis motivated by clinically constrained acquisitions in which shorter ensembles are used to limit motion corruption or workflow burden in intra-operative and mobile settings. \\
 \hline
 \end{tabular}
 \caption{Literature-grounded stress axes used in the held-out paper-tier SIMUS stress confirmation. The paper-tier confirmation fixes attention to the residualizer families that dominated the preliminary reduced-grid sweep (RPCA and adaptive-global SVD), then reruns those clinically motivated perturbations on the held-out paper-tier mobile setting. These perturbations are intended to approximate clinically relevant nuisance pressure, not to claim one-to-one replay of any single in vivo acquisition.}

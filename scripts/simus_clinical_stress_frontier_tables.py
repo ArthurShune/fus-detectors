@@ -9,10 +9,11 @@ from pathlib import Path
 
 AXIS_META = {
     "cardiac_pulsation": {
-        "label": r"Cardiac-like pulsation\\\cite{BarangerAdaptiveSVD2018}",
+        "label": r"Cardiac-like pulsation\\\cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018}",
         "provenance": (
-            "Stress axis motivated by neonatal and open-skull reports of cardiac-like "
-            "tissue pulsation broadening the low-frequency tissue spectrum."
+            "Stress axis motivated by cardiac-like tissue pulsation broadening the low-frequency "
+            "tissue spectrum in neonatal and open-skull fUS, with Demen\\'e et al. identifying "
+            "roughly 1--10 mm/s tissue motion as the critical operating regime for SVD clutter filtering."
         ),
         "levels": {
             "reference": "1.0x cardiac amplitude at 1.30 Hz",
@@ -24,7 +25,7 @@ AXIS_META = {
         "label": r"Short ensemble\\\cite{Imbault2017,Soloukey2020FUSAwake,MobileFUS2025}",
         "provenance": (
             "Stress axis motivated by clinically constrained acquisitions in which shorter "
-            "ensembles are used to limit motion corruption or workflow burden."
+            "ensembles are used to limit motion corruption or workflow burden in intra-operative and mobile settings."
         ),
         "levels": {
             "reference": "64 frames (42.7 ms)",
@@ -140,7 +141,7 @@ def _headline_table(rows: list[dict[str, str]]) -> str:
             r"\hline",
             r"\end{tabular}%",
             r"}",
-            r"\caption{Held-out paper-tier SIMUS stress confirmation on the mobile setting, restricted to the strongest residualizer families identified by the preliminary reduced-grid frontier (RPCA and adaptive-global SVD). For each stress level we report the strongest public comparator stack and the strongest detector-family stack on the held-out evaluation seed. These rows are intended as stress-frontier evidence for clinically motivated pulsation and short-ensemble pressure, not as a replacement for the main prespecified structural benchmark in the main paper.}",
+            r"\caption{Held-out paper-tier SIMUS stress confirmation on the mobile setting, restricted to the strongest residualizer families identified by the preliminary reduced-grid frontier (RPCA and adaptive-global SVD). For each stressed row we report the strongest public comparator stack and the strongest detector-family stack on that same held-out evaluation seed. These rows are intended as stress-frontier evidence for clinically motivated pulsation and short-ensemble pressure, not as a replacement for the main prespecified structural benchmark in the main paper.}",
             r"\label{tab:simus_stress_frontier_headline}",
             r"\end{table*}",
             "",
