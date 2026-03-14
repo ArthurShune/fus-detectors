@@ -9,8 +9,8 @@ Run \path{PYTHONPATH=. conda run -n stap-fus python scripts/generate_repro_manif
 \paragraph{Repository state.}
 Public repository: \path{git@github.com:ArthurShune/stap-for-fus.git}.
 Release tag: (not recorded; set \texttt{STAP\_FUS\_RELEASE\_TAG} or create a git tag).
-Commit: \texttt{db0dd0f} (full: \texttt{db0dd0fb3a}\allowbreak\texttt{22621fde9c}\allowbreak\texttt{3514cc4ada}\allowbreak\texttt{4ff4758007}); branch: \texttt{main}; dirty: \texttt{true}.
-Dirty details: non-ignored paths=5, ignored build products=0.
+Commit: \texttt{f95e817} (full: \texttt{f95e81729c}\allowbreak\texttt{7535ce17f6}\allowbreak\texttt{a950b7f860}\allowbreak\texttt{fa94939035}); branch: \texttt{main}; dirty: \texttt{true}.
+Dirty details: non-ignored paths=4, ignored build products=0.
 Note: dirty status ignores common LaTeX build products (e.g., \texttt{*.aux, *.log, *.out, *.fls, *.fdb\_latexmk, *.synctex.gz, *.pdf}).
 For archival reproducibility, generate this manifest from a clean, tagged release commit (\texttt{dirty=false}) and record the public repository URL and tag.
 
@@ -1061,7 +1061,11 @@ PYTHONPATH=. python -m scripts.shin_ratbrain_motion_sensitivity_posthoc \
 }
 
   \item \textbf{Leading structural-fidelity figure (Gammex phantom; matched-FPR decision differences)}
-    (paper refs: Figure 1: \path{leading_structural_fidelity_gammex.pdf}).
+    Paper refs:
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item Introduction: worked Gammex structural-fidelity example at matched 1e-2 background FPR
+      \item Twinkling section: representative structural-fidelity panel
+    \end{itemize}
     Outputs:
     \begingroup\raggedright
     \begin{itemize}[nosep,leftmargin=0em,label={}]
@@ -1541,8 +1545,8 @@ PYTHONPATH=. python scripts/ulm_zenodo_7883227_motion_sweep.py \
   \item \textbf{ULM 7883227 localization-derived structural-label audit (published PALA reference)}
     Paper refs:
     \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item Front matter: headline bounded in-vivo structural-label result (ulm7883227\_pala\_headline\_hero.pdf)
       \item ULM section: localization-derived structural-label audit on the same dataset
-      \item ULM section: Figure (ulm7883227\_pala\_structural\_masks.pdf)
       \item ULM section: Table (ulm7883227\_pala\_structural\_roc\_table.tex)
       \item Supplement: Figure (ulm7883227\_pala\_structural\_roc\_curves.pdf)
       \item Discussion: RTX 4080 latency note for the same 64-frame no-registration specialist
@@ -1556,6 +1560,8 @@ PYTHONPATH=. python scripts/ulm_zenodo_7883227_motion_sweep.py \
       \item \path{reports/}\allowbreak\path{ulm7883227_pala_structural_roc_short32.json}
       \item \path{reports/}\allowbreak\path{ulm7883227_pala_structural_roc_brainlike_}\allowbreak\path{motion.json}
       \item \path{reports/}\allowbreak\path{ulm7883227_pala_latency_rtx4080.json}
+      \item \path{figs/paper/}\allowbreak\path{ulm7883227_pala_headline_hero.pdf}
+      \item \path{figs/paper/}\allowbreak\path{ulm7883227_pala_headline_hero.png}
       \item \path{figs/paper/}\allowbreak\path{ulm7883227_pala_structural_masks.pdf}
       \item \path{figs/paper/}\allowbreak\path{ulm7883227_pala_structural_roc_curves.pdf}
       \item \path{figs/paper/}\allowbreak\path{ulm7883227_pala_structural_roc_curves.png}
@@ -1585,6 +1591,7 @@ PYTHONPATH=. python scripts/ulm7883227_structural_roc.py \
   --out-tex reports/ulm7883227_pala_structural_roc_table.tex \
   --out-mask-fig figs/paper/ulm7883227_pala_structural_masks.pdf \
   --out-roc-fig figs/paper/ulm7883227_pala_structural_roc_curves.pdf
+PYTHONPATH=. conda run -n stap-fus python scripts/fig_ulm_pala_headline_hero.py
 PYTHONPATH=. conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
   --summary-json reports/ulm7883227_pala_latency_rtx4080.json \
   --out-root runs/latency_realdata_cuda_ulm_pala_noreg \

@@ -1542,7 +1542,10 @@ def _default_artifacts() -> list[ArtifactInfo]:
         ),
         ArtifactInfo(
             name="Leading structural-fidelity figure (Gammex phantom; matched-FPR decision differences)",
-            paper_refs=["Figure 1: leading_structural_fidelity_gammex.pdf"],
+            paper_refs=[
+                "Introduction: worked Gammex structural-fidelity example at matched 1e-2 background FPR",
+                "Twinkling section: representative structural-fidelity panel",
+            ],
             outputs=["figs/paper/leading_structural_fidelity_gammex.pdf"],
             commands=[
                 "SEQ_DIR=\"data/twinkling_artifact/Flow in Gammex phantom\"",
@@ -1968,8 +1971,8 @@ def _default_artifacts() -> list[ArtifactInfo]:
         ArtifactInfo(
             name="ULM 7883227 localization-derived structural-label audit (published PALA reference)",
             paper_refs=[
+                "Front matter: headline bounded in-vivo structural-label result (ulm7883227_pala_headline_hero.pdf)",
                 "ULM section: localization-derived structural-label audit on the same dataset",
-                "ULM section: Figure (ulm7883227_pala_structural_masks.pdf)",
                 "ULM section: Table (ulm7883227_pala_structural_roc_table.tex)",
                 "Supplement: Figure (ulm7883227_pala_structural_roc_curves.pdf)",
                 "Discussion: RTX 4080 latency note for the same 64-frame no-registration specialist",
@@ -1981,6 +1984,8 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "reports/ulm7883227_pala_structural_roc_short32.json",
                 "reports/ulm7883227_pala_structural_roc_brainlike_motion.json",
                 "reports/ulm7883227_pala_latency_rtx4080.json",
+                "figs/paper/ulm7883227_pala_headline_hero.pdf",
+                "figs/paper/ulm7883227_pala_headline_hero.png",
                 "figs/paper/ulm7883227_pala_structural_masks.pdf",
                 "figs/paper/ulm7883227_pala_structural_roc_curves.pdf",
                 "figs/paper/ulm7883227_pala_structural_roc_curves.png",
@@ -2007,6 +2012,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --out-tex reports/ulm7883227_pala_structural_roc_table.tex \\",
                 "  --out-mask-fig figs/paper/ulm7883227_pala_structural_masks.pdf \\",
                 "  --out-roc-fig figs/paper/ulm7883227_pala_structural_roc_curves.pdf",
+                "PYTHONPATH=. conda run -n stap-fus python scripts/fig_ulm_pala_headline_hero.py",
                 "PYTHONPATH=. conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
                 "  --summary-json reports/ulm7883227_pala_latency_rtx4080.json \\",
                 "  --out-root runs/latency_realdata_cuda_ulm_pala_noreg \\",
