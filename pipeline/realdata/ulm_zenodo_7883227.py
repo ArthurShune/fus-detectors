@@ -30,6 +30,15 @@ def ulm_zenodo_7883227_iq_zip_path(root: Path | None = None) -> Path:
     return base / "IQ_001_to_025.zip"
 
 
+def ulm_zenodo_7883227_iq_zip_paths(root: Path | None = None) -> list[Path]:
+    base = ulm_zenodo_7883227_root() if root is None else Path(root)
+    paths = sorted(base.glob("IQ_*_to_*.zip"))
+    if paths:
+        return paths
+    single = base / "IQ_001_to_025.zip"
+    return [single] if single.is_file() else []
+
+
 def ulm_zenodo_7883227_param_json_path(root: Path | None = None) -> Path:
     base = ulm_zenodo_7883227_root() if root is None else Path(root)
     return base / "param.json"
@@ -52,19 +61,21 @@ def load_ulm_zenodo_7883227_params(root: Path | None = None) -> Ulm7883227Params
 
 
 def list_ulm_blocks(root: Path | None = None) -> list[int]:
-    zip_path = ulm_zenodo_7883227_iq_zip_path(root)
-    if not zip_path.is_file():
-        raise FileNotFoundError(f"IQ zip not found at {zip_path}")
+    zip_paths = ulm_zenodo_7883227_iq_zip_paths(root)
+    if not zip_paths:
+        base = ulm_zenodo_7883227_root() if root is None else Path(root)
+        raise FileNotFoundError(f"No IQ zip archives found under {base}")
     blocks: list[int] = []
     pat = re.compile(r"^IQ/IQ_(\d{3})\.hdf5$")
-    with zipfile.ZipFile(zip_path, "r") as zf:
-        for name in zf.namelist():
-            m = pat.match(name)
-            if not m:
-                continue
-            blocks.append(int(m.group(1)))
+    for zip_path in zip_paths:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            for name in zf.namelist():
+                m = pat.match(name)
+                if not m:
+                    continue
+                blocks.append(int(m.group(1)))
     blocks.sort()
-    return blocks
+    return sorted(set(blocks))
 
 
 def _block_member_name(block_id: int) -> str:
@@ -92,24 +103,31 @@ def ensure_ulm_block_extracted(
     if out_path.is_file():
         return out_path
 
-    zip_path = ulm_zenodo_7883227_iq_zip_path(root)
-    if not zip_path.is_file():
-        raise FileNotFoundError(f"IQ zip not found at {zip_path}")
-
     member = _block_member_name(block_id)
-    with zipfile.ZipFile(zip_path, "r") as zf:
-        names = set(zf.namelist())
-        if member not in names:
-            raise FileNotFoundError(f"Missing member {member!r} in {zip_path}")
-        with zf.open(member, "r") as src:
-            with tempfile.NamedTemporaryFile(
-                dir=cache,
-                prefix=f"{out_path.stem}.",
-                suffix=".tmp",
-                delete=False,
-            ) as tmp:
-                shutil.copyfileobj(src, tmp)
-                tmp_path = Path(tmp.name)
+    zip_paths = ulm_zenodo_7883227_iq_zip_paths(root)
+    if not zip_paths:
+        base = ulm_zenodo_7883227_root() if root is None else Path(root)
+        raise FileNotFoundError(f"No IQ zip archives found under {base}")
+    tmp_path: Path | None = None
+    found = False
+    for zip_path in zip_paths:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            names = set(zf.namelist())
+            if member not in names:
+                continue
+            found = True
+            with zf.open(member, "r") as src:
+                with tempfile.NamedTemporaryFile(
+                    dir=cache,
+                    prefix=f"{out_path.stem}.",
+                    suffix=".tmp",
+                    delete=False,
+                ) as tmp:
+                    shutil.copyfileobj(src, tmp)
+                    tmp_path = Path(tmp.name)
+            break
+    if not found or tmp_path is None:
+        raise FileNotFoundError(f"Missing member {member!r} across IQ zip archives under {Path(root) if root is not None else ulm_zenodo_7883227_root()}")
     # Another worker may have finished the same extraction while we were writing.
     if out_path.is_file():
         try:
@@ -154,6 +172,7 @@ __all__ = [
     "Ulm7883227Params",
     "ulm_zenodo_7883227_root",
     "ulm_zenodo_7883227_iq_zip_path",
+    "ulm_zenodo_7883227_iq_zip_paths",
     "ulm_zenodo_7883227_param_json_path",
     "load_ulm_zenodo_7883227_params",
     "list_ulm_blocks",
