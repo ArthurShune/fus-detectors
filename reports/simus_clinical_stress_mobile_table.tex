@@ -1,0 +1,21 @@
+\begin{table}[t]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{@{}P{2.6cm} P{1.4cm} P{3.4cm} C{1.35cm} C{1.35cm} C{1.35cm} C{1.35cm}@{}}
+\hline
+Stress axis & Level & Applied perturbation & \shortstack{PD\\AUC$_{\mathrm{main/nuis}}$} & \shortstack{Default\\AUC$_{\mathrm{main/nuis}}$} & \shortstack{PD\\FPR$_{\mathrm{nuis}}$@$0.5$} & \shortstack{Default\\FPR$_{\mathrm{nuis}}$@$0.5$} \\
+\hline
+\shortstack[l]{Bulk tissue motion\\\cite{DemeneClutterSVD2015,Soloukey2020FUSAwake,MobileFUS2025}} & Reference & 1.00x bulk motion / phase nuisance & 0.380 & 0.448 & 0.667 & 0.515 \\
+\shortstack[l]{Bulk tissue motion\\\cite{DemeneClutterSVD2015,Soloukey2020FUSAwake,MobileFUS2025}} & Moderate & 1.75x bulk motion / phase nuisance & 0.595 & 0.480 & 0.333 & 0.591 \\
+\shortstack[l]{Bulk tissue motion\\\cite{DemeneClutterSVD2015,Soloukey2020FUSAwake,MobileFUS2025}} & Hard & 2.75x bulk motion / phase nuisance & 0.561 & 0.554 & 0.439 & 0.424 \\
+\shortstack[l]{Nuisance reflectivity\\\cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018}} & Reference & +0.0 dB nuisance reflectivity & 0.380 & 0.448 & 0.667 & 0.515 \\
+\shortstack[l]{Nuisance reflectivity\\\cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018}} & Moderate & +6.0 dB nuisance reflectivity & 0.485 & 0.480 & 0.470 & 0.439 \\
+\shortstack[l]{Nuisance reflectivity\\\cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018}} & Hard & +12.0 dB nuisance reflectivity & 0.539 & 0.530 & 0.424 & 0.439 \\
+\hline
+\end{tabular}
+}
+\caption{Clinically grounded reduced-grid SIMUS stress audit on the mobile scene family (two held-out realizations). Each row perturbs one axis at a time around the prespecified mobile setting, keeps the MC--SVD residualizer fixed, and compares the same-residual PD score to the fixed band-limited matched-subspace default. The purpose of this supplementary audit is not to create a second headline benchmark, but to show that the task becomes visibly harder under literature-grounded nuisance perturbations.}
+\label{tab:simus_stress_mobile}
+\end{table}
