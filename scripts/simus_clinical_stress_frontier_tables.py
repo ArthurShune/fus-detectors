@@ -37,6 +37,7 @@ AXIS_META = {
 
 LEVEL_ORDER = {"reference": 0, "moderate": 1, "hard": 2}
 AXIS_ORDER = {"cardiac_pulsation": 0, "short_ensemble": 1}
+LEVEL_DISPLAY = {"reference": "Ref.", "moderate": "Mod.", "hard": "Hard"}
 
 
 def _fmt(value: float | str | None, digits: int = 3) -> str:
@@ -110,7 +111,7 @@ def _headline_table(rows: list[dict[str, str]]) -> str:
         r"\scriptsize",
         r"\setlength{\tabcolsep}{4pt}",
         r"\resizebox{\linewidth}{!}{%",
-        r"\begin{tabular}{@{}P{2.7cm} P{1.2cm} P{2.2cm} P{2.9cm} P{2.9cm} C{1.25cm} C{1.25cm} C{1.25cm} C{1.25cm}@{}}",
+        r"\begin{tabular}{@{}P{2.55cm} P{1.45cm} P{2.05cm} P{2.8cm} P{2.8cm} C{1.2cm} C{1.2cm} C{1.2cm} C{1.2cm}@{}}",
         r"\hline",
         r"Stress axis & Level & Applied perturbation & Best public stack & Best detector-family stack & \shortstack{Public\\AUC$_{\mathrm{main/nuis}}$} & \shortstack{Detector\\AUC$_{\mathrm{main/nuis}}$} & \shortstack{Public\\FPR$_{\mathrm{nuis}}$@$0.5$} & \shortstack{Detector\\FPR$_{\mathrm{nuis}}$@$0.5$} \\",
         r"\hline",
@@ -124,7 +125,7 @@ def _headline_table(rows: list[dict[str, str]]) -> str:
                 " & ".join(
                     [
                         rf"\shortstack[l]{{{meta['label']}}}",
-                        level.capitalize(),
+                        LEVEL_DISPLAY[level],
                         meta["levels"][level],
                         public["pipeline_label"],
                         detector["pipeline_label"],
@@ -141,7 +142,7 @@ def _headline_table(rows: list[dict[str, str]]) -> str:
             r"\hline",
             r"\end{tabular}%",
             r"}",
-            r"\caption{Held-out paper-tier SIMUS stress confirmation on the mobile setting, restricted to the strongest residualizer families identified by the preliminary reduced-grid frontier (RPCA and adaptive-global SVD). For each stressed row we report the strongest public comparator stack and the strongest detector-family stack on that same held-out evaluation seed. These rows are intended as stress-frontier evidence for clinically motivated pulsation and short-ensemble pressure, not as a replacement for the main prespecified structural benchmark in the main paper.}",
+            r"\caption{Held-out paper-tier SIMUS stress frontier on the mobile setting, restricted to the strongest residualizer families identified by the preliminary reduced-grid frontier (RPCA and adaptive-global SVD). For each stressed row we report the strongest public comparator stack and the strongest detector-family stack on that same held-out evaluation seed. This is the harder structural headline table in the main paper; the cleaner prespecified structural checkpoint is retained separately to identify the fixed default detector head.}",
             r"\label{tab:simus_stress_frontier_headline}",
             r"\end{table*}",
             "",
