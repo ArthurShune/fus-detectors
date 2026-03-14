@@ -23,10 +23,25 @@ When KA is enabled, it is shrink-only and preserves a protected do-not-penalize 
   \item Frozen threshold sensitivity around the finalized adaptive and KA thresholds: Tables~\ref{tab:adaptive_tau_sensitivity} and \ref{tab:ka_cflow_sensitivity}.
   \item Shin proxy-metric comparisons, runtime, and measured rigid-motion telemetry: Figure~\ref{fig:shin_baseline_matrix_proxy_metrics} and Figure~\ref{fig:shin_motion_telemetry}.
   \item Corrected SIMUS/PyMUST moving-scatterer benchmark and same-residual score comparison: Tables~\ref{tab:simus_frozen_benchmark_v1p2} and \ref{tab:simus_symmetric_pipeline_v1p2}.
-  \item Clinically anchored SIMUS-ClinUtility-v2 structural/functional checkpoint and compact real-data translation audit: Tables~\ref{tab:simus_v2_structural_latency}, \ref{tab:simus_v2_functional_latency}, and \ref{tab:realdata_detector_head_audit}.
+  \item SIMUS/PyMUST structural/functional checkpoint and compact real-data translation audit: Tables~\ref{tab:simus_v2_structural_latency} and \ref{tab:simus_v2_functional_latency}, plus the supplement-only real-IQ same-residual audit table later in this appendix.
   \item Clinically anchored detector-family ablation on a fixed MC--SVD residual: Table~\ref{tab:simus_detector_family_ablation}.
+  \item Compact detector-family policy summary: Table~\ref{tab:detector_family_policy}.
   \item Compact baseline-family summary for the labeled brain simulation pilots: Table~\ref{tab:brain_baseline_summary}.
 \end{itemize}
+
+\IfFileExists{reports/detector_family_policy_table.tex}{%
+  \input{reports/detector_family_policy_table.tex}%
+}{%
+  \begin{table}[t]
+  \centering
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/detector_family_policy_table.tex}.\\
+    Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/detector_family_policy_summary.py}.
+  \end{minipage}}
+  \caption{Detector-family policy implied by the current evidence.}
+  \label{tab:detector_family_policy}
+  \end{table}
+}
 
 \subsection{Full ROC curves for labeled regimes}
 The main text reports strict low-FPR operating points. Here we provide representative ROC-style curves to show the overall curve shape under the same masks and scoring conventions.
@@ -915,5 +930,5 @@ ULM 7883227 elastic & MC--SVD-style residual & $+0.282$ & $+0.251$ & positive on
 \label{tab:realdata_detector_head_audit}
 \end{table}
 \else
-\noindent In the full build, this compact same-residual table is promoted to the main Results section (Table~\ref{tab:realdata_detector_head_audit}) so that the reader-facing real-IQ scoring evidence is visible without requiring the appendix.
+\noindent This compact same-residual table is kept in the Supplementary Material so the main Results section can remain focused on the structurally labeled and deployment-facing endpoints.
 \fi

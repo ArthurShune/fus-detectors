@@ -9,7 +9,7 @@ from pathlib import Path
 
 AXIS_META = {
     "cardiac_pulsation": {
-        "label": r"Cardiac-like pulsation\\\cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018}",
+        "label": r"Cardiac-like pulsation",
         "provenance": (
             "Stress axis motivated by cardiac-like tissue pulsation broadening the low-frequency "
             "tissue spectrum in neonatal and open-skull fUS, with Demen\\'e et al. identifying "
@@ -22,7 +22,7 @@ AXIS_META = {
         },
     },
     "short_ensemble": {
-        "label": r"Short ensemble\\\cite{Imbault2017,Soloukey2020FUSAwake,MobileFUS2025}",
+        "label": r"Short ensemble",
         "provenance": (
             "Stress axis motivated by clinically constrained acquisitions in which shorter "
             "ensembles are used to limit motion corruption or workflow burden in intra-operative and mobile settings."
@@ -38,6 +38,11 @@ AXIS_META = {
 LEVEL_ORDER = {"reference": 0, "moderate": 1, "hard": 2}
 AXIS_ORDER = {"cardiac_pulsation": 0, "short_ensemble": 1}
 LEVEL_DISPLAY = {"reference": "Ref.", "moderate": "Mod.", "hard": "Hard"}
+PIPELINE_DISPLAY = {
+    "RPCA -> PD": r"\shortstack[l]{RPCA\\$\rightarrow$ PD}",
+    "RPCA -> Matched-subspace default": r"\shortstack[l]{RPCA\\$\rightarrow$ Fixed matched-subspace}",
+    "Adaptive Global SVD -> Whitened specialist": r"\shortstack[l]{Adaptive-global SVD\\$\rightarrow$ Whitened specialist}",
+}
 
 
 def _fmt(value: float | str | None, digits: int = 3) -> str:
@@ -65,6 +70,10 @@ def _best_by(rows: list[dict[str, str]], *, split: str, role: str, axis_key: str
 def _write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _pipeline_display(label: str) -> str:
+    return PIPELINE_DISPLAY.get(label, label.replace(" -> ", r"$\rightarrow$"))
 
 
 def _provenance_table() -> str:
@@ -109,9 +118,9 @@ def _headline_table(rows: list[dict[str, str]]) -> str:
         r"\begin{table*}[t]",
         r"\centering",
         r"\scriptsize",
-        r"\setlength{\tabcolsep}{4pt}",
+        r"\setlength{\tabcolsep}{3pt}",
         r"\resizebox{\linewidth}{!}{%",
-        r"\begin{tabular}{@{}P{2.55cm} P{1.45cm} P{2.05cm} P{2.8cm} P{2.8cm} C{1.2cm} C{1.2cm} C{1.2cm} C{1.2cm}@{}}",
+        r"\begin{tabular}{@{}P{2.8cm} P{1.2cm} P{2.2cm} P{3.2cm} P{3.2cm} C{1.0cm} C{1.0cm} C{1.0cm} C{1.0cm}@{}}",
         r"\hline",
         r"Stress axis & Level & Applied perturbation & Best public stack & Best detector-family stack & \shortstack{Public\\AUC$_{\mathrm{main/nuis}}$} & \shortstack{Detector\\AUC$_{\mathrm{main/nuis}}$} & \shortstack{Public\\FPR$_{\mathrm{nuis}}$@$0.5$} & \shortstack{Detector\\FPR$_{\mathrm{nuis}}$@$0.5$} \\",
         r"\hline",
@@ -127,8 +136,8 @@ def _headline_table(rows: list[dict[str, str]]) -> str:
                         rf"\shortstack[l]{{{meta['label']}}}",
                         LEVEL_DISPLAY[level],
                         meta["levels"][level],
-                        public["pipeline_label"],
-                        detector["pipeline_label"],
+                        _pipeline_display(public["pipeline_label"]),
+                        _pipeline_display(detector["pipeline_label"]),
                         _fmt(public["auc_main_vs_nuisance"]),
                         _fmt(detector["auc_main_vs_nuisance"]),
                         _fmt(public["fpr_nuisance_match@0p5"]),
@@ -142,7 +151,7 @@ def _headline_table(rows: list[dict[str, str]]) -> str:
             r"\hline",
             r"\end{tabular}%",
             r"}",
-            r"\caption{Held-out paper-tier SIMUS stress frontier on the mobile setting, restricted to the strongest residualizer families identified by the preliminary reduced-grid frontier (RPCA and adaptive-global SVD). For each stressed row we report the strongest public comparator stack and the strongest detector-family stack on that same held-out evaluation seed. This is the harder structural headline table in the main paper; the cleaner prespecified structural checkpoint is retained separately to identify the fixed default detector head.}",
+            r"\caption{Held-out SIMUS mobile stress frontier. Each row compares the best public comparator with the best detector-family stack on the same held-out evaluation seed. The cleaner structural checkpoint is shown separately to identify the fixed default detector head.}",
             r"\label{tab:simus_stress_frontier_headline}",
             r"\end{table*}",
             "",
