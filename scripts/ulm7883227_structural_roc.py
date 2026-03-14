@@ -15,6 +15,7 @@ import imageio.v3 as iio
 import numpy as np
 import scipy.ndimage as ndi
 from skimage.feature import match_template
+from skimage.filters import threshold_otsu
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -149,6 +150,7 @@ def _connected_components(binary: np.ndarray) -> int:
 def _derive_structural_masks(
     reference_pd: np.ndarray,
     *,
+    support_mask: np.ndarray | None,
     vessel_quantile: float,
     bg_quantile: float,
     erode_iters: int,
@@ -165,25 +167,31 @@ def _derive_structural_masks(
     finite = np.isfinite(ref)
     if not finite.any():
         raise ValueError("reference map has no finite values")
+    if support_mask is None:
+        support = finite.copy()
+    else:
+        support = np.asarray(support_mask, dtype=bool) & finite
+    if not support.any():
+        raise ValueError("structural support mask has no valid pixels")
     vessel_thr = _safe_quantile(ref[finite], vessel_quantile)
     positive_vals = ref[finite & (ref > 0.0)]
     if positive_vals.size and vessel_thr <= 0.0 and (positive_vals.size / max(1, int(finite.sum()))) < 0.5:
         vessel_thr = _safe_quantile(positive_vals, vessel_quantile)
     vessel_mode = str(vessel_mask_mode or "area").strip().lower()
     if vessel_mode == "peaks":
-        peaks = (ref >= vessel_thr) & finite
+        peaks = (ref >= vessel_thr) & support
         peaks &= ref == ndi.maximum_filter(ref, size=max(3, int(peak_size)), mode="nearest")
         vessel = peaks
         if peak_dilate_iters > 0:
             vessel = ndi.binary_dilation(vessel, iterations=int(peak_dilate_iters))
     else:
-        vessel = (ref >= vessel_thr) & finite
+        vessel = (ref >= vessel_thr) & support
         if erode_iters > 0:
             vessel = ndi.binary_erosion(vessel, iterations=int(erode_iters))
         vessel = ndi.binary_opening(vessel, iterations=1)
 
-    bg_thr = _safe_quantile(ref[finite], bg_quantile)
-    bg_candidate = finite.copy()
+    bg_thr = _safe_quantile(ref[support], bg_quantile)
+    bg_candidate = support.copy()
     if guard_dilate_iters > 0:
         vessel_guard = ndi.binary_dilation(vessel, iterations=int(guard_dilate_iters))
     else:
@@ -202,7 +210,7 @@ def _derive_structural_masks(
     if bg_mode == "shell":
         inner = ndi.binary_dilation(vessel, iterations=max(1, int(shell_inner_dilate_iters)))
         outer = ndi.binary_dilation(vessel, iterations=max(int(shell_outer_dilate_iters), int(shell_inner_dilate_iters) + 1))
-        bg = outer & ~inner & finite
+        bg = outer & ~inner & support
         if edge_margin > 0:
             bg[:edge_margin, :] = False
             bg[-edge_margin:, :] = False
@@ -224,6 +232,7 @@ def _derive_structural_masks(
         "background_threshold": float(bg_thr) if np.isfinite(bg_thr) else None,
         "n_vessel": int(vessel.sum()),
         "n_background": int(bg.sum()),
+        "n_support": int(support.sum()),
         "guard_dilate_iters": int(guard_dilate_iters),
         "edge_margin_px": int(edge_margin),
         "vessel_components": int(_connected_components(vessel)),
@@ -237,6 +246,23 @@ def _derive_structural_masks(
         "shell_outer_dilate_iters": int(shell_outer_dilate_iters),
     }
     return vessel.astype(bool), bg.astype(bool), qc
+
+
+def _derive_powdop_support_mask(powdop_crop: np.ndarray) -> np.ndarray:
+    img = _to_gray_unit(np.asarray(powdop_crop, dtype=np.float32))
+    vals = img[np.isfinite(img)]
+    if vals.size == 0:
+        raise ValueError("powdop crop has no finite values")
+    thr = float(min(threshold_otsu(vals), np.quantile(vals, 0.12)))
+    thr = max(thr, 0.02)
+    support = img >= thr
+    support = ndi.binary_closing(support, iterations=3)
+    support = ndi.binary_fill_holes(support)
+    support = ndi.binary_opening(support, iterations=1)
+    if int(support.sum()) == 0:
+        support = img >= float(np.quantile(vals, 0.20))
+        support = ndi.binary_fill_holes(support)
+    return support.astype(bool)
 
 
 def _compute_reference_pd_map(
@@ -596,8 +622,9 @@ def _compute_reference_pala_example_matout(
 ) -> tuple[np.ndarray, dict[str, Any]]:
     cache_dir.mkdir(parents=True, exist_ok=True)
     map_path = cache_dir / "reference_pala_example_matout.npy"
+    support_path = cache_dir / "reference_pala_example_support.npy"
     tele_path = cache_dir / "reference_pala_example_matout.json"
-    if map_path.is_file() and tele_path.is_file():
+    if map_path.is_file() and support_path.is_file() and tele_path.is_file():
         return (
             np.load(map_path, allow_pickle=False).astype(np.float32, copy=False),
             json.loads(tele_path.read_text()),
@@ -614,6 +641,7 @@ def _compute_reference_pala_example_matout(
         raise FileNotFoundError(
             f"expected PALA example TIFFs under {pala_example_root}, found PowDop={powdop_tif.is_file()} MatOut={matout_tif.is_file()}"
         )
+    powdop_template = _to_gray_unit(iio.imread(powdop_tif))
     reg = _register_pala_example_crop(
         mean_pd_raw=mean_pd_raw,
         pala_powdop_tif=powdop_tif,
@@ -632,7 +660,12 @@ def _compute_reference_pala_example_matout(
     oriented = np.full(oriented_shape, np.nan, dtype=np.float32)
     oriented[y : y + h, x : x + w] = coarse_crop.astype(np.float32, copy=False)
     ref_raw = _oriented_to_raw(oriented, orientation).astype(np.float32, copy=False)
+    support_crop = _derive_powdop_support_mask(powdop_template)
+    oriented_support = np.zeros(oriented_shape, dtype=bool)
+    oriented_support[y : y + h, x : x + w] = support_crop.astype(bool, copy=False)
+    support_raw = _oriented_to_raw(oriented_support.astype(np.float32), orientation) > 0.5
     np.save(map_path, ref_raw, allow_pickle=False)
+    np.save(support_path, support_raw.astype(np.uint8), allow_pickle=False)
     tele_payload = {
         "reference_mode": "pala_example_matout",
         "pala_example_root": str(pala_example_root),
@@ -643,6 +676,8 @@ def _compute_reference_pala_example_matout(
         "scalebar_removal": scalebar,
         "coarse_crop_shape": [int(v) for v in coarse_crop.shape],
         "raw_shape": [int(v) for v in ref_raw.shape],
+        "support_mask_path": str(support_path),
+        "support_mask_pixels": int(support_raw.sum()),
     }
     tele_path.write_text(json.dumps(tele_payload, indent=2, sort_keys=True))
     return ref_raw, tele_payload
@@ -1171,6 +1206,7 @@ def main() -> None:
         args.cache_root.mkdir(parents=True, exist_ok=True)
 
     ref_maps: dict[int, np.ndarray] = {}
+    support_maps: dict[int, np.ndarray] = {}
     ref_tele: dict[int, dict[str, Any]] = {}
     for block_id in ref_blocks:
         ref_map, tele = _compute_reference_map(
@@ -1191,6 +1227,11 @@ def main() -> None:
             pala_trim_sr_border=int(args.pala_trim_sr_border),
         )
         ref_maps[int(block_id)] = ref_map
+        support_path = str(tele.get("support_mask_path", "")).strip()
+        if support_path:
+            support_maps[int(block_id)] = np.load(support_path, allow_pickle=False).astype(bool)
+        else:
+            support_maps[int(block_id)] = np.isfinite(ref_map)
         ref_tele[int(block_id)] = tele
 
     representative_block = int(eval_blocks[0])
@@ -1208,9 +1249,12 @@ def main() -> None:
         if not loo_ids:
             loo_ids = list(ref_blocks)
         loo_stack = np.stack([ref_maps[int(bid)] for bid in loo_ids], axis=0)
+        support_stack = np.stack([support_maps[int(bid)].astype(np.float32) for bid in loo_ids], axis=0)
         ref_map = np.mean(loo_stack, axis=0).astype(np.float32, copy=False)
+        support_mask = np.mean(support_stack, axis=0) >= 0.5
         mask_flow, mask_bg, qc = _derive_structural_masks(
             ref_map,
+            support_mask=support_mask,
             vessel_quantile=float(args.vessel_quantile),
             bg_quantile=float(args.background_quantile),
             erode_iters=int(args.mask_erode_iters),
@@ -1229,6 +1273,7 @@ def main() -> None:
         reference_manifest[int(block_id)] = {
             "reference_blocks": [int(b) for b in loo_ids],
             "mask_qc": qc,
+            "support_pixels": int(support_mask.sum()),
         }
         if int(block_id) == representative_block:
             representative_ref = ref_map.copy()
