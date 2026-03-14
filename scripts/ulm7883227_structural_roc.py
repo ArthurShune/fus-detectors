@@ -23,6 +23,12 @@ from pipeline.realdata.ulm_zenodo_7883227 import (
     load_ulm_block_iq,
     load_ulm_zenodo_7883227_params,
 )
+from scripts.ulm_zenodo_7883227_motion_sweep import (
+    _apply_translation_per_frame,
+    _apply_warp_per_frame,
+    _brainlike_displacement_fields,
+    _motion_shifts,
+)
 from sim.kwave.common import _baseline_pd_mcsvd
 from sim.kwave.icube_bundle import write_acceptance_bundle_from_icube
 
@@ -89,6 +95,16 @@ def _threshold_from_neg(neg: np.ndarray, fpr: float) -> tuple[float | None, floa
     return thr, fpr_emp
 
 
+def _threshold_from_pos(pos: np.ndarray, tpr: float) -> tuple[float | None, float | None]:
+    pos_f = _finite(pos)
+    if pos_f.size == 0:
+        return None, None
+    q = float(np.clip(1.0 - float(tpr), 0.0, 1.0))
+    thr = float(np.quantile(pos_f, q))
+    tpr_emp = float(np.mean(pos_f >= thr))
+    return thr, tpr_emp
+
+
 def _bootstrap_ci(
     xs: list[float | None],
     *,
@@ -136,6 +152,12 @@ def _derive_structural_masks(
     erode_iters: int,
     guard_dilate_iters: int,
     edge_margin: int,
+    vessel_mask_mode: str,
+    peak_size: int,
+    peak_dilate_iters: int,
+    background_mask_mode: str,
+    shell_inner_dilate_iters: int,
+    shell_outer_dilate_iters: int,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
     ref = np.asarray(reference_pd, dtype=np.float64)
     finite = np.isfinite(ref)
@@ -145,10 +167,18 @@ def _derive_structural_masks(
     positive_vals = ref[finite & (ref > 0.0)]
     if positive_vals.size and vessel_thr <= 0.0 and (positive_vals.size / max(1, int(finite.sum()))) < 0.5:
         vessel_thr = _safe_quantile(positive_vals, vessel_quantile)
-    vessel = (ref >= vessel_thr) & finite
-    if erode_iters > 0:
-        vessel = ndi.binary_erosion(vessel, iterations=int(erode_iters))
-    vessel = ndi.binary_opening(vessel, iterations=1)
+    vessel_mode = str(vessel_mask_mode or "area").strip().lower()
+    if vessel_mode == "peaks":
+        peaks = (ref >= vessel_thr) & finite
+        peaks &= ref == ndi.maximum_filter(ref, size=max(3, int(peak_size)), mode="nearest")
+        vessel = peaks
+        if peak_dilate_iters > 0:
+            vessel = ndi.binary_dilation(vessel, iterations=int(peak_dilate_iters))
+    else:
+        vessel = (ref >= vessel_thr) & finite
+        if erode_iters > 0:
+            vessel = ndi.binary_erosion(vessel, iterations=int(erode_iters))
+        vessel = ndi.binary_opening(vessel, iterations=1)
 
     bg_thr = _safe_quantile(ref[finite], bg_quantile)
     bg_candidate = finite.copy()
@@ -166,17 +196,30 @@ def _derive_structural_masks(
         vessel[-edge_margin:, :] = False
         vessel[:, :edge_margin] = False
         vessel[:, -edge_margin:] = False
-    bg = bg_candidate & (ref <= bg_thr)
-    if int(bg.sum()) < 1000:
-        candidate_vals = ref[bg_candidate]
-        if candidate_vals.size:
-            bg_thr = _safe_quantile(candidate_vals, min(max(float(bg_quantile), 0.5), 0.8))
-            bg = bg_candidate & (ref <= bg_thr)
-    if int(bg.sum()) < 1000:
-        bg = bg_candidate.copy()
+    bg_mode = str(background_mask_mode or "global_low").strip().lower()
+    if bg_mode == "shell":
+        inner = ndi.binary_dilation(vessel, iterations=max(1, int(shell_inner_dilate_iters)))
+        outer = ndi.binary_dilation(vessel, iterations=max(int(shell_outer_dilate_iters), int(shell_inner_dilate_iters) + 1))
+        bg = outer & ~inner & finite
+        if edge_margin > 0:
+            bg[:edge_margin, :] = False
+            bg[-edge_margin:, :] = False
+            bg[:, :edge_margin] = False
+            bg[:, -edge_margin:] = False
+        bg &= ~vessel
+        bg_thr = float("nan")
+    else:
+        bg = bg_candidate & (ref <= bg_thr)
+        if int(bg.sum()) < 1000:
+            candidate_vals = ref[bg_candidate]
+            if candidate_vals.size:
+                bg_thr = _safe_quantile(candidate_vals, min(max(float(bg_quantile), 0.5), 0.8))
+                bg = bg_candidate & (ref <= bg_thr)
+        if int(bg.sum()) < 1000:
+            bg = bg_candidate.copy()
     qc = {
         "vessel_threshold": float(vessel_thr),
-        "background_threshold": float(bg_thr),
+        "background_threshold": float(bg_thr) if np.isfinite(bg_thr) else None,
         "n_vessel": int(vessel.sum()),
         "n_background": int(bg.sum()),
         "guard_dilate_iters": int(guard_dilate_iters),
@@ -184,6 +227,12 @@ def _derive_structural_masks(
         "vessel_components": int(_connected_components(vessel)),
         "background_components": int(_connected_components(bg)),
         "fpr_floor_background": float(1.0 / max(1, int(bg.sum()))),
+        "vessel_mask_mode": vessel_mode,
+        "background_mask_mode": bg_mode,
+        "peak_size": int(peak_size),
+        "peak_dilate_iters": int(peak_dilate_iters),
+        "shell_inner_dilate_iters": int(shell_inner_dilate_iters),
+        "shell_outer_dilate_iters": int(shell_outer_dilate_iters),
     }
     return vessel.astype(bool), bg.astype(bool), qc
 
@@ -333,6 +382,7 @@ def _evaluate_window_score(
     mask_bg: np.ndarray,
     *,
     fprs: list[float],
+    tpr_targets: list[float],
 ) -> dict[str, Any]:
     pos = np.asarray(score, dtype=np.float64)[np.asarray(mask_flow, dtype=bool)]
     neg = np.asarray(score, dtype=np.float64)[np.asarray(mask_bg, dtype=bool)]
@@ -352,6 +402,18 @@ def _evaluate_window_score(
             out[f"tpr@{tag}"] = float(np.mean(pos >= thr)) if pos.size else None
             out[f"fpr@{tag}"] = realized
             out[f"thr@{tag}"] = float(thr)
+    for tpr in tpr_targets:
+        pct = int(round(100.0 * float(tpr)))
+        tag = f"{pct:02d}"
+        thr, realized = _threshold_from_pos(pos, tpr)
+        if thr is None:
+            out[f"fpr_at_tpr{tag}"] = None
+            out[f"tpr_realized@{tag}"] = None
+            out[f"thr_tpr@{tag}"] = None
+        else:
+            out[f"fpr_at_tpr{tag}"] = float(np.mean(neg >= thr)) if neg.size else None
+            out[f"tpr_realized@{tag}"] = realized
+            out[f"thr_tpr@{tag}"] = float(thr)
     return out
 
 
@@ -361,21 +423,111 @@ def _stap_variant_label(variant: str) -> str:
         return "Matched-subspace detector (fixed head)"
     if raw == "adaptive_guard":
         return "Matched-subspace detector (adaptive head)"
+    if raw == "whitened_power":
+        return "Whitened-power detector"
     return "Matched-subspace detector (whitened specialist)"
 
 
-def _score_specs(stap_variant: str = "msd_ratio") -> list[tuple[str, str, str]]:
-    return [
+def _score_specs(
+    stap_variant: str = "msd_ratio",
+    *,
+    include_postka: bool = False,
+) -> list[tuple[str, str, str]]:
+    specs = [
         ("pd", "score_base.npy", "Baseline (power Doppler)"),
         ("log_pd", "score_base_pdlog.npy", "Baseline (log-power Doppler)"),
         ("kasai", "score_base_kasai.npy", "Baseline (Kasai lag-1 magnitude)"),
+        ("stap_pd", "pd_stap.npy", "Detector-filtered power Doppler"),
         ("matched_subspace", "score_stap_preka.npy", _stap_variant_label(stap_variant)),
     ]
+    if include_postka:
+        specs.append(
+            (
+                "matched_subspace_postka",
+                "score_stap.npy",
+                f"{_stap_variant_label(stap_variant)} + shrink-only penalty",
+            )
+        )
+    return specs
 
 
-def _load_bundle_scores(bundle_dir: Path, *, stap_variant: str) -> dict[str, np.ndarray]:
+def _apply_motion_to_cube(
+    cube: np.ndarray,
+    *,
+    motion_kind: str,
+    motion_amp_px: float,
+    motion_seed: int,
+    step_frame: int | None,
+    brainlike_rigid_kind: str,
+    brainlike_rigid_frac: float,
+    brainlike_elastic_frac: float,
+    brainlike_elastic_sigma_px: float,
+    brainlike_elastic_depth_decay_frac: float,
+    brainlike_elastic_rw_step_sigma: float,
+    brainlike_micro_jitter_frac: float,
+) -> tuple[np.ndarray, dict[str, Any] | None]:
+    kind = str(motion_kind or "none").strip().lower()
+    amp_px = float(max(0.0, motion_amp_px))
+    if amp_px <= 0.0 or kind in {"none", "off"}:
+        return np.asarray(cube, dtype=np.complex64, copy=False), None
+    cube0 = np.asarray(cube, dtype=np.complex64, copy=False)
+    T, H, W = cube0.shape
+    if kind in {"sine", "sin", "drift_sine", "step", "burst", "rw", "randomwalk"}:
+        dy, dx = _motion_shifts(
+            kind,
+            T=T,
+            amp_px=amp_px,
+            seed=int(motion_seed),
+            step_frame=step_frame,
+        )
+        moved = _apply_translation_per_frame(cube0, dy, dx)
+        return moved.astype(np.complex64, copy=False), {
+            "motion_kind": kind,
+            "motion_amp_px": amp_px,
+            "motion_seed": int(motion_seed),
+            "gt_align_kind": "translation",
+            "dy_frame_ref": float(dy[T // 2]),
+            "dx_frame_ref": float(dx[T // 2]),
+        }
+    if kind in {"brainlike", "elastic"}:
+        if kind == "elastic":
+            rigid_kind = "none"
+            rigid_frac = 0.0
+            elastic_frac = 1.0
+            micro_jitter_frac = 0.0
+        else:
+            rigid_kind = str(brainlike_rigid_kind)
+            rigid_frac = float(brainlike_rigid_frac)
+            elastic_frac = float(brainlike_elastic_frac)
+            micro_jitter_frac = float(brainlike_micro_jitter_frac)
+        dy_field, dx_field, tele = _brainlike_displacement_fields(
+            T=T,
+            H=H,
+            W=W,
+            amp_px=amp_px,
+            seed=int(motion_seed),
+            rigid_kind=rigid_kind,
+            rigid_frac=float(rigid_frac),
+            elastic_frac=float(elastic_frac),
+            elastic_sigma_px=float(brainlike_elastic_sigma_px),
+            elastic_depth_decay_frac=float(brainlike_elastic_depth_decay_frac),
+            elastic_rw_step_sigma=float(brainlike_elastic_rw_step_sigma),
+            micro_jitter_frac=float(micro_jitter_frac),
+        )
+        moved = _apply_warp_per_frame(cube0, dy_field, dx_field)
+        return moved.astype(np.complex64, copy=False), {
+            "motion_kind": kind,
+            "motion_amp_px": amp_px,
+            "motion_seed": int(motion_seed),
+            "gt_align_kind": "warp",
+            **tele,
+        }
+    raise ValueError(f"unsupported motion_kind={motion_kind!r}")
+
+
+def _load_bundle_scores(bundle_dir: Path, *, stap_variant: str, include_postka: bool) -> dict[str, np.ndarray]:
     out: dict[str, np.ndarray] = {}
-    for key, filename, _ in _score_specs(stap_variant):
+    for key, filename, _ in _score_specs(stap_variant, include_postka=include_postka):
         path = bundle_dir / filename
         if path.is_file():
             out[key] = np.load(path, allow_pickle=False).astype(np.float32, copy=False)
@@ -451,12 +603,26 @@ def _make_roc_figure(
         "pd": dict(color="#666666", linewidth=1.8),
         "log_pd": dict(color="#999999", linewidth=1.2, linestyle="--"),
         "kasai": dict(color="#ff7f0e", linewidth=1.6),
+        "stap_pd": dict(color="#2ca02c", linewidth=1.8),
         "matched_subspace": dict(color="#1f77b4", linewidth=2.0),
+        "matched_subspace_postka": dict(color="#d62728", linewidth=2.0, linestyle="-."),
     }
-    labels = {k: lbl for k, _, lbl in _score_specs(str(((per_window_rows[0] if per_window_rows else {}).get("stap_detector_variant")) or "msd_ratio"))}
+    include_postka = bool((per_window_rows[0] if per_window_rows else {}).get("score_ka_v2_enable"))
+    labels = {
+        k: lbl
+        for k, _, lbl in _score_specs(
+            str(((per_window_rows[0] if per_window_rows else {}).get("stap_detector_variant")) or "msd_ratio"),
+            include_postka=include_postka,
+        )
+    }
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(6.2, 4.6), constrained_layout=True)
-    for score_idx, (score_key, _, _) in enumerate(_score_specs(str(((per_window_rows[0] if per_window_rows else {}).get("stap_detector_variant")) or "msd_ratio"))):
+    for score_idx, (score_key, _, _) in enumerate(
+        _score_specs(
+            str(((per_window_rows[0] if per_window_rows else {}).get("stap_detector_variant")) or "msd_ratio"),
+            include_postka=include_postka,
+        )
+    ):
         score_rows = [r for r in per_window_rows if r["score_key"] == score_key]
         xs: list[float] = []
         ys: list[float] = []
@@ -495,7 +661,7 @@ def _make_roc_figure(
         hi = hi[order]
         st = styles[score_key]
         ax.plot(x, y, label=labels[score_key], **st)
-        if score_key in {"matched_subspace", "pd"}:
+        if score_key in {"matched_subspace", "matched_subspace_postka", "pd", "stap_pd"}:
             ax.fill_between(x, lo, hi, color=st["color"], alpha=0.12, linewidth=0)
     ax.set_xscale("log")
     ax.set_xlim(min(fprs_plot) * 0.8, max(fprs_plot) * 1.2)
@@ -517,10 +683,14 @@ def _write_summary_table(
     fprs: list[float],
 ) -> None:
     stap_variant = str(((summary.get("frozen_profile") or {}).get("stap_detector_variant")) or "msd_ratio")
-    score_order = [k for k, _, _ in _score_specs(stap_variant)]
-    score_labels = {k: lbl for k, _, lbl in _score_specs(stap_variant)}
+    include_postka = bool(((summary.get("frozen_profile") or {}).get("score_ka_v2_enable")) or False)
+    score_order = [k for k, _, _ in _score_specs(stap_variant, include_postka=include_postka)]
+    score_labels = {k: lbl for k, _, lbl in _score_specs(stap_variant, include_postka=include_postka)}
     col_tags = [f"{float(fpr):.0e}" for fpr in fprs]
     ref_mode = str(((summary.get("reference_design") or {}).get("reference_mode")) or "local_density")
+    window_frames = int(((summary.get("reference_design") or {}).get("window_frames")) or 128)
+    motion_kind = str(((summary.get("reference_design") or {}).get("motion_kind")) or "none")
+    motion_amp_px = float(((summary.get("reference_design") or {}).get("motion_amp_px")) or 0.0)
     if ref_mode == "local_density":
         ref_text = (
             "a leave-one-block-out full-acquisition microbubble-density reference obtained by "
@@ -561,7 +731,9 @@ def _write_summary_table(
     lines.append(
         "\\caption{Structural-label ROC on real in vivo rat-brain IQ from ULM Zenodo 7883227. "
         f"For each evaluation block, vessel and background masks are derived once from {ref_text}; "
-        "short 128-frame windows from the held-out block are then scored on the "
+        f"short {window_frames}-frame windows from the held-out block"
+        + (f" after {motion_kind} motion injection at {motion_amp_px:.2f} px amplitude" if motion_kind not in {'none','off'} and motion_amp_px > 0.0 else "")
+        + " are then scored on the "
         "same MC--SVD residual cube using different downstream detector heads. Entries report window-level "
         "means with 95\\% bootstrap CIs over windows. Reproducibility details are provided in \\SuppOrApp{app:repro}.}"
     )
@@ -596,8 +768,12 @@ def parse_args() -> argparse.Namespace:
         "--stap-detector-variant",
         type=str,
         default="msd_ratio",
-        choices=["msd_ratio", "unwhitened_ratio", "adaptive_guard"],
+        choices=["msd_ratio", "unwhitened_ratio", "adaptive_guard", "whitened_power"],
     )
+    ap.add_argument("--flow-low-hz", type=float, default=10.0)
+    ap.add_argument("--flow-high-hz", type=float, default=150.0)
+    ap.add_argument("--alias-center-hz", type=float, default=350.0)
+    ap.add_argument("--alias-width-hz", type=float, default=150.0)
     ap.add_argument("--reference-mode", type=str, default="local_density", choices=["local_density", "pd"])
     ap.add_argument("--reference-local-density-quantile", type=float, default=0.9995)
     ap.add_argument("--reference-local-density-peak-size", type=int, default=3)
@@ -605,14 +781,38 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--diag-load", type=float, default=0.07)
     ap.add_argument("--cov-estimator", type=str, default="scm")
     ap.add_argument("--stap-device", type=str, default="cuda")
+    ap.add_argument("--score-ka-v2-enable", action=argparse.BooleanOptionalAction, default=False)
     ap.add_argument("--reg-enable", action=argparse.BooleanOptionalAction, default=True)
     ap.add_argument("--reg-subpixel", type=int, default=4)
+    ap.add_argument(
+        "--motion-kind",
+        type=str,
+        default="none",
+        choices=["none", "sine", "step", "randomwalk", "brainlike", "elastic"],
+    )
+    ap.add_argument("--motion-amp-px", type=float, default=0.0)
+    ap.add_argument("--motion-seed", type=int, default=0)
+    ap.add_argument("--step-frame", type=int, default=None)
+    ap.add_argument("--brainlike-rigid-kind", type=str, default="randomwalk")
+    ap.add_argument("--brainlike-rigid-frac", type=float, default=0.7)
+    ap.add_argument("--brainlike-elastic-frac", type=float, default=0.3)
+    ap.add_argument("--brainlike-elastic-sigma-px", type=float, default=24.0)
+    ap.add_argument("--brainlike-elastic-depth-decay-frac", type=float, default=0.8)
+    ap.add_argument("--brainlike-elastic-rw-step-sigma", type=float, default=0.25)
+    ap.add_argument("--brainlike-micro-jitter-frac", type=float, default=0.08)
     ap.add_argument("--vessel-quantile", type=float, default=0.92)
     ap.add_argument("--background-quantile", type=float, default=0.50)
     ap.add_argument("--mask-erode-iters", type=int, default=1)
     ap.add_argument("--guard-dilate-iters", type=int, default=3)
     ap.add_argument("--edge-margin", type=int, default=4)
+    ap.add_argument("--vessel-mask-mode", type=str, default="area", choices=["area", "peaks"])
+    ap.add_argument("--peak-size", type=int, default=3)
+    ap.add_argument("--peak-dilate-iters", type=int, default=1)
+    ap.add_argument("--background-mask-mode", type=str, default="global_low", choices=["global_low", "shell"])
+    ap.add_argument("--shell-inner-dilate-iters", type=int, default=4)
+    ap.add_argument("--shell-outer-dilate-iters", type=int, default=10)
     ap.add_argument("--fprs", type=float, nargs="+", default=[1e-1, 1e-2, 1e-3])
+    ap.add_argument("--tpr-targets", type=float, nargs="+", default=[0.5])
     ap.add_argument(
         "--fprs-plot",
         type=float,
@@ -656,6 +856,9 @@ def main() -> None:
     args = parse_args()
     params = load_ulm_zenodo_7883227_params(args.data_root)
     prf_hz = float(args.prf_hz) if args.prf_hz is not None else float(params.frame_rate_hz)
+    lt_eff = min(int(args.lt), int(args.window_frames) - 1)
+    if lt_eff < 2:
+        raise ValueError(f"window_frames must exceed Lt by at least one sample (got window_frames={args.window_frames}, Lt={args.lt})")
     ref_blocks = _parse_blocks(args.ref_blocks, root=args.data_root)
     eval_blocks = _parse_blocks(args.eval_blocks, root=args.data_root)
 
@@ -714,6 +917,12 @@ def main() -> None:
             erode_iters=int(args.mask_erode_iters),
             guard_dilate_iters=int(args.guard_dilate_iters),
             edge_margin=int(args.edge_margin),
+            vessel_mask_mode=str(args.vessel_mask_mode),
+            peak_size=int(args.peak_size),
+            peak_dilate_iters=int(args.peak_dilate_iters),
+            background_mask_mode=str(args.background_mask_mode),
+            shell_inner_dilate_iters=int(args.shell_inner_dilate_iters),
+            shell_outer_dilate_iters=int(args.shell_outer_dilate_iters),
         )
         if int(mask_bg.sum()) < 1000:
             raise RuntimeError(f"block {block_id}: background mask too small for 1e-3 tail ({int(mask_bg.sum())} pixels)")
@@ -734,6 +943,20 @@ def main() -> None:
         for win_idx, start in enumerate(starts):
             stop = int(start) + int(args.window_frames)
             cube = iq_full[int(start) : int(stop)]
+            cube, motion_tele = _apply_motion_to_cube(
+                cube,
+                motion_kind=str(args.motion_kind),
+                motion_amp_px=float(args.motion_amp_px),
+                motion_seed=int(args.motion_seed) + 1009 * int(block_id) + 37 * int(win_idx),
+                step_frame=args.step_frame,
+                brainlike_rigid_kind=str(args.brainlike_rigid_kind),
+                brainlike_rigid_frac=float(args.brainlike_rigid_frac),
+                brainlike_elastic_frac=float(args.brainlike_elastic_frac),
+                brainlike_elastic_sigma_px=float(args.brainlike_elastic_sigma_px),
+                brainlike_elastic_depth_decay_frac=float(args.brainlike_elastic_depth_decay_frac),
+                brainlike_elastic_rw_step_sigma=float(args.brainlike_elastic_rw_step_sigma),
+                brainlike_micro_jitter_frac=float(args.brainlike_micro_jitter_frac),
+            )
             dataset_name = f"ulm7883227_struct_block{int(block_id):03d}_{int(start):04d}_{int(stop):04d}"
             bundle_root = args.bundle_tmp_root if bool(args.keep_bundles) else Path(
                 tempfile.mkdtemp(prefix="ulm7883227_struct_", dir=args.bundle_tmp_root)
@@ -747,7 +970,7 @@ def main() -> None:
                 prf_hz=float(prf_hz),
                 tile_hw=(int(args.tile_h), int(args.tile_w)),
                 tile_stride=int(args.tile_stride),
-                Lt=int(args.lt),
+                Lt=int(lt_eff),
                 diag_load=float(args.diag_load),
                 cov_estimator=str(args.cov_estimator),
                 stap_device=str(args.stap_device),
@@ -757,27 +980,35 @@ def main() -> None:
                 svd_energy_frac=float(args.svd_energy_frac),
                 run_stap=True,
                 stap_detector_variant=str(args.stap_detector_variant),
-                score_ka_v2_enable=False,
+                score_ka_v2_enable=bool(args.score_ka_v2_enable),
                 stap_conditional_enable=False,
                 flow_mask_mode="pd_auto",
                 mask_flow_override=mask_flow,
                 mask_bg_override=mask_bg,
-                band_ratio_flow_low_hz=10.0,
-                band_ratio_flow_high_hz=150.0,
-                band_ratio_alias_center_hz=350.0,
-                band_ratio_alias_width_hz=150.0,
+                band_ratio_flow_low_hz=float(args.flow_low_hz),
+                band_ratio_flow_high_hz=float(args.flow_high_hz),
+                band_ratio_alias_center_hz=float(args.alias_center_hz),
+                band_ratio_alias_width_hz=float(args.alias_width_hz),
                 meta_extra={
                     "ulm_structural_roc": {
                         "evaluation_block_id": int(block_id),
                         "window_start": int(start),
                         "window_stop": int(stop),
                         "reference_block_ids": [int(b) for b in loo_ids],
+                        "motion": motion_tele,
                     }
                 },
             )
             bundle_dir = Path(paths["meta"]).parent
-            scores = _load_bundle_scores(bundle_dir, stap_variant=str(args.stap_detector_variant))
-            for score_key, _, score_label in _score_specs(str(args.stap_detector_variant)):
+            scores = _load_bundle_scores(
+                bundle_dir,
+                stap_variant=str(args.stap_detector_variant),
+                include_postka=bool(args.score_ka_v2_enable),
+            )
+            for score_key, _, score_label in _score_specs(
+                str(args.stap_detector_variant),
+                include_postka=bool(args.score_ka_v2_enable),
+            ):
                 score = scores.get(score_key)
                 if score is None:
                     continue
@@ -786,6 +1017,7 @@ def main() -> None:
                     mask_flow,
                     mask_bg,
                     fprs=[float(f) for f in args.fprs_plot],
+                    tpr_targets=[float(t) for t in args.tpr_targets],
                 )
                 row = {
                     "block_id": int(block_id),
@@ -795,6 +1027,9 @@ def main() -> None:
                     "score_key": str(score_key),
                     "score_label": str(score_label),
                     "stap_detector_variant": str(args.stap_detector_variant),
+                    "motion_kind": str(args.motion_kind),
+                    "motion_amp_px": float(args.motion_amp_px),
+                    "score_ka_v2_enable": bool(args.score_ka_v2_enable),
                     "n_vessel": int(mask_flow.sum()),
                     "n_background": int(mask_bg.sum()),
                     **metrics,
@@ -803,7 +1038,10 @@ def main() -> None:
 
     # Restrict summary table to requested headline FPRs.
     summary_scores: dict[str, Any] = {}
-    for score_key, _, score_label in _score_specs(str(args.stap_detector_variant)):
+    for score_key, _, score_label in _score_specs(
+        str(args.stap_detector_variant),
+        include_postka=bool(args.score_ka_v2_enable),
+    ):
         rows = [r for r in per_window_rows if r["score_key"] == score_key]
         if not rows:
             continue
@@ -825,6 +1063,18 @@ def main() -> None:
                 n_boot=int(args.bootstrap_n),
                 seed=int(args.bootstrap_seed) + 200 * (i + 1),
             )
+        for i, tpr in enumerate(args.tpr_targets):
+            tag = f"{int(round(100.0 * float(tpr))):02d}"
+            sec[f"fpr_at_tpr{tag}"] = _bootstrap_ci(
+                [r.get(f"fpr_at_tpr{tag}") for r in rows],
+                n_boot=int(args.bootstrap_n),
+                seed=int(args.bootstrap_seed) + 500 * (i + 1),
+            )
+            sec[f"tpr_realized@{tag}"] = _bootstrap_ci(
+                [r.get(f"tpr_realized@{tag}") for r in rows],
+                n_boot=int(args.bootstrap_n),
+                seed=int(args.bootstrap_seed) + 600 * (i + 1),
+            )
         summary_scores[score_key] = sec
 
     summary = {
@@ -842,6 +1092,11 @@ def main() -> None:
             "prf_hz": float(prf_hz),
             "fprs_table": [float(f) for f in args.fprs],
             "fprs_plot": [float(f) for f in args.fprs_plot],
+            "tpr_targets": [float(t) for t in args.tpr_targets],
+            "motion_kind": str(args.motion_kind),
+            "motion_amp_px": float(args.motion_amp_px),
+            "vessel_mask_mode": str(args.vessel_mask_mode),
+            "background_mask_mode": str(args.background_mask_mode),
         },
         "frozen_profile": {
             "baseline": "MC-SVD",
@@ -850,13 +1105,18 @@ def main() -> None:
             "tile_h": int(args.tile_h),
             "tile_w": int(args.tile_w),
             "tile_stride": int(args.tile_stride),
-            "Lt": int(args.lt),
+            "Lt_requested": int(args.lt),
+            "Lt": int(lt_eff),
             "cov_estimator": str(args.cov_estimator),
             "diag_load": float(args.diag_load),
+            "score_ka_v2_enable": bool(args.score_ka_v2_enable),
             "bands_hz": {
-                "flow": [10.0, 150.0],
-                "guard": [150.0, 200.0],
-                "alias": [200.0, 500.0],
+                "flow": [float(args.flow_low_hz), float(args.flow_high_hz)],
+                "guard": [float(args.flow_high_hz), float(args.alias_center_hz) - float(args.alias_width_hz)],
+                "alias": [
+                    float(args.alias_center_hz) - float(args.alias_width_hz),
+                    float(args.alias_center_hz) + float(args.alias_width_hz),
+                ],
             },
         },
         "mask_qc": mask_qc,
