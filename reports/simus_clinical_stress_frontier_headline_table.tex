@@ -1,21 +1,21 @@
 \begin{table*}[t]
 \centering
 \scriptsize
-\setlength{\tabcolsep}{4pt}
+\setlength{\tabcolsep}{3pt}
 \resizebox{\linewidth}{!}{%
-\begin{tabular}{@{}P{2.55cm} P{1.45cm} P{2.05cm} P{2.8cm} P{2.8cm} C{1.2cm} C{1.2cm} C{1.2cm} C{1.2cm}@{}}
+\begin{tabular}{@{}P{2.8cm} P{1.2cm} P{2.2cm} P{3.2cm} P{3.2cm} C{1.0cm} C{1.0cm} C{1.0cm} C{1.0cm}@{}}
 \hline
 Stress axis & Level & Applied perturbation & Best public stack & Best detector-family stack & \shortstack{Public\\AUC$_{\mathrm{main/nuis}}$} & \shortstack{Detector\\AUC$_{\mathrm{main/nuis}}$} & \shortstack{Public\\FPR$_{\mathrm{nuis}}$@$0.5$} & \shortstack{Detector\\FPR$_{\mathrm{nuis}}$@$0.5$} \\
 \hline
-\shortstack[l]{Cardiac-like pulsation\\\cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018}} & Ref. & 1.0x cardiac amplitude at 1.30 Hz & RPCA -> PD & RPCA -> Matched-subspace default & 0.381 & 0.879 & 0.743 & 0.034 \\
-\shortstack[l]{Cardiac-like pulsation\\\cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018}} & Mod. & 2.0x cardiac amplitude at 1.30 Hz & RPCA -> PD & Adaptive Global SVD -> Whitened specialist & 0.388 & 0.883 & 0.668 & 0.037 \\
-\shortstack[l]{Cardiac-like pulsation\\\cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018}} & Hard & 3.0x cardiac amplitude at 1.30 Hz & RPCA -> PD & Adaptive Global SVD -> Whitened specialist & 0.399 & 0.882 & 0.609 & 0.025 \\
-\shortstack[l]{Short ensemble\\\cite{Imbault2017,Soloukey2020FUSAwake,MobileFUS2025}} & Ref. & 64 frames (42.7 ms) & RPCA -> PD & RPCA -> Matched-subspace default & 0.381 & 0.879 & 0.743 & 0.034 \\
-\shortstack[l]{Short ensemble\\\cite{Imbault2017,Soloukey2020FUSAwake,MobileFUS2025}} & Mod. & 48 frames (32.0 ms) & RPCA -> PD & Adaptive Global SVD -> Whitened specialist & 0.390 & 0.841 & 0.754 & 0.056 \\
-\shortstack[l]{Short ensemble\\\cite{Imbault2017,Soloukey2020FUSAwake,MobileFUS2025}} & Hard & 32 frames (21.3 ms) & RPCA -> PD & RPCA -> Matched-subspace default & 0.426 & 0.772 & 0.617 & 0.166 \\
+\shortstack[l]{Cardiac-like pulsation} & Ref. & 1.0x cardiac amplitude at 1.30 Hz & \shortstack[l]{RPCA\\$\rightarrow$ PD} & \shortstack[l]{RPCA\\$\rightarrow$ Fixed matched-subspace} & 0.381 & 0.879 & 0.743 & 0.034 \\
+\shortstack[l]{Cardiac-like pulsation} & Mod. & 2.0x cardiac amplitude at 1.30 Hz & \shortstack[l]{RPCA\\$\rightarrow$ PD} & \shortstack[l]{Adaptive-global SVD\\$\rightarrow$ Whitened specialist} & 0.388 & 0.883 & 0.668 & 0.037 \\
+\shortstack[l]{Cardiac-like pulsation} & Hard & 3.0x cardiac amplitude at 1.30 Hz & \shortstack[l]{RPCA\\$\rightarrow$ PD} & \shortstack[l]{Adaptive-global SVD\\$\rightarrow$ Whitened specialist} & 0.399 & 0.882 & 0.609 & 0.025 \\
+\shortstack[l]{Short ensemble} & Ref. & 64 frames (42.7 ms) & \shortstack[l]{RPCA\\$\rightarrow$ PD} & \shortstack[l]{RPCA\\$\rightarrow$ Fixed matched-subspace} & 0.381 & 0.879 & 0.743 & 0.034 \\
+\shortstack[l]{Short ensemble} & Mod. & 48 frames (32.0 ms) & \shortstack[l]{RPCA\\$\rightarrow$ PD} & \shortstack[l]{Adaptive-global SVD\\$\rightarrow$ Whitened specialist} & 0.390 & 0.841 & 0.754 & 0.056 \\
+\shortstack[l]{Short ensemble} & Hard & 32 frames (21.3 ms) & \shortstack[l]{RPCA\\$\rightarrow$ PD} & \shortstack[l]{RPCA\\$\rightarrow$ Fixed matched-subspace} & 0.426 & 0.772 & 0.617 & 0.166 \\
 \hline
 \end{tabular}%
 }
-\caption{Held-out paper-tier SIMUS stress frontier on the mobile setting, restricted to the strongest residualizer families identified by the preliminary reduced-grid frontier (RPCA and adaptive-global SVD). For each stressed row we report the strongest public comparator stack and the strongest detector-family stack on that same held-out evaluation seed. This is the harder structural headline table in the main paper; the cleaner prespecified structural checkpoint is retained separately to identify the fixed default detector head.}
+\caption{Held-out SIMUS mobile stress frontier. Each row compares the best public comparator with the best detector-family stack on the same held-out evaluation seed. The cleaner structural checkpoint is shown separately to identify the fixed default detector head.}
 \label{tab:simus_stress_frontier_headline}
 \end{table*}
