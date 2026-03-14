@@ -622,26 +622,45 @@ def main() -> None:
     eval_summary = _aggregate_by_pipeline(eval_rows)
     best_public = _best_pipeline(dev_summary, role="public")
     best_detector = _best_pipeline(dev_summary, role="detector")
+    best_public_eval = _best_pipeline(eval_summary, role="public")
+    best_detector_eval = _best_pipeline(eval_summary, role="detector")
     detector_keys = [row["pipeline_key"] for row in dev_summary if str(row["role"]) == "detector"]
     detector_policy = _search_detector_policy(dev_rows, detector_keys=detector_keys)
 
     eval_best_public_rows = [row for row in eval_rows if str(row["pipeline_key"]) == str(best_public["pipeline_key"])]
     eval_best_detector_rows = [row for row in eval_rows if str(row["pipeline_key"]) == str(best_detector["pipeline_key"])]
     eval_policy_rows = _apply_policy_to_rows(eval_rows, detector_policy) if detector_policy is not None else []
+    eval_best_public_eval_rows = [row for row in eval_rows if str(row["pipeline_key"]) == str(best_public_eval["pipeline_key"])]
+    eval_best_detector_eval_rows = [row for row in eval_rows if str(row["pipeline_key"]) == str(best_detector_eval["pipeline_key"])]
 
     summary = {
         "best_public_dev": best_public,
         "best_detector_dev": best_detector,
         "detector_policy_dev": detector_policy,
-        "eval_best_public": _aggregate_by_pipeline(eval_best_public_rows),
-        "eval_best_detector": _aggregate_by_pipeline(eval_best_detector_rows),
-        "eval_detector_policy": _aggregate_by_pipeline(eval_policy_rows),
+        # Held-out performance of the development-selected winners.
+        "eval_of_best_public_dev": _aggregate_by_pipeline(eval_best_public_rows),
+        "eval_of_best_detector_dev": _aggregate_by_pipeline(eval_best_detector_rows),
+        "eval_of_detector_policy_dev": _aggregate_by_pipeline(eval_policy_rows),
+        # True best held-out winners.
+        "best_public_eval": best_public_eval,
+        "best_detector_eval": best_detector_eval,
+        "eval_best_public": _aggregate_by_pipeline(eval_best_public_eval_rows),
+        "eval_best_detector": _aggregate_by_pipeline(eval_best_detector_eval_rows),
     }
     summary["headline_delta_eval"] = None
     if summary["eval_best_public"] and summary["eval_best_detector"]:
         public_eval = summary["eval_best_public"][0]
         detector_eval = summary["eval_best_detector"][0]
         summary["headline_delta_eval"] = {
+            "detector_minus_public_selection": float(detector_eval["selection_score"]) - float(public_eval["selection_score"]),
+            "detector_minus_public_auc_main_vs_nuisance": float(detector_eval["mean_auc_main_vs_nuisance"] or 0.0) - float(public_eval["mean_auc_main_vs_nuisance"] or 0.0),
+            "detector_minus_public_fpr_nuisance_match@0p5": float(detector_eval["mean_fpr_nuisance_match@0p5"] or 0.0) - float(public_eval["mean_fpr_nuisance_match@0p5"] or 0.0),
+        }
+    summary["headline_delta_eval_of_dev_best"] = None
+    if summary["eval_of_best_public_dev"] and summary["eval_of_best_detector_dev"]:
+        public_eval = summary["eval_of_best_public_dev"][0]
+        detector_eval = summary["eval_of_best_detector_dev"][0]
+        summary["headline_delta_eval_of_dev_best"] = {
             "detector_minus_public_selection": float(detector_eval["selection_score"]) - float(public_eval["selection_score"]),
             "detector_minus_public_auc_main_vs_nuisance": float(detector_eval["mean_auc_main_vs_nuisance"] or 0.0) - float(public_eval["mean_auc_main_vs_nuisance"] or 0.0),
             "detector_minus_public_fpr_nuisance_match@0p5": float(detector_eval["mean_fpr_nuisance_match@0p5"] or 0.0) - float(public_eval["mean_fpr_nuisance_match@0p5"] or 0.0),
