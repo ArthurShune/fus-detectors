@@ -1,0 +1,21 @@
+\begin{table*}[t]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{@{}P{2.7cm} P{1.2cm} P{2.2cm} P{2.9cm} P{2.9cm} C{1.25cm} C{1.25cm} C{1.25cm} C{1.25cm}@{}}
+\hline
+Stress axis & Level & Applied perturbation & Best public stack & Best detector-family stack & \shortstack{Public\\AUC$_{\mathrm{main/nuis}}$} & \shortstack{Detector\\AUC$_{\mathrm{main/nuis}}$} & \shortstack{Public\\FPR$_{\mathrm{nuis}}$@$0.5$} & \shortstack{Detector\\FPR$_{\mathrm{nuis}}$@$0.5$} \\
+\hline
+\shortstack[l]{Cardiac-like pulsation\\\cite{BarangerAdaptiveSVD2018}} & Reference & 1.0x cardiac amplitude at 1.30 Hz & RPCA -> PD & RPCA -> Whitened specialist & 0.427 & 0.729 & 0.576 & 0.273 \\
+\shortstack[l]{Cardiac-like pulsation\\\cite{BarangerAdaptiveSVD2018}} & Moderate & 2.0x cardiac amplitude at 1.30 Hz & RPCA -> PD & Adaptive Global SVD -> Whitened specialist & 0.467 & 0.850 & 0.576 & 0.091 \\
+\shortstack[l]{Cardiac-like pulsation\\\cite{BarangerAdaptiveSVD2018}} & Hard & 3.0x cardiac amplitude at 1.30 Hz & RPCA -> PD & RPCA -> Whitened specialist & 0.482 & 0.747 & 0.485 & 0.182 \\
+\shortstack[l]{Short ensemble\\\cite{Imbault2017,Soloukey2020FUSAwake,MobileFUS2025}} & Reference & 64 frames (42.7 ms) & Adaptive Global SVD -> PD & RPCA -> Whitened specialist & 0.389 & 0.964 & 0.606 & 0.000 \\
+\shortstack[l]{Short ensemble\\\cite{Imbault2017,Soloukey2020FUSAwake,MobileFUS2025}} & Moderate & 48 frames (32.0 ms) & RPCA -> PD & RPCA -> Whitened specialist & 0.421 & 0.668 & 0.576 & 0.303 \\
+\shortstack[l]{Short ensemble\\\cite{Imbault2017,Soloukey2020FUSAwake,MobileFUS2025}} & Hard & 32 frames (21.3 ms) & RPCA -> PD & RPCA -> Matched-subspace default & 0.336 & 0.702 & 0.758 & 0.212 \\
+\hline
+\end{tabular}%
+}
+\caption{Held-out reduced-grid SIMUS stress frontier on the mobile setting. For each stress level we report the strongest public comparator stack and the strongest detector-family stack on the held-out evaluation seed. These rows are intended as stress-frontier evidence for clinically motivated pulsation and short-ensemble pressure, not as a replacement for the main prespecified structural benchmark in the main paper.}
+\label{tab:simus_stress_frontier_headline}
+\end{table*}
