@@ -9,8 +9,8 @@ Run \path{PYTHONPATH=. conda run -n stap-fus python scripts/generate_repro_manif
 \paragraph{Repository state.}
 Public repository: \path{git@github.com:ArthurShune/stap-for-fus.git}.
 Release tag: (not recorded; set \texttt{STAP\_FUS\_RELEASE\_TAG} or create a git tag).
-Commit: \texttt{50a1833} (full: \texttt{50a1833724}\allowbreak\texttt{ca41ee8e3f}\allowbreak\texttt{c4563a337a}\allowbreak\texttt{d1be975c24}); branch: \texttt{main}; dirty: \texttt{true}.
-Dirty details: non-ignored paths=8, ignored build products=4.
+Commit: \texttt{0a264b3} (full: \texttt{0a264b380f}\allowbreak\texttt{4dcf355843}\allowbreak\texttt{1caf4f1bca}\allowbreak\texttt{5809730367}); branch: \texttt{main}; dirty: \texttt{true}.
+Dirty details: non-ignored paths=5, ignored build products=0.
 Note: dirty status ignores common LaTeX build products (e.g., \texttt{*.aux, *.log, *.out, *.fls, *.fdb\_latexmk, *.synctex.gz, *.pdf}).
 For archival reproducibility, generate this manifest from a clean, tagged release commit (\texttt{dirty=false}) and record the public repository URL and tag.
 
@@ -41,8 +41,8 @@ Paths below are the expected on-disk locations used by the scripts in this repos
   \item \textbf{Twinkling artifact dataset (RawBCF phantoms)}: Structurally labeled phantom ROC (Gammex) + within-ensemble motion ladders + KA hygiene (calculi).
     \\ Local: \path{data/twinkling_artifact/}.
     \\ Source: \path{https://doi.org/10.17816/DD76511}.
-  \item \textbf{ULM Zenodo 7883227 (rat brain kHz IQ)}: Label-free motion robustness + one-time baseline calibration sweep.
-    \\ Local archive: \path{data/ulm_zenodo_7883227/IQ_001_to_025.zip}.
+  \item \textbf{ULM Zenodo 7883227 (rat brain kHz IQ)}: Motion robustness, same-residual score audit, bounded leave-one-block-out structural audit, and one-time baseline calibration sweep.
+    \\ Local archive: \path{data/ulm_zenodo_7883227/IQ_*.zip}.
     \\ Extracts to: \path{tmp/ulm_zenodo_7883227/}.
     \\ Source: \path{https://doi.org/10.5281/zenodo.7883227}.
 \end{itemize}
@@ -59,6 +59,7 @@ Paths below are the expected on-disk locations used by the scripts in this repos
   \item \textbf{Twinkling calculi KA hygiene}: calcifications sequence, frames 0:50 (n=50), PRF approx 500 Hz, N=9 shots.
   \item \textbf{ULM 7883227 baseline sweep}: blocks 1-3, frames 0:128, MC-SVD energy-frac sweep (label-free).
   \item \textbf{ULM 7883227 motion sweeps}: blocks 1-3, frames 0:128, frozen baseline e=0.975, motion kinds {brainlike,elastic}.
+  \item \textbf{ULM 7883227 structural audit}: leave-one-block-out reference/eval blocks 1-10, 128-frame windows at offsets {0,128}, max 2 windows/block, local-density structural reference, adaptive matched-subspace head.
 \end{itemize}
 
 \paragraph{Artifact commands.}
@@ -253,30 +254,268 @@ conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
 \end{verbatim}
 }
 
-  \item \textbf{RTX 4080 SUPER named product-preset latency rerun (paper-facing)}
-    (paper refs: Table: latency\_summary\_4080super\_product).
+  \item \textbf{RTX 4080 SUPER latency reruns + consolidated summaries (legacy vs optimized; steady-state windows/frames 2..N)}
+    (paper refs: Table: latency\_summary\_4080super).
     Outputs:
     \begingroup\raggedright
     \begin{itemize}[nosep,leftmargin=0em,label={}]
-      \item \path{runs/}\allowbreak\path{latency_named_preset/rtx4080_prf_product_v1/}
-      \item \path{reports/}\allowbreak\path{latency_named_preset_rtx4080_prf_product_v1.json}
-      \item \path{reports/}\allowbreak\path{latency_named_preset_rtx4080_prf_product_v1_table.tex}
+      \item \path{reports/}\allowbreak\path{hw/4080super_nvidia_smi.txt}
+      \item \path{reports/}\allowbreak\path{hw/4080super_env.txt}
+      \item \path{runs/latency_4080super_brain_openskull_w64_}\allowbreak\path{tb192_off0_64_128_192_256/}
+      \item \path{runs/latency_4080super_brain_openskull_w64_}\allowbreak\path{tb192_off0_64_128_192_256_cond/}
+      \item \path{runs/latency_4080super_brain_aliascontract_}\allowbreak\path{w64_tb192_off0_64_128_192_256/}
+      \item \path{runs/latency_4080super_brain_aliascontract_}\allowbreak\path{w64_tb192_off0_64_128_192_256_cond/}
+      \item \path{runs/latency_4080super_brain_skullor_w64_}\allowbreak\path{tb192_off0_64_128_192_256/}
+      \item \path{runs/latency_4080super_brain_skullor_w64_}\allowbreak\path{tb192_off0_64_128_192_256_cond/}
+      \item \path{runs/latency_4080super_shin_fig3_w128_tb192/}
+      \item \path{runs/latency_4080super_gammex_linear17_f0_6_}\allowbreak\path{tb512/}
+      \item \path{reports/}\allowbreak\path{latency/4080super_latency_summary.csv}
+      \item \path{reports/}\allowbreak\path{latency/4080super_latency_summary.json}
     \end{itemize}
     \endgroup
-    Notes: This is the only paper-facing RTX~4080~SUPER latency path. It reproduces the frozen deployment-oriented preset reported in the main text: the simple unwhitened matched-subspace head on the labeled-brain stress tests, the frozen adaptive-guard mode on Shin, and the short-ensemble raw-baseline plus unwhitened matched-subspace head on Gammex. The script runs all scenarios in one pass, reports steady-state means over windows/frames 2..N, excludes disk I/O, and writes the exact \LaTeX{} fragment used by the paper.
+    Notes: The replay scripts print cold(win1) and steady(avg win2..N); the paper tables report steady-state means. For Brain k-Wave, scripts/latency\_rerun\_check.py forces legacy vs optimized CUDA-graph settings internally (legacy: STAP\_FAST\_CUDA\_GRAPH=0; optimized: STAP\_FAST\_CUDA\_GRAPH=1).
 {\footnotesize
 \begin{verbatim}
-PYTHONPATH=. conda run -n stap-fus python scripts/run_latency_named_preset.py \
-  --clean \
-  --out-root runs/latency_named_preset/rtx4080_prf_product_v1 \
-  --out-json reports/latency_named_preset_rtx4080_prf_product_v1.json \
-  --out-tex reports/latency_named_preset_rtx4080_prf_product_v1_table.tex
+# Hardware audit (record driver/GPU; record stap-fus env versions):
+nvidia-smi > reports/hw/4080super_nvidia_smi.txt
+conda run -n stap-fus python -c 'import platform, sys; import torch; print("python", sys.version.splitlines()[0]); print("platform", platform.platform()); print("torch", torch.__version__); print("torch_cuda", getattr(torch.version, "cuda", None)); print("cuda_is_available", torch.cuda.is_available()); print("device0", torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)' > reports/hw/4080super_env.txt
+
+# Brain k-Wave latency reruns (offsets 0/64/128/192/256; tile_batch=192):
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_seed1 \
+  --out-root runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256 \
+  --profile Brain-OpenSkull \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --tile-batch 192 \
+  --cuda-warmup-heavy --stap-debug-samples 0
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_seed1 \
+  --out-root runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256_cond \
+  --profile Brain-OpenSkull \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --tile-batch 192 \
+  --cuda-warmup-heavy --stap-debug-samples 0 \
+  --stap-conditional on
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_hab_seed2 \
+  --out-root runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256 \
+  --profile Brain-AliasContract \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --tile-batch 192 \
+  --cuda-warmup-heavy --stap-debug-samples 0
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_hab_seed2 \
+  --out-root runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256_cond \
+  --profile Brain-AliasContract \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --tile-batch 192 \
+  --cuda-warmup-heavy --stap-debug-samples 0 \
+  --stap-conditional on
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_hab_v3_skull_seed2 \
+  --out-root runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256 \
+  --profile Brain-SkullOR \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --tile-batch 192 \
+  --cuda-warmup-heavy --stap-debug-samples 0
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_hab_v3_skull_seed2 \
+  --out-root runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256_cond \
+  --profile Brain-SkullOR \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --tile-batch 192 \
+  --cuda-warmup-heavy --stap-debug-samples 0 \
+  --stap-conditional on
+
+# Shin RatBrain Fig3 latency (requires dataset; see docs/data_download.md):
+PYTHONPATH=. STAP_FAST_PATH=1 STAP_TILING_UNFOLD=0 STAP_FAST_CUDA_GRAPH=0 \
+STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 STAP_TYLER_TRITON_CAPTURE=1 \
+conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
+  --stap-device cuda --tile-batch 192 --clean \
+  --out-root runs/latency_4080super_shin_fig3_w128_tb192/legacy \
+  shin --data-root data/shin_zenodo_10711806/ratbrain_fig3_raw \
+  --iq-file IQData001.dat \
+  --windows 0:128,64:192,122:250 \
+  --prf-hz 1000 --Lt 64 --svd-energy-frac 0.97
+
+PYTHONPATH=. STAP_FAST_PATH=1 STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \
+STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 STAP_TYLER_TRITON_CAPTURE=1 \
+conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
+  --stap-device cuda --tile-batch 192 --clean \
+  --out-root runs/latency_4080super_shin_fig3_w128_tb192/optimized \
+  shin --data-root data/shin_zenodo_10711806/ratbrain_fig3_raw \
+  --iq-file IQData001.dat \
+  --windows 0:128,64:192,122:250 \
+  --prf-hz 1000 --Lt 64 --svd-energy-frac 0.97
+
+# Gammex linear17 latency (along/across frames 0..5):
+PYTHONPATH=. STAP_FAST_PATH=1 STAP_TILING_UNFOLD=0 STAP_FAST_CUDA_GRAPH=0 \
+STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 STAP_TYLER_TRITON_CAPTURE=1 \
+conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
+  --stap-device cuda --tile-batch 512 --clean \
+  --out-root runs/latency_4080super_gammex_linear17_f0_6_tb512/legacy \
+  gammex --frames-along 0:6 --frames-across 0:6
+
+PYTHONPATH=. STAP_FAST_PATH=1 STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \
+STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 STAP_TYLER_TRITON_CAPTURE=1 \
+conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
+  --stap-device cuda --tile-batch 512 --clean \
+  --out-root runs/latency_4080super_gammex_linear17_f0_6_tb512/optimized \
+  gammex --frames-along 0:6 --frames-across 0:6
+
+# Collect consolidated CSV/JSON (steady windows/frames 2..N; includes parity checks):
+PYTHONPATH=. conda run -n stap-fus python scripts/collect_latency_summary.py
 \end{verbatim}
 }
 
-  \item \textbf{Lower-level latency harnesses (diagnostic, not paper-facing)}
-    Outputs vary by harness and scenario.
-    Notes: \path{scripts/latency_rerun_check.py}, \path{scripts/latency_realdata_rerun_check.py}, and related collectors remain useful for profiling, stage-level timing breakdowns, and exploratory ablations. They are intentionally not the source of the paper table, because the final manuscript reports only the consolidated named preset above rather than legacy-vs-optimized or specialist-path timing experiments.
+  \item \textbf{RTX 4080 SUPER CUDA latency replay (Brain-* k-Wave; legacy vs optimized; steady-state windows 2..5)}
+    (paper refs: Table: latency\_summary\_4080super).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{runs/latency_4080super_brain_openskull_w64_}\allowbreak\path{tb192_off0_64_128_192_256/}
+      \item \path{runs/latency_4080super_brain_openskull_w64_}\allowbreak\path{tb192_off0_64_128_192_256_cond/}
+      \item \path{runs/latency_4080super_brain_aliascontract_}\allowbreak\path{w64_tb192_off0_64_128_192_256/}
+      \item \path{runs/latency_4080super_brain_aliascontract_}\allowbreak\path{w64_tb192_off0_64_128_192_256_cond/}
+      \item \path{runs/latency_4080super_brain_skullor_w64_}\allowbreak\path{tb192_off0_64_128_192_256/}
+      \item \path{runs/latency_4080super_brain_skullor_w64_}\allowbreak\path{tb192_off0_64_128_192_256_cond/}
+    \end{itemize}
+    \endgroup
+    Notes: The script writes both legacy/ and optimized/ subtrees per out-root and reports cold(win1) and steady(avg win2..N). Publishable latency uses windows 2..N.
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_seed1 \
+  --out-root runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256 \
+  --profile Brain-OpenSkull \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --stap-debug-samples 0 \
+  --tile-batch 192 --cuda-warmup-heavy \
+  --stap-conditional off
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_seed1 \
+  --out-root runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256_cond \
+  --profile Brain-OpenSkull \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --stap-debug-samples 0 \
+  --tile-batch 192 --cuda-warmup-heavy \
+  --stap-conditional on
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_hab_seed2 \
+  --out-root runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256 \
+  --profile Brain-AliasContract \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --stap-debug-samples 0 \
+  --tile-batch 192 --cuda-warmup-heavy \
+  --stap-conditional off
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_hab_seed2 \
+  --out-root runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256_cond \
+  --profile Brain-AliasContract \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --stap-debug-samples 0 \
+  --tile-batch 192 --cuda-warmup-heavy \
+  --stap-conditional on
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_hab_v3_skull_seed2 \
+  --out-root runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256 \
+  --profile Brain-SkullOR \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --stap-debug-samples 0 \
+  --tile-batch 192 --cuda-warmup-heavy \
+  --stap-conditional off
+
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  --src runs/pilot/r4c_kwave_hab_v3_skull_seed2 \
+  --out-root runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256_cond \
+  --profile Brain-SkullOR \
+  --window-length 64 --window-offsets 0,64,128,192,256 \
+  --stap-device cuda --stap-debug-samples 0 \
+  --tile-batch 192 --cuda-warmup-heavy \
+  --stap-conditional on
+\end{verbatim}
+}
+
+  \item \textbf{RTX 4080 SUPER CUDA latency replay (real data: Shin + Gammex; legacy vs optimized; steady-state frames 2..N)}
+    (paper refs: Table: latency\_summary\_4080super).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{runs/latency_4080super_shin_fig3_w128_}\allowbreak\path{tb192/legacy/}
+      \item \path{runs/latency_4080super_shin_fig3_w128_}\allowbreak\path{tb192/optimized/}
+      \item \path{runs/latency_4080super_gammex_linear17_f0_6_}\allowbreak\path{tb512/legacy/}
+      \item \path{runs/latency_4080super_gammex_linear17_f0_6_}\allowbreak\path{tb512/optimized/}
+    \end{itemize}
+    \endgroup
+    Notes: These are 'latency-only' replay settings (e.g., STAP\_TYLER\_MAX\_ITER=1, STAP\_SNAPSHOT\_STRIDE=4) to isolate compute throughput; see per-bundle meta.json for exact telemetry.
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. \
+STAP_TILING_UNFOLD=0 STAP_FAST_CUDA_GRAPH=0 \
+STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \
+STAP_TYLER_TRITON_CAPTURE=1 \
+conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
+  --stap-device cuda --tile-batch 192 --clean \
+  --out-root runs/latency_4080super_shin_fig3_w128_tb192/legacy \
+  shin --iq-file IQData001.dat \
+  --windows 0:128,64:192,122:250 \
+  --Lt 64 --svd-energy-frac 0.97
+
+PYTHONPATH=. \
+STAP_FAST_PATH=1 STAP_TILING_UNFOLD=0 STAP_FAST_CUDA_GRAPH=0 \
+STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \
+STAP_TYLER_TRITON_CAPTURE=1 \
+conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
+  --stap-device cuda --tile-batch 512 --clean \
+  --out-root runs/latency_4080super_gammex_linear17_f0_6_tb512/legacy \
+  gammex --frames-along 0:6 --frames-across 0:6
+
+PYTHONPATH=. \
+STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \
+STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \
+STAP_TYLER_TRITON_CAPTURE=1 \
+conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
+  --stap-device cuda --tile-batch 192 --clean \
+  --out-root runs/latency_4080super_shin_fig3_w128_tb192/optimized \
+  shin --iq-file IQData001.dat \
+  --windows 0:128,64:192,122:250 \
+  --Lt 64 --svd-energy-frac 0.97
+
+PYTHONPATH=. \
+STAP_FAST_PATH=1 STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \
+STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \
+STAP_TYLER_TRITON_CAPTURE=1 \
+conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
+  --stap-device cuda --tile-batch 512 --clean \
+  --out-root runs/latency_4080super_gammex_linear17_f0_6_tb512/optimized \
+  gammex --frames-along 0:6 --frames-across 0:6
+\end{verbatim}
+}
+
+  \item \textbf{RTX 4080 SUPER latency summary aggregation (CSV/JSON)}
+    (paper refs: Table: latency\_summary\_4080super).
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{latency/4080super_latency_summary.csv}
+      \item \path{reports/}\allowbreak\path{latency/4080super_latency_summary.json}
+    \end{itemize}
+    \endgroup
+    Notes: Reads existing runs/latency\_4080super\_* folders and writes steady-state windows 2..N summaries.
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. conda run -n stap-fus python scripts/collect_latency_summary.py
+\end{verbatim}
+}
 
   \item \textbf{Brain-* baseline fairness: MC--SVD(e) tune-once sweep}
     (paper refs: Baseline fairness (Brain-*)).
@@ -1299,6 +1538,56 @@ PYTHONPATH=. python scripts/ulm_zenodo_7883227_motion_sweep.py \
 \end{verbatim}
 }
 
+  \item \textbf{ULM 7883227 bounded structural-label audit (leave-one-block-out vascular reference)}
+    Paper refs:
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item ULM section: bounded structural-label audit on the same dataset
+      \item Supplement: Figure (ulm7883227\_structural\_masks\_mid10\_adaptive.pdf)
+      \item Supplement: Figure (ulm7883227\_structural\_roc\_curves\_mid10\_adaptive.pdf)
+      \item Supplement: Table (ulm7883227\_structural\_roc\_mid10\_adaptive\_table.tex)
+    \end{itemize}
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{runs/real/}\allowbreak\path{ulm7883227_structural_roc_mid10_adaptive/}
+      \item \path{reports/}\allowbreak\path{ulm7883227_structural_roc_mid10_adaptive.csv}
+      \item \path{reports/}\allowbreak\path{ulm7883227_structural_roc_mid10_}\allowbreak\path{adaptive.json}
+      \item \path{reports/}\allowbreak\path{ulm7883227_structural_roc_mid10_adaptive_}\allowbreak\path{table.tex}
+      \item \path{figs/paper/}\allowbreak\path{ulm7883227_structural_masks_mid10_}\allowbreak\path{adaptive.pdf}
+      \item \path{figs/paper/}\allowbreak\path{ulm7883227_structural_masks_mid10_}\allowbreak\path{adaptive.png}
+      \item \path{figs/paper/}\allowbreak\path{ulm7883227_structural_roc_curves_mid10_}\allowbreak\path{adaptive.pdf}
+      \item \path{figs/paper/}\allowbreak\path{ulm7883227_structural_roc_curves_mid10_}\allowbreak\path{adaptive.png}
+    \end{itemize}
+    \endgroup
+    Notes: This is a bounded negative-control structural audit on real in vivo IQ, not an independent task benchmark; the leave-one-block-out reference is derived only from the remaining blocks.
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. python scripts/ulm7883227_structural_roc.py \
+  --ref-blocks 1-10 --eval-blocks 1-10 \
+  --window-frames 128 --window-stride 128 --max-windows-per-block 2 \
+  --tile-h 8 --tile-w 8 --tile-stride 3 \
+  --lt 64 --prf-hz 1000 \
+  --svd-energy-frac 0.975 \
+  --stap-detector-variant adaptive_guard \
+  --reference-mode local_density \
+  --reference-local-density-quantile 0.9995 \
+  --reference-local-density-peak-size 3 \
+  --reference-local-density-sigma 1.0 \
+  --cov-estimator scm --diag-load 0.07 \
+  --stap-device cuda \
+  --reg-enable --reg-subpixel 4 \
+  --vessel-quantile 0.92 --background-quantile 0.50 \
+  --mask-erode-iters 1 --guard-dilate-iters 3 --edge-margin 4 \
+  --bootstrap-n 500 \
+  --out-root runs/real/ulm7883227_structural_roc_mid10_adaptive \
+  --out-csv reports/ulm7883227_structural_roc_mid10_adaptive.csv \
+  --out-json reports/ulm7883227_structural_roc_mid10_adaptive.json \
+  --out-tex reports/ulm7883227_structural_roc_mid10_adaptive_table.tex \
+  --out-mask-fig figs/paper/ulm7883227_structural_masks_mid10_adaptive.pdf \
+  --out-roc-fig figs/paper/ulm7883227_structural_roc_curves_mid10_adaptive.pdf
+\end{verbatim}
+}
+
   \item \textbf{SIMUS/PyMUST moving-scatterer sanity link + bundle contract (micro + alias; non-performance claims)}
     Paper refs:
     \begin{itemize}[nosep,leftmargin=0em,label={}]
@@ -1389,3 +1678,4 @@ pdflatex stap_fus_supplement.tex    # supplement-only (appendices only)
 }
 
 \end{enumerate}
+

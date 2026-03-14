@@ -612,8 +612,8 @@ def _default_datasets() -> list[DatasetInfo]:
         ),
         DatasetInfo(
             name="ULM Zenodo 7883227 (rat brain kHz IQ)",
-            purpose="Label-free motion robustness + one-time baseline calibration sweep.",
-            local_path="data/ulm_zenodo_7883227/IQ_001_to_025.zip (extracts to tmp/ulm_zenodo_7883227/)",
+            purpose="Motion robustness, same-residual score audit, bounded leave-one-block-out structural audit, and one-time baseline calibration sweep.",
+            local_path="data/ulm_zenodo_7883227/IQ_*.zip (extracts to tmp/ulm_zenodo_7883227/)",
             doi_or_url="https://doi.org/10.5281/zenodo.7883227",
         ),
     ]
@@ -634,6 +634,10 @@ def _default_selections() -> dict[str, str]:
         "Twinkling calculi KA hygiene": "calcifications sequence, frames 0:50 (n=50), PRF approx 500 Hz, N=9 shots.",
         "ULM 7883227 baseline sweep": "blocks 1-3, frames 0:128, MC-SVD energy-frac sweep (label-free).",
         "ULM 7883227 motion sweeps": "blocks 1-3, frames 0:128, frozen baseline e=0.975, motion kinds {brainlike,elastic}.",
+        "ULM 7883227 structural audit": (
+            "leave-one-block-out reference/eval blocks 1-10, 128-frame windows at offsets {0,128}, "
+            "max 2 windows/block, local-density structural reference, adaptive matched-subspace head."
+        ),
     }
 
 
@@ -1960,6 +1964,54 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --out-json reports/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_elastic_e975.json \\",
                 "  --out-png figs/paper/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_elastic_e975.png",
             ],
+        ),
+        ArtifactInfo(
+            name="ULM 7883227 bounded structural-label audit (leave-one-block-out vascular reference)",
+            paper_refs=[
+                "ULM section: bounded structural-label audit on the same dataset",
+                "Supplement: Figure (ulm7883227_structural_masks_mid10_adaptive.pdf)",
+                "Supplement: Figure (ulm7883227_structural_roc_curves_mid10_adaptive.pdf)",
+                "Supplement: Table (ulm7883227_structural_roc_mid10_adaptive_table.tex)",
+            ],
+            outputs=[
+                "runs/real/ulm7883227_structural_roc_mid10_adaptive/",
+                "reports/ulm7883227_structural_roc_mid10_adaptive.csv",
+                "reports/ulm7883227_structural_roc_mid10_adaptive.json",
+                "reports/ulm7883227_structural_roc_mid10_adaptive_table.tex",
+                "figs/paper/ulm7883227_structural_masks_mid10_adaptive.pdf",
+                "figs/paper/ulm7883227_structural_masks_mid10_adaptive.png",
+                "figs/paper/ulm7883227_structural_roc_curves_mid10_adaptive.pdf",
+                "figs/paper/ulm7883227_structural_roc_curves_mid10_adaptive.png",
+            ],
+            commands=[
+                "PYTHONPATH=. python scripts/ulm7883227_structural_roc.py \\",
+                "  --ref-blocks 1-10 --eval-blocks 1-10 \\",
+                "  --window-frames 128 --window-stride 128 --max-windows-per-block 2 \\",
+                "  --tile-h 8 --tile-w 8 --tile-stride 3 \\",
+                "  --lt 64 --prf-hz 1000 \\",
+                "  --svd-energy-frac 0.975 \\",
+                "  --stap-detector-variant adaptive_guard \\",
+                "  --reference-mode local_density \\",
+                "  --reference-local-density-quantile 0.9995 \\",
+                "  --reference-local-density-peak-size 3 \\",
+                "  --reference-local-density-sigma 1.0 \\",
+                "  --cov-estimator scm --diag-load 0.07 \\",
+                "  --stap-device cuda \\",
+                "  --reg-enable --reg-subpixel 4 \\",
+                "  --vessel-quantile 0.92 --background-quantile 0.50 \\",
+                "  --mask-erode-iters 1 --guard-dilate-iters 3 --edge-margin 4 \\",
+                "  --bootstrap-n 500 \\",
+                "  --out-root runs/real/ulm7883227_structural_roc_mid10_adaptive \\",
+                "  --out-csv reports/ulm7883227_structural_roc_mid10_adaptive.csv \\",
+                "  --out-json reports/ulm7883227_structural_roc_mid10_adaptive.json \\",
+                "  --out-tex reports/ulm7883227_structural_roc_mid10_adaptive_table.tex \\",
+                "  --out-mask-fig figs/paper/ulm7883227_structural_masks_mid10_adaptive.pdf \\",
+                "  --out-roc-fig figs/paper/ulm7883227_structural_roc_curves_mid10_adaptive.pdf",
+            ],
+            notes=(
+                "This is a bounded negative-control structural audit on real in vivo IQ, not an independent task benchmark; "
+                "the leave-one-block-out reference is derived only from the remaining blocks."
+            ),
         ),
         ArtifactInfo(
             name="SIMUS/PyMUST moving-scatterer sanity link + bundle contract (micro + alias; non-performance claims)",

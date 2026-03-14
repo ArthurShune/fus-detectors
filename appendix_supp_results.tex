@@ -282,6 +282,55 @@ not present locally. Reproducibility details are provided in \SuppOrApp{app:repr
 \label{fig:ulm_elastic_e975}
 \end{figure}
 
+\subsection{ULM 7883227: bounded structural-label audit on real in-vivo brain IQ}
+To test whether the same open ULM dataset can support a more anatomical score audit, we derive a leave-one-block-out vascular reference from the long-horizon acquisition itself and then evaluate short 128-frame windows against masks derived from that reference. The construction is intentionally conservative and frozen. For each held-out block, we use the remaining reference blocks to build a full-acquisition microbubble-density-style map by accumulating sparse local maxima on MC--SVD-filtered residuals \cite{ChavignonZenodo7883227,HeilesULMBenchmark2021}. Vessel pixels are then defined as the top 8\% of that reference after a 1-pixel erosion, while background pixels are taken from the lower half after a 3-pixel guard dilation around vessels and a 4-pixel edge exclusion. This yields roughly $3.7\times 10^4$ background pixels per held-out block, so the $10^{-3}$ operating point remains well resolved.
+
+We report the completed 10-block / 20-window audit for the adaptive matched-subspace head because it is the real-IQ detector-family variant emphasized elsewhere in the paper. The result is informative but negative: on this clean-window sparse-bubble vascular-density endpoint, conventional PD and Kasai remain stronger than the detector-family heads under the frozen ULM profile. The adaptive matched-subspace head reaches AUC $0.681$ [0.669, 0.691], compared with 0.878 [0.855, 0.896] for PD and 0.881 [0.860, 0.897] for Kasai; its TPR@$10^{-2}$ is 0.118 [0.102, 0.132], compared with 0.334 [0.296, 0.368] for PD. The fixed matched-subspace head is numerically similar (AUC 0.678 [0.666, 0.690]) and does not change the interpretation. We therefore treat this experiment as a bounded negative control on real \emph{in vivo} structural ROC rather than as a new efficacy headline.
+
+\begin{figure}[t]
+\centering
+\IfFileExists{figs/paper/ulm7883227_structural_masks_mid10_adaptive.pdf}{%
+\includegraphics[width=\linewidth]{figs/paper/ulm7883227_structural_masks_mid10_adaptive.pdf}%
+}{%
+\fbox{%
+\parbox{0.96\linewidth}{%
+\textbf{ULM structural-mask asset unavailable in this checkout.}
+Reproduce it with \texttt{scripts/ulm7883227\_structural\_roc.py}; the exact command is listed in \SuppOrApp{app:repro}.%
+}%
+}%
+}
+\caption{Representative leave-one-block-out structural masks for ULM Zenodo 7883227. The underlying reference is a full-acquisition microbubble-density-style map obtained from the remaining blocks only, using sparse local maxima accumulated on MC--SVD-filtered long-horizon residuals. Left: vessel mask after 1-pixel erosion. Right: background mask after a 3-pixel guard dilation and 4-pixel edge exclusion. These masks are fixed before the short-window detector scores are evaluated on the held-out block.}
+\label{fig:ulm_structural_masks}
+\end{figure}
+
+\IfFileExists{reports/ulm7883227_structural_roc_mid10_adaptive_table.tex}{%
+  \input{reports/ulm7883227_structural_roc_mid10_adaptive_table.tex}%
+}{%
+  \begin{center}
+  \refstepcounter{table}\label{tab:ulm7883227_structural_roc}%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/ulm7883227_structural_roc_mid10_adaptive_table.tex}.\\
+    Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/ulm7883227_structural_roc.py ...}.
+  \end{minipage}}
+  \end{center}
+}
+
+\begin{figure}[t]
+\centering
+\IfFileExists{figs/paper/ulm7883227_structural_roc_curves_mid10_adaptive.pdf}{%
+\includegraphics[width=0.8\linewidth]{figs/paper/ulm7883227_structural_roc_curves_mid10_adaptive.pdf}%
+}{%
+\fbox{%
+\parbox{0.96\linewidth}{%
+\textbf{ULM structural ROC asset unavailable in this checkout.}
+Reproduce it with \texttt{scripts/ulm7883227\_structural\_roc.py}; the exact command is listed in \SuppOrApp{app:repro}.%
+}%
+}%
+}
+\caption{ROC curves for the bounded leave-one-block-out structural audit on ULM Zenodo 7883227 (10 evaluation blocks, 20 short windows). The vessel/background labels come from the long-horizon reference only; the short-window detector scores are evaluated on the identical MC--SVD residual cube. On this endpoint, PD and Kasai remain stronger than the matched-subspace detector heads under the frozen ULM profile.}
+\label{fig:ulm_structural_roc_curves}
+\end{figure}
+
 \subsection{Mac{\'e} whole-brain fUS: hemodynamic band-energy statistics and hold-out check}
 We treat the Mac{\'e}/Urban whole-brain dataset as a PD-only, open-skull analogue of the open-skull brain pilot and compute tile-level hemodynamic band-energy statistics with fixed bands $\Pf=[0,0.5]$~Hz, guard $[0.5,1.0]$~Hz, and $\Pa=[1.0,3.0]$~Hz on $8\times 8$ tiles (stride 3). Offline we also compute atlas-derived \emph{region strata} (e.g.\ VIS/SC/LGd versus CP/CA/DG) for descriptive summaries; these strata are not treated as ground-truth flow labels and are not used as KA inputs. Figure~\ref{fig:mace_phase2_summary} summarizes a systematic sweep in ``Pf occupancy vs alias separation'' space. We provide an explicit atlas-alignment sanity check in \SuppOrApp{app:mace-atlas-align}.
 Here PD-z denotes a per-tile change-from-baseline z-score on the PD time series (distinct from the Doppler/IQ PD-mode score maps $S_{\mathrm{PD}}$ exported by the STAP pipeline).
