@@ -4,18 +4,17 @@
     "release_tag": null
   },
   "git": {
-    "commit": "db0dd0fb3a22621fde9c3514cc4ada4ff4758007",
-    "commit_short": "db0dd0f",
+    "commit": "f95e81729c7535ce17f6a950b7f860fa94939035",
+    "commit_short": "f95e817",
     "branch": "main",
     "dirty": true,
-    "dirty_paths_count": 5,
+    "dirty_paths_count": 4,
     "dirty_ignored_paths_count": 0,
     "dirty_paths": [
-      "M appendix_supp_results.tex",
       "M scripts/generate_repro_manifest.py",
-      "M scripts/latency_realdata_rerun_check.py",
       "M scripts/ulm7883227_structural_roc.py",
-      "M stap_fus_methodology.tex"
+      "M stap_fus_methodology.tex",
+      "?? scripts/fig_ulm_pala_headline_hero.py"
     ],
     "dirty_ignored_paths": []
   },
@@ -1051,7 +1050,8 @@
     {
       "name": "Leading structural-fidelity figure (Gammex phantom; matched-FPR decision differences)",
       "paper_refs": [
-        "Figure 1: leading_structural_fidelity_gammex.pdf"
+        "Introduction: worked Gammex structural-fidelity example at matched 1e-2 background FPR",
+        "Twinkling section: representative structural-fidelity panel"
       ],
       "outputs": [
         "figs/paper/leading_structural_fidelity_gammex.pdf"
@@ -1496,8 +1496,8 @@
     {
       "name": "ULM 7883227 localization-derived structural-label audit (published PALA reference)",
       "paper_refs": [
+        "Front matter: headline bounded in-vivo structural-label result (ulm7883227_pala_headline_hero.pdf)",
         "ULM section: localization-derived structural-label audit on the same dataset",
-        "ULM section: Figure (ulm7883227_pala_structural_masks.pdf)",
         "ULM section: Table (ulm7883227_pala_structural_roc_table.tex)",
         "Supplement: Figure (ulm7883227_pala_structural_roc_curves.pdf)",
         "Discussion: RTX 4080 latency note for the same 64-frame no-registration specialist"
@@ -1509,6 +1509,8 @@
         "reports/ulm7883227_pala_structural_roc_short32.json",
         "reports/ulm7883227_pala_structural_roc_brainlike_motion.json",
         "reports/ulm7883227_pala_latency_rtx4080.json",
+        "figs/paper/ulm7883227_pala_headline_hero.pdf",
+        "figs/paper/ulm7883227_pala_headline_hero.png",
         "figs/paper/ulm7883227_pala_structural_masks.pdf",
         "figs/paper/ulm7883227_pala_structural_roc_curves.pdf",
         "figs/paper/ulm7883227_pala_structural_roc_curves.png"
@@ -1535,6 +1537,7 @@
         "  --out-tex reports/ulm7883227_pala_structural_roc_table.tex \\",
         "  --out-mask-fig figs/paper/ulm7883227_pala_structural_masks.pdf \\",
         "  --out-roc-fig figs/paper/ulm7883227_pala_structural_roc_curves.pdf",
+        "PYTHONPATH=. conda run -n stap-fus python scripts/fig_ulm_pala_headline_hero.py",
         "PYTHONPATH=. conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
         "  --summary-json reports/ulm7883227_pala_latency_rtx4080.json \\",
         "  --out-root runs/latency_realdata_cuda_ulm_pala_noreg \\",

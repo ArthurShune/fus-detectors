@@ -99,6 +99,23 @@ Quantitative detection claims are restricted to datasets with independent labels
 
 Overall, the results support importing a STAP-inspired detector framework into post-beamformed fUS: a localized nuisance-focused detector family that complements rather than replaces upstream clutter suppression.
 \end{abstract}
+
+\begin{figure}[t]
+\centering
+\IfFileExists{figs/paper/ulm7883227_pala_headline_hero.pdf}{%
+  \includegraphics[width=\linewidth]{figs/paper/ulm7883227_pala_headline_hero.pdf}%
+}{%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    \centering
+    \vspace{0.5em}
+    Missing figure \path{figs/paper/ulm7883227_pala_headline_hero.pdf}.\\
+    Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/fig_ulm_pala_headline_hero.py}.
+    \vspace{0.5em}
+  \end{minipage}}%
+}
+\caption{Headline bounded in-vivo structural-label result on ULM Zenodo 7883227 using the published PALA rat-brain localization rendering as an external vascular reference. Left: the PALA-derived vessel-core and perivascular-shell masks after registration back to the IQ grid. Middle and right: the same audited 64-frame MC--SVD residual window (block 001, frames 128:192), thresholded at matched 70\% vessel-core recall for baseline power Doppler and the frozen no-registration whitened-power specialist. Bottom: aggregate held-out performance over 10 blocks / 20 windows, together with the exact RTX~4080 SUPER latency for the same frozen configuration.}
+\label{fig:ulm_pala_headline_hero}
+\end{figure}
 \fi
 
 \ifSTAPSUPPLEMENTONLY\else
@@ -106,8 +123,7 @@ Overall, the results support importing a STAP-inspired detector framework into p
 
 Functional ultrasound (fUS) is now used for vascular and functional mapping in settings ranging from preclinical neuroscience to awake surgery and cranial-window human imaging. In these settings, the practical problem is often not average sensitivity alone. A small number of nuisance-driven false detections can distort vascular readouts, contaminate functional maps, and undermine confidence in interpretation. Tissue motion, phase instability, and aliased high-velocity flow therefore matter most when they survive ordinary clutter suppression and populate the extreme right tail of the detector output.
 
-We address that problem with a STAP-inspired localized detector framework. The conceptual borrowing from radar is not a literal port of classical array-domain STAP. Instead, it is a shift toward local nuisance-aware detector design after ordinary residualization. The main practical result is that the simplest member of this framework, a band-limited matched-subspace score without local whitening, is the strongest fixed head on the prespecified held-out structural benchmark. A second, prespecified adaptive member keeps that score by default and turns on local whitening only when residual guard-band structure indicates localized clutter. A third, fully whitened member is retained for regimes where full covariance adaptation earns its extra complexity. Instead of treating clutter suppression as the whole problem, we treat it as the first stage of a detection pipeline: a coarse residualizer removes the dominant clutter, and a second scoring stage asks whether the remaining signal is more consistent with parenchymal microvascular flow than with structured nuisance. This targets the spatially varying interference patterns that often remain after otherwise reasonable low-rank filtering and that disproportionately affect the low-FPR tail.
-Figure~\ref{fig:leading_structural_fidelity} provides a motivating qualitative example on a structurally labeled flow phantom: at a matched background-FPR operating point, STAP modifies detection decisions in a way that is consistent with the B-mode-derived vessel geometry.
+We address that problem with a STAP-inspired localized detector framework. The conceptual borrowing from radar is not a literal port of classical array-domain STAP. Instead, it is a shift toward local nuisance-aware detector design after ordinary residualization. The main practical result is that the simplest member of this framework, a band-limited matched-subspace score without local whitening, is the strongest fixed head on the prespecified held-out structural benchmark. A second, prespecified adaptive member keeps that score by default and turns on local whitening only when residual guard-band structure indicates localized clutter. A third, fully whitened member is retained for regimes where full covariance adaptation earns its extra complexity. Instead of treating clutter suppression as the whole problem, we treat it as the first stage of a detection pipeline: a coarse residualizer removes the dominant clutter, and a second scoring stage asks whether the remaining signal is more consistent with parenchymal microvascular flow than with structured nuisance. This targets the spatially varying interference patterns that often remain after otherwise reasonable low-rank filtering and that disproportionately affect the low-FPR tail. Figure~\ref{fig:ulm_pala_headline_hero} previews the clearest real-data version of that story: on real in-vivo rat-brain IQ, the same-residual whitened-power specialist is more concentrated on the localization-derived vascular core and less contaminated by the immediately adjacent shell than conventional Doppler scoring.
 
 \begin{figure}[t]
 \centering
@@ -819,21 +835,7 @@ To obtain a more anatomical structural readout on the same open real-IQ data, we
 
 Under this bounded but anatomically grounded endpoint, the strongest specialist score is no longer PD or Kasai. In the completed 10-block / 20-window audit with short 64-frame windows, the fully whitened power-style specialist reaches AUC $0.538$ [0.529, 0.548], compared with 0.476 [0.467, 0.486] for PD and 0.475 [0.465, 0.485] for Kasai. At matched 70\% vessel-core recall, the same specialist reduces perivascular-shell false positives from 0.723 [0.711, 0.736] for PD and 0.725 [0.712, 0.738] for Kasai to 0.635 [0.615, 0.654]. Supporting audits remain directionally positive under 32-frame windows (AUC $0.534$ [0.520, 0.547]) and under injected \texttt{brainlike} motion at 1 px amplitude (AUC $0.523$ [0.516, 0.530]), both against PD baselines near 0.47--0.48 (\SuppOrApp{app:supp-results}). On an RTX~4080 SUPER, the same frozen 64-frame no-registration specialist configuration runs at 41.6~ms steady-state total for a 64~ms acquisition budget, so this bounded in-vivo structural result is not tied to an offline-only implementation. This remains a bounded in-vivo structural check rather than a task-activation benchmark: the labels come from a published localization-derived vascular rendering on the same acquisition, not from an independent modality or functional task.
 
-\begin{figure}[t]
-\centering
-\IfFileExists{figs/paper/ulm7883227_pala_structural_masks.pdf}{%
-\includegraphics[width=0.86\linewidth]{figs/paper/ulm7883227_pala_structural_masks.pdf}%
-}{%
-\fbox{%
-\parbox{0.92\linewidth}{%
-\textbf{ULM PALA-backed structural-mask asset unavailable in this checkout.}
-Reproduce it with \texttt{scripts/ulm7883227\_structural\_roc.py}; the exact command is listed in \SuppOrApp{app:repro}.%
-}%
-}%
-}
-\caption{Representative localization-derived structural masks for ULM Zenodo 7883227. The underlying reference is obtained by registering the published PALA rat-brain PowDop example back to the Zenodo IQ field of view and downsampling the corresponding published super-resolution MatOut vascular rendering onto the short-window evaluation lattice. Left: vessel-core mask derived from local maxima of that registered localization map. Right: perivascular-shell mask surrounding the core. These masks are fixed before the short-window detector scores are evaluated.}
-\label{fig:ulm_pala_structural_masks}
-\end{figure}
+Figure~\ref{fig:ulm_pala_headline_hero} shows the resulting localization-derived structural masks together with a representative same-window comparison between baseline power Doppler and the whitened-power specialist.
 
 \IfFileExists{reports/ulm7883227_pala_structural_roc_table.tex}{%
   \input{reports/ulm7883227_pala_structural_roc_table.tex}%

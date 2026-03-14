@@ -1015,7 +1015,7 @@ def _write_summary_table(
         + (" are then scored without additional frame-to-frame registration on the "
            if not reg_enable
            else " are then scored on the ")
-        "same MC--SVD residual cube using different downstream detector heads. Entries report window-level "
+        + "same MC--SVD residual cube using different downstream detector heads. Entries report window-level "
         "means with 95\\% bootstrap CIs over windows. Reproducibility details are provided in \\SuppOrApp{app:repro}.}"
     )
     lines.append("\\label{tab:ulm7883227_structural_roc}")
