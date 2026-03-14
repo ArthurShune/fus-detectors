@@ -282,15 +282,15 @@ not present locally. Reproducibility details are provided in \SuppOrApp{app:repr
 \label{fig:ulm_elastic_e975}
 \end{figure}
 
-\subsection{ULM 7883227: bounded structural-label audit on real in-vivo brain IQ}
-To test whether the same open ULM dataset can support a more anatomical score audit, we derive a leave-one-block-out vascular reference from the long-horizon acquisition itself and then evaluate short 128-frame windows against masks derived from that reference. The construction is intentionally conservative and frozen. For each held-out block, we use the remaining reference blocks to build a full-acquisition microbubble-density-style map by accumulating sparse local maxima on MC--SVD-filtered residuals \cite{ChavignonZenodo7883227,HeilesULMBenchmark2021}. Vessel pixels are then defined as the top 8\% of that reference after a 1-pixel erosion, while background pixels are taken from the lower half after a 3-pixel guard dilation around vessels and a 4-pixel edge exclusion. This yields roughly $3.7\times 10^4$ background pixels per held-out block, so the $10^{-3}$ operating point remains well resolved.
+\subsection{ULM 7883227: localization-derived structural-label audit on real in-vivo brain IQ}
+To obtain a stronger anatomical reference on the same open ULM dataset, we use the published PALA rat-brain ULM example rather than the earlier local-density surrogate \cite{ChavignonZenodo7883227,HeilesULMBenchmark2021}. The construction is deterministic and frozen. We reproduce the corresponding short-horizon PALA PowDop rendering from the Zenodo IQ archive using the published odd-block selection and SVD cutoff, register that published PowDop crop back to the Zenodo IQ field of view, and then downsample the published super-resolution MatOut vascular rendering onto the short-window evaluation lattice. Vessel pixels are defined as a peak-based core mask on that registered localization map, and background pixels are defined as the immediately surrounding shell. This creates a bounded but genuinely localization-derived vessel-core versus perivascular-shell endpoint on real in-vivo brain IQ.
 
-We report the completed 10-block / 20-window audit for the adaptive matched-subspace head because it is the real-IQ detector-family variant emphasized elsewhere in the paper. The result is informative but negative: on this clean-window sparse-bubble vascular-density endpoint, conventional PD and Kasai remain stronger than the detector-family heads under the frozen ULM profile. The adaptive matched-subspace head reaches AUC $0.681$ [0.669, 0.691], compared with 0.878 [0.855, 0.896] for PD and 0.881 [0.860, 0.897] for Kasai; its TPR@$10^{-2}$ is 0.118 [0.102, 0.132], compared with 0.334 [0.296, 0.368] for PD. The fixed matched-subspace head is numerically similar (AUC 0.678 [0.666, 0.690]) and does not change the interpretation. We therefore treat this experiment as a bounded negative control on real \emph{in vivo} structural ROC rather than as a new efficacy headline.
+The completed 10-block / 20-window audit uses the fully whitened power-style specialist because that is the strongest short-window head on this structural occupancy target. On short 64-frame windows, the specialist reaches AUC $0.539$ [0.529, 0.549], compared with 0.476 [0.467, 0.485] for PD and 0.475 [0.465, 0.485] for Kasai. At matched 70\% vessel-core recall, the same specialist lowers perivascular-shell false positives from 0.723 [0.711, 0.737] for PD and 0.725 [0.712, 0.739] for Kasai to 0.635 [0.615, 0.654]. The direction remains positive under short 32-frame windows (AUC $0.534$ [0.520, 0.547] versus 0.477 [0.467, 0.488] for PD) and under injected \texttt{brainlike} motion at 1 px amplitude (AUC $0.523$ [0.516, 0.530] versus 0.472 [0.466, 0.477] for PD). This is still a bounded structural-label audit rather than independent multimodal validation, but it is now a positive real in-vivo structural result rather than a negative-control check.
 
 \begin{figure}[t]
 \centering
-\IfFileExists{figs/paper/ulm7883227_structural_masks_mid10_adaptive.pdf}{%
-\includegraphics[width=\linewidth]{figs/paper/ulm7883227_structural_masks_mid10_adaptive.pdf}%
+\IfFileExists{figs/paper/ulm7883227_pala_structural_masks.pdf}{%
+\includegraphics[width=\linewidth]{figs/paper/ulm7883227_pala_structural_masks.pdf}%
 }{%
 \fbox{%
 \parbox{0.96\linewidth}{%
@@ -299,17 +299,17 @@ Reproduce it with \texttt{scripts/ulm7883227\_structural\_roc.py}; the exact com
 }%
 }%
 }
-\caption{Representative leave-one-block-out structural masks for ULM Zenodo 7883227. The underlying reference is a full-acquisition microbubble-density-style map obtained from the remaining blocks only, using sparse local maxima accumulated on MC--SVD-filtered long-horizon residuals. Left: vessel mask after 1-pixel erosion. Right: background mask after a 3-pixel guard dilation and 4-pixel edge exclusion. These masks are fixed before the short-window detector scores are evaluated on the held-out block.}
+\caption{Representative localization-derived structural masks for ULM Zenodo 7883227. The underlying reference is obtained by registering the published PALA rat-brain PowDop example back to the Zenodo IQ field of view and downsampling the corresponding published super-resolution MatOut vascular rendering onto the short-window evaluation lattice. Left: vessel-core mask derived from local maxima of that registered localization map. Right: perivascular-shell mask surrounding the core. These masks are fixed before the short-window detector scores are evaluated.}
 \label{fig:ulm_structural_masks}
 \end{figure}
 
-\IfFileExists{reports/ulm7883227_structural_roc_mid10_adaptive_table.tex}{%
-  \input{reports/ulm7883227_structural_roc_mid10_adaptive_table.tex}%
+\IfFileExists{reports/ulm7883227_pala_structural_roc_table_supp.tex}{%
+  \input{reports/ulm7883227_pala_structural_roc_table_supp.tex}%
 }{%
   \begin{center}
-  \refstepcounter{table}\label{tab:ulm7883227_structural_roc}%
+  \refstepcounter{table}\label{tab:ulm7883227_structural_roc_supp}%
   \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/ulm7883227_structural_roc_mid10_adaptive_table.tex}.\\
+    Missing table \path{reports/ulm7883227_pala_structural_roc_table_supp.tex}.\\
     Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/ulm7883227_structural_roc.py ...}.
   \end{minipage}}
   \end{center}
@@ -317,8 +317,8 @@ Reproduce it with \texttt{scripts/ulm7883227\_structural\_roc.py}; the exact com
 
 \begin{figure}[t]
 \centering
-\IfFileExists{figs/paper/ulm7883227_structural_roc_curves_mid10_adaptive.pdf}{%
-\includegraphics[width=0.8\linewidth]{figs/paper/ulm7883227_structural_roc_curves_mid10_adaptive.pdf}%
+\IfFileExists{figs/paper/ulm7883227_pala_structural_roc_curves.pdf}{%
+\includegraphics[width=0.8\linewidth]{figs/paper/ulm7883227_pala_structural_roc_curves.pdf}%
 }{%
 \fbox{%
 \parbox{0.96\linewidth}{%
@@ -327,7 +327,7 @@ Reproduce it with \texttt{scripts/ulm7883227\_structural\_roc.py}; the exact com
 }%
 }%
 }
-\caption{ROC curves for the bounded leave-one-block-out structural audit on ULM Zenodo 7883227 (10 evaluation blocks, 20 short windows). The vessel/background labels come from the long-horizon reference only; the short-window detector scores are evaluated on the identical MC--SVD residual cube. On this endpoint, PD and Kasai remain stronger than the matched-subspace detector heads under the frozen ULM profile.}
+\caption{ROC curves for the bounded localization-derived structural audit on ULM Zenodo 7883227 (10 evaluation blocks, 20 short windows). The vessel-core and perivascular-shell labels come from the published PALA localization rendering after registration back to the Zenodo IQ grid; the short-window detector scores are evaluated on the identical MC--SVD residual cube. On this endpoint, the fully whitened power-style specialist is stronger than PD and Kasai.}
 \label{fig:ulm_structural_roc_curves}
 \end{figure}
 

@@ -11,8 +11,10 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import imageio.v3 as iio
 import numpy as np
 import scipy.ndimage as ndi
+from skimage.feature import match_template
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -315,6 +317,10 @@ def _compute_reference_map(
     local_density_quantile: float,
     local_density_peak_size: int,
     local_density_sigma: float,
+    pala_example_root: Path,
+    pala_powdop_blocks: list[int],
+    pala_svd_cutoff_start: int,
+    pala_trim_sr_border: int,
 ) -> tuple[np.ndarray, dict[str, Any]]:
     mode_norm = str(mode).strip().lower()
     if mode_norm == "pd":
@@ -326,6 +332,15 @@ def _compute_reference_map(
             reg_subpixel=reg_subpixel,
             svd_energy_frac=svd_energy_frac,
             device=device,
+        )
+    if mode_norm == "pala_example_matout":
+        return _compute_reference_pala_example_matout(
+            root=root,
+            cache_dir=cache_dir / "pala_example_matout",
+            pala_example_root=Path(pala_example_root),
+            pala_powdop_blocks=[int(b) for b in pala_powdop_blocks],
+            svd_cutoff_start=int(pala_svd_cutoff_start),
+            trim_sr_border=int(pala_trim_sr_border),
         )
     if mode_norm != "local_density":
         raise ValueError(f"unsupported reference mode {mode!r}")
@@ -374,6 +389,263 @@ def _compute_reference_map(
     }
     tele_path.write_text(json.dumps(tele_payload, indent=2, sort_keys=True))
     return ref_map.astype(np.float32, copy=False), tele_payload
+
+
+def _to_gray_unit(arr: np.ndarray) -> np.ndarray:
+    img = np.asarray(arr, dtype=np.float32)
+    if img.ndim == 3:
+        img = 0.2989 * img[..., 0] + 0.5870 * img[..., 1] + 0.1140 * img[..., 2]
+    img = img.astype(np.float32, copy=False)
+    finite = np.isfinite(img)
+    if not finite.any():
+        return np.zeros(img.shape[:2], dtype=np.float32)
+    vals = img[finite]
+    lo = float(vals.min())
+    hi = float(vals.max())
+    if hi <= lo:
+        out = np.zeros_like(img, dtype=np.float32)
+        out[finite] = 1.0
+        return out
+    out = np.zeros_like(img, dtype=np.float32)
+    out[finite] = (img[finite] - lo) / (hi - lo)
+    return out
+
+
+def _pala_svd_filter(cube_t_hw: np.ndarray, *, cutoff_start: int) -> np.ndarray:
+    cube = np.asarray(cube_t_hw, dtype=np.complex64, copy=False)
+    if cube.ndim != 3:
+        raise ValueError(f"expected (T,H,W) cube, got {cube.shape}")
+    T, H, W = cube.shape
+    keep0 = max(int(cutoff_start) - 1, 0)
+    if keep0 <= 0:
+        return cube
+    X = np.transpose(cube, (1, 2, 0)).reshape(H * W, T)
+    gram = X.conj().T @ X
+    evals, U = np.linalg.eigh(gram)
+    order = np.argsort(evals)[::-1]
+    U = U[:, order]
+    V = X @ U
+    Xf = V[:, keep0:] @ U[:, keep0:].conj().T
+    return Xf.reshape(H, W, T).transpose(2, 0, 1).astype(np.complex64, copy=False)
+
+
+def _compute_pala_powdop_mean(
+    *,
+    root: Path,
+    blocks: list[int],
+    cutoff_start: int,
+    cache_dir: Path,
+) -> np.ndarray:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    mean_path = cache_dir / (
+        f"pala_powdop_mean_blocks_{'-'.join(f'{int(b):03d}' for b in blocks)}_cut{int(cutoff_start)}.npy"
+    )
+    if mean_path.is_file():
+        return np.load(mean_path, allow_pickle=False).astype(np.float32, copy=False)
+    pds: list[np.ndarray] = []
+    for block_id in blocks:
+        per_path = cache_dir / f"pala_powdop_block{int(block_id):03d}_cut{int(cutoff_start)}.npy"
+        if per_path.is_file():
+            pd = np.load(per_path, allow_pickle=False).astype(np.float32, copy=False)
+        else:
+            cube = load_ulm_block_iq(int(block_id), frames=None, root=root)
+            filt = _pala_svd_filter(cube, cutoff_start=int(cutoff_start))
+            pd = np.sqrt(np.sum(np.abs(np.transpose(filt, (1, 2, 0))) ** 2, axis=2)).astype(
+                np.float32, copy=False
+            )
+            np.save(per_path, pd, allow_pickle=False)
+        pds.append(pd)
+    mean_pd = np.mean(np.stack(pds, axis=0), axis=0).astype(np.float32, copy=False)
+    np.save(mean_path, mean_pd, allow_pickle=False)
+    return mean_pd
+
+
+def _mask_pala_scalebar(matout_gray: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
+    img = _to_gray_unit(matout_gray)
+    H, W = img.shape
+    bright = img >= max(0.75, float(np.quantile(img, 0.995)))
+    roi = np.zeros_like(bright, dtype=bool)
+    roi[max(0, H - 160) :, : min(W, 240)] = True
+    labels, n = ndi.label(bright & roi)
+    masked = img.copy()
+    payload: dict[str, Any] = {"removed": False}
+    if n <= 0:
+        return masked, payload
+    best_lab = None
+    best_area = 0
+    for lab in range(1, n + 1):
+        ys, xs = np.where(labels == lab)
+        if ys.size == 0:
+            continue
+        h = int(ys.max() - ys.min() + 1)
+        w = int(xs.max() - xs.min() + 1)
+        area = int(ys.size)
+        if w >= 4 * max(1, h) and area >= best_area:
+            best_lab = lab
+            best_area = area
+    if best_lab is None:
+        return masked, payload
+    mask = labels == int(best_lab)
+    masked[mask] = 0.0
+    ys, xs = np.where(mask)
+    payload = {
+        "removed": True,
+        "area_px": int(mask.sum()),
+        "bbox_yxhw": [
+            int(ys.min()),
+            int(xs.min()),
+            int(ys.max() - ys.min() + 1),
+            int(xs.max() - xs.min() + 1),
+        ],
+    }
+    return masked, payload
+
+
+def _candidate_oriented_maps(raw_pd: np.ndarray) -> dict[str, np.ndarray]:
+    raw = np.asarray(raw_pd, dtype=np.float32, copy=False)
+    return {
+        "transpose": raw.T,
+        "transpose_fliplr": np.fliplr(raw.T),
+        "transpose_flipud": np.flipud(raw.T),
+        "transpose_flipud_fliplr": np.flipud(np.fliplr(raw.T)),
+        "raw": raw,
+        "flipud": np.flipud(raw),
+        "fliplr": np.fliplr(raw),
+    }
+
+
+def _register_pala_example_crop(
+    *,
+    mean_pd_raw: np.ndarray,
+    pala_powdop_tif: Path,
+    cache_dir: Path,
+) -> dict[str, Any]:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    out_path = cache_dir / "pala_example_registration.json"
+    if out_path.is_file():
+        return json.loads(out_path.read_text())
+    template = _to_gray_unit(iio.imread(pala_powdop_tif))
+    if template.shape != (78, 118):
+        raise ValueError(f"unexpected PALA PowDop template shape {template.shape}, expected (78, 118)")
+    results: list[dict[str, Any]] = []
+    for name, arr0 in _candidate_oriented_maps(mean_pd_raw).items():
+        arr = np.power(np.maximum(np.asarray(arr0, dtype=np.float32), 0.0), 1.0 / 3.0)
+        arr = _to_gray_unit(arr)
+        if arr.shape[0] < template.shape[0] or arr.shape[1] < template.shape[1]:
+            continue
+        resp = match_template(arr, template, pad_input=False)
+        ij = np.unravel_index(np.argmax(resp), resp.shape)
+        y, x = int(ij[0]), int(ij[1])
+        crop = arr[y : y + template.shape[0], x : x + template.shape[1]]
+        corr = float(np.corrcoef(crop.ravel(), template.ravel())[0, 1])
+        results.append(
+            {
+                "orientation": str(name),
+                "match_score": float(resp[ij]),
+                "corr": corr,
+                "crop_yxhw": [y, x, int(template.shape[0]), int(template.shape[1])],
+                "oriented_shape": [int(arr.shape[0]), int(arr.shape[1])],
+            }
+        )
+    if not results:
+        raise RuntimeError("failed to register PALA PowDop example to synthesized PowDop")
+    best = max(results, key=lambda r: (float(r["match_score"]), float(r["corr"])))
+    payload = {"best": best, "candidates": results}
+    out_path.write_text(json.dumps(payload, indent=2, sort_keys=True))
+    return payload
+
+
+def _oriented_to_raw(oriented: np.ndarray, orientation: str) -> np.ndarray:
+    arr = np.asarray(oriented, dtype=np.float32, copy=False)
+    if orientation == "transpose":
+        return arr.T
+    if orientation == "transpose_fliplr":
+        return np.fliplr(arr).T
+    if orientation == "transpose_flipud":
+        return np.flipud(arr).T
+    if orientation == "transpose_flipud_fliplr":
+        return np.fliplr(np.flipud(arr)).T
+    if orientation == "raw":
+        return arr
+    if orientation == "flipud":
+        return np.flipud(arr)
+    if orientation == "fliplr":
+        return np.fliplr(arr)
+    raise ValueError(f"unsupported orientation {orientation!r}")
+
+
+def _pool_sr_to_coarse(mat_sr: np.ndarray, *, trim_border: int) -> np.ndarray:
+    img = np.asarray(mat_sr, dtype=np.float32, copy=False)
+    trim = max(0, int(trim_border))
+    if trim > 0:
+        img = img[:-trim, :-trim]
+    H, W = img.shape
+    if (H % 10) != 0 or (W % 10) != 0:
+        raise ValueError(f"expected super-res shape divisible by 10 after trim, got {(H, W)}")
+    return img.reshape(H // 10, 10, W // 10, 10).mean(axis=(1, 3)).astype(np.float32, copy=False)
+
+
+def _compute_reference_pala_example_matout(
+    *,
+    root: Path,
+    cache_dir: Path,
+    pala_example_root: Path,
+    pala_powdop_blocks: list[int],
+    svd_cutoff_start: int,
+    trim_sr_border: int,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    map_path = cache_dir / "reference_pala_example_matout.npy"
+    tele_path = cache_dir / "reference_pala_example_matout.json"
+    if map_path.is_file() and tele_path.is_file():
+        return (
+            np.load(map_path, allow_pickle=False).astype(np.float32, copy=False),
+            json.loads(tele_path.read_text()),
+        )
+    mean_pd_raw = _compute_pala_powdop_mean(
+        root=root,
+        blocks=[int(b) for b in pala_powdop_blocks],
+        cutoff_start=int(svd_cutoff_start),
+        cache_dir=cache_dir / "powdop_cache",
+    )
+    powdop_tif = pala_example_root / "PALA_InVivoRatBrain_example_PowDop.tif"
+    matout_tif = pala_example_root / "PALA_InVivoRatBrain_example_MatOut.tif"
+    if not powdop_tif.is_file() or not matout_tif.is_file():
+        raise FileNotFoundError(
+            f"expected PALA example TIFFs under {pala_example_root}, found PowDop={powdop_tif.is_file()} MatOut={matout_tif.is_file()}"
+        )
+    reg = _register_pala_example_crop(
+        mean_pd_raw=mean_pd_raw,
+        pala_powdop_tif=powdop_tif,
+        cache_dir=cache_dir,
+    )
+    best = reg["best"]
+    matout_gray, scalebar = _mask_pala_scalebar(_to_gray_unit(iio.imread(matout_tif)))
+    coarse_crop = _pool_sr_to_coarse(matout_gray, trim_border=int(trim_sr_border))
+    y, x, h, w = [int(v) for v in best["crop_yxhw"]]
+    if coarse_crop.shape != (h, w):
+        raise ValueError(
+            f"PALA MatOut coarse crop shape {coarse_crop.shape} does not match registered PowDop crop {(h, w)}"
+        )
+    orientation = str(best["orientation"])
+    oriented_shape = tuple(int(v) for v in best["oriented_shape"])
+    oriented = np.full(oriented_shape, np.nan, dtype=np.float32)
+    oriented[y : y + h, x : x + w] = coarse_crop.astype(np.float32, copy=False)
+    ref_raw = _oriented_to_raw(oriented, orientation).astype(np.float32, copy=False)
+    np.save(map_path, ref_raw, allow_pickle=False)
+    tele_payload = {
+        "reference_mode": "pala_example_matout",
+        "pala_example_root": str(pala_example_root),
+        "pala_powdop_blocks": [int(b) for b in pala_powdop_blocks],
+        "svd_cutoff_start": int(svd_cutoff_start),
+        "trim_sr_border": int(trim_sr_border),
+        "registration": reg,
+        "scalebar_removal": scalebar,
+        "coarse_crop_shape": [int(v) for v in coarse_crop.shape],
+        "raw_shape": [int(v) for v in ref_raw.shape],
+    }
+    tele_path.write_text(json.dumps(tele_payload, indent=2, sort_keys=True))
+    return ref_raw, tele_payload
 
 
 def _evaluate_window_score(
@@ -696,6 +968,12 @@ def _write_summary_table(
             "a leave-one-block-out full-acquisition microbubble-density reference obtained by "
             "accumulating sparse local maxima on MC--SVD-filtered long-horizon residuals from the remaining blocks"
         )
+    elif ref_mode == "pala_example_matout":
+        ref_text = (
+            "an external super-resolved vascular reference derived by registering the published PALA rat-brain "
+            "ULM example back onto the Zenodo IQ grid and downsampling the registered MatOut rendering to the "
+            "short-window evaluation lattice"
+        )
     else:
         ref_text = (
             "a leave-one-block-out full-acquisition vascular reference built from MC--SVD-filtered "
@@ -774,10 +1052,23 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--flow-high-hz", type=float, default=150.0)
     ap.add_argument("--alias-center-hz", type=float, default=350.0)
     ap.add_argument("--alias-width-hz", type=float, default=150.0)
-    ap.add_argument("--reference-mode", type=str, default="local_density", choices=["local_density", "pd"])
+    ap.add_argument(
+        "--reference-mode",
+        type=str,
+        default="local_density",
+        choices=["local_density", "pd", "pala_example_matout"],
+    )
     ap.add_argument("--reference-local-density-quantile", type=float, default=0.9995)
     ap.add_argument("--reference-local-density-peak-size", type=int, default=3)
     ap.add_argument("--reference-local-density-sigma", type=float, default=1.0)
+    ap.add_argument(
+        "--pala-example-root",
+        type=Path,
+        default=Path("/tmp/PALA_repo_1073521"),
+    )
+    ap.add_argument("--pala-powdop-blocks", type=str, default="1,3,5,7,9,11,13,15,17,19")
+    ap.add_argument("--pala-svd-cutoff-start", type=int, default=5)
+    ap.add_argument("--pala-trim-sr-border", type=int, default=1)
     ap.add_argument("--diag-load", type=float, default=0.07)
     ap.add_argument("--cov-estimator", type=str, default="scm")
     ap.add_argument("--stap-device", type=str, default="cuda")
@@ -861,6 +1152,7 @@ def main() -> None:
         raise ValueError(f"window_frames must exceed Lt by at least one sample (got window_frames={args.window_frames}, Lt={args.lt})")
     ref_blocks = _parse_blocks(args.ref_blocks, root=args.data_root)
     eval_blocks = _parse_blocks(args.eval_blocks, root=args.data_root)
+    pala_powdop_blocks = _parse_blocks(args.pala_powdop_blocks, root=args.data_root)
 
     args.cache_root.mkdir(parents=True, exist_ok=True)
     args.bundle_tmp_root.mkdir(parents=True, exist_ok=True)
@@ -890,6 +1182,10 @@ def main() -> None:
             local_density_quantile=float(args.reference_local_density_quantile),
             local_density_peak_size=int(args.reference_local_density_peak_size),
             local_density_sigma=float(args.reference_local_density_sigma),
+            pala_example_root=Path(args.pala_example_root),
+            pala_powdop_blocks=[int(b) for b in pala_powdop_blocks],
+            pala_svd_cutoff_start=int(args.pala_svd_cutoff_start),
+            pala_trim_sr_border=int(args.pala_trim_sr_border),
         )
         ref_maps[int(block_id)] = ref_map
         ref_tele[int(block_id)] = tele
