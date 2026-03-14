@@ -520,12 +520,12 @@ Regime (sampling) & Baseline & Detector head (prespecified settings) & Doppler b
 \hline
 Labeled brain simulation scenarios (k-Wave; PRF 1500; 64-frame windows) & MC--SVD (energy fraction $e=0.90$); adaptive SVD (SV similarity cutoff); block-wise local SVD (overlap-add; $e=0.90$); RPCA; HOSVD (baselines scored by PD on residual) & tiles $8\times 8$, stride 3; $L_t=8$; robust covariance (Tyler-type) with diagonal loading $\lambda=0.07$; matched-subspace flow-band score & $\Pf=[30,250]$, guard $[250,400]$, $\Pa=[400,750]$ \\
 Gammex flow phantom (linear17; PRF 2500; $N=17$ shots; pooled over cine frames) & baseline SVD band-pass keep $[2,17]$; conventional short-ensemble comparators (PD/log-PD/Kasai) & tiles $8\times 8$; $L_t=16$; Tyler-type covariance with $\lambda=0.07$; stride 6 (along) / 4 (across); matched-subspace flow-band score & $\Pf=[150,450]$, guard $[450,700]$, $\Pa=[700,1200]$ \\
-ULM Zenodo 7883227 (PRF 1000; 128-frame blocks) & MC--SVD baseline with energy fraction $e=0.975$ chosen by a one-time label-free sweep & tiles $8\times 8$, stride 3; $L_t=64$; SCM covariance with $\lambda=0.07$; matched-subspace flow-band score & $\Pf=[10,150]$, guard $[150,200]$, $\Pa=[200,500]$ \\
+ULM Zenodo 7883227 motion and same-residual audits (PRF 1000; 128-frame blocks) & MC--SVD baseline with energy fraction $e=0.975$ chosen by a one-time label-free sweep & tiles $8\times 8$, stride 3; $L_t=64$; SCM covariance with $\lambda=0.07$; matched-subspace flow-band score & $\Pf=[10,150]$, guard $[150,200]$, $\Pa=[200,500]$ \\
 \hline
 \end{tabular}%
 }
 \endgroup
-\caption{Prespecified operating settings for the main regimes. All settings are fixed per regime prior to reporting results; exact commands and exported metadata are provided in \SuppOrApp{app:repro}.}
+\caption{Prespecified operating settings for the main regimes. All settings are fixed per regime prior to reporting results; exact commands and exported metadata are provided in \SuppOrApp{app:repro}. The bounded PALA-backed ULM structural-label audit uses a separate prespecified 64-frame no-registration specialist configuration described explicitly in Section~\ref{sec:ulm7883227}.}
 \label{tab:fixed_profiles}
 \end{table}
 

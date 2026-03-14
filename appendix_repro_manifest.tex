@@ -9,8 +9,8 @@ Run \path{PYTHONPATH=. conda run -n stap-fus python scripts/generate_repro_manif
 \paragraph{Repository state.}
 Public repository: \path{git@github.com:ArthurShune/stap-for-fus.git}.
 Release tag: (not recorded; set \texttt{STAP\_FUS\_RELEASE\_TAG} or create a git tag).
-Commit: \texttt{973a81f} (full: \texttt{973a81fa85}\allowbreak\texttt{a5c425a7de}\allowbreak\texttt{04d8988598}\allowbreak\texttt{fe504862c5}); branch: \texttt{main}; dirty: \texttt{true}.
-Dirty details: non-ignored paths=3, ignored build products=2.
+Commit: \texttt{bbc5420} (full: \texttt{bbc54205ab}\allowbreak\texttt{a8993f1616}\allowbreak\texttt{627fb932f5}\allowbreak\texttt{eb89440ad0}); branch: \texttt{main}; dirty: \texttt{true}.
+Dirty details: non-ignored paths=2, ignored build products=2.
 Note: dirty status ignores common LaTeX build products (e.g., \texttt{*.aux, *.log, *.out, *.fls, *.fdb\_latexmk, *.synctex.gz, *.pdf}).
 For archival reproducibility, generate this manifest from a clean, tagged release commit (\texttt{dirty=false}) and record the public repository URL and tag.
 
@@ -59,7 +59,7 @@ Paths below are the expected on-disk locations used by the scripts in this repos
   \item \textbf{Twinkling calculi KA hygiene}: calcifications sequence, frames 0:50 (n=50), PRF approx 500 Hz, N=9 shots.
   \item \textbf{ULM 7883227 baseline sweep}: blocks 1-3, frames 0:128, MC-SVD energy-frac sweep (label-free).
   \item \textbf{ULM 7883227 motion sweeps}: blocks 1-3, frames 0:128, frozen baseline e=0.975, motion kinds {brainlike,elastic}.
-  \item \textbf{ULM 7883227 structural audit}: leave-one-block-out reference/eval blocks 1-10, 128-frame windows at offsets {0,128}, max 2 windows/block, local-density structural reference, adaptive matched-subspace head.
+  \item \textbf{ULM 7883227 PALA-backed structural audit}: reference/eval blocks 1-10, 64-frame windows at offsets {0,128}, max 2 windows/block, published PALA localization-derived vessel-core versus perivascular-shell reference, no-registration whitened matched-subspace specialist.
 \end{itemize}
 
 \paragraph{Artifact commands.}
@@ -1567,7 +1567,7 @@ PYTHONPATH=. python scripts/ulm_zenodo_7883227_motion_sweep.py \
       \item \path{figs/paper/}\allowbreak\path{ulm7883227_pala_structural_roc_curves.png}
     \end{itemize}
     \endgroup
-    Notes: This is a bounded structural-label audit on real in vivo IQ using the published PALA localization rendering registered back onto the Zenodo IQ grid. The vessel-core and perivascular-shell masks are clipped to anatomical support before evaluation. It is stronger than a label-free audit but still not an independent multimodal task benchmark. The short-window detector itself runs without additional frame-to-frame registration in the frozen headline configuration because re-enabling registration changed the structural ROC only at the fourth decimal place while pushing latency well above the 64-frame acquisition budget.
+    Notes: This is a bounded structural-label audit on real in vivo IQ using the published PALA localization rendering registered back onto the Zenodo IQ grid. The vessel-core and perivascular-shell masks are clipped to anatomical support before evaluation. It supersedes the earlier local-density surrogate audit and is the only paper-facing ULM structural endpoint. It is stronger than a label-free audit but still not an independent multimodal task benchmark. The short-window detector itself runs without additional frame-to-frame registration in the frozen headline configuration because re-enabling registration changed the structural ROC only at the fourth decimal place while pushing latency well above the 64-frame acquisition budget.
 {\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python scripts/ulm7883227_structural_roc.py \
