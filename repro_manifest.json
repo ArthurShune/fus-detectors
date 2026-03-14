@@ -4,16 +4,15 @@
     "release_tag": null
   },
   "git": {
-    "commit": "973a81fa85a5c425a7de04d8988598fe504862c5",
-    "commit_short": "973a81f",
+    "commit": "bbc54205aba8993f1616627fb932f5eb89440ad0",
+    "commit_short": "bbc5420",
     "branch": "main",
     "dirty": true,
-    "dirty_paths_count": 3,
+    "dirty_paths_count": 2,
     "dirty_ignored_paths_count": 2,
     "dirty_paths": [
       "M scripts/generate_repro_manifest.py",
-      "M stap_fus_methodology.tex",
-      "?? scripts/fixed_calibration_transfer.py"
+      "M stap_fus_methodology.tex"
     ],
     "dirty_ignored_paths": [
       "M stap_fus_methodology.pdf",
@@ -113,7 +112,7 @@
     "Twinkling calculi KA hygiene": "calcifications sequence, frames 0:50 (n=50), PRF approx 500 Hz, N=9 shots.",
     "ULM 7883227 baseline sweep": "blocks 1-3, frames 0:128, MC-SVD energy-frac sweep (label-free).",
     "ULM 7883227 motion sweeps": "blocks 1-3, frames 0:128, frozen baseline e=0.975, motion kinds {brainlike,elastic}.",
-    "ULM 7883227 structural audit": "leave-one-block-out reference/eval blocks 1-10, 128-frame windows at offsets {0,128}, max 2 windows/block, local-density structural reference, adaptive matched-subspace head."
+    "ULM 7883227 PALA-backed structural audit": "reference/eval blocks 1-10, 64-frame windows at offsets {0,128}, max 2 windows/block, published PALA localization-derived vessel-core versus perivascular-shell reference, no-registration whitened matched-subspace specialist."
   },
   "artifacts": [
     {
@@ -1553,7 +1552,7 @@
         "  --alias-center-hz 350 --alias-width-hz 150 \\",
         "  --no-reg-enable"
       ],
-      "notes": "This is a bounded structural-label audit on real in vivo IQ using the published PALA localization rendering registered back onto the Zenodo IQ grid. The vessel-core and perivascular-shell masks are clipped to anatomical support before evaluation. It is stronger than a label-free audit but still not an independent multimodal task benchmark. The short-window detector itself runs without additional frame-to-frame registration in the frozen headline configuration because re-enabling registration changed the structural ROC only at the fourth decimal place while pushing latency well above the 64-frame acquisition budget."
+      "notes": "This is a bounded structural-label audit on real in vivo IQ using the published PALA localization rendering registered back onto the Zenodo IQ grid. The vessel-core and perivascular-shell masks are clipped to anatomical support before evaluation. It supersedes the earlier local-density surrogate audit and is the only paper-facing ULM structural endpoint. It is stronger than a label-free audit but still not an independent multimodal task benchmark. The short-window detector itself runs without additional frame-to-frame registration in the frozen headline configuration because re-enabling registration changed the structural ROC only at the fourth decimal place while pushing latency well above the 64-frame acquisition budget."
     },
     {
       "name": "Fixed-calibration threshold-transfer audits (SIMUS/PyMUST + PALA-backed ULM)",

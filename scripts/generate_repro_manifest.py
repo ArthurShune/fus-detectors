@@ -634,9 +634,10 @@ def _default_selections() -> dict[str, str]:
         "Twinkling calculi KA hygiene": "calcifications sequence, frames 0:50 (n=50), PRF approx 500 Hz, N=9 shots.",
         "ULM 7883227 baseline sweep": "blocks 1-3, frames 0:128, MC-SVD energy-frac sweep (label-free).",
         "ULM 7883227 motion sweeps": "blocks 1-3, frames 0:128, frozen baseline e=0.975, motion kinds {brainlike,elastic}.",
-        "ULM 7883227 structural audit": (
-            "leave-one-block-out reference/eval blocks 1-10, 128-frame windows at offsets {0,128}, "
-            "max 2 windows/block, local-density structural reference, adaptive matched-subspace head."
+        "ULM 7883227 PALA-backed structural audit": (
+            "reference/eval blocks 1-10, 64-frame windows at offsets {0,128}, max 2 windows/block, "
+            "published PALA localization-derived vessel-core versus perivascular-shell reference, "
+            "no-registration whitened matched-subspace specialist."
         ),
     }
 
@@ -2029,7 +2030,8 @@ def _default_artifacts() -> list[ArtifactInfo]:
             notes=(
                 "This is a bounded structural-label audit on real in vivo IQ using the published PALA localization "
                 "rendering registered back onto the Zenodo IQ grid. The vessel-core and perivascular-shell masks are "
-                "clipped to anatomical support before evaluation. It is stronger than a label-free audit but still "
+                "clipped to anatomical support before evaluation. It supersedes the earlier local-density surrogate "
+                "audit and is the only paper-facing ULM structural endpoint. It is stronger than a label-free audit but still "
                 "not an independent multimodal task benchmark. The short-window detector itself runs without "
                 "additional frame-to-frame registration in the frozen headline configuration because re-enabling "
                 "registration changed the structural ROC only at the fourth decimal place while pushing latency "
