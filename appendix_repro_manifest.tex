@@ -9,8 +9,8 @@ Run \path{PYTHONPATH=. conda run -n stap-fus python scripts/generate_repro_manif
 \paragraph{Repository state.}
 Public repository: \path{git@github.com:ArthurShune/stap-for-fus.git}.
 Release tag: (not recorded; set \texttt{STAP\_FUS\_RELEASE\_TAG} or create a git tag).
-Commit: \texttt{91b9204} (full: \texttt{91b9204c1d}\allowbreak\texttt{3583549cee}\allowbreak\texttt{8cc4fac018}\allowbreak\texttt{203314ec68}); branch: \texttt{main}; dirty: \texttt{true}.
-Dirty details: non-ignored paths=4, ignored build products=2.
+Commit: \texttt{db0dd0f} (full: \texttt{db0dd0fb3a}\allowbreak\texttt{22621fde9c}\allowbreak\texttt{3514cc4ada}\allowbreak\texttt{4ff4758007}); branch: \texttt{main}; dirty: \texttt{true}.
+Dirty details: non-ignored paths=5, ignored build products=0.
 Note: dirty status ignores common LaTeX build products (e.g., \texttt{*.aux, *.log, *.out, *.fls, *.fdb\_latexmk, *.synctex.gz, *.pdf}).
 For archival reproducibility, generate this manifest from a clean, tagged release commit (\texttt{dirty=false}) and record the public repository URL and tag.
 
@@ -1545,6 +1545,7 @@ PYTHONPATH=. python scripts/ulm_zenodo_7883227_motion_sweep.py \
       \item ULM section: Figure (ulm7883227\_pala\_structural\_masks.pdf)
       \item ULM section: Table (ulm7883227\_pala\_structural\_roc\_table.tex)
       \item Supplement: Figure (ulm7883227\_pala\_structural\_roc\_curves.pdf)
+      \item Discussion: RTX 4080 latency note for the same 64-frame no-registration specialist
     \end{itemize}
     Outputs:
     \begingroup\raggedright
@@ -1554,12 +1555,13 @@ PYTHONPATH=. python scripts/ulm_zenodo_7883227_motion_sweep.py \
       \item \path{reports/}\allowbreak\path{ulm7883227_pala_structural_roc_table.tex}
       \item \path{reports/}\allowbreak\path{ulm7883227_pala_structural_roc_short32.json}
       \item \path{reports/}\allowbreak\path{ulm7883227_pala_structural_roc_brainlike_}\allowbreak\path{motion.json}
+      \item \path{reports/}\allowbreak\path{ulm7883227_pala_latency_rtx4080.json}
       \item \path{figs/paper/}\allowbreak\path{ulm7883227_pala_structural_masks.pdf}
       \item \path{figs/paper/}\allowbreak\path{ulm7883227_pala_structural_roc_curves.pdf}
       \item \path{figs/paper/}\allowbreak\path{ulm7883227_pala_structural_roc_curves.png}
     \end{itemize}
     \endgroup
-    Notes: This is a bounded structural-label audit on real in vivo IQ using the published PALA localization rendering registered back onto the Zenodo IQ grid. It is stronger than a label-free audit but still not an independent multimodal task benchmark.
+    Notes: This is a bounded structural-label audit on real in vivo IQ using the published PALA localization rendering registered back onto the Zenodo IQ grid. It is stronger than a label-free audit but still not an independent multimodal task benchmark. The short-window detector itself runs without additional frame-to-frame registration in the frozen headline configuration because re-enabling registration changed the structural ROC only at the fourth decimal place while pushing latency well above the 64-frame acquisition budget.
 {\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python scripts/ulm7883227_structural_roc.py \
@@ -1574,7 +1576,7 @@ PYTHONPATH=. python scripts/ulm7883227_structural_roc.py \
   --pala-svd-cutoff-start 5 --pala-trim-sr-border 1 \
   --cov-estimator scm --diag-load 0.07 \
   --stap-device cuda \
-  --reg-enable --reg-subpixel 4 \
+  --no-reg-enable \
   --vessel-mask-mode peaks --background-mask-mode shell \
   --tpr-targets 0.5 0.7 0.9 \
   --bootstrap-n 500 \
@@ -1583,6 +1585,18 @@ PYTHONPATH=. python scripts/ulm7883227_structural_roc.py \
   --out-tex reports/ulm7883227_pala_structural_roc_table.tex \
   --out-mask-fig figs/paper/ulm7883227_pala_structural_masks.pdf \
   --out-roc-fig figs/paper/ulm7883227_pala_structural_roc_curves.pdf
+PYTHONPATH=. conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \
+  --summary-json reports/ulm7883227_pala_latency_rtx4080.json \
+  --out-root runs/latency_realdata_cuda_ulm_pala_noreg \
+  --stap-device cuda --stap-detector-variant whitened_power \
+  ulm --data-root data/ulm_zenodo_7883227 --block-ids 1 \
+  --windows 0:64,128:192,256:320 --window-frames 64 \
+  --Lt 64 --tile-h 8 --tile-w 8 --tile-stride 3 \
+  --diag-load 0.07 --cov-estimator scm \
+  --baseline-type mc_svd --svd-energy-frac 0.975 \
+  --flow-low-hz 10 --flow-high-hz 150 \
+  --alias-center-hz 350 --alias-width-hz 150 \
+  --no-reg-enable
 \end{verbatim}
 }
 

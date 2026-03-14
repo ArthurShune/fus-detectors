@@ -26,6 +26,10 @@ from typing import Any, Dict, Iterable, List, Tuple
 import numpy as np
 
 from pipeline.realdata.shin_ratbrain import load_shin_iq, load_shin_metadata
+from pipeline.realdata.ulm_zenodo_7883227 import (
+    load_ulm_block_iq,
+    load_ulm_zenodo_7883227_params,
+)
 from pipeline.realdata.twinkling_artifact import (
     RawBCFPar,
     decode_rawbcf_cfm_cube,
@@ -89,6 +93,28 @@ def _parse_indices(spec: str, n_max: int) -> List[int]:
         step = int(parts[2]) if len(parts) == 3 and parts[2] else 1
         return list(range(start, min(stop, n_max), step))
     return [int(spec)]
+
+
+def _parse_block_ids(spec: str) -> List[int]:
+    raw = (spec or "").strip().lower()
+    if raw in {"", "all", ":"}:
+        raise ValueError("Explicit ULM block ids are required for latency runs.")
+    out: List[int] = []
+    for part in raw.replace(" ", "").split(","):
+        if not part:
+            continue
+        if "-" in part:
+            lo_s, hi_s = part.split("-", 1)
+            lo = int(lo_s)
+            hi = int(hi_s)
+            step = 1 if hi >= lo else -1
+            out.extend(list(range(lo, hi + step, step)))
+        else:
+            out.append(int(part))
+    vals = sorted({int(v) for v in out})
+    if not vals:
+        raise ValueError("expected at least one ULM block id")
+    return vals
 
 
 def _slugify(text: str) -> str:
@@ -353,6 +379,108 @@ def _run_shin(args: argparse.Namespace) -> Dict[str, Any]:
     }
 
 
+def _run_ulm(args: argparse.Namespace) -> Dict[str, Any]:
+    data_root = Path(args.data_root)
+    params = load_ulm_zenodo_7883227_params(data_root)
+    prf_hz = float(args.prf_hz) if args.prf_hz is not None else float(params.frame_rate_hz)
+    block_ids = _parse_block_ids(str(args.block_ids))
+    windows = _parse_slice_list(str(args.windows))
+    lt_eff = min(int(args.Lt), max(2, int(args.window_frames) - 1))
+    if lt_eff < 2:
+        raise ValueError(f"Invalid Lt/window pair: Lt={args.Lt}, window_frames={args.window_frames}")
+
+    _maybe_set_tile_batch(args.tile_batch)
+
+    out_root = Path(args.out_root)
+    run_root = out_root / "ulm" / str(args.stap_detector_variant)
+    if args.clean:
+        _clean_dir(run_root)
+    else:
+        run_root.mkdir(parents=True, exist_ok=True)
+
+    teles: List[Dict[str, Any]] = []
+    for block_id in block_ids:
+        iq_full = load_ulm_block_iq(int(block_id), frames=None, root=data_root)
+        total_frames = int(iq_full.shape[0])
+        for frames, tag in windows:
+            if int(args.window_frames) > 0:
+                if len(frames) != int(args.window_frames):
+                    raise ValueError(
+                        f"Window {tag} length {len(frames)} does not match --window-frames={args.window_frames}."
+                    )
+            if frames and (max(frames) >= total_frames or min(frames) < 0):
+                raise ValueError(f"Window {tag} out of range for block {block_id} with frames={total_frames}.")
+            cube = iq_full[np.asarray(frames, dtype=np.int64)]
+            dataset_name = f"ulm_block{int(block_id):03d}_{tag}"
+            meta_extra = {
+                "orig_data": {
+                    "dataset": "ULM_Zenodo_7883227",
+                    "block_id": int(block_id),
+                    "frames_tag": tag,
+                    "frames_spec": str(args.windows),
+                    "frame_rate_hz_param_json": float(params.frame_rate_hz),
+                    "prf_per_emission_hz_param_json": float(params.prf_per_emission_hz),
+                    "angles_rad_param_json": list(params.angles_rad),
+                }
+            }
+            paths = write_acceptance_bundle_from_icube(
+                out_root=run_root,
+                dataset_name=dataset_name,
+                Icube=cube,
+                prf_hz=float(prf_hz),
+                tile_hw=(int(args.tile_h), int(args.tile_w)),
+                tile_stride=int(args.tile_stride),
+                Lt=int(lt_eff),
+                diag_load=float(args.diag_load),
+                cov_estimator=str(args.cov_estimator),
+                baseline_type=str(args.baseline_type),
+                reg_enable=bool(args.reg_enable),
+                reg_subpixel=int(args.reg_subpixel),
+                svd_energy_frac=float(args.svd_energy_frac),
+                flow_mask_mode="pd_auto",
+                flow_mask_pd_quantile=float(args.flow_mask_pd_quantile),
+                flow_mask_min_pixels=int(args.flow_mask_min_pixels),
+                flow_mask_union_default=bool(args.flow_mask_union_default),
+                band_ratio_flow_low_hz=float(args.flow_low_hz),
+                band_ratio_flow_high_hz=float(args.flow_high_hz),
+                band_ratio_alias_center_hz=float(args.alias_center_hz),
+                band_ratio_alias_width_hz=float(args.alias_width_hz),
+                stap_detector_variant=str(args.stap_detector_variant),
+                stap_whiten_gamma=float(args.stap_whiten_gamma),
+                hybrid_rescue_rule=str(args.hybrid_rescue_rule),
+                stap_device=str(args.stap_device),
+                run_stap=True,
+                stap_conditional_enable=False,
+                score_ka_v2_enable=False,
+                meta_extra=meta_extra,
+            )
+            tele = _load_telemetry(Path(paths["meta"]))
+            teles.append(tele)
+
+    detector_key = _detector_time_key(teles)
+    keys = ["baseline_ms", "reg_ms", "svd_ms", detector_key, "stap_fast_path_used", "tile_count"]
+    _print_cold_steady("ulm stap_full", teles, keys=keys)
+    _print_cuda_profile("ulm stap_full", teles)
+
+    steady = teles[1:] if len(teles) > 1 else teles
+    base_steady_ms = _mean_over(steady, "baseline_ms")
+    det_steady_ms = _mean_over(steady, detector_key)
+    total_steady_ms = None
+    if base_steady_ms is not None and det_steady_ms is not None:
+        total_steady_ms = float(base_steady_ms) + float(det_steady_ms)
+    return {
+        "regime": "ULM Zenodo 7883227",
+        "blocks": [int(b) for b in block_ids],
+        "windows": [tag for _frames, tag in windows],
+        "prf_hz": float(prf_hz),
+        "window_frames": int(args.window_frames),
+        "window_budget_s": float(int(args.window_frames) / float(prf_hz)),
+        "baseline_s_steady": (float(base_steady_ms) / 1000.0) if base_steady_ms is not None else None,
+        "stap_full_s_steady": (float(det_steady_ms) / 1000.0) if det_steady_ms is not None else None,
+        "total_s_steady": (float(total_steady_ms) / 1000.0) if total_steady_ms is not None else None,
+    }
+
+
 def _run_gammex(args: argparse.Namespace) -> Dict[str, Any]:
     prf_hz = float(args.prf_hz)
     _maybe_set_tile_batch(args.tile_batch)
@@ -578,6 +706,12 @@ def main() -> None:
         ],
         help="Frozen routing rule used by hybrid/adaptive detector variants (default: %(default)s).",
     )
+    ap.add_argument(
+        "--summary-json",
+        type=Path,
+        default=None,
+        help="Optional path to write the final latency summary as JSON (default: stdout only).",
+    )
 
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -603,6 +737,30 @@ def main() -> None:
     ap_shin.add_argument("--flow-high-hz", type=float, default=250.0)
     ap_shin.add_argument("--alias-center-hz", type=float, default=400.0)
     ap_shin.add_argument("--alias-width-hz", type=float, default=100.0)
+
+    ap_ulm = sub.add_parser("ulm", help="Run ULM Zenodo 7883227 steady-state latency (multiple windows).")
+    ap_ulm.add_argument("--data-root", type=Path, default=Path("data/ulm_zenodo_7883227"))
+    ap_ulm.add_argument("--block-ids", type=str, default="1")
+    ap_ulm.add_argument("--windows", type=str, default="0:64,128:192,256:320")
+    ap_ulm.add_argument("--window-frames", type=int, default=64)
+    ap_ulm.add_argument("--prf-hz", type=float, default=None)
+    ap_ulm.add_argument("--Lt", type=int, default=64)
+    ap_ulm.add_argument("--tile-h", type=int, default=8)
+    ap_ulm.add_argument("--tile-w", type=int, default=8)
+    ap_ulm.add_argument("--tile-stride", type=int, default=3)
+    ap_ulm.add_argument("--diag-load", type=float, default=0.07)
+    ap_ulm.add_argument("--cov-estimator", type=str, default="scm")
+    ap_ulm.add_argument("--baseline-type", type=str, default="mc_svd")
+    ap_ulm.add_argument("--svd-energy-frac", type=float, default=0.975)
+    ap_ulm.add_argument("--flow-mask-pd-quantile", type=float, default=0.99)
+    ap_ulm.add_argument("--flow-mask-min-pixels", type=int, default=64)
+    ap_ulm.add_argument("--flow-mask-union-default", action=argparse.BooleanOptionalAction, default=False)
+    ap_ulm.add_argument("--reg-enable", action=argparse.BooleanOptionalAction, default=True)
+    ap_ulm.add_argument("--reg-subpixel", type=int, default=4)
+    ap_ulm.add_argument("--flow-low-hz", type=float, default=10.0)
+    ap_ulm.add_argument("--flow-high-hz", type=float, default=150.0)
+    ap_ulm.add_argument("--alias-center-hz", type=float, default=350.0)
+    ap_ulm.add_argument("--alias-width-hz", type=float, default=150.0)
 
     ap_g = sub.add_parser("gammex", help="Run Gammex flow phantom steady-state latency (multiple frames).")
     ap_g.add_argument(
@@ -666,11 +824,16 @@ def main() -> None:
 
     if args.cmd == "shin":
         summary = _run_shin(args)
+    elif args.cmd == "ulm":
+        summary = _run_ulm(args)
     else:
         summary = _run_gammex(args)
 
     print("\n[summary]")
     print(json.dumps(summary, indent=2))
+    if args.summary_json is not None:
+        args.summary_json.parent.mkdir(parents=True, exist_ok=True)
+        args.summary_json.write_text(json.dumps(summary, indent=2))
 
 
 if __name__ == "__main__":
