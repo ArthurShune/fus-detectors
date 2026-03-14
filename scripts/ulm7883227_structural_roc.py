@@ -963,6 +963,7 @@ def _write_summary_table(
     window_frames = int(((summary.get("reference_design") or {}).get("window_frames")) or 128)
     motion_kind = str(((summary.get("reference_design") or {}).get("motion_kind")) or "none")
     motion_amp_px = float(((summary.get("reference_design") or {}).get("motion_amp_px")) or 0.0)
+    reg_enable = bool(((summary.get("frozen_profile") or {}).get("reg_enable")) or False)
     if ref_mode == "local_density":
         ref_text = (
             "a leave-one-block-out full-acquisition microbubble-density reference obtained by "
@@ -1011,7 +1012,9 @@ def _write_summary_table(
         f"For each evaluation block, vessel and background masks are derived once from {ref_text}; "
         f"short {window_frames}-frame windows from the held-out block"
         + (f" after {motion_kind} motion injection at {motion_amp_px:.2f} px amplitude" if motion_kind not in {'none','off'} and motion_amp_px > 0.0 else "")
-        + " are then scored on the "
+        + (" are then scored without additional frame-to-frame registration on the "
+           if not reg_enable
+           else " are then scored on the ")
         "same MC--SVD residual cube using different downstream detector heads. Entries report window-level "
         "means with 95\\% bootstrap CIs over windows. Reproducibility details are provided in \\SuppOrApp{app:repro}.}"
     )

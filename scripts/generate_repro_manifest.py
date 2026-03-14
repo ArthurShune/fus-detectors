@@ -1972,6 +1972,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "ULM section: Figure (ulm7883227_pala_structural_masks.pdf)",
                 "ULM section: Table (ulm7883227_pala_structural_roc_table.tex)",
                 "Supplement: Figure (ulm7883227_pala_structural_roc_curves.pdf)",
+                "Discussion: RTX 4080 latency note for the same 64-frame no-registration specialist",
             ],
             outputs=[
                 "reports/ulm7883227_pala_structural_roc.csv",
@@ -1979,6 +1980,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "reports/ulm7883227_pala_structural_roc_table.tex",
                 "reports/ulm7883227_pala_structural_roc_short32.json",
                 "reports/ulm7883227_pala_structural_roc_brainlike_motion.json",
+                "reports/ulm7883227_pala_latency_rtx4080.json",
                 "figs/paper/ulm7883227_pala_structural_masks.pdf",
                 "figs/paper/ulm7883227_pala_structural_roc_curves.pdf",
                 "figs/paper/ulm7883227_pala_structural_roc_curves.png",
@@ -1996,7 +1998,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --pala-svd-cutoff-start 5 --pala-trim-sr-border 1 \\",
                 "  --cov-estimator scm --diag-load 0.07 \\",
                 "  --stap-device cuda \\",
-                "  --reg-enable --reg-subpixel 4 \\",
+                "  --no-reg-enable \\",
                 "  --vessel-mask-mode peaks --background-mask-mode shell \\",
                 "  --tpr-targets 0.5 0.7 0.9 \\",
                 "  --bootstrap-n 500 \\",
@@ -2005,11 +2007,26 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --out-tex reports/ulm7883227_pala_structural_roc_table.tex \\",
                 "  --out-mask-fig figs/paper/ulm7883227_pala_structural_masks.pdf \\",
                 "  --out-roc-fig figs/paper/ulm7883227_pala_structural_roc_curves.pdf",
+                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "  --summary-json reports/ulm7883227_pala_latency_rtx4080.json \\",
+                "  --out-root runs/latency_realdata_cuda_ulm_pala_noreg \\",
+                "  --stap-device cuda --stap-detector-variant whitened_power \\",
+                "  ulm --data-root data/ulm_zenodo_7883227 --block-ids 1 \\",
+                "  --windows 0:64,128:192,256:320 --window-frames 64 \\",
+                "  --Lt 64 --tile-h 8 --tile-w 8 --tile-stride 3 \\",
+                "  --diag-load 0.07 --cov-estimator scm \\",
+                "  --baseline-type mc_svd --svd-energy-frac 0.975 \\",
+                "  --flow-low-hz 10 --flow-high-hz 150 \\",
+                "  --alias-center-hz 350 --alias-width-hz 150 \\",
+                "  --no-reg-enable",
             ],
             notes=(
                 "This is a bounded structural-label audit on real in vivo IQ using the published PALA localization "
                 "rendering registered back onto the Zenodo IQ grid. It is stronger than a label-free audit but still "
-                "not an independent multimodal task benchmark."
+                "not an independent multimodal task benchmark. The short-window detector itself runs without "
+                "additional frame-to-frame registration in the frozen headline configuration because re-enabling "
+                "registration changed the structural ROC only at the fourth decimal place while pushing latency "
+                "well above the 64-frame acquisition budget."
             ),
         ),
         ArtifactInfo(
