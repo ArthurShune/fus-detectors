@@ -658,6 +658,7 @@ def write_acceptance_bundle_from_icube(
                 "rescue_tiles": int(np.count_nonzero(~promote_tiles)),
             }
             promote_fraction = float(hybrid_stats["advanced_fraction"] or 0.0)
+            promote_info = None
             if bool(np.any(choose_advanced)):
                 with kw._temporary_environ(
                     {"STAP_BAND_PROJECT_MODE": os.getenv("STAP_BAND_PROJECT_MODE") or "dual"}
