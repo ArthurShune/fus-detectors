@@ -21,6 +21,16 @@ from sim.kwave.icube_bundle import write_acceptance_bundle_from_icube
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _variant_display_name(variant: str) -> str:
+    mapping = {
+        "msd_ratio": "Whitened matched-subspace specialist",
+        "whitened_power": "Whitened-power specialist",
+        "adaptive_guard": "Adaptive guard specialist",
+        "unwhitened_ratio": "Fixed matched-subspace head",
+    }
+    return mapping.get(str(variant), str(variant).replace("_", " ").title())
+
+
 def _normalize(x: np.ndarray, *, qlo: float = 0.02, qhi: float = 0.995) -> np.ndarray:
     arr = np.asarray(x, dtype=np.float32)
     vals = arr[np.isfinite(arr)]
@@ -53,6 +63,7 @@ def _score_panel(
     ax,
     *,
     bg_img: np.ndarray,
+    support_mask: np.ndarray,
     core_mask: np.ndarray,
     shell_mask: np.ndarray,
     det_mask: np.ndarray,
@@ -61,7 +72,13 @@ def _score_panel(
     auc: float,
     fpr70: float,
 ) -> None:
-    ax.imshow(bg_img, cmap="magma", interpolation="nearest")
+    import matplotlib.pyplot as plt
+
+    bg = np.ma.masked_where(~np.asarray(support_mask, dtype=bool), bg_img)
+    cmap = plt.get_cmap("magma").copy()
+    cmap.set_bad(color=(0.98, 0.98, 0.98, 1.0))
+    ax.imshow(bg, cmap=cmap, interpolation="nearest")
+    ax.contour(support_mask.astype(np.uint8), levels=[0.5], colors=["#f8fafc"], linewidths=1.0)
     ax.contour(shell_mask.astype(np.uint8), levels=[0.5], colors=["#ffb000"], linewidths=1.3, linestyles="--")
     ax.contour(core_mask.astype(np.uint8), levels=[0.5], colors=["#00d5ff"], linewidths=1.5)
 
@@ -71,20 +88,19 @@ def _score_panel(
         dtype=np.float32,
     ) / 255.0
     overlay[..., :3] = rgb[None, None, :]
-    overlay[..., 3] = 0.68 * det_mask.astype(np.float32)
+    overlay[..., 3] = 0.68 * (det_mask.astype(np.float32) * support_mask.astype(np.float32))
     ax.imshow(overlay, interpolation="nearest")
 
     ax.set_title(title, fontsize=12, fontweight="bold", pad=8)
     ax.text(
-        0.02,
-        0.98,
-        f"AUC {auc:.3f}\nShell FPR @ 70% core recall = {fpr70:.3f}",
+        0.5,
+        -0.10,
+        f"AUC {auc:.3f}   |   shell FPR @ 70% core recall {fpr70:.3f}",
         transform=ax.transAxes,
-        ha="left",
+        ha="center",
         va="top",
-        fontsize=9.5,
-        color="white",
-        bbox=dict(boxstyle="round,pad=0.35", facecolor=(0.05, 0.05, 0.08, 0.82), edgecolor=(1, 1, 1, 0.18)),
+        fontsize=9.2,
+        color="#0f172a",
     )
     ax.set_xticks([])
     ax.set_yticks([])
@@ -143,13 +159,29 @@ def main() -> int:
     args = parse_args()
 
     try:
+        import scienceplots  # noqa: F401
         import matplotlib.pyplot as plt
-        from matplotlib.gridspec import GridSpec
+        from matplotlib.lines import Line2D
     except Exception as exc:  # pragma: no cover
         raise RuntimeError(f"matplotlib required: {exc}") from exc
 
+    plt.style.use(["science", "nature", "no-latex"])
+    plt.rcParams.update(
+        {
+            "figure.facecolor": "white",
+            "axes.facecolor": "white",
+            "savefig.facecolor": "white",
+            "axes.titleweight": "bold",
+            "axes.titlesize": 12,
+            "font.size": 10,
+        }
+    )
+
     summary = json.loads(Path(args.summary_json).read_text())
     latency = json.loads(Path(args.latency_json).read_text())
+    specialist_variant = str(summary["frozen_profile"]["stap_detector_variant"])
+    specialist_name = _variant_display_name(specialist_variant)
+    specialist_name_table = specialist_name.replace(" specialist", "")
 
     ref_map, _ = _compute_reference_map(
         int(args.block_id),
@@ -168,8 +200,15 @@ def main() -> int:
         pala_svd_cutoff_start=5,
         pala_trim_sr_border=1,
     )
+    support_path = _.get("support_mask_path")
+    support_mask = (
+        np.load(support_path, allow_pickle=False).astype(bool)
+        if support_path
+        else np.isfinite(ref_map)
+    )
     mask_flow, mask_bg, _ = _derive_structural_masks(
         ref_map,
+        support_mask=support_mask,
         vessel_quantile=float(args.vessel_quantile),
         bg_quantile=float(args.background_quantile),
         erode_iters=1,
@@ -223,8 +262,9 @@ def main() -> int:
     det_pd = np.asarray(scores["pd"] >= tau_pd, dtype=bool)
     det_wp = np.asarray(scores["matched_subspace"] >= tau_wp, dtype=bool)
 
-    y0, y1, x0, x1 = _crop_bbox(mask_flow, mask_bg, pad=8)
+    y0, y1, x0, x1 = _crop_bbox(mask_flow, mask_bg, support_mask, pad=6)
     ref_crop = _normalize(ref_map[y0:y1, x0:x1])
+    support_crop = support_mask[y0:y1, x0:x1]
     flow_crop = mask_flow[y0:y1, x0:x1]
     bg_crop = mask_bg[y0:y1, x0:x1]
     pd_crop = det_pd[y0:y1, x0:x1]
@@ -236,70 +276,47 @@ def main() -> int:
     total_ms = 1000.0 * float(latency["total_s_steady"])
     budget_ms = 1000.0 * float(latency["window_budget_s"])
 
-    fig = plt.figure(figsize=(10.6, 6.0))
+    fig = plt.figure(figsize=(11.2, 6.4))
     gs = fig.add_gridspec(
         2,
         3,
-        width_ratios=[1.15, 1.0, 1.0],
-        height_ratios=[1.0, 0.78],
-        left=0.04,
-        right=0.985,
-        bottom=0.06,
-        top=0.955,
-        wspace=0.26,
-        hspace=0.22,
+        width_ratios=[1.0, 1.0, 1.0],
+        height_ratios=[1.0, 0.84],
+        wspace=0.18,
+        hspace=0.34,
     )
 
-    ax_ref = fig.add_subplot(gs[:, 0])
+    ax_ref = fig.add_subplot(gs[0, 0])
     ax_pd = fig.add_subplot(gs[0, 1])
     ax_wp = fig.add_subplot(gs[0, 2])
-    ax_box = fig.add_subplot(gs[1, 1:])
+    ax_box = fig.add_subplot(gs[1, :])
 
-    ax_ref.imshow(ref_crop, cmap="magma", interpolation="nearest")
+    ref_disp = np.ma.masked_where(~support_crop, ref_crop)
+    cmap = plt.get_cmap("magma").copy()
+    cmap.set_bad(color=(0.98, 0.98, 0.98, 1.0))
+    ax_ref.imshow(ref_disp, cmap=cmap, interpolation="nearest")
+    ax_ref.contour(support_crop.astype(np.uint8), levels=[0.5], colors=["#f8fafc"], linewidths=1.0)
     ax_ref.contour(bg_crop.astype(np.uint8), levels=[0.5], colors=["#ffb000"], linewidths=1.5, linestyles="--")
     ax_ref.contour(flow_crop.astype(np.uint8), levels=[0.5], colors=["#00d5ff"], linewidths=1.8)
-    ax_ref.set_title("External PALA vascular reference\nprojected onto the IQ grid", fontsize=12, fontweight="bold", pad=8)
+    ax_ref.set_title("External PALA localization reference\nregistered to the IQ grid", pad=8)
     ax_ref.text(
         0.03,
-        0.97,
-        "Vessel-core label",
+        -0.10,
+        "Representative audit window: block 001, frames 128:192",
         transform=ax_ref.transAxes,
         ha="left",
         va="top",
-        fontsize=9,
-        color="#00d5ff",
-        fontweight="bold",
-        bbox=dict(boxstyle="round,pad=0.25", facecolor=(0.04, 0.04, 0.06, 0.80), edgecolor=(1, 1, 1, 0.12)),
-    )
-    ax_ref.text(
-        0.03,
-        0.88,
-        "Perivascular shell background",
-        transform=ax_ref.transAxes,
-        ha="left",
-        va="top",
-        fontsize=8.7,
-        color="#ffb000",
-        fontweight="bold",
-        bbox=dict(boxstyle="round,pad=0.25", facecolor=(0.04, 0.04, 0.06, 0.80), edgecolor=(1, 1, 1, 0.12)),
-    )
-    ax_ref.text(
-        0.03,
-        0.04,
-        "Real in-vivo rat-brain IQ\nULM Zenodo 7883227\nrepresentative audited window: block 001, frames 128:192",
-        transform=ax_ref.transAxes,
-        ha="left",
-        va="bottom",
-        fontsize=8.9,
-        color="white",
-        bbox=dict(boxstyle="round,pad=0.35", facecolor=(0.05, 0.05, 0.08, 0.84), edgecolor=(1, 1, 1, 0.12)),
+        fontsize=9.0,
+        color="#0f172a",
     )
     ax_ref.set_xticks([])
     ax_ref.set_yticks([])
+    ax_ref.set_anchor("C")
 
     _score_panel(
         ax_pd,
         bg_img=ref_crop,
+        support_mask=support_crop,
         core_mask=flow_crop,
         shell_mask=bg_crop,
         det_mask=pd_crop,
@@ -308,94 +325,89 @@ def main() -> int:
         auc=float(pd_metrics["auc"]),
         fpr70=float(pd_metrics["fpr_at_tpr70"]),
     )
+    ax_pd.set_anchor("C")
     _score_panel(
         ax_wp,
         bg_img=ref_crop,
+        support_mask=support_crop,
         core_mask=flow_crop,
         shell_mask=bg_crop,
         det_mask=wp_crop,
         color="#4fd1c5",
-        title="Whitened-power specialist\nmatched 70% core recall",
+        title=f"{specialist_name}\nmatched 70% core recall",
         auc=float(wp_metrics["auc"]),
         fpr70=float(wp_metrics["fpr_at_tpr70"]),
     )
+    ax_wp.set_anchor("C")
 
     ax_box.set_axis_off()
-    ax_box.set_xlim(0, 1)
-    ax_box.set_ylim(0, 1)
+    ax_box.set_xlim(0.0, 1.0)
+    ax_box.set_ylim(0.0, 1.0)
+    cell_text = [
+        [specialist_name_table, f"{wp_agg['auc']['center']:.3f} [{wp_agg['auc']['lo']:.3f}, {wp_agg['auc']['hi']:.3f}]", f"{wp_agg['fpr_at_tpr70']['center']:.3f} [{wp_agg['fpr_at_tpr70']['lo']:.3f}, {wp_agg['fpr_at_tpr70']['hi']:.3f}]"],
+        ["Power Doppler", f"{pd_agg['auc']['center']:.3f} [{pd_agg['auc']['lo']:.3f}, {pd_agg['auc']['hi']:.3f}]", f"{pd_agg['fpr_at_tpr70']['center']:.3f} [{pd_agg['fpr_at_tpr70']['lo']:.3f}, {pd_agg['fpr_at_tpr70']['hi']:.3f}]"],
+        ["Kasai", f"{kasai_agg['auc']['center']:.3f} [{kasai_agg['auc']['lo']:.3f}, {kasai_agg['auc']['hi']:.3f}]", f"{kasai_agg['fpr_at_tpr70']['center']:.3f} [{kasai_agg['fpr_at_tpr70']['lo']:.3f}, {kasai_agg['fpr_at_tpr70']['hi']:.3f}]"],
+    ]
+    tbl = ax_box.table(
+        cellText=cell_text,
+        colLabels=["Score", "AUC", "Shell FPR @ 70% core recall"],
+        cellLoc="left",
+        colLoc="left",
+        bbox=[0.20, 0.20, 0.50, 0.55],
+    )
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(8.9)
+    for (r, c), cell in tbl.get_celld().items():
+        cell.set_edgecolor("#cbd5e1")
+        if r == 0:
+            cell.set_text_props(weight="bold", color="#0f172a")
+            cell.set_facecolor("#e2e8f0")
+        else:
+            cell.set_facecolor("#f8fafc" if r % 2 else "#ffffff")
+            if c == 0 and r == 1:
+                cell.set_text_props(color="#0f766e", weight="bold")
+    ax_box.text(0.02, 0.94, "Held-out in-vivo structural summary", fontsize=12.2, fontweight="bold", ha="left", va="top", color="#0f172a")
+    ax_box.text(0.02, 0.88, "10 blocks / 20 windows", fontsize=9.2, color="#475569", ha="left", va="top")
+    ax_box.text(0.02, 0.76, "External reference", fontsize=10.0, fontweight="bold", ha="left", color="#0f172a")
     ax_box.text(
         0.02,
-        0.92,
-        "Bounded in-vivo structural-label result\n10 held-out blocks / 20 short windows",
-        fontsize=13.2,
-        fontweight="bold",
+        0.66,
+        "Published PALA localization rendering\nregistered once to the IQ grid.\nCore and shell masks are clipped\nto anatomical support.",
+        fontsize=9.0,
+        color="#334155",
         ha="left",
         va="top",
-        color="#0f172a",
     )
+    ax_box.text(0.02, 0.27, "Interpretation", fontsize=10.0, fontweight="bold", ha="left", color="#0f172a")
     ax_box.text(
         0.02,
-        0.68,
-        f"Whitened-power detector: AUC {wp_agg['auc']['center']:.3f} [{wp_agg['auc']['lo']:.3f}, {wp_agg['auc']['hi']:.3f}]",
-        fontsize=10.8,
-        color="#0f172a",
-    )
-    ax_box.text(
-        0.02,
-        0.55,
-        f"Power Doppler: AUC {pd_agg['auc']['center']:.3f} [{pd_agg['auc']['lo']:.3f}, {pd_agg['auc']['hi']:.3f}]    Kasai: {kasai_agg['auc']['center']:.3f} [{kasai_agg['auc']['lo']:.3f}, {kasai_agg['auc']['hi']:.3f}]",
-        fontsize=9.8,
+        0.17,
+        "The effect is modest but consistent.\nThe direction remains positive at 32 frames\nand under mild injected brainlike motion.",
+        fontsize=9.0,
         color="#334155",
+        ha="left",
+        va="top",
     )
-    ax_box.text(
-        0.02,
-        0.34,
-        f"At matched 70% vessel-core recall, shell FPR drops from {pd_agg['fpr_at_tpr70']['center']:.3f} "
-        f"[{pd_agg['fpr_at_tpr70']['lo']:.3f}, {pd_agg['fpr_at_tpr70']['hi']:.3f}] to "
-        f"{wp_agg['fpr_at_tpr70']['center']:.3f} [{wp_agg['fpr_at_tpr70']['lo']:.3f}, {wp_agg['fpr_at_tpr70']['hi']:.3f}].",
-        fontsize=10.1,
-        color="#0f172a",
-    )
-    ax_box.text(
-        0.02,
-        0.16,
-        "Direction stays positive at 32 frames and under mild injected brainlike motion.",
-        fontsize=9.9,
-        color="#0f172a",
-    )
-    ax_box.text(
-        0.72,
-        0.60,
-        f"{total_ms:.1f} ms",
-        fontsize=25,
-        fontweight="bold",
-        color="#0f766e",
-        ha="center",
-    )
-    ax_box.text(
-        0.72,
-        0.43,
-        f"steady-state total\nvs {budget_ms:.0f} ms budget",
-        fontsize=10.4,
-        color="#0f172a",
-        ha="center",
-    )
-    ax_box.text(
-        0.72,
-        0.20,
-        "RTX 4080 SUPER\n64-frame no-registration headline path",
-        fontsize=9.5,
-        color="#334155",
-        ha="center",
-    )
-    ax_box.plot([0.60, 0.84], [0.77, 0.77], color="#cbd5e1", lw=6, solid_capstyle="round")
-    ax_box.plot([0.60, 0.76], [0.77, 0.77], color="#14b8a6", lw=6, solid_capstyle="round")
-    ax_box.text(0.60, 0.83, "real-time budget", fontsize=8.9, color="#475569", ha="left")
+    ax_box.text(0.83, 0.72, f"{total_ms:.1f} ms", fontsize=24, fontweight="bold", color="#0f766e", ha="center")
+    ax_box.text(0.83, 0.55, f"steady-state total\nvs {budget_ms:.0f} ms acquisition budget", fontsize=10.0, color="#0f172a", ha="center")
+    ax_box.text(0.83, 0.23, "RTX 4080 SUPER\n64-frame configuration", fontsize=9.1, color="#334155", ha="center")
+    ax_box.plot([0.74, 0.93], [0.83, 0.83], color="#cbd5e1", lw=6, solid_capstyle="round")
+    ax_box.plot([0.74, 0.74 + 0.19 * min(total_ms / budget_ms, 1.0)], [0.83, 0.83], color="#14b8a6", lw=6, solid_capstyle="round")
+    ax_box.text(0.74, 0.89, "acquisition-time budget", fontsize=8.8, color="#475569", ha="left")
+
+    legend_handles = [
+        Line2D([0], [0], color="#f8fafc", lw=1.4, label="anatomical support"),
+        Line2D([0], [0], color="#00d5ff", lw=1.8, label="vessel core"),
+        Line2D([0], [0], color="#ffb000", lw=1.6, ls="--", label="perivascular shell"),
+    ]
+    ax_box.legend(handles=legend_handles, loc="upper center", bbox_to_anchor=(0.56, 0.98), ncol=3, frameon=False, fontsize=8.8)
+
+    fig.subplots_adjust(left=0.04, right=0.985, top=0.93, bottom=0.08)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(args.out, bbox_inches="tight", pad_inches=0.05)
+    fig.savefig(args.out)
     if args.out.suffix.lower() == ".pdf":
-        fig.savefig(args.out.with_suffix(".png"), dpi=300, bbox_inches="tight", pad_inches=0.05)
+        fig.savefig(args.out.with_suffix(".png"), dpi=300)
     plt.close(fig)
     return 0
 

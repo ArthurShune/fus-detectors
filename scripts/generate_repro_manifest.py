@@ -1997,7 +1997,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --tile-h 8 --tile-w 8 --tile-stride 3 \\",
                 "  --lt 64 --prf-hz 1000 \\",
                 "  --svd-energy-frac 0.975 \\",
-                "  --stap-detector-variant whitened_power \\",
+                "  --stap-detector-variant msd_ratio \\",
                 "  --reference-mode pala_example_matout \\",
                 "  --pala-powdop-blocks 1,3,5,7,9,11,13,15,17,19 \\",
                 "  --pala-svd-cutoff-start 5 --pala-trim-sr-border 1 \\",
@@ -2016,7 +2016,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "PYTHONPATH=. conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
                 "  --summary-json reports/ulm7883227_pala_latency_rtx4080.json \\",
                 "  --out-root runs/latency_realdata_cuda_ulm_pala_noreg \\",
-                "  --stap-device cuda --stap-detector-variant whitened_power \\",
+                "  --stap-device cuda --stap-detector-variant msd_ratio \\",
                 "  ulm --data-root data/ulm_zenodo_7883227 --block-ids 1 \\",
                 "  --windows 0:64,128:192,256:320 --window-frames 64 \\",
                 "  --Lt 64 --tile-h 8 --tile-w 8 --tile-stride 3 \\",
@@ -2028,7 +2028,8 @@ def _default_artifacts() -> list[ArtifactInfo]:
             ],
             notes=(
                 "This is a bounded structural-label audit on real in vivo IQ using the published PALA localization "
-                "rendering registered back onto the Zenodo IQ grid. It is stronger than a label-free audit but still "
+                "rendering registered back onto the Zenodo IQ grid. The vessel-core and perivascular-shell masks are "
+                "clipped to anatomical support before evaluation. It is stronger than a label-free audit but still "
                 "not an independent multimodal task benchmark. The short-window detector itself runs without "
                 "additional frame-to-frame registration in the frozen headline configuration because re-enabling "
                 "registration changed the structural ROC only at the fourth decimal place while pushing latency "
