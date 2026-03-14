@@ -2037,6 +2037,44 @@ def _default_artifacts() -> list[ArtifactInfo]:
             ),
         ),
         ArtifactInfo(
+            name="Fixed-calibration threshold-transfer audits (SIMUS/PyMUST + PALA-backed ULM)",
+            paper_refs=[
+                "Thresholding/evaluation protocol section: fixed-calibration transfer rationale",
+                "SIMUS results: Table (simus_fixed_calibration_transfer_table.tex)",
+                "ULM section: Table (ulm7883227_pala_fixed_calibration_transfer_table.tex)",
+                "Discussion: deployment-thresholding paragraph",
+            ],
+            outputs=[
+                "reports/fixed_calibration_transfer.json",
+                "reports/simus_v2/simus_fixed_calibration_transfer.csv",
+                "reports/simus_fixed_calibration_transfer_table.tex",
+                "reports/ulm7883227_pala_fixed_calibration_transfer.csv",
+                "reports/ulm7883227_pala_fixed_calibration_transfer_table.tex",
+            ],
+            commands=[
+                "PYTHONPATH=. conda run -n stap-fus python scripts/fixed_calibration_transfer.py \\",
+                "  --stap-device cuda \\",
+                "  --alpha 0.001 \\",
+                "  --simus-stap-profile Brain-SIMUS-Clin-MotionMidRobust-v0 \\",
+                "  --simus-out-root runs/fixed_calibration_transfer/simus \\",
+                "  --simus-out-csv reports/simus_v2/simus_fixed_calibration_transfer.csv \\",
+                "  --simus-out-tex reports/simus_fixed_calibration_transfer_table.tex \\",
+                "  --ulm-data-root data/ulm_zenodo_7883227 \\",
+                "  --ulm-pala-example-root external/PALA/PALA_data_InVivoRatBrain \\",
+                "  --ulm-out-root runs/fixed_calibration_transfer/ulm \\",
+                "  --ulm-out-csv reports/ulm7883227_pala_fixed_calibration_transfer.csv \\",
+                "  --ulm-out-tex reports/ulm7883227_pala_fixed_calibration_transfer_table.tex \\",
+                "  --out-json reports/fixed_calibration_transfer.json",
+            ],
+            notes=(
+                "This is the paper's non-retrospective threshold-transfer check. On SIMUS/PyMUST, thresholds are "
+                "learned once from separate calibration seeds 125--126 and applied unchanged to held-out seeds "
+                "127--128. On the bounded PALA-backed ULM endpoint, complementary 5-block calibration banks are "
+                "used so that thresholds are fixed before evaluation on the held-out blocks. These are deployment-"
+                "relevant transfer checks, not per-window oracle calibrations."
+            ),
+        ),
+        ArtifactInfo(
             name="SIMUS/PyMUST moving-scatterer sanity link + bundle contract (micro + alias; non-performance claims)",
             paper_refs=[
                 "Simulation spec: moving-scatterer physical Doppler regime (SIMUS)",

@@ -9,8 +9,8 @@ Run \path{PYTHONPATH=. conda run -n stap-fus python scripts/generate_repro_manif
 \paragraph{Repository state.}
 Public repository: \path{git@github.com:ArthurShune/stap-for-fus.git}.
 Release tag: (not recorded; set \texttt{STAP\_FUS\_RELEASE\_TAG} or create a git tag).
-Commit: \texttt{b429ac9} (full: \texttt{b429ac9d77}\allowbreak\texttt{21019dd395}\allowbreak\texttt{ba7f7482f7}\allowbreak\texttt{71a0d64928}); branch: \texttt{main}; dirty: \texttt{true}.
-Dirty details: non-ignored paths=6, ignored build products=2.
+Commit: \texttt{973a81f} (full: \texttt{973a81fa85}\allowbreak\texttt{a5c425a7de}\allowbreak\texttt{04d8988598}\allowbreak\texttt{fe504862c5}); branch: \texttt{main}; dirty: \texttt{true}.
+Dirty details: non-ignored paths=3, ignored build products=2.
 Note: dirty status ignores common LaTeX build products (e.g., \texttt{*.aux, *.log, *.out, *.fls, *.fdb\_latexmk, *.synctex.gz, *.pdf}).
 For archival reproducibility, generate this manifest from a clean, tagged release commit (\texttt{dirty=false}) and record the public repository URL and tag.
 
@@ -1604,6 +1604,43 @@ PYTHONPATH=. conda run -n stap-fus python scripts/latency_realdata_rerun_check.p
   --flow-low-hz 10 --flow-high-hz 150 \
   --alias-center-hz 350 --alias-width-hz 150 \
   --no-reg-enable
+\end{verbatim}
+}
+
+  \item \textbf{Fixed-calibration threshold-transfer audits (SIMUS/PyMUST + PALA-backed ULM)}
+    Paper refs:
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item Thresholding/evaluation protocol section: fixed-calibration transfer rationale
+      \item SIMUS results: Table (simus\_fixed\_calibration\_transfer\_table.tex)
+      \item ULM section: Table (ulm7883227\_pala\_fixed\_calibration\_transfer\_table.tex)
+      \item Discussion: deployment-thresholding paragraph
+    \end{itemize}
+    Outputs:
+    \begingroup\raggedright
+    \begin{itemize}[nosep,leftmargin=0em,label={}]
+      \item \path{reports/}\allowbreak\path{fixed_calibration_transfer.json}
+      \item \path{reports/}\allowbreak\path{simus_v2/simus_fixed_calibration_}\allowbreak\path{transfer.csv}
+      \item \path{reports/}\allowbreak\path{simus_fixed_calibration_transfer_table.tex}
+      \item \path{reports/}\allowbreak\path{ulm7883227_pala_fixed_calibration_}\allowbreak\path{transfer.csv}
+      \item \path{reports/}\allowbreak\path{ulm7883227_pala_fixed_calibration_transfer_}\allowbreak\path{table.tex}
+    \end{itemize}
+    \endgroup
+    Notes: This is the paper's non-retrospective threshold-transfer check. On SIMUS/PyMUST, thresholds are learned once from separate calibration seeds 125--126 and applied unchanged to held-out seeds 127--128. On the bounded PALA-backed ULM endpoint, complementary 5-block calibration banks are used so that thresholds are fixed before evaluation on the held-out blocks. These are deployment-relevant transfer checks, not per-window oracle calibrations.
+{\footnotesize
+\begin{verbatim}
+PYTHONPATH=. conda run -n stap-fus python scripts/fixed_calibration_transfer.py \
+  --stap-device cuda \
+  --alpha 0.001 \
+  --simus-stap-profile Brain-SIMUS-Clin-MotionMidRobust-v0 \
+  --simus-out-root runs/fixed_calibration_transfer/simus \
+  --simus-out-csv reports/simus_v2/simus_fixed_calibration_transfer.csv \
+  --simus-out-tex reports/simus_fixed_calibration_transfer_table.tex \
+  --ulm-data-root data/ulm_zenodo_7883227 \
+  --ulm-pala-example-root external/PALA/PALA_data_InVivoRatBrain \
+  --ulm-out-root runs/fixed_calibration_transfer/ulm \
+  --ulm-out-csv reports/ulm7883227_pala_fixed_calibration_transfer.csv \
+  --ulm-out-tex reports/ulm7883227_pala_fixed_calibration_transfer_table.tex \
+  --out-json reports/fixed_calibration_transfer.json
 \end{verbatim}
 }
 
