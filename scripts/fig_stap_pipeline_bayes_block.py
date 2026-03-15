@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
 
-def add_box(ax, x, y, w, h, title, body, *, fc="#f7f7f7") -> None:
+def add_box(ax, x, y, w, h, title, body, *, fc="#f7f7f7", title_fs=8.8, body_fs=8.0) -> None:
     patch = FancyBboxPatch(
         (x, y),
         w,
@@ -20,11 +20,11 @@ def add_box(ax, x, y, w, h, title, body, *, fc="#f7f7f7") -> None:
         linewidth=1.0,
     )
     ax.add_patch(patch)
-    ax.text(x + 0.14, y + h - 0.14, title, fontsize=8.8, ha="left", va="top", weight="bold")
-    ax.text(x + w / 2, y + h - 0.45, body, fontsize=8.0, ha="center", va="top", linespacing=1.08)
+    ax.text(x + 0.14, y + h - 0.14, title, fontsize=title_fs, ha="left", va="top", weight="bold")
+    ax.text(x + w / 2, y + h - 0.48, body, fontsize=body_fs, ha="center", va="top", linespacing=1.12)
 
 
-def add_arrow(ax, x0, y0, x1, y1, *, text=None, text_xy=None) -> None:
+def add_arrow(ax, x0, y0, x1, y1, *, text=None, text_xy=None, text_fs=7.5) -> None:
     arr = FancyArrowPatch(
         (x0, y0),
         (x1, y1),
@@ -35,7 +35,36 @@ def add_arrow(ax, x0, y0, x1, y1, *, text=None, text_xy=None) -> None:
     )
     ax.add_patch(arr)
     if text and text_xy is not None:
-        ax.text(text_xy[0], text_xy[1], text, fontsize=7.8, ha="center", va="center")
+        ax.text(text_xy[0], text_xy[1], text, fontsize=text_fs, ha="center", va="center")
+
+
+def add_note(ax, x, y, w, h, text, *, fc="#f5f5f5", fs=7.6) -> None:
+    patch = FancyBboxPatch(
+        (x, y),
+        w,
+        h,
+        boxstyle="round,pad=0.02,rounding_size=0.08",
+        facecolor=fc,
+        edgecolor="black",
+        linewidth=0.9,
+    )
+    ax.add_patch(patch)
+    ax.text(x + w / 2, y + h / 2, text, fontsize=fs, ha="center", va="center", linespacing=1.1)
+
+
+def add_group(ax, x, y, w, h, title, *, fc="#fbfcfe") -> None:
+    patch = FancyBboxPatch(
+        (x, y),
+        w,
+        h,
+        boxstyle="round,pad=0.02,rounding_size=0.09",
+        facecolor=fc,
+        edgecolor="black",
+        linewidth=1.0,
+        linestyle="-",
+    )
+    ax.add_patch(patch)
+    ax.text(x + 0.16, y + h - 0.16, title, fontsize=8.5, ha="left", va="top", weight="bold")
 
 
 def main() -> int:
@@ -60,91 +89,92 @@ def main() -> int:
         }
     )
 
-    fig, ax = plt.subplots(figsize=(8.4, 3.3))
-    ax.set_xlim(0, 17.2)
-    ax.set_ylim(0, 5.0)
+    fig, ax = plt.subplots(figsize=(10.9, 4.9))
+    ax.set_xlim(0, 20.6)
+    ax.set_ylim(0, 6.2)
     ax.axis("off")
 
-    h = 0.95
-    add_box(ax, 0.45, 2.0, 2.4, h, "Beamformed IQ", r"$X[t,y,x]$")
-    add_box(ax, 3.2, 2.0, 2.9, h, "Residualization", "baseline clutter suppression\n(e.g. MC--SVD)")
+    h = 1.12
+    add_box(ax, 0.55, 2.45, 2.55, h, "Beamformed IQ", r"$X[t,y,x]$", body_fs=8.2)
+    add_box(ax, 3.45, 2.45, 3.05, h, "Residualization", "baseline clutter suppression\n(e.g. MC--SVD)", body_fs=8.15)
     add_box(
         ax,
-        6.45,
-        2.0,
-        3.2,
+        6.9,
+        2.45,
+        3.35,
         h,
         "Tile extraction + band geometry",
         "slow-time tiles\nflow / guard / alias bands",
         fc="#f4f7fb",
+        body_fs=8.1,
     )
 
+    add_group(ax, 10.8, 0.7, 4.05, 5.15, "Detector family")
+    add_note(
+        ax,
+        11.15,
+        4.98,
+        3.3,
+        0.42,
+        "Choose one mode; the score family is shared.",
+        fs=7.0,
+    )
     add_box(
         ax,
-        10.25,
-        3.35,
-        2.65,
-        h,
+        11.3,
+        3.8,
+        3.05,
+        1.0,
         "Fixed detector",
         "band-limited matched-\nsubspace score",
         fc="#eef6ff",
+        body_fs=8.0,
     )
     add_box(
         ax,
-        10.25,
-        1.95,
-        2.65,
-        h,
+        11.3,
+        2.35,
+        3.05,
+        1.0,
         "Adaptive detector",
         "fixed score by default\nwhiten only in clutter-heavy tiles",
         fc="#eef6ff",
+        body_fs=7.8,
     )
     add_box(
         ax,
-        10.25,
-        0.55,
-        2.65,
-        h,
+        11.3,
+        0.9,
+        3.05,
+        1.0,
         "Fully whitened detector",
         "tile-local covariance\nwhitening everywhere",
         fc="#eef6ff",
+        body_fs=7.95,
     )
 
     add_box(
         ax,
-        13.4,
-        2.0,
-        1.7,
+        15.15,
+        2.45,
+        2.25,
         h,
-        "Optional penalty layer",
+        "Optional penalty",
         "shrink-only\nvessel-proxy protection",
         fc="#fff4e8",
+        title_fs=8.3,
+        body_fs=7.55,
     )
-    add_box(ax, 15.45, 2.0, 1.25, h, "Output map", "score map")
+    add_box(ax, 18.0, 2.45, 1.55, h, "Output map", "score map", title_fs=8.05, body_fs=7.8)
 
     # Main linear flow.
-    add_arrow(ax, 2.85, 2.48, 3.2, 2.48)
-    add_arrow(ax, 6.1, 2.48, 6.45, 2.48)
+    add_arrow(ax, 3.1, 3.0, 3.45, 3.0)
+    add_arrow(ax, 6.5, 3.0, 6.9, 3.0)
 
-    # Branching from tile/band block.
-    add_arrow(ax, 9.65, 2.65, 10.25, 3.82, text="use everywhere", text_xy=(10.0, 3.2))
-    add_arrow(ax, 9.65, 2.48, 10.25, 2.48, text="guard-triggered switch", text_xy=(10.0, 2.78))
-    add_arrow(ax, 9.65, 2.31, 10.25, 1.02, text="force whitening", text_xy=(9.95, 1.72))
-
-    # Variant outputs toward optional penalty layer.
-    add_arrow(ax, 12.9, 3.82, 13.4, 2.62)
-    add_arrow(ax, 12.9, 2.48, 13.4, 2.48)
-    add_arrow(ax, 12.9, 1.02, 13.4, 2.34)
-    add_arrow(ax, 15.1, 2.48, 15.45, 2.48)
-
-    ax.text(
-        11.55,
-        4.55,
-        "Three detector modes share the same\nflow-band score family; they differ only in\nwhen local whitening is used.",
-        fontsize=8.0,
-        ha="center",
-        va="top",
-    )
+    # Detector family as a grouped stage.
+    add_arrow(ax, 10.25, 3.0, 10.8, 3.0)
+    add_arrow(ax, 14.85, 3.0, 15.15, 3.0)
+    add_arrow(ax, 17.4, 3.0, 18.0, 3.0)
 
     fig.savefig(out, bbox_inches="tight", format="pdf")
     plt.close(fig)
