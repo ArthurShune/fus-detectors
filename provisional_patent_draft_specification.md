@@ -67,7 +67,7 @@ In another aspect, the disclosure provides an optional shrink-only penalty layer
 
 In another aspect, the disclosure provides threshold-calibration and transfer workflows. Thresholds may be learned from separate negative-only calibration data, nuisance banks, separate blocks, separate sessions, separate subjects, or separate devices, and then transferred to evaluation data without per-window retuning. In some embodiments, the threshold targets a right-tail operating point, a fixed false-positive rate, or a matched-sensitivity operating point.
 
-In another aspect, the disclosure provides system and deployment embodiments, including scanner-integrated embodiments, workstation embodiments, GPU or accelerator embodiments, edge embodiments, and non-transitory computer-readable-medium embodiments. In some embodiments, the disclosure further provides real-time or near-real-time execution architectures, including tiled batching, temporal embedding, local covariance estimation, conditional execution of whitening only where needed, overlap-add stitching, cached geometry, graph-replay execution, and other exact-output-preserving optimizations.
+In another aspect, the disclosure provides system and deployment embodiments, including scanner-integrated embodiments, workstation embodiments, GPU or accelerator embodiments, edge embodiments, and non-transitory computer-readable-medium embodiments. In some embodiments, the disclosure further provides real-time or near-real-time execution architectures, including tiled batching, temporal embedding, local covariance estimation, conditional execution of whitening only where needed, overlap-add stitching, cached geometry, graph-replay execution, and other exact-output-preserving optimizations that preserve the intended detector outputs while reducing execution latency.
 
 The disclosed technology therefore provides a detector platform that can improve nuisance discrimination and operating-point stability in ultrasound Doppler imaging without requiring replacement of the upstream clutter filter.
 
@@ -100,7 +100,7 @@ The following drawing list is recommended for the provisional filing. The provis
    A diagram showing calibration-bank threshold learning and application to held-out data without per-window recalibration.
 
 9. **Figure 9: Real-time processing architecture.**
-   A system diagram showing tile batching, hardware acceleration, optional conditional execution, overlap-add stitching, and output generation.
+   A system diagram showing tile batching, hardware acceleration, conditional execution, reusable localized operators, overlap-add stitching, and output generation.
 
 10. **Figure 10: System implementation embodiments.**
    A diagram showing a scanner-integrated embodiment, workstation embodiment, and edge-compute embodiment.
@@ -283,6 +283,14 @@ Example implementation features include:
 
 In some embodiments, diagnostics not required for output generation are omitted in latency-sensitive modes while preserving the exact output scores.
 
+In some embodiments, exact-output-preserving localized operators are cached and reused across windows, frames, or batches. Examples include reusable overlap counts, reusable projector terms, reusable geometry terms, and reusable support operators that depend on acquisition geometry or band definitions but not on the particular residual data values.
+
+In some embodiments, whitening or covariance-adaptive processing is executed only for selected localized supports. For example, the system may skip whitening for tiles or regions that remain on the fixed detector branch while still producing the same score outputs that would have been produced by the disclosed branch-selection policy.
+
+In some embodiments, the system uses fixed-batch or graph-replay execution to stabilize repeated localized workloads. In some embodiments, the system omits nonessential diagnostics, telemetry, or paper-facing statistics while preserving the detector outputs needed for deployment.
+
+In some embodiments, the disclosed execution architecture is configured to produce score maps within an acquisition-time budget or other deployment-time budget without changing the underlying detector outputs relative to a corresponding non-optimized implementation.
+
 ### 13. System and Medium Embodiments
 
 In some embodiments, the disclosed detector is implemented in an ultrasound scanner, an ultrasound research platform, a workstation connected to an ultrasound scanner, a portable or edge-computing device, a remote compute server, or a cloud-connected processing system.
@@ -348,8 +356,9 @@ The current draft should support at least the following claim families in a late
 1. A computer-implemented method for generating an ultrasound score map from beamformed or residualized data using localized matched-subspace scoring.
 2. A computer-implemented method in which a clutter-evidence metric selects between a non-whitened detector branch and a whitened detector branch.
 3. A computer-implemented method in which a shrink-only penalty is applied to candidate regions while preserving a protected region.
-4. A system claim covering processors, memory, and an ultrasound data interface configured to carry out the foregoing method steps.
-5. A non-transitory computer-readable-medium claim covering instructions that cause a processor to carry out the foregoing method steps.
+4. A computer-implemented real-time execution method using conditional localized execution, reusable localized operators, and batched aggregation while preserving detector outputs.
+5. A system claim covering processors, memory, and an ultrasound data interface configured to carry out the foregoing method steps.
+6. A non-transitory computer-readable-medium claim covering instructions that cause a processor to carry out the foregoing method steps.
 
 These claim families should be supported expressly in the filed provisional even if a formal claim set is not filed with the provisional application.
 
@@ -362,7 +371,7 @@ The provisional should support later claims along at least these families:
 3. A method of generating a score map using fixed and whitened branches with adaptive switching.
 4. A method of applying a shrink-only score penalty with a protected set and inert fallback mode.
 5. A threshold-transfer method using a calibration bank and later held-out application.
-6. A real-time execution method using batched tile-local processing and overlap-add aggregation.
+6. A real-time execution method using batched tile-local processing, conditional branch execution, reusable localized operators, and overlap-add aggregation.
 7. A system and non-transitory computer-readable medium implementing the above.
 
 ## Filing and Scope Notes
