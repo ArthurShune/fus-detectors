@@ -76,6 +76,10 @@ def _pipeline_display(label: str) -> str:
     return PIPELINE_DISPLAY.get(label, label.replace(" -> ", r"$\rightarrow$"))
 
 
+def _pipeline_caption(label: str) -> str:
+    return label.replace(" -> ", r" $\rightarrow$ ")
+
+
 def _provenance_table() -> str:
     lines = [
         r"\begin{table}[t]",
@@ -114,44 +118,48 @@ def _provenance_table() -> str:
 
 
 def _headline_table(rows: list[dict[str, str]]) -> str:
-    lines = [
-        r"\begin{table*}[t]",
-        r"\centering",
-        r"\scriptsize",
-        r"\setlength{\tabcolsep}{3pt}",
-        r"\resizebox{\linewidth}{!}{%",
-        r"\begin{tabular}{@{}P{2.8cm} P{1.2cm} P{2.2cm} P{3.2cm} P{3.2cm} C{1.0cm} C{1.0cm} C{1.0cm} C{1.0cm}@{}}",
-        r"\hline",
-        r"Stress axis & Level & Applied perturbation & Best public stack & Best detector-family stack & \shortstack{Public\\AUC$_{\mathrm{main/nuis}}$} & \shortstack{Detector\\AUC$_{\mathrm{main/nuis}}$} & \shortstack{Public\\FPR$_{\mathrm{nuis}}$@$0.5$} & \shortstack{Detector\\FPR$_{\mathrm{nuis}}$@$0.5$} \\",
-        r"\hline",
-    ]
+    public_labels: list[str] = []
     for axis_key in sorted(AXIS_META, key=lambda k: AXIS_ORDER[k]):
         meta = AXIS_META[axis_key]
         for level in sorted(meta["levels"], key=lambda l: LEVEL_ORDER[l]):
             public = _best_by(rows, split="eval", role="public", axis_key=axis_key, level=level)
+            public_labels.append(public["pipeline_label"])
+    common_public = public_labels[0] if public_labels and len(set(public_labels)) == 1 else None
+
+    lines = [
+        r"\begin{table*}[t]",
+        r"\centering",
+        r"\footnotesize",
+        r"\setlength{\tabcolsep}{5pt}",
+    ]
+    for axis_key in sorted(AXIS_META, key=lambda k: AXIS_ORDER[k]):
+        meta = AXIS_META[axis_key]
+        lines.extend(
+            [
+                rf"\par\medskip\noindent\textbf{{{meta['label']}}}\par\medskip",
+                r"\begin{tabular}{@{}P{4.4cm} P{3.7cm} P{5.1cm}@{}}",
+                r"\hline",
+                r"Level / perturbation & Best detector-family stack & Metrics (Public $\rightarrow$ Detector) \\",
+                r"\hline",
+            ]
+        )
+        for level in sorted(meta["levels"], key=lambda l: LEVEL_ORDER[l]):
             detector = _best_by(rows, split="eval", role="detector", axis_key=axis_key, level=level)
-            lines.append(
-                " & ".join(
-                    [
-                        rf"\shortstack[l]{{{meta['label']}}}",
-                        LEVEL_DISPLAY[level],
-                        meta["levels"][level],
-                        _pipeline_display(public["pipeline_label"]),
-                        _pipeline_display(detector["pipeline_label"]),
-                        _fmt(public["auc_main_vs_nuisance"]),
-                        _fmt(detector["auc_main_vs_nuisance"]),
-                        _fmt(public["fpr_nuisance_match@0p5"]),
-                        _fmt(detector["fpr_nuisance_match@0p5"]),
-                    ]
-                )
-                + r" \\"
+            public = _best_by(rows, split="eval", role="public", axis_key=axis_key, level=level)
+            condition_cell = rf"\shortstack[l]{{{LEVEL_DISPLAY[level]}\\{meta['levels'][level]}}}"
+            metrics_cell = (
+                rf"\shortstack[l]{{AUC$_{{\mathrm{{main/nuis}}}}$: "
+                rf"{_fmt(public['auc_main_vs_nuisance'])} $\rightarrow$ {_fmt(detector['auc_main_vs_nuisance'])}\\"
+                rf"FPR$_{{\mathrm{{nuis}}}}$@$0.5$: "
+                rf"{_fmt(public['fpr_nuisance_match@0p5'])} $\rightarrow$ {_fmt(detector['fpr_nuisance_match@0p5'])}}}"
             )
+            lines.append(" & ".join([condition_cell, _pipeline_display(detector["pipeline_label"]), metrics_cell]) + r" \\")
+        lines.extend([r"\hline", r"\end{tabular}"])
+        if axis_key != "short_ensemble":
+            lines.append(r"\medskip")
     lines.extend(
         [
-            r"\hline",
-            r"\end{tabular}%",
-            r"}",
-            r"\caption{Held-out SIMUS mobile stress frontier. Each row compares the best public comparator with the best detector-family stack on the same held-out evaluation seed. The cleaner structural checkpoint is shown separately to identify the fixed default detector head.}",
+            rf"\caption{{Held-out SIMUS mobile stress frontier. Each row compares the best detector-family stack with the strongest public comparator on the same held-out evaluation seed.{(' On every row in this reduced table, the strongest public comparator was ' + _pipeline_caption(common_public) + '.') if common_public else ''} The cleaner structural checkpoint is shown separately to identify the fixed default detector head.}}",
             r"\label{tab:simus_stress_frontier_headline}",
             r"\end{table*}",
             "",
