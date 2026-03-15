@@ -6,8 +6,17 @@ This is the practical filing checklist for the current provisional package.
 
 - `provisional_application_package.pdf`
 - `provisional_drawings.pdf`
+- `provisional_cover_information.pdf`
 - cover sheet or ADS with inventor and correspondence information
 - filing fee and entity-status selection
+
+## Filing identity
+
+- inventor: Arthur Shune
+- applicant: Arthur Shune
+- assignee: Arthur Shune
+- requested entity status: micro entity, personal inventor
+- correspondence email: `arthur.shune@gmail.com`
 
 ## Confirm before filing
 
