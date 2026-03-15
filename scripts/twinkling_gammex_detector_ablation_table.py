@@ -224,7 +224,7 @@ def _render_table(
         "Baseline (Kasai lag-1 power)",
         "Detector ablation (whitened power)",
         "Detector ablation (unwhitened ratio)",
-        "STAP (whitened matched-subspace)",
+        "Fully whitened matched-subspace detector",
     ]
 
     lines: list[str] = []
@@ -262,7 +262,7 @@ def _render_table(
         "All scores are right-tail (higher indicates more flow evidence). This is a same-residual detector-head "
         "comparison: every row is evaluated on the identical baseline SVD band-pass residual cube, changing only "
         "the detector head. The baseline rows are power Doppler and Kasai lag-1 power on that residual; the detector "
-        "ablations replace the STAP matched-subspace score with either total whitened slow-time power (no Doppler "
+        "ablations replace the fully whitened matched-subspace detector with either total whitened slow-time power (no Doppler "
         "band partition) or the same flow-band matched-subspace ratio without covariance whitening ($R=I$). "
         "Thresholds are chosen per method on pooled background pixels to match each target FPR and evaluated on "
         "pooled lumen pixels. Brackets show 95\\% frame-bootstrap CIs ($n=2000$ resamples over cine frames) at the "
@@ -295,7 +295,7 @@ def main() -> None:
         ("Baseline (Kasai lag-1 power)", "base_kasai", along_default, across_default),
         ("Detector ablation (whitened power)", "stap_preka", along_power, across_power),
         ("Detector ablation (unwhitened ratio)", "stap_preka", along_unwhite, across_unwhite),
-        ("STAP (whitened matched-subspace)", "stap_preka", along_default, across_default),
+        ("Fully whitened matched-subspace detector", "stap_preka", along_default, across_default),
     ]
 
     rows: list[Cell] = []

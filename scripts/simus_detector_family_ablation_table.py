@@ -60,7 +60,7 @@ def _build_table(summary_rows: list[dict[str, Any]]) -> str:
         "PD on MC--SVD residual",
         "Unwhitened ratio",
         "Whitened power",
-        "STAP (whitened matched-subspace)",
+        "Fully whitened matched-subspace detector",
     ]
     settings = ["Mobile", "Intra-operative parenchymal"]
     keyed = {(r["method_label"], r["setting"]): r for r in summary_rows}
@@ -101,12 +101,12 @@ def _build_table(summary_rows: list[dict[str, Any]]) -> str:
     lines.append("\\end{tabular}%")
     lines.append("}")
     lines.append(
-        "\\caption{Same-residual detector-family ablation on the clinically anchored SIMUS/PyMUST "
-        "structural benchmark using a common MC--SVD residual and the current translational STAP "
-        "profile (Brain-SIMUS-Clin-MotionRobust-v0). Rows differ only in the downstream score head: "
+        "\\caption{Same-residual detector-family ablation on the held-out use-case-motivated SIMUS/PyMUST "
+        "structural benchmark using a common MC--SVD residual and the current detector profile "
+        "(Brain-SIMUS-Clin-MotionRobust-v0). Rows differ only in the downstream score head: "
         "baseline PD, the same flow-band matched-subspace ratio without whitening ($R=I$), total "
-        "whitened slow-time power without Doppler band partition, and the full whitened matched-"
-        "subspace STAP score. Values are means over the two held-out evaluation seeds for each "
+        "whitened slow-time power without Doppler band partition, and the fully whitened matched-"
+        "subspace detector. Values are means over the two held-out evaluation seeds for each "
         "setting. Lower nuisance FPR at matched TPR is better.}"
     )
     lines.append("\\label{tab:simus_detector_family_ablation}")
@@ -183,7 +183,7 @@ def main() -> None:
         },
         {
             "key": "stap",
-            "method_label": "STAP (whitened matched-subspace)",
+            "method_label": "Fully whitened matched-subspace detector",
             "run_stap": True,
             "bundle_overrides": {"stap_detector_variant": "msd_ratio"},
             "score_name": "score_stap_preka.npy",
