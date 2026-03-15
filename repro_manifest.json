@@ -4,20 +4,16 @@
     "release_tag": null
   },
   "git": {
-    "commit": "bbc54205aba8993f1616627fb932f5eb89440ad0",
-    "commit_short": "bbc5420",
+    "commit": "c37c42c8a3f16847ea713e70012d354f6e4dae53",
+    "commit_short": "c37c42c",
     "branch": "main",
     "dirty": true,
-    "dirty_paths_count": 2,
-    "dirty_ignored_paths_count": 2,
+    "dirty_paths_count": 1,
+    "dirty_ignored_paths_count": 0,
     "dirty_paths": [
-      "M scripts/generate_repro_manifest.py",
-      "M stap_fus_methodology.tex"
+      "M scripts/generate_repro_manifest.py"
     ],
-    "dirty_ignored_paths": [
-      "M stap_fus_methodology.pdf",
-      "M stap_fus_paper.pdf"
-    ]
+    "dirty_ignored_paths": []
   },
   "env": {
     "preferred_conda_env": "stap-fus",
@@ -41,23 +37,18 @@
       }
     },
     "current": {
-      "python": "3.11.14 | packaged by conda-forge | (main, Jan 26 2026, 23:48:32) [GCC 14.3.0]",
+      "python": "3.12.3 (main, Mar  3 2026, 12:15:18) [GCC 13.3.0]",
       "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
       "machine": "x86_64",
       "processor": "x86_64",
       "versions": {
-        "numpy": "2.2.6",
-        "scipy": "1.14.1",
-        "torch": "2.4.1",
-        "matplotlib": "3.10.0",
-        "cupy": "14.0.1"
+        "numpy": null,
+        "scipy": null,
+        "torch": null,
+        "matplotlib": null,
+        "cupy": null
       },
-      "torch_cuda": {
-        "cuda_is_available": true,
-        "cuda_version": "12.1",
-        "device_count": 1,
-        "device0_name": "NVIDIA GeForce RTX 4080 SUPER"
-      },
+      "torch_cuda": {},
       "cwd": "/home/arthu/stap-for-fus"
     },
     "environment_yml": {
@@ -96,7 +87,7 @@
     },
     {
       "name": "ULM Zenodo 7883227 (rat brain kHz IQ)",
-      "purpose": "Motion robustness, same-residual score audit, localization-derived structural-label audit on real in-vivo brain IQ, and one-time baseline calibration sweep.",
+      "purpose": "Motion robustness, same-residual score audit, one-time baseline calibration sweep, and the single paper-facing same-acquisition structural audit using a published PALA localization-derived vascular reference.",
       "local_path": "data/ulm_zenodo_7883227/IQ_*.zip (extracts to tmp/ulm_zenodo_7883227/)",
       "doi_or_url": "https://doi.org/10.5281/zenodo.7883227"
     }
@@ -112,7 +103,7 @@
     "Twinkling calculi KA hygiene": "calcifications sequence, frames 0:50 (n=50), PRF approx 500 Hz, N=9 shots.",
     "ULM 7883227 baseline sweep": "blocks 1-3, frames 0:128, MC-SVD energy-frac sweep (label-free).",
     "ULM 7883227 motion sweeps": "blocks 1-3, frames 0:128, frozen baseline e=0.975, motion kinds {brainlike,elastic}.",
-    "ULM 7883227 PALA-backed structural audit": "reference/eval blocks 1-10, 64-frame windows at offsets {0,128}, max 2 windows/block, published PALA localization-derived vessel-core versus perivascular-shell reference, no-registration whitened matched-subspace specialist."
+    "ULM 7883227 localization-derived structural audit (published PALA reference)": "reference/eval blocks 1-10, 64-frame windows at offsets {0,128}, max 2 windows/block, published PALA localization-derived vessel-core versus perivascular-shell reference, no-registration whitened matched-subspace specialist. This supersedes the earlier 128-frame local-density surrogate and is the only paper-facing ULM structural endpoint."
   },
   "artifacts": [
     {
@@ -1495,10 +1486,10 @@
       "notes": null
     },
     {
-      "name": "ULM 7883227 localization-derived structural-label audit (published PALA reference)",
+      "name": "ULM 7883227 localization-derived structural audit (published PALA reference)",
       "paper_refs": [
-        "Front matter: headline bounded in-vivo structural-label result (ulm7883227_pala_headline_hero.pdf)",
-        "ULM section: localization-derived structural-label audit on the same dataset",
+        "Front matter: ULM structural-audit hero figure (ulm7883227_pala_headline_hero.pdf)",
+        "ULM section: localization-derived structural audit on the same dataset",
         "ULM section: Table (ulm7883227_pala_structural_roc_table.tex)",
         "Supplement: Figure (ulm7883227_pala_structural_roc_curves.pdf)",
         "Discussion: RTX 4080 latency note for the same 64-frame no-registration specialist"
@@ -1552,7 +1543,7 @@
         "  --alias-center-hz 350 --alias-width-hz 150 \\",
         "  --no-reg-enable"
       ],
-      "notes": "This is a bounded structural-label audit on real in vivo IQ using the published PALA localization rendering registered back onto the Zenodo IQ grid. The vessel-core and perivascular-shell masks are clipped to anatomical support before evaluation. It supersedes the earlier local-density surrogate audit and is the only paper-facing ULM structural endpoint. It is stronger than a label-free audit but still not an independent multimodal task benchmark. The short-window detector itself runs without additional frame-to-frame registration in the frozen headline configuration because re-enabling registration changed the structural ROC only at the fourth decimal place while pushing latency well above the 64-frame acquisition budget."
+      "notes": "This is the only paper-facing ULM structural endpoint: a bounded same-acquisition structural audit on real in vivo IQ using the published PALA localization rendering registered back onto the Zenodo IQ grid. The vessel-core and perivascular-shell masks are clipped to anatomical support before evaluation. It supersedes the earlier 128-frame local-density surrogate audit, which should be ignored for manuscript claims. It is stronger than a label-free audit but still not an independent multimodal task benchmark. The short-window detector itself runs without additional frame-to-frame registration in the frozen headline configuration because re-enabling registration changed the structural ROC only at the fourth decimal place while pushing latency well above the 64-frame acquisition budget."
     },
     {
       "name": "Fixed-calibration threshold-transfer audits (SIMUS/PyMUST + PALA-backed ULM)",
