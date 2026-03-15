@@ -21,7 +21,7 @@ def setup_ax(figsize=(11, 6.5)):
     return fig, ax
 
 
-def box(ax, x, y, w, h, text, fontsize=11, lw=1.5):
+def box(ax, x, y, w, h, text, fontsize=11, lw=1.5, ref=None):
     patch = FancyBboxPatch(
         (x, y),
         w,
@@ -42,6 +42,16 @@ def box(ax, x, y, w, h, text, fontsize=11, lw=1.5):
         fontsize=fontsize,
         family="DejaVu Sans",
     )
+    if ref is not None:
+        ax.text(
+            x,
+            y + h + 0.018,
+            str(ref),
+            ha="left",
+            va="bottom",
+            fontsize=9,
+            family="DejaVu Sans Mono",
+        )
 
 
 def arrow(ax, start, end, lw=1.4):
@@ -66,11 +76,11 @@ def save(fig, name):
 
 def draw_overview():
     fig, ax = setup_ax()
-    box(ax, 0.04, 0.36, 0.13, 0.22, "Beamformed IQ or residual slow-time data")
-    box(ax, 0.22, 0.36, 0.13, 0.22, "Residualization or clutter suppression")
-    box(ax, 0.40, 0.18, 0.18, 0.56, "Localized detector family\n\nFixed detector\nAdaptive detector\nFully whitened detector")
-    box(ax, 0.63, 0.36, 0.12, 0.22, "Optional shrink-only penalty")
-    box(ax, 0.80, 0.36, 0.15, 0.22, "Score map, detection map, or vascular display")
+    box(ax, 0.04, 0.36, 0.13, 0.22, "Beamformed IQ or residual slow-time data", ref=102)
+    box(ax, 0.22, 0.36, 0.13, 0.22, "Residualization or clutter suppression", ref=104)
+    box(ax, 0.40, 0.18, 0.18, 0.56, "Localized detector family\n\nFixed detector\nAdaptive detector\nFully whitened detector", ref=106)
+    box(ax, 0.63, 0.36, 0.12, 0.22, "Optional shrink-only penalty", ref=108)
+    box(ax, 0.80, 0.36, 0.15, 0.22, "Score map, detection map, or vascular display", ref=110)
     arrow(ax, (0.17, 0.47), (0.22, 0.47))
     arrow(ax, (0.35, 0.47), (0.40, 0.47))
     arrow(ax, (0.58, 0.47), (0.63, 0.47))
@@ -80,12 +90,12 @@ def draw_overview():
 
 def draw_local_processing():
     fig, ax = setup_ax()
-    box(ax, 0.05, 0.63, 0.22, 0.17, "Residual slow-time cube")
-    box(ax, 0.05, 0.22, 0.22, 0.17, "Overlap-add or weighted aggregation")
-    box(ax, 0.39, 0.63, 0.20, 0.17, "Overlapping spatial tiles")
-    box(ax, 0.39, 0.22, 0.20, 0.17, "Localized scores")
-    box(ax, 0.72, 0.63, 0.21, 0.17, "Slow-time vectors or embedded snapshots")
-    box(ax, 0.72, 0.22, 0.21, 0.17, "Per-tile detector output")
+    box(ax, 0.05, 0.63, 0.22, 0.17, "Residual slow-time cube", ref=202)
+    box(ax, 0.05, 0.22, 0.22, 0.17, "Overlap-add or weighted aggregation", ref=212)
+    box(ax, 0.39, 0.63, 0.20, 0.17, "Overlapping spatial tiles", ref=204)
+    box(ax, 0.39, 0.22, 0.20, 0.17, "Localized scores", ref=210)
+    box(ax, 0.72, 0.63, 0.21, 0.17, "Slow-time vectors or embedded snapshots", ref=206)
+    box(ax, 0.72, 0.22, 0.21, 0.17, "Per-tile detector output", ref=208)
     arrow(ax, (0.27, 0.71), (0.39, 0.71))
     arrow(ax, (0.59, 0.71), (0.72, 0.71))
     arrow(ax, (0.82, 0.63), (0.82, 0.39))
@@ -96,12 +106,12 @@ def draw_local_processing():
 
 def draw_adaptive_switch():
     fig, ax = setup_ax()
-    box(ax, 0.05, 0.38, 0.15, 0.18, "Localized support")
-    box(ax, 0.29, 0.63, 0.22, 0.16, "Clutter-evidence feature\n(guard, alias, motion, condition)")
-    box(ax, 0.29, 0.36, 0.22, 0.16, "Fixed detector branch")
-    box(ax, 0.29, 0.09, 0.22, 0.16, "Fully whitened branch")
-    box(ax, 0.62, 0.33, 0.16, 0.22, "Branch selector or blend")
-    box(ax, 0.84, 0.33, 0.11, 0.22, "Output score")
+    box(ax, 0.05, 0.38, 0.15, 0.18, "Localized support", ref=302)
+    box(ax, 0.29, 0.63, 0.22, 0.16, "Clutter-evidence feature\n(guard, alias, motion, condition)", ref=304)
+    box(ax, 0.29, 0.36, 0.22, 0.16, "Fixed detector branch", ref=306)
+    box(ax, 0.29, 0.09, 0.22, 0.16, "Fully whitened branch", ref=308)
+    box(ax, 0.62, 0.33, 0.16, 0.22, "Branch selector or blend", ref=310)
+    box(ax, 0.84, 0.33, 0.11, 0.22, "Output score", ref=312)
     arrow(ax, (0.20, 0.47), (0.29, 0.71))
     arrow(ax, (0.20, 0.47), (0.29, 0.44))
     arrow(ax, (0.20, 0.47), (0.29, 0.17))
@@ -114,12 +124,12 @@ def draw_adaptive_switch():
 
 def draw_penalty():
     fig, ax = setup_ax()
-    box(ax, 0.05, 0.38, 0.16, 0.18, "Detector score map")
-    box(ax, 0.30, 0.63, 0.20, 0.16, "Candidate-set logic")
-    box(ax, 0.30, 0.38, 0.20, 0.16, "Protected-set logic")
-    box(ax, 0.30, 0.13, 0.20, 0.16, "Side-information features")
-    box(ax, 0.62, 0.38, 0.18, 0.18, "Shrink-only weight or monotone suppression")
-    box(ax, 0.85, 0.38, 0.10, 0.18, "Post-penalty score")
+    box(ax, 0.05, 0.38, 0.16, 0.18, "Detector score map", ref=402)
+    box(ax, 0.30, 0.63, 0.20, 0.16, "Candidate-set logic", ref=404)
+    box(ax, 0.30, 0.38, 0.20, 0.16, "Protected-set logic", ref=406)
+    box(ax, 0.30, 0.13, 0.20, 0.16, "Side-information features", ref=408)
+    box(ax, 0.62, 0.38, 0.18, 0.18, "Shrink-only weight or monotone suppression", ref=410)
+    box(ax, 0.85, 0.38, 0.10, 0.18, "Post-penalty score", ref=412)
     arrow(ax, (0.21, 0.47), (0.30, 0.71))
     arrow(ax, (0.21, 0.47), (0.30, 0.46))
     arrow(ax, (0.21, 0.47), (0.30, 0.21))
@@ -132,10 +142,10 @@ def draw_penalty():
 
 def draw_threshold_transfer():
     fig, ax = setup_ax()
-    box(ax, 0.05, 0.36, 0.18, 0.20, "Calibration data\n(background or nuisance bank)")
-    box(ax, 0.31, 0.36, 0.18, 0.20, "Threshold learning\nor operating-point calibration")
-    box(ax, 0.57, 0.36, 0.16, 0.20, "Fixed threshold family")
-    box(ax, 0.81, 0.36, 0.14, 0.20, "Held-out deployment data")
+    box(ax, 0.05, 0.36, 0.18, 0.20, "Calibration data\n(background or nuisance bank)", ref=502)
+    box(ax, 0.31, 0.36, 0.18, 0.20, "Threshold learning\nor operating-point calibration", ref=504)
+    box(ax, 0.57, 0.36, 0.16, 0.20, "Fixed threshold family", ref=506)
+    box(ax, 0.81, 0.36, 0.14, 0.20, "Held-out deployment data", ref=508)
     arrow(ax, (0.23, 0.46), (0.31, 0.46))
     arrow(ax, (0.49, 0.46), (0.57, 0.46))
     arrow(ax, (0.73, 0.46), (0.81, 0.46))
@@ -144,13 +154,13 @@ def draw_threshold_transfer():
 
 def draw_realtime():
     fig, ax = setup_ax()
-    box(ax, 0.03, 0.38, 0.13, 0.20, "Batched tile extraction")
-    box(ax, 0.21, 0.65, 0.18, 0.15, "Reusable localized operators\n(overlap, geometry, projectors)")
-    box(ax, 0.21, 0.38, 0.18, 0.15, "Conditional branch execution")
-    box(ax, 0.21, 0.11, 0.18, 0.15, "Fixed-batch or replay execution")
-    box(ax, 0.48, 0.38, 0.15, 0.20, "Localized scoring")
-    box(ax, 0.70, 0.38, 0.12, 0.20, "Overlap-add")
-    box(ax, 0.86, 0.38, 0.11, 0.20, "Output map")
+    box(ax, 0.03, 0.38, 0.13, 0.20, "Batched tile extraction", ref=602)
+    box(ax, 0.21, 0.65, 0.18, 0.15, "Reusable localized operators\n(overlap, geometry, projectors)", ref=604)
+    box(ax, 0.21, 0.38, 0.18, 0.15, "Conditional branch execution", ref=606)
+    box(ax, 0.21, 0.11, 0.18, 0.15, "Fixed-batch or replay execution", ref=608)
+    box(ax, 0.48, 0.38, 0.15, 0.20, "Localized scoring", ref=610)
+    box(ax, 0.70, 0.38, 0.12, 0.20, "Overlap-add", ref=612)
+    box(ax, 0.86, 0.38, 0.11, 0.20, "Output map", ref=614)
     arrow(ax, (0.16, 0.48), (0.21, 0.72))
     arrow(ax, (0.16, 0.48), (0.21, 0.46))
     arrow(ax, (0.16, 0.48), (0.21, 0.19))
