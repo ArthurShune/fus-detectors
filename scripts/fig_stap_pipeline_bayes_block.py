@@ -2,170 +2,133 @@
 from __future__ import annotations
 
 import argparse
+import html
+import textwrap
 from pathlib import Path
 
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+from graphviz import Digraph
 
 
-def add_box(ax, x, y, w, h, title, body, *, fc="#f7f7f7", title_fs=8.7, body_fs=7.8) -> None:
-    patch = FancyBboxPatch(
-        (x, y),
-        w,
-        h,
-        boxstyle="round,pad=0.02,rounding_size=0.08",
-        facecolor=fc,
-        edgecolor="black",
-        linewidth=1.0,
+def wrap_lines(text: str, width: int) -> str:
+    parts: list[str] = []
+    for paragraph in text.split("\n"):
+        wrapped = textwrap.wrap(paragraph, width=width) or [""]
+        parts.extend(wrapped)
+    return "<BR/>".join(html.escape(line) for line in parts)
+
+
+def boxed_label(title: str, body: str, *, fill: str = "#f7f7f7", body_width: int = 24) -> str:
+    title_html = html.escape(title)
+    body_html = wrap_lines(body, body_width)
+    return f"""<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="10" BGCOLOR="{fill}" COLOR="black">
+      <TR>
+        <TD ALIGN="CENTER">
+          <FONT POINT-SIZE="15"><B>{title_html}</B></FONT><BR/>
+          <FONT POINT-SIZE="12">{body_html}</FONT>
+        </TD>
+      </TR>
+    </TABLE>
+    >"""
+
+
+def detector_label() -> str:
+    return """<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8" BGCOLOR="#fbfcfe" COLOR="black">
+      <TR>
+        <TD ALIGN="CENTER">
+          <FONT POINT-SIZE="15"><B>Detector family</B></FONT><BR/>
+          <FONT POINT-SIZE="12">localized matched-subspace scoring</FONT>
+        </TD>
+      </TR>
+      <TR><TD>
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="8" CELLPADDING="8">
+          <TR>
+            <TD BGCOLOR="#eef6ff" WIDTH="220" ALIGN="CENTER">
+              <FONT POINT-SIZE="13"><B>Fixed detector</B></FONT><BR/>
+              <FONT POINT-SIZE="11">non-whitened score</FONT>
+            </TD>
+          </TR>
+          <TR>
+            <TD BGCOLOR="#eef6ff" WIDTH="220" ALIGN="CENTER">
+              <FONT POINT-SIZE="13"><B>Adaptive detector</B></FONT><BR/>
+              <FONT POINT-SIZE="11">whitening only when guard-band clutter rises</FONT>
+            </TD>
+          </TR>
+          <TR>
+            <TD BGCOLOR="#eef6ff" WIDTH="220" ALIGN="CENTER">
+              <FONT POINT-SIZE="13"><B>Fully whitened detector</B></FONT><BR/>
+              <FONT POINT-SIZE="11">local covariance-adaptive specialist</FONT>
+            </TD>
+          </TR>
+        </TABLE>
+      </TD></TR>
+    </TABLE>
+    >"""
+
+
+def build_graph() -> Digraph:
+    graph = Digraph("stap_pipeline_bayes_block")
+    graph.attr(
+        rankdir="LR",
+        splines="ortho",
+        nodesep="0.45",
+        ranksep="0.7",
+        pad="0.1",
+        bgcolor="white",
     )
-    ax.add_patch(patch)
-    title_text = ax.text(x + 0.14, y + h - 0.14, title, fontsize=title_fs, ha="left", va="top", weight="bold")
-    body_text = ax.text(x + w / 2, y + 0.40 * h, body, fontsize=body_fs, ha="center", va="center", linespacing=1.08)
-    title_text.set_clip_path(patch)
-    body_text.set_clip_path(patch)
+    graph.attr("node", shape="plain", fontname="Times-Roman")
+    graph.attr("edge", arrowhead="normal", arrowsize="0.8", penwidth="1.1")
 
-
-def add_arrow(ax, x0, y0, x1, y1, *, text=None, text_xy=None, text_fs=7.5) -> None:
-    arr = FancyArrowPatch(
-        (x0, y0),
-        (x1, y1),
-        arrowstyle="-|>",
-        mutation_scale=10,
-        linewidth=1.15,
-        color="black",
+    graph.node(
+        "iq",
+        boxed_label("Beamformed IQ", "Complex slow-time data", fill="#f7f7f7", body_width=22),
     )
-    ax.add_patch(arr)
-    if text and text_xy is not None:
-        ax.text(text_xy[0], text_xy[1], text, fontsize=text_fs, ha="center", va="center")
-
-
-def add_group(ax, x, y, w, h, title, subtitle=None, *, fc="#fbfcfe") -> None:
-    patch = FancyBboxPatch(
-        (x, y),
-        w,
-        h,
-        boxstyle="round,pad=0.02,rounding_size=0.09",
-        facecolor=fc,
-        edgecolor="black",
-        linewidth=1.0,
-        linestyle="-",
+    graph.node(
+        "resid",
+        boxed_label("Residualization", "Conventional clutter suppression", fill="#f7f7f7", body_width=24),
     )
-    ax.add_patch(patch)
-    title_text = ax.text(x + 0.16, y + h - 0.16, title, fontsize=8.45, ha="left", va="top", weight="bold")
-    title_text.set_clip_path(patch)
-    if subtitle:
-        sub_text = ax.text(x + 0.16, y + h - 0.48, subtitle, fontsize=7.35, ha="left", va="top")
-        sub_text.set_clip_path(patch)
+    graph.node(
+        "tiles",
+        boxed_label(
+            "Local tiles",
+            "Overlapping tiles with flow, guard, and alias-band summaries",
+            fill="#f4f7fb",
+            body_width=24,
+        ),
+    )
+    graph.node("detector", detector_label())
+    graph.node(
+        "penalty",
+        boxed_label(
+            "Optional shrink-only penalty",
+            "Conservative score reduction in flagged artifact regions",
+            fill="#fff4e8",
+            body_width=22,
+        ),
+    )
+    graph.node(
+        "output",
+        boxed_label("Output map", "Detector score map", fill="#f7f7f7", body_width=18),
+    )
+
+    graph.edge("iq", "resid")
+    graph.edge("resid", "tiles")
+    graph.edge("tiles", "detector")
+    graph.edge("detector", "penalty")
+    graph.edge("penalty", "output")
+    return graph
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate the main method-overview figure.")
-    parser.add_argument(
-        "--out",
-        default="figs/paper/stap_pipeline_bayes_block.pdf",
-        help="Output PDF path.",
-    )
+    parser.add_argument("--out", default="figs/paper/stap_pipeline_bayes_block.pdf", help="Output path.")
     args = parser.parse_args()
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-
-    mpl.rcParams.update(
-        {
-            "font.family": "serif",
-            "mathtext.fontset": "cm",
-            "font.size": 9,
-            "pdf.fonttype": 42,
-            "ps.fonttype": 42,
-        }
-    )
-
-    fig, ax = plt.subplots(figsize=(11.1, 4.6))
-    ax.set_xlim(0, 21.0)
-    ax.set_ylim(0, 5.8)
-    ax.axis("off")
-
-    h = 1.08
-    y0 = 2.30
-    add_box(ax, 0.55, y0, 2.55, h, "Beamformed IQ", "complex slow-time data", body_fs=7.75)
-    add_box(ax, 3.45, y0, 3.05, h, "Residualization", "coarse clutter suppression", body_fs=7.75)
-    add_box(
-        ax,
-        6.9,
-        y0,
-        3.35,
-        h,
-        "Local tiles",
-        "overlapping tiles\nflow / guard / alias bands",
-        fc="#f4f7fb",
-        title_fs=8.45,
-        body_fs=7.7,
-    )
-
-    add_group(ax, 10.8, 0.95, 4.5, 4.0, "Detector family", "matched-subspace scoring")
-    add_box(
-        ax,
-        11.3,
-        3.35,
-        3.45,
-        0.82,
-        "Fixed",
-        "no whitening",
-        fc="#eef6ff",
-        title_fs=7.75,
-        body_fs=7.45,
-    )
-    add_box(
-        ax,
-        11.3,
-        2.20,
-        3.45,
-        0.82,
-        "Adaptive",
-        "whiten on\nclutter cue",
-        fc="#eef6ff",
-        title_fs=7.75,
-        body_fs=7.2,
-    )
-    add_box(
-        ax,
-        11.3,
-        1.05,
-        3.45,
-        0.82,
-        "Whitened",
-        "local\ncovariance",
-        fc="#eef6ff",
-        title_fs=7.55,
-        body_fs=7.1,
-    )
-
-    add_box(
-        ax,
-        15.95,
-        y0,
-        2.6,
-        h,
-        "Optional penalty",
-        "shrink-only\nscore reduction",
-        fc="#fff4e8",
-        title_fs=8.15,
-        body_fs=7.45,
-    )
-    add_box(ax, 18.95, y0, 1.45, h, "Output", "score map", title_fs=7.9, body_fs=7.4)
-
-    # Main linear flow.
-    add_arrow(ax, 3.1, y0 + 0.54, 3.45, y0 + 0.54)
-    add_arrow(ax, 6.5, y0 + 0.54, 6.9, y0 + 0.54)
-
-    # Detector family as a grouped stage.
-    add_arrow(ax, 10.25, y0 + 0.54, 10.8, y0 + 0.54)
-    add_arrow(ax, 15.3, y0 + 0.54, 15.95, y0 + 0.54)
-    add_arrow(ax, 18.55, y0 + 0.54, 18.95, y0 + 0.54)
-
-    fig.savefig(out, bbox_inches="tight", format="pdf")
-    plt.close(fig)
+    graph = build_graph()
+    out.write_bytes(graph.pipe(format=out.suffix.lstrip(".")))
     return 0
 
 
