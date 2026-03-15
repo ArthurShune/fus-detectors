@@ -93,6 +93,7 @@ def main():
     run("latexmk", "-pdf", "-interaction=nonstopmode", "provisional_application_package.tex", cwd=PATENT)
     run("latexmk", "-pdf", "-interaction=nonstopmode", "provisional_drawings.tex", cwd=PATENT)
     run("latexmk", "-pdf", "-interaction=nonstopmode", "provisional_submission_checklist.tex", cwd=PATENT)
+    run("latexmk", "-pdf", "-interaction=nonstopmode", "provisional_cover_information.tex", cwd=PATENT)
 
 
 if __name__ == "__main__":
