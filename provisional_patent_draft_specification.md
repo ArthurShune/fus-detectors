@@ -151,7 +151,7 @@ In some embodiments, a non-transitory computer-readable medium stores instructio
 
 The disclosed techniques are not limited to any particular residualizer, dataset, benchmark, frame count, support size, pulse-repetition frequency, covariance recipe, hardware platform, or evaluation protocol. In some embodiments, the detector is applied to beamformed or residualized slow-time data. In some embodiments, additional or alternative subspace constructions are used. In some embodiments, more than two detector branches are available and their outputs are selected or combined under a policy responsive to nuisance or clutter evidence.
 
-In some embodiments, the shrink-only transform is applied before or after aggregation. In some embodiments, one or more reference maps, anatomical priors, or spatial context features provide side information. In some embodiments, learned nuisance features or learned branch policies are used as optional policy inputs.
+In some embodiments, the shrink-only transform is applied before or after aggregation. In some embodiments, one or more reference maps, anatomical priors, or spatial context features provide optional side information. In some embodiments, learned nuisance features or learned branch policies are used as optional policy inputs. Such prior-based or learned inputs are not required for the core localized scoring, adaptive branch selection, shrink-only suppression, threshold transfer, or exact-output-preserving execution embodiments described above.
 
 ### Example Use Cases
 
@@ -161,21 +161,6 @@ The disclosed techniques may be used in functional ultrasound imaging, ultrafast
 
 The foregoing embodiments are illustrative and not limiting. Features described in connection with one embodiment may be combined with features of another embodiment unless the context clearly indicates otherwise. The disclosed subject matter is not limited to any particular residualization technique, detector formula, covariance estimator, support geometry, operator basis, branch count, threshold source, hardware platform, or output representation. Equivalent localized support definitions, target and non-target operator constructions, branch-control policies, monotone non-increasing suppression transforms, aggregation procedures, and execution architectures may be used while remaining within the scope of the disclosed systems and methods.
 
-## Suggested Claim Families For Later Nonprovisional Drafting
+## Embodiment Categories
 
-1. A computer-implemented method for generating an ultrasound score map from beamformed or residualized data using localized subspace-based scoring.
-2. A computer-implemented method in which a clutter-evidence metric selects between a fixed detector branch and a covariance-adaptive detector branch.
-3. A computer-implemented method in which a shrink-only penalty is applied to candidate regions while preserving a protected region.
-4. A computer-implemented real-time execution method using conditional localized execution, reusable localized operators, and batched aggregation while preserving detector outputs.
-5. A system claim covering processors, memory, and an ultrasound data interface configured to carry out the foregoing method steps.
-6. A non-transitory computer-readable-medium claim covering instructions that cause a processor to carry out the foregoing method steps.
-
-## Example Support For Later Claims
-
-1. A method of localized subspace-based scoring on post-residual ultrasound slow-time data.
-2. A method of selective enabling of local whitening based on clutter evidence.
-3. A method of generating a score map using fixed and covariance-adaptive branches with adaptive selection.
-4. A method of applying a shrink-only score penalty with a protected set and inert fallback mode.
-5. A threshold-transfer method using a calibration bank and later held-out application.
-6. A real-time execution method using batched tile-local processing, conditional branch execution, reusable localized operators, and overlap-add aggregation.
-7. A system and non-transitory computer-readable medium implementing the above.
+The present disclosure supports separate method, system, and non-transitory computer-readable-medium embodiments for: localized subspace-based scoring on post-residual ultrasound slow-time data; adaptive branch policy using clutter evidence to select or combine fixed and covariance-adaptive detector branches, including fully whitened embodiments; shrink-only suppression with candidate-set, protected-set, and inert-mode behavior; threshold calibration and transfer without per-window recalibration; and exact-output-preserving selective execution using reusable localized operators and conditional covariance-adaptive processing.

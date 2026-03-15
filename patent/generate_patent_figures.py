@@ -78,7 +78,15 @@ def draw_overview():
     fig, ax = setup_ax()
     box(ax, 0.04, 0.36, 0.13, 0.22, "Beamformed IQ or residual slow-time data", ref=102)
     box(ax, 0.22, 0.36, 0.13, 0.22, "Residualization or clutter suppression", ref=104)
-    box(ax, 0.40, 0.18, 0.18, 0.56, "Localized detector family\n\nFixed detector\nAdaptive detector\nFully whitened detector", ref=106)
+    box(
+        ax,
+        0.40,
+        0.18,
+        0.18,
+        0.56,
+        "Localized detector family\n\nFixed detector\nAdaptive detector\nCovariance-adaptive detector\n(including fully whitened embodiments)",
+        ref=106,
+    )
     box(ax, 0.63, 0.36, 0.12, 0.22, "Optional shrink-only penalty", ref=108)
     box(ax, 0.80, 0.36, 0.15, 0.22, "Score map, detection map, or vascular display", ref=110)
     arrow(ax, (0.17, 0.47), (0.22, 0.47))
@@ -109,7 +117,7 @@ def draw_adaptive_switch():
     box(ax, 0.05, 0.38, 0.15, 0.18, "Localized support", ref=302)
     box(ax, 0.29, 0.63, 0.22, 0.16, "Clutter-evidence feature\n(guard, alias, motion, condition)", ref=304)
     box(ax, 0.29, 0.36, 0.22, 0.16, "Fixed detector branch", ref=306)
-    box(ax, 0.29, 0.09, 0.22, 0.16, "Fully whitened branch", ref=308)
+    box(ax, 0.29, 0.09, 0.22, 0.16, "Covariance-adaptive branch\n(including fully whitened embodiments)", ref=308)
     box(ax, 0.62, 0.33, 0.16, 0.22, "Branch selector or blend", ref=310)
     box(ax, 0.84, 0.33, 0.11, 0.22, "Output score", ref=312)
     arrow(ax, (0.20, 0.47), (0.29, 0.71))
