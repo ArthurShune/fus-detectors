@@ -636,23 +636,21 @@ The stress-frontier table should also prevent the wrong reading of the cleaner c
 \paragraph{Functional same-residual detector-head comparison.}
 To test whether the fully whitened variant adds value beyond upstream residualization in function-priority settings, we report a compact same-residual comparison on the prespecified functional benchmark settings. For each fixed residual stream, we compare the fully whitened detector to conventional Doppler-style score heads using the same held-out data and the same downstream GLM-style readout.
 
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{P{2.7cm} P{2.8cm} C{2.5cm} P{4.4cm}}
-\hline
-Benchmark setting & Best end-to-end chain & Same-residual score comparison & Interpretation \\
-\hline
-Intra-operative parenchymal & RPCA $\rightarrow$ PD-after-STAP & Improved in all 6 residual families & STAP helps both in the strongest end-to-end chain and in the same-residual comparison \\
-Mobile & HOSVD $\rightarrow$ PD & Improved in 5 of 6 residual families & The best full pipeline depends on the acquisition setting, but STAP still improves most same-residual comparisons \\
-\hline
-\end{tabular}
-\caption{Same-residual functional detector-head comparison on prespecified benchmark settings under a common background-controlled GLM readout. ``Best end-to-end chain'' includes interactions between the upstream filter and the downstream score. ``Same-residual score comparison'' keeps the residual cube fixed and asks whether the fully whitened STAP-inspired detector improves the same downstream readout. This isolates detector-head behavior from upstream clutter suppression. Across these two prespecified settings, the held-out audit favors STAP in 11 of 12 family/setting comparisons, with the remaining case an effective tie.}
-\label{tab:accepted_v2_functional_main}
-\end{table}
+\IfFileExists{reports/simus_functional_numeric_summary_table.tex}{%
+  \input{reports/simus_functional_numeric_summary_table.tex}%
+}{%
+  \begin{center}
+  \refstepcounter{table}\label{tab:accepted_v2_functional_main}%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/simus_functional_numeric_summary_table.tex}.\\
+    Reproduce it with \path{python3 scripts/simus_functional_numeric_table.py}.
+  \end{minipage}}
+  \end{center}
+}
 
-Within the detector family itself, the robustly whitened Huber variant remains worth keeping even though it is not the structural default. On the held-out same-residual functional audit, it improves 5 of 6 mobile residual families for the direct STAP readout and 4 of 6 intra-operative residual families for the PD-after-STAP readout, with the remaining comparisons near-neutral rather than catastrophic. This is one prespecified whitening recipe carried across the functional, phantom, and labeled-stress-test regimes rather than a different score retuned for each dataset. That cross-regime consistency is the main reason we retain it as a distinct fully whitened variant inside the STAP-inspired detector framework. The adaptive variant described later sits between this fully whitened head and the simple fixed default: it does not replace the functional fully whitened result, but it provides a cleaner translational compromise than forcing full whitening everywhere.
+Table~\ref{tab:accepted_v2_functional_main} makes the functional story more explicit than a simple win-count. In the strict held-out same-residual audit, the fully whitened detector is positive in 5 of 6 residual families in both settings, with median held-out selection-score gains of +0.065 [0.032, 0.091] for the intra-operative parenchymal setting and +0.111 [0.032, 0.142] for the mobile setting. The corresponding median gains in activation-versus-nuisance AUC are +0.026 [0.014, 0.052] and +0.059 [0.011, 0.066]. Those are not large enough to carry the paper by themselves, but they are directionally consistent and quantitatively nontrivial under a common readout. A broader bounded targeted-search follow-up remains positive in 11 of 12 family/setting comparisons and is kept in the Supplementary Material rather than in the main reader path.
+
+Within the detector family itself, the robustly whitened Huber variant therefore remains worth keeping even though it is not the structural default. This is one prespecified whitening recipe carried across the functional, phantom, and labeled-stress-test regimes rather than a different score retuned for each dataset. That cross-regime consistency is the main reason we retain it as a distinct fully whitened variant inside the matched-subspace detector framework. The adaptive variant described later sits between this fully whitened head and the simple fixed default: it does not replace the functional fully whitened result, but it provides a cleaner translational compromise than forcing full whitening everywhere.
 
 \paragraph{Scope and low-FPR operating protocol.}
 Quantitative detection performance is reported on labeled brain simulations, structurally labeled phantom regimes (Gammex flow phantom sequences; labels derived from B-mode geometry), and the prespecified held-out SIMUS/PyMUST benchmark using the strict low-FPR operating protocol of Section~\ref{sec:eval}. Open real-IQ datasets are used primarily for bounded score-audit and motion-robustness evidence rather than for task ROC; the ULM section additionally includes a bounded localization-derived structural audit on real brain IQ, which we treat as an in-vivo vascular-fidelity check rather than as a decisive task-efficacy benchmark. Conditional execution is a decision-rule variant that uses a flow-proxy mask; leakage ablations and additional diagnostics are reported in \SuppOrApp{app:supp-results}.
