@@ -10,6 +10,7 @@
 \usepackage{iftex}
 \usepackage{url}
 \usepackage{graphicx}
+\usepackage{caption}
 \usepackage[hidelinks]{hyperref}
 
 \newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
@@ -104,6 +105,34 @@ This build combines the submission manuscript with supplementary methods and rep
 Functional ultrasound and ultrafast Doppler maps can remain vulnerable to nuisance-driven false positives after conventional clutter suppression, especially in the low-false-positive operating region where rare artifacts can dominate interpretation. We study a post-residual detector-head framework for beamformed fUS slow-time data. The fixed default is a band-limited matched-subspace score; an adaptive extension turns on tile-local whitening only where residual guard-band energy indicates localized clutter; and a fully whitened specialist is retained for regimes in which full local covariance adaptation earns its extra complexity. Quantitative claims are restricted to labeled brain simulations, a structurally labeled flow phantom, a prespecified held-out SIMUS/PyMUST moving-scatterer benchmark, and bounded real-IQ audits. Across the labeled brain stress tests and Gammex phantom, the matched-subspace family retains nonzero sensitivity at strict low-FPR operating points where PD/Kasai comparators can collapse. On the held-out SIMUS/PyMUST structural benchmark, the fixed non-whitened matched-subspace score is the strongest fixed downstream head among the evaluated prespecified comparators, while held-out stress rows and fixed-threshold transfer checks show where the adaptive and fully whitened variants help beyond that default. On real in-vivo rat-brain IQ, a localization-derived PALA vascular reference yields a bounded same-acquisition structural audit in which a prespecified fully whitened specialist shows a modest advantage over PD and Kasai. This real-IQ result is structural rather than task-activation evidence. These results support localized matched-subspace scoring as a practical downstream complement to, rather than a replacement for, conventional clutter suppression.
 \end{abstract}
 
+\begin{center}
+\setlength{\fboxsep}{7pt}
+\fbox{\begin{minipage}{0.97\linewidth}
+\textbf{Evidence at a glance.}
+The paper makes four kinds of claims, from controlled labeled detection to bounded real-IQ corroboration. The validation ladder below is intentionally placed before the method section so cold readers can see what is shown where before the technical details.
+
+\captionsetup{type=table}
+\centering
+\small
+\begingroup
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}P{2.9cm} P{2.8cm} P{8.2cm}@{}}
+\hline
+Regime & Independent anchor & What it establishes in this paper \\
+\hline
+Brain simulation stress tests & simulator truth & controlled mechanism checks and strict-tail sensitivity under labeled nuisance stress \\
+Gammex phantom & B-mode structural labels & structural ROC on real phantom data with independent geometry \\
+Held-out SIMUS/PyMUST benchmark & simulated label masks in use-case-motivated scenes & main held-out structural benchmark, stress-frontier confirmation, and fixed-calibration transfer \\
+ULM structural audit & published localization-derived vascular reference & bounded same-acquisition structural audit on real in-vivo IQ \\
+ULM motion + Shin audits & no independent task labels & bounded robustness and corroborative real-IQ evidence only \\
+\hline
+\end{tabular}
+\endgroup
+\captionof{table}{Compact validation ladder for the paper. The evidence progresses from labeled simulation and structurally labeled phantom data to a held-out use-case-motivated synthetic benchmark and one bounded same-acquisition structural audit on open real in-vivo IQ. The fuller claim-support map appears later in Table~\ref{tab:claims_discipline}.}
+\label{tab:validation_ladder_intro}
+\end{minipage}}
+\end{center}
+
 \begin{figure}[t]
 \centering
 \IfFileExists{figs/paper/ulm7883227_pala_headline_hero.pdf}{%
@@ -153,28 +182,7 @@ This is not only an extreme-tail effect. On the representative Gammex frame in F
 
 We also study a conservative shrink-only regularization layer, but only as a bounded optional add-on: it can compress extreme-tail artifacts without score inflation, yet the main paper does not rely on it for its primary efficacy claims (details in the Supplementary Material). This problem matters now because fUS is no longer only a preclinical proof-of-concept modality. It is already used in intra-operative, neonatal, cranial-window, and emerging mobile settings \cite{Imbault2017,DemeneHumanNewborn2017,BarangerNeonates2021,Rabut2024,MobileFUS2025,Deffieux2021}, where rare nuisance-driven false positives can matter more than average image quality.
 
-The main claim of the paper is simple: after conventional clutter suppression, a localized matched-subspace downstream score can reduce nuisance leakage better than PD/Kasai-based scoring on the evaluated tasks. The rest of the paper asks where that simpler fixed score is already sufficient, where an adaptive whitening switch is useful, and where a fully whitened specialist mode earns its extra complexity.
-
-\begin{table}[!t]
-\centering
-\small
-\begingroup
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}P{3.0cm} P{2.9cm} P{8.1cm}@{}}
-\hline
-Regime & Independent anchor & What it establishes in this paper \\
-\hline
-Brain simulation stress tests & simulator truth & controlled mechanism checks and strict-tail sensitivity under labeled nuisance stress \\
-Gammex phantom & B-mode structural labels & structural ROC on real phantom data with independent geometry \\
-Held-out SIMUS/PyMUST benchmark & simulated label masks in use-case-motivated scenes & main held-out structural benchmark, stress-frontier confirmation, and fixed-calibration transfer \\
-ULM structural audit & published localization-derived vascular reference & bounded same-acquisition structural audit on real in-vivo IQ \\
-ULM motion + Shin audits & no independent task labels & bounded robustness and corroborative real-IQ evidence only \\
-\hline
-\end{tabular}
-\endgroup
-\caption{Compact validation ladder for the paper. The evidence progresses from labeled simulation and structurally labeled phantom data to a held-out use-case-motivated synthetic benchmark and one bounded same-acquisition structural audit on open real in-vivo IQ. The fuller claim-support map appears later in Table~\ref{tab:claims_discipline}.}
-\label{tab:validation_ladder_intro}
-\end{table}
+The main claim of the paper is simple: after conventional clutter suppression, a localized matched-subspace downstream score can reduce nuisance leakage better than PD/Kasai-based scoring on the evaluated tasks. The rest of the paper asks where that simpler fixed score is already sufficient, where an adaptive whitening switch is useful, and where a fully whitened specialist mode earns its extra complexity. The validation ladder in Table~\ref{tab:validation_ladder_intro} is placed before the methods for exactly that reason: it gives readers the claim scope and evidence order up front, before the notation and benchmark detail.
 
 \paragraph{Contributions.}
 \begin{itemize}[nosep]
