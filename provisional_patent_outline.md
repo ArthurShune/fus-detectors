@@ -69,7 +69,7 @@ Draft this early and clearly:
 
 > The invention relates to systems and methods for detecting flow-consistent signal in beamformed ultrasound slow-time data after clutter suppression. A residual signal is analyzed locally using tile-based band-limited matched-subspace scoring rather than conventional power Doppler alone. In some embodiments, local whitening is selectively enabled when guard-band or related clutter-evidence features indicate structured nuisance. In some embodiments, an optional shrink-only penalty layer suppresses high-risk detections without increasing any score and while preserving protected flow-proxy regions. The disclosed methods improve nuisance discrimination, strict-tail behavior, and deployment practicality in functional ultrasound and ultrafast Doppler imaging.
 
-## 6. Five Invention Families To Disclose
+## 6. Six Invention Families To Disclose
 
 ### A. Core localized matched-subspace detector
 
@@ -134,22 +134,37 @@ This part is worth protecting because it is a clean safety mechanism:
 - it preserves a protected set
 - it fails safely to “off”
 
-### E. System, deployment, and threshold-transfer family
+### E. Threshold-transfer and deployment workflow family
 
 This should be included if protection is wanted around practical deployment, not only around the score computation.
 
 Disclose:
 
-- scanner-integrated, workstation, GPU, edge, software-only, and medium embodiments
 - calibration of thresholds from negative-only banks or separate calibration sets
 - transfer of thresholds across windows, blocks, animals, sessions, devices, or scanners without per-window retuning
 - right-tail score calibration using background or nuisance sets
 - calibration for fixed FPR or matched operating points
 - adaptation of thresholds across detector branches or variants
 - output to display, storage, alerting, downstream analytics, or control logic
-- exact-output-preserving batched execution as one deployment embodiment
 
 Do not oversell this family as a solved clinical workflow. Disclose it as a practical operating embodiment with multiple variants.
+
+### F. System and exact-output-preserving real-time execution family
+
+This family is worth including if the commercial story depends on producing the disclosed detector outputs within acquisition-time constraints.
+
+Disclose:
+
+- scanner-integrated, workstation, GPU, edge, software-only, and medium embodiments
+- batched tile extraction and localized score computation
+- conditional execution of whitening only for selected tiles, regions, pixels, or branch-promoted supports
+- exact-output-preserving cached geometry terms, overlap counts, projector terms, or reusable localized operators
+- fixed-batch or graph-replay execution strategies that stabilize repeated localized workloads
+- overlap-add or equivalent stitching of localized outputs into a score map
+- latency-sensitive modes that omit nonessential diagnostics or telemetry while preserving the same detector outputs
+- exact-output-preserving fallback or bypass logic for localized support conditions, including clean-scene fast paths where appropriate
+
+The point is not merely “use a GPU.” The point is a concrete execution architecture for the localized detector family that preserves the intended detector output while meeting acquisition-time budgets.
 
 ## 7. What Not To Lock To
 
@@ -215,6 +230,7 @@ Use separate short paragraphs for:
 - fully whitened detector family
 - shrink-only penalty family
 - threshold-transfer family
+- exact-output-preserving real-time execution family
 - system and hardware embodiments
 
 ### Brief Description Of Drawings
@@ -235,7 +251,7 @@ Recommended subsections:
 8. Score aggregation
 9. Optional shrink-only penalty layer
 10. Threshold calibration and transfer
-11. Real-time batched implementation
+11. Exact-output-preserving real-time execution
 12. System and medium embodiments
 13. Example operating settings
 14. Alternative embodiments
@@ -267,7 +283,7 @@ At minimum, include these figures or patent-clean redrawings of them:
    - calibration bank, fixed threshold family, held-out deployment data
 
 7. Real-time processing architecture
-   - tile batch extraction, local processing, overlap-add, optional GPU or accelerator execution
+   - tile batch extraction, conditional localized execution, overlap-add, optional GPU or accelerator execution
 
 8. System hardware architecture
    - scanner-integrated embodiment, workstation embodiment, edge embodiment
@@ -292,10 +308,13 @@ Primary independent claim directions:
 3. `Penalty-layer claim`
    - shrink-only post-score suppression with a protected set and inert fallback
 
-4. `System claim`
+4. `Real-time execution claim`
+   - exact-output-preserving batched localized processing with conditional branch execution and reusable localized operators
+
+5. `System claim`
    - processor, memory, and ultrasound-data interface configured to perform the method
 
-5. `Non-transitory computer-readable-medium claim`
+6. `Non-transitory computer-readable-medium claim`
    - software instructions causing a processor to perform the method
 
 Dependent support themes:
@@ -309,6 +328,7 @@ Dependent support themes:
 - hard switch vs soft switch vs blended switch
 - protected-set construction
 - calibration-bank and threshold-transfer rules
+- conditional execution and reusable localized operators
 - hardware embodiment
 - fallback and safe-disable logic
 
