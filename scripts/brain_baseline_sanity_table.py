@@ -282,7 +282,7 @@ def main() -> int:
         "Local SVD (block-wise)": "Block-wise local SVD (overlap-add)",
         "RPCA": "RPCA",
         "HOSVD": "HOSVD",
-        "STAP (MC-SVD+STAP, full)": "STAP (pre-KA) on MC--SVD",
+        "STAP (MC-SVD+STAP, full)": "Matched-subspace detector on MC--SVD",
     }
     regimes = [
         ("Brain-OpenSkull", "open"),

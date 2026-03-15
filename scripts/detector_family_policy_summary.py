@@ -61,7 +61,7 @@ def _build_tex(rows: list[dict[str, Any]]) -> str:
         "matched-subspace detector is the fixed default because it remains strongest on the prespecified "
         "held-out structural benchmark across all tested fixed profiles. The prespecified guard-triggered adaptive "
         "variant preserves that fixed-head behavior in cleaner regimes while selectively turning on whitening in "
-        "clutter-heavier ones. The fully whitened STAP-inspired variant is retained for settings where full "
+        "clutter-heavier ones. The fully whitened matched-subspace variant is retained for settings where full "
         "whitening still earns its complexity.}"
     )
     lines.append("\\label{tab:detector_family_policy}")
@@ -168,13 +168,13 @@ def main() -> None:
             "preferred_head_tex": "Fully whitened covariance-adaptive variant",
             "anchor": (
                 f"Positive in {_fmt_winloss(sum(float(r['delta_selection_b_minus_a']) > 0 for r in mobile_stap), sum(float(r['delta_selection_b_minus_a']) < 0 for r in mobile_stap))} "
-                f"mobile families for direct STAP readout and {_fmt_winloss(sum(float(r['delta_selection_b_minus_a']) > 0 for r in intra_stap_pd), sum(float(r['delta_selection_b_minus_a']) < 0 for r in intra_stap_pd))} "
-                f"intra-operative families for PD-after-STAP"
+                f"mobile families for direct matched-subspace readout and {_fmt_winloss(sum(float(r['delta_selection_b_minus_a']) > 0 for r in intra_stap_pd), sum(float(r['delta_selection_b_minus_a']) < 0 for r in intra_stap_pd))} "
+                f"intra-operative families for PD after matched-subspace stage"
             ),
             "anchor_tex": (
                 f"Positive in {_fmt_winloss(sum(float(r['delta_selection_b_minus_a']) > 0 for r in mobile_stap), sum(float(r['delta_selection_b_minus_a']) < 0 for r in mobile_stap))} "
-                f"mobile families (direct STAP readout) and {_fmt_winloss(sum(float(r['delta_selection_b_minus_a']) > 0 for r in intra_stap_pd), sum(float(r['delta_selection_b_minus_a']) < 0 for r in intra_stap_pd))} "
-                f"intra-operative families (PD-after-STAP)"
+                f"mobile families (direct matched-subspace readout) and {_fmt_winloss(sum(float(r['delta_selection_b_minus_a']) > 0 for r in intra_stap_pd), sum(float(r['delta_selection_b_minus_a']) < 0 for r in intra_stap_pd))} "
+                f"intra-operative families (PD after matched-subspace stage)"
             ),
             "interpretation": "Keep the fully whitened variant for function-priority analyses even though it is not the structural default.",
             "interpretation_tex": "Keep the fully whitened variant for function-priority analyses even though it is not the structural default.",

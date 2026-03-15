@@ -98,7 +98,7 @@ def main() -> None:
         "Local SVD (block-wise)": r"Block-wise local SVD (overlap-add)",
         "RPCA": r"RPCA",
         "HOSVD": r"HOSVD",
-        "STAP (MC-SVD+STAP, full)": r"STAP (pre-KA matched-subspace) on MC--SVD residual",
+        "STAP (MC-SVD+STAP, full)": r"Matched-subspace detector on MC--SVD residual",
     }
 
     have_regimes = sorted({str(r.get("regime")) for r in records if isinstance(r, dict)})

@@ -121,9 +121,9 @@ def _regime_order() -> list[tuple[str, str]]:
 def _method_display() -> dict[str, str]:
     return {
         "RPCA+PD (paired)": "PD on RPCA residual",
-        "RPCA+STAP (paired; pre-KA)": "STAP on RPCA residual",
+        "RPCA+STAP (paired; pre-KA)": "Matched-subspace detector on RPCA residual",
         "HOSVD+PD (paired)": "PD on HOSVD residual",
-        "HOSVD+STAP (paired; pre-KA)": "STAP on HOSVD residual",
+        "HOSVD+STAP (paired; pre-KA)": "Matched-subspace detector on HOSVD residual",
     }
 
 
@@ -197,7 +197,7 @@ def _render_table_tex(
     lines.append("\\end{tabular}%")
     lines.append("}")
     lines.append(
-        "\\caption{Detector-swap fairness check on labeled brain simulation stress tests: PD vs matched-subspace STAP detector scores "
+        "\\caption{Detector-swap fairness check on labeled brain simulation stress tests: PD vs matched-subspace detector scores "
         "computed on the \\emph{same} residual produced by a competing clutter filter (paired bundles). "
         "The two column groups correspond to an open-skull surface-artifact stress test and a structured-clutter leakage stress test. "
         "Numbers are medians (IQR) over five disjoint 64-frame windows (offsets 0/64/128/192/256).}"

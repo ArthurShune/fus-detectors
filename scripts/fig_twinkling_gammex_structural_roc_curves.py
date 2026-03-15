@@ -134,7 +134,7 @@ def main() -> None:
         ("baseline_pd", r"Baseline (power Doppler)"),
         ("whitened_power", r"Whitened power"),
         ("unwhitened_ratio", r"Unwhitened ratio"),
-        ("stap_preka", r"STAP (matched-subspace)"),
+        ("stap_preka", r"Fully whitened matched-subspace"),
     ]
 
     try:
