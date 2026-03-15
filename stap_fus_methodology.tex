@@ -158,6 +158,27 @@ We also study a conservative shrink-only regularization layer, but only as a bou
 
 The main claim of the paper is simple: after conventional clutter suppression, a localized matched-subspace downstream score can reduce nuisance leakage better than PD/Kasai-based scoring on the evaluated tasks. The rest of the paper asks where that simpler fixed score is already sufficient, where an adaptive whitening switch is useful, and where a fully whitened specialist mode earns its extra complexity.
 
+\begin{table}[!t]
+\centering
+\small
+\begingroup
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}P{3.0cm} P{2.9cm} P{8.1cm}@{}}
+\hline
+Regime & Independent anchor & What it establishes in this paper \\
+\hline
+Brain simulation stress tests & simulator truth & controlled mechanism checks and strict-tail sensitivity under labeled nuisance stress \\
+Gammex phantom & B-mode structural labels & structural ROC on real phantom data with independent geometry \\
+SIMUS translational benchmark & simulated label masks in use-case-motivated scenes & main held-out structural benchmark, stress-frontier confirmation, and fixed-calibration transfer \\
+ULM structural audit & published localization-derived vascular reference & bounded same-acquisition structural audit on real in-vivo IQ \\
+ULM motion + Shin audits & no independent task labels & bounded robustness and corroborative real-IQ evidence only \\
+\hline
+\end{tabular}
+\endgroup
+\caption{Compact validation ladder for the paper. The evidence progresses from labeled simulation and structurally labeled phantom data to a held-out use-case-motivated synthetic benchmark and one bounded same-acquisition structural audit on open real in-vivo IQ. The fuller claim-support map appears later in Table~\ref{tab:claims_discipline}.}
+\label{tab:validation_ladder_intro}
+\end{table}
+
 \paragraph{Contributions.}
 \begin{itemize}[nosep]
   \item A post-residual localized matched-subspace detector family for beamformed fUS slow-time data, centered on a fixed band-limited head and extended by a prespecified adaptive whitening switch, a bounded fully whitened specialist mode, and an optional shrink-only penalty layer.
@@ -167,7 +188,7 @@ The main claim of the paper is simple: after conventional clutter suppression, a
 \end{itemize}
 
 \paragraph{Scope and claims.}
-Claims are stratified by data regime and summarized in the evidence map of Table~\ref{tab:claims_discipline}. Quantitative detection efficacy is limited to regimes with independent $H_1/H_0$ labels or a prespecified structural reference that is external to the short-window detector outputs being scored. Open in-vivo IQ and PD-only datasets are still used primarily for bounded robustness and translation audits, but the ULM section now also includes a localization-derived structural audit reported explicitly as a bounded same-acquisition structural audit using a localization-derived vascular reference rather than as a task-activation benchmark.
+Claims are stratified by data regime and summarized first in the compact validation ladder of Table~\ref{tab:validation_ladder_intro}, then in the fuller claim-support map of Table~\ref{tab:claims_discipline}. Quantitative detection efficacy is limited to regimes with independent $H_1/H_0$ labels or a prespecified structural reference that is external to the short-window detector outputs being scored. Open in-vivo IQ and PD-only datasets are still used primarily for bounded robustness and translation audits, but the ULM section now also includes a localization-derived structural audit reported explicitly as a bounded same-acquisition structural audit using a localization-derived vascular reference rather than as a task-activation benchmark.
 
 \paragraph{Canonical benchmark names.}
 To keep the narrative compact, the remainder of the paper uses a small fixed set of benchmark names: \emph{brain simulation stress tests}, \emph{Gammex phantom}, \emph{SIMUS translational benchmark}, \emph{ULM motion audit}, \emph{ULM structural audit}, and \emph{Shin real-IQ audit}. Development-generation labels, internal profile identifiers, and reproduction-script names are kept in the Supplementary Material and repository manifests rather than in the main reader path.
