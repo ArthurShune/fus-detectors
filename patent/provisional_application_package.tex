@@ -20,7 +20,7 @@
 \providecommand{\tightlist}{}
 \pagestyle{fancy}
 \fancyhf{}
-\fancyhead[L]{Localized Matched-Subspace Detection in Ultrasound Doppler Imaging}
+\fancyhead[L]{Localized Subspace-Based Detection in Ultrasound Doppler Imaging}
 \fancyhead[R]{Specification}
 \fancyfoot[C]{\thepage}
 \titleformat{\section}{\large\bfseries}{\thesection.}{0.5em}{}
@@ -32,7 +32,7 @@
 
 \begin{titlepage}
 \centering
-{\Large Systems and Methods for Localized Matched-Subspace Detection in Ultrasound Doppler Imaging\par}
+{\Large Systems and Methods for Localized Subspace-Based Detection in Ultrasound Doppler Imaging\par}
 \vspace{1.5cm}
 {\large Specification\par}
 \vspace{0.8cm}
@@ -70,11 +70,11 @@ Correspondence email: & \texttt{arthur.shune@gmail.com} \\
 \item receiving beamformed ultrasound data or residualized slow-time ultrasound data;
 \item partitioning the data into a plurality of localized spatial support regions;
 \item forming, for each localized spatial support region, one or more slow-time vectors or slow-time snapshots;
-\item computing, from the one or more slow-time vectors or slow-time snapshots, a matched-subspace detector score using a target flow-consistent subspace and at least one non-target component; and
+\item computing, from the one or more slow-time vectors or slow-time snapshots, a localized detector score using a target-aligned component and at least one non-target component; and
 \item aggregating localized detector scores to generate an output score map, detection map, or vascular map.
 \end{enumerate}
 
-\item The method of claim 1, wherein computing the matched-subspace detector score comprises computing a non-whitened or identity-whitened band-limited matched-subspace score.
+\item The method of claim 1, wherein computing the localized detector score comprises computing a non-whitened or identity-whitened band-limited matched-subspace score.
 
 \item The method of claim 1, wherein the target flow-consistent subspace is defined at least in part by a flow band, and wherein one or more additional subspaces are defined by a guard band, an alias band, or an out-of-band complement.
 
