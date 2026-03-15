@@ -14,19 +14,15 @@ When KA is enabled, it is shrink-only and preserves a protected do-not-penalize 
 \end{minipage}}
 \end{center}
 
-\paragraph{Where to find what.}
+\paragraph{Supplement roadmap.}
+\noindent The supplementary material is organized as reader-facing support for the main paper, with structurally labeled and real-IQ audits first, optional adaptive/KA diagnostics next, and archival fairness or repository-style material later.
 \begin{itemize}[nosep]
-  \item Full ROC curve shapes for labeled regimes: Figure~\ref{fig:brain_kwave_roc_curves} (labeled brain simulations) and Figure~\ref{fig:twinkling_gammex_structural_roc_curves} (Gammex).
-  \item STAP-only ablation and PRF sensitivity sanity check (Gammex): Figure~\ref{fig:twinkling_gammex_ablation_prf_sensitivity}.
-  \item Conditional-execution leakage ablation (open-skull pilot): Table~\ref{tab:condstap_leakage_ablation}.
-  \item Prespecified-setting sensitivity sweep (open-skull pilot; $\lambda$, tile size, $L_t$): Figure~\ref{fig:brain_openskull_profile_sensitivity}.
-  \item Frozen threshold sensitivity around the finalized adaptive and KA thresholds: Tables~\ref{tab:adaptive_tau_sensitivity} and \ref{tab:ka_cflow_sensitivity}.
-  \item Shin proxy-metric comparisons, runtime, and measured rigid-motion telemetry: Figure~\ref{fig:shin_baseline_matrix_proxy_metrics} and Figure~\ref{fig:shin_motion_telemetry}.
-  \item Corrected SIMUS/PyMUST moving-scatterer benchmark and same-residual score comparison: Tables~\ref{tab:simus_frozen_benchmark_v1p2} and \ref{tab:simus_symmetric_pipeline_v1p2}.
-  \item SIMUS/PyMUST structural/functional checkpoint and compact real-data translation audit: Tables~\ref{tab:simus_v2_structural_latency} and \ref{tab:simus_v2_functional_latency}, plus the supplement-only real-IQ same-residual audit table later in this appendix.
-  \item Clinically anchored detector-family ablation on a fixed MC--SVD residual: Table~\ref{tab:simus_detector_family_ablation}.
-  \item Compact detector-family policy summary: Table~\ref{tab:detector_family_policy}.
-  \item Compact baseline-family summary for the labeled brain simulation pilots: Table~\ref{tab:brain_baseline_summary}.
+  \item \textbf{Supporting structural audits:} full ROC shapes for labeled regimes, cross-window calibration, whitened-head stability, relaxed-tail sanity checks, open-skull parameter sensitivity, and the Gammex STAP-only / PRF sensitivity check (Figure~\ref{fig:brain_kwave_roc_curves}, Figure~\ref{fig:twinkling_gammex_structural_roc_curves}, Figure~\ref{fig:brain_openskull_profile_sensitivity}, Figure~\ref{fig:twinkling_gammex_ablation_prf_sensitivity}).
+  \item \textbf{Adaptive and KA supporting audits:} finalized threshold sensitivity, conditional-execution leakage, and artifact-heavy calculi hygiene (Tables~\ref{tab:adaptive_tau_sensitivity}, \ref{tab:ka_cflow_sensitivity}, and \ref{tab:condstap_leakage_ablation}).
+  \item \textbf{Real-IQ supporting audits:} ULM motion variants and structural audit, Shin real-IQ proxy/motion/hygiene details, and the compact real-IQ same-residual score audit later in this appendix.
+  \item \textbf{PD-only and whole-brain retrospectives:} the Mac{\'e}/Urban alias-gating and atlas-based summary panels.
+  \item \textbf{Supplementary simulation and held-out benchmark details:} detailed labeled brain tables, corrected SIMUS/PyMUST fairness checkpoints, and the use-case-motivated synthetic checkpoint tables (Tables~\ref{tab:simus_frozen_benchmark_v1p2}, \ref{tab:simus_symmetric_pipeline_v1p2}, \ref{tab:simus_v2_structural_latency}, and \ref{tab:simus_v2_functional_latency}).
+  \item \textbf{Detector-family policy summaries:} the compact detector-family policy table and baseline-family summary (Table~\ref{tab:detector_family_policy} and Table~\ref{tab:brain_baseline_summary}).
 \end{itemize}
 
 \IfFileExists{reports/detector_family_policy_table.tex}{%
@@ -40,8 +36,11 @@ When KA is enabled, it is shrink-only and preserves a protected do-not-penalize 
   \end{minipage}}
   \caption{Detector-family policy implied by the current evidence.}
   \label{tab:detector_family_policy}
-  \end{table}
+\end{table}
 }
+
+\subsection*{Supporting Structural Audits}
+This block collects supplementary labeled and structurally labeled checks that reinforce the main structural claims without adding new benchmark families.
 
 \subsection{Full ROC curves for labeled regimes}
 The main text reports strict low-FPR operating points. Here we provide representative ROC-style curves to show the overall curve shape under the same masks and scoring conventions.
@@ -187,6 +186,9 @@ Because the detector relies on covariance whitening, a natural concern is sensit
 \label{fig:brain_openskull_profile_sensitivity}
 \end{figure}
 
+\subsection*{Adaptive and KA Supporting Audits}
+This block isolates threshold robustness, conditional execution, and shrink-only penalty behavior so that optional mechanisms are easy to find and do not interrupt the main structural or real-IQ narratives.
+
 \subsection{Sensitivity of the finalized adaptive and KA thresholds}
 \label{app:param-threshold-sensitivity}
 An obvious overfitting concern is that the adaptive guard threshold $\tau_g$ and the KA flow-support proxy threshold $c_{\mathrm{flow}}$ might have been tuned so tightly that small perturbations would materially change the reported detector behavior. We therefore perturb each finalized threshold by $\pm 10\%$ while leaving the rest of the pipeline fixed.
@@ -276,6 +278,9 @@ To illustrate the shrink-only behavior of the KA layer in a strongly artifact-do
 \label{fig:twinkling_calculi_tail_example}
 \end{figure}
 
+\subsection*{Real-IQ Supporting Audits}
+This block collects the bounded real-IQ analyses: additional ULM robustness variants, the localization-derived structural audit, and the Shin real-IQ translation and hygiene details.
+
 \subsection{ULM 7883227: additional motion variants}
 In addition to the main \texttt{brainlike} motion sweep reported in the main paper, we report an \texttt{elastic} (nonrigid-only) motion ladder under the same frozen baseline and STAP configuration.
 
@@ -345,6 +350,9 @@ Reproduce it with \texttt{scripts/ulm7883227\_structural\_roc.py}; the exact com
 \caption{ROC curves for the bounded localization-derived structural audit on ULM Zenodo 7883227 (10 evaluation blocks, 20 short windows). The vessel-core and perivascular-shell labels come from the published PALA localization rendering after registration back to the Zenodo IQ grid and are clipped to anatomical support; the short-window detector scores are evaluated on the identical MC--SVD residual cube. On this corrected endpoint, the fully whitened matched-subspace specialist is modestly but consistently stronger than PD and Kasai.}
 \label{fig:ulm_structural_roc_curves}
 \end{figure}
+
+\subsection*{PD-only and Whole-Brain Retrospectives}
+This block collects the whole-brain Mac{\'e}/Urban audits, which are useful for band-energy, alias-gating, and threshold-discipline retrospectives but are not treated as primary Doppler-IQ efficacy benchmarks.
 
 \subsection{Mac{\'e} whole-brain fUS: hemodynamic band-energy statistics and hold-out check}
 We treat the Mac{\'e}/Urban whole-brain dataset as a PD-only, open-skull analogue of the open-skull brain pilot and compute tile-level hemodynamic band-energy statistics with fixed bands $\Pf=[0,0.5]$~Hz, guard $[0.5,1.0]$~Hz, and $\Pa=[1.0,3.0]$~Hz on $8\times 8$ tiles (stride 3). Offline we also compute atlas-derived \emph{region strata} (e.g.\ VIS/SC/LGd versus CP/CA/DG) for descriptive summaries; these strata are not treated as ground-truth flow labels and are not used as KA inputs. Figure~\ref{fig:mace_phase2_summary} summarizes a systematic sweep in ``Pf occupancy vs alias separation'' space. We provide an explicit atlas-alignment sanity check in \SuppOrApp{app:mace-atlas-align}.
@@ -445,6 +453,9 @@ Reproducibility details are provided in \SuppOrApp{app:repro}.%
 % but omitted from the main text to avoid confusion with label-conditioned
 % operating-point selection. See Appendix~\ref{app:pdonly-dashboard} for the
 % PD-only summary-panel definitions.
+
+\subsection*{Real-IQ Supporting Audits (continued)}
+The remaining real-IQ material returns to beamformed complex-IQ datasets after the PD-only whole-brain retrospective.
 
 \subsection{Shin RatBrain Fig3 (LOCA-ULM): real kHz IQ translation and KA diagnostics}
 \label{sec:shin-ratbrain}
@@ -751,6 +762,9 @@ Because there are no task labels and no ground-truth vessel segmentation, quanti
 In addition, the ``brain-like'' motion stress test is an image-domain warp applied to beamformed IQ (rigid + depth-decaying elastic components) rather than a scatterer-level forward model; it is designed to mimic the specific high-rank, spatially varying residual-motion mismatch represented in the structured-clutter pilot, not to reproduce full ultrasound physics.
 Accordingly, we interpret Shin results as evidence of (i) deterministic real-IQ ingestion and band-energy summaries, (ii) KA prior auditability and invariants (shrink-only; protected tiles unchanged), and (iii) self-consistency under controlled residual-motion corruption, while leaving ROC improvement claims to labeled simulation regimes and to future raw-IQ datasets with task or landmark structure.
 
+\subsection*{Supplementary Simulation and Held-Out Benchmark Details}
+This block collects the detailed simulation tables and held-out synthetic benchmark checkpoints that support, but do not replace, the main-text reader path.
+
 \subsection{Labeled brain simulation strict-tail operating points}
 \label{app:brain-kwave-vnext-table}
 The detailed labeled brain simulation low-FPR operating-point table is placed here so that the main text can foreground the narrower use-case-motivated synthetic \emph{SIMUS-ClinUtility-v2} checkpoint. These simulation pilots remain important as a labeled strict-tail stress test and as the basis for the detector-component ablations that follow.
@@ -765,6 +779,9 @@ The detailed labeled brain simulation low-FPR operating-point table is placed he
   \end{minipage}}
   \end{center}
 }
+
+\subsection*{Secondary Legacy Fairness Checkpoints}
+These tables remain useful for fairness and version-control context, but they are secondary to the canonical held-out use-case-motivated benchmark in the main paper.
 
 \subsection{Corrected SIMUS/PyMUST moving-scatterer benchmark (frozen v1)}
 \label{app:simus-frozen-benchmark}
@@ -906,6 +923,9 @@ STAP score aggregate (11/12 positive) & 0.442 & +0.088 & -- & -- & -- \\
 \caption{Clinically anchored \emph{SIMUS-ClinUtility-v2} functional checkpoint on held-out evaluation seeds using the common readout \texttt{bgcdf\_outside\_glm}. The first two rows report the best end-to-end held-out pipeline on each setting; the final row reports the mean STAP-score runtime in the strict same-residual comparison, where the residualizer is held fixed and only the downstream score is swapped. In that audit the mean native runtime is 0.274~s, the mean STAP runtime is 0.442~s, and the mean held-out selection-score gain is +0.088, with STAP positive in 11/12 prespecified family/setting comparisons.}
 \label{tab:simus_v2_functional_latency}
 \end{table}
+
+\subsection*{Functional and Translation-Support Audits}
+This block collects compact real-data score audits and PD-only whole-brain retrospective summaries that support the translational interpretation without serving as primary labeled efficacy benchmarks.
 
 \subsection{Compact real-data translation audit}
 \label{app:realdata-translation-audit}

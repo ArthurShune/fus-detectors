@@ -4,13 +4,14 @@
     "release_tag": null
   },
   "git": {
-    "commit": "c37c42c8a3f16847ea713e70012d354f6e4dae53",
-    "commit_short": "c37c42c",
+    "commit": "1d973630f536e53ccef278357c9b89be795123dc",
+    "commit_short": "1d97363",
     "branch": "main",
     "dirty": true,
-    "dirty_paths_count": 1,
+    "dirty_paths_count": 2,
     "dirty_ignored_paths_count": 0,
     "dirty_paths": [
+      "M appendix_supp_results.tex",
       "M scripts/generate_repro_manifest.py"
     ],
     "dirty_ignored_paths": []
@@ -37,18 +38,23 @@
       }
     },
     "current": {
-      "python": "3.12.3 (main, Mar  3 2026, 12:15:18) [GCC 13.3.0]",
+      "python": "3.11.14 | packaged by conda-forge | (main, Jan 26 2026, 23:48:32) [GCC 14.3.0]",
       "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
       "machine": "x86_64",
       "processor": "x86_64",
       "versions": {
-        "numpy": null,
-        "scipy": null,
-        "torch": null,
-        "matplotlib": null,
-        "cupy": null
+        "numpy": "2.2.6",
+        "scipy": "1.14.1",
+        "torch": "2.4.1",
+        "matplotlib": "3.10.0",
+        "cupy": "14.0.1"
       },
-      "torch_cuda": {},
+      "torch_cuda": {
+        "cuda_is_available": true,
+        "cuda_version": "12.1",
+        "device_count": 1,
+        "device0_name": "NVIDIA GeForce RTX 4080 SUPER"
+      },
       "cwd": "/home/arthu/stap-for-fus"
     },
     "environment_yml": {
