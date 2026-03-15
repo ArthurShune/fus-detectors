@@ -111,6 +111,10 @@ Functional ultrasound and ultrafast Doppler maps can remain vulnerable to nuisan
 \textbf{Evidence at a glance.}
 The paper makes four kinds of claims, from controlled labeled detection to bounded real-IQ corroboration. The validation ladder below is intentionally placed before the method section so cold readers can see what is shown where before the technical details.
 
+\medskip
+\noindent\textbf{Immediate external test.}
+The clearest next validation step is prospective labeled \emph{in vivo} evaluation on raw high-PRF IQ with an independent anatomical or task anchor and a genuinely fixed threshold-transfer workflow across repeated sessions.
+
 \captionsetup{type=table}
 \centering
 \small
@@ -194,6 +198,9 @@ The main claim of the paper is simple: after conventional clutter suppression, a
 
 \paragraph{Scope and claims.}
 Claims are stratified by data regime and summarized first in the compact validation ladder of Table~\ref{tab:validation_ladder_intro}, then in the fuller claim-support map of Table~\ref{tab:claims_discipline}. Quantitative detection efficacy is limited to regimes with independent $H_1/H_0$ labels or a prespecified structural reference that is external to the short-window detector outputs being scored. Open in-vivo IQ and PD-only datasets are still used primarily for bounded robustness and translation audits, but the ULM section now also includes a localization-derived structural audit reported explicitly as a bounded same-acquisition structural audit using a localization-derived vascular reference rather than as a task-activation benchmark.
+
+\paragraph{Next external test.}
+The practical collaboration target is now straightforward: prospective labeled \emph{in vivo} validation on raw high-PRF IQ with an independent anatomical or task anchor and repeated sessions suitable for fixed-threshold transfer. Later in the paper we explain why that benchmark is still not available in one standardized public package, even though simultaneous fUS--Neuropixels, raw fUS plus two-photon, and early human task-fUS resources are beginning to make that next study realistic.
 
 \paragraph{Canonical benchmark names.}
 To keep the narrative compact, the remainder of the paper uses a small fixed set of benchmark names: \emph{brain simulation stress tests}, \emph{Gammex phantom}, \emph{held-out SIMUS/PyMUST benchmark}, \emph{ULM motion audit}, \emph{ULM structural audit}, and \emph{Shin real-IQ audit}. Development-generation labels, internal profile identifiers, and reproduction-script names are kept in the Supplementary Material and repository manifests rather than in the main reader path.
