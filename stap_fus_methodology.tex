@@ -156,6 +156,8 @@ This is not only an extreme-tail effect. On the representative Gammex frame in F
 
 We also study a conservative shrink-only regularization layer, but only as a bounded optional add-on: it can compress extreme-tail artifacts without score inflation, yet the main paper does not rely on it for its primary efficacy claims (details in the Supplementary Material). This problem matters now because fUS is no longer only a preclinical proof-of-concept modality. It is already used in intra-operative, neonatal, cranial-window, and emerging mobile settings \cite{Imbault2017,DemeneHumanNewborn2017,BarangerNeonates2021,Rabut2024,MobileFUS2025,Deffieux2021}, where rare nuisance-driven false positives can matter more than average image quality.
 
+The main claim of the paper is simple: after conventional clutter suppression, a localized matched-subspace downstream score can reduce nuisance leakage better than PD/Kasai-based scoring on the evaluated tasks. The rest of the paper asks where that simpler fixed score is already sufficient, where an adaptive whitening switch is useful, and where a fully whitened specialist mode earns its extra complexity.
+
 \paragraph{Contributions.}
 \begin{itemize}[nosep]
   \item A post-residual localized matched-subspace detector family for beamformed fUS slow-time data, centered on a fixed band-limited head and extended by a prespecified adaptive whitening switch, a bounded fully whitened specialist mode, and an optional shrink-only penalty layer.
