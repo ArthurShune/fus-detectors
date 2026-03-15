@@ -9,8 +9,8 @@ Run \path{PYTHONPATH=. conda run -n stap-fus python scripts/generate_repro_manif
 \paragraph{Repository state.}
 Public repository: \path{git@github.com:ArthurShune/stap-for-fus.git}.
 Release tag: (not recorded; set \texttt{STAP\_FUS\_RELEASE\_TAG} or create a git tag).
-Commit: \texttt{bbc5420} (full: \texttt{bbc54205ab}\allowbreak\texttt{a8993f1616}\allowbreak\texttt{627fb932f5}\allowbreak\texttt{eb89440ad0}); branch: \texttt{main}; dirty: \texttt{true}.
-Dirty details: non-ignored paths=2, ignored build products=2.
+Commit: \texttt{c37c42c} (full: \texttt{c37c42c8a3}\allowbreak\texttt{f16847ea71}\allowbreak\texttt{3e70012d35}\allowbreak\texttt{4f6e4dae53}); branch: \texttt{main}; dirty: \texttt{true}.
+Dirty details: non-ignored paths=1, ignored build products=0.
 Note: dirty status ignores common LaTeX build products (e.g., \texttt{*.aux, *.log, *.out, *.fls, *.fdb\_latexmk, *.synctex.gz, *.pdf}).
 For archival reproducibility, generate this manifest from a clean, tagged release commit (\texttt{dirty=false}) and record the public repository URL and tag.
 
@@ -41,7 +41,7 @@ Paths below are the expected on-disk locations used by the scripts in this repos
   \item \textbf{Twinkling artifact dataset (RawBCF phantoms)}: Structurally labeled phantom ROC (Gammex) + within-ensemble motion ladders + KA hygiene (calculi).
     \\ Local: \path{data/twinkling_artifact/}.
     \\ Source: \path{https://doi.org/10.17816/DD76511}.
-  \item \textbf{ULM Zenodo 7883227 (rat brain kHz IQ)}: Motion robustness, same-residual score audit, localization-derived structural-label audit on real in-vivo brain IQ, and one-time baseline calibration sweep.
+  \item \textbf{ULM Zenodo 7883227 (rat brain kHz IQ)}: Motion robustness, same-residual score audit, one-time baseline calibration sweep, and the single paper-facing same-acquisition structural audit using a published PALA localization-derived vascular reference.
     \\ Local archive: \path{data/ulm_zenodo_7883227/IQ_*.zip}.
     \\ Extracts to: \path{tmp/ulm_zenodo_7883227/}.
     \\ Source: \path{https://doi.org/10.5281/zenodo.7883227}.
@@ -59,8 +59,10 @@ Paths below are the expected on-disk locations used by the scripts in this repos
   \item \textbf{Twinkling calculi KA hygiene}: calcifications sequence, frames 0:50 (n=50), PRF approx 500 Hz, N=9 shots.
   \item \textbf{ULM 7883227 baseline sweep}: blocks 1-3, frames 0:128, MC-SVD energy-frac sweep (label-free).
   \item \textbf{ULM 7883227 motion sweeps}: blocks 1-3, frames 0:128, frozen baseline e=0.975, motion kinds {brainlike,elastic}.
-  \item \textbf{ULM 7883227 PALA-backed structural audit}: reference/eval blocks 1-10, 64-frame windows at offsets {0,128}, max 2 windows/block, published PALA localization-derived vessel-core versus perivascular-shell reference, no-registration whitened matched-subspace specialist.
+  \item \textbf{ULM 7883227 localization-derived structural audit (published PALA reference)}: reference/eval blocks 1-10, 64-frame windows at offsets {0,128}, max 2 windows/block, published PALA localization-derived vessel-core versus perivascular-shell reference, no-registration whitened matched-subspace specialist. This supersedes the earlier 128-frame local-density surrogate and is the only paper-facing ULM structural endpoint.
 \end{itemize}
+
+\noindent\textit{ULM structural endpoint note.} The only paper-facing ULM structural benchmark in this appendix is the 64-frame same-acquisition structural audit that uses the published PALA localization-derived vascular reference and the no-registration whitened matched-subspace specialist. Earlier 128-frame local-density surrogate runs were exploratory, are superseded, and do not support any manuscript claim.
 
 \paragraph{Artifact commands.}
 Each entry below lists the command(s) used to regenerate the referenced paper artifact(s). Most scripts write a JSON summary containing the full parameterization and are safe to rerun.
@@ -1542,11 +1544,11 @@ PYTHONPATH=. python scripts/ulm_zenodo_7883227_motion_sweep.py \
 \end{verbatim}
 }
 
-  \item \textbf{ULM 7883227 localization-derived structural-label audit (published PALA reference)}
+  \item \textbf{ULM 7883227 localization-derived structural audit (published PALA reference)}
     Paper refs:
     \begin{itemize}[nosep,leftmargin=0em,label={}]
-      \item Front matter: headline bounded in-vivo structural-label result (ulm7883227\_pala\_headline\_hero.pdf)
-      \item ULM section: localization-derived structural-label audit on the same dataset
+      \item Front matter: ULM structural-audit hero figure (ulm7883227\_pala\_headline\_hero.pdf)
+      \item ULM section: localization-derived structural audit on the same dataset
       \item ULM section: Table (ulm7883227\_pala\_structural\_roc\_table.tex)
       \item Supplement: Figure (ulm7883227\_pala\_structural\_roc\_curves.pdf)
       \item Discussion: RTX 4080 latency note for the same 64-frame no-registration specialist
@@ -1567,7 +1569,7 @@ PYTHONPATH=. python scripts/ulm_zenodo_7883227_motion_sweep.py \
       \item \path{figs/paper/}\allowbreak\path{ulm7883227_pala_structural_roc_curves.png}
     \end{itemize}
     \endgroup
-    Notes: This is a bounded structural-label audit on real in vivo IQ using the published PALA localization rendering registered back onto the Zenodo IQ grid. The vessel-core and perivascular-shell masks are clipped to anatomical support before evaluation. It supersedes the earlier local-density surrogate audit and is the only paper-facing ULM structural endpoint. It is stronger than a label-free audit but still not an independent multimodal task benchmark. The short-window detector itself runs without additional frame-to-frame registration in the frozen headline configuration because re-enabling registration changed the structural ROC only at the fourth decimal place while pushing latency well above the 64-frame acquisition budget.
+    Notes: This is the only paper-facing ULM structural endpoint: a bounded same-acquisition structural audit on real in vivo IQ using the published PALA localization rendering registered back onto the Zenodo IQ grid. The vessel-core and perivascular-shell masks are clipped to anatomical support before evaluation. It supersedes the earlier 128-frame local-density surrogate audit, which should be ignored for manuscript claims. It is stronger than a label-free audit but still not an independent multimodal task benchmark. The short-window detector itself runs without additional frame-to-frame registration in the frozen headline configuration because re-enabling registration changed the structural ROC only at the fourth decimal place while pushing latency well above the 64-frame acquisition budget.
 {\footnotesize
 \begin{verbatim}
 PYTHONPATH=. python scripts/ulm7883227_structural_roc.py \
