@@ -1,53 +1,75 @@
 # Provisional Patent Outline
 
-This is a technical drafting outline for a U.S. provisional application based on the current invention as implemented and described in this repo. It is not legal advice. Before filing, have a patent attorney review the scope, inventorship, assignments, and foreign-filing strategy.
+This is a technical drafting outline for a U.S. provisional application based on the current invention as implemented and described in this repo. It is not legal advice. Before filing, have patent counsel review inventorship, assignment, domestic and foreign filing strategy, and claim scope.
 
-## 1. Filing Facts To Respect Before The Preprint
+## 1. Core Drafting Rule
+
+Do not file the manuscript verbatim.
+
+The provisional should be a patent-style specification organized around invention families, practical implementations, and alternative embodiments. The paper and benchmark suite are evidence that the detector works; they are not the invention itself.
+
+The filing should read as a computer-implemented ultrasound imaging method and system that:
+
+- receives beamformed ultrasound slow-time data or residualized slow-time data
+- performs localized matched-subspace flow detection
+- optionally enables local whitening when clutter evidence warrants it
+- optionally applies a shrink-only penalty layer
+- produces score maps, detection maps, vascular maps, or downstream decisions
+
+That framing matters for both priority support under `35 U.S.C. 112(a)` and for presenting the invention as a practical application rather than only as a mathematical statistic.
+
+## 2. Filing Facts To Respect Before The Preprint
 
 Official USPTO points worth following:
 
-- A provisional application is a placeholder that can establish an early filing date, but it is not examined. A corresponding nonprovisional must be filed within 12 months to keep the benefit of the provisional filing date.
-- A provisional should include a detailed written description that satisfies `35 U.S.C. 112(a)` and any drawings needed to understand the invention.
-- A provisional does not require claims, and it does not require an oath or declaration, but it does require a provisional cover sheet or ADS and the filing fee.
-- The USPTO allows a one-year grace period after an inventor-originated public disclosure, but many other countries do not. If foreign filing matters, file before public disclosure.
+- A provisional application can establish an early filing date, but it is not examined.
+- A corresponding nonprovisional must be filed within 12 months to keep the benefit of the provisional filing date.
+- A provisional should include a detailed written description satisfying `35 U.S.C. 112(a)` and any drawings needed to understand the invention.
+- A provisional does not require formal claims, an oath, or an IDS, but it does require the correct filing paperwork and fee.
+- The U.S. has grace-period rules for some inventor-originated disclosures, but many foreign jurisdictions do not. If foreign filing matters, file before public disclosure.
 
 Official sources:
 
 - USPTO provisional filing overview: <https://www.uspto.gov/patents/basics/apply/provisional-application>
 - USPTO MPEP on provisional content: <https://www.uspto.gov/web/offices/pac/mpep/documents/0600_601_01_d.htm>
-- USPTO Patent Center / filing online: <https://www.uspto.gov/patents/apply/filing-online/submitting-patent-applications-or-patent-prosecution>
-- USPTO on disclosure and foreign rights: <https://www.uspto.gov/patents/basics/international-protection/filing-patents-abroad>
+- USPTO subject-matter eligibility guidance entry point: <https://www.uspto.gov/web/offices/pac/mpep/s2106.html>
+- USPTO Patent Center / online filing: <https://www.uspto.gov/patents/apply/patent-center>
+- USPTO guidance on disclosure timing and foreign rights: <https://www.uspto.gov/patents/basics/international-protection/filing-patents-abroad>
+- USPTO provisional drafting presentation: <https://www.uspto.gov/sites/default/files/documents/provisional-applications-6-2023.pdf>
 
-## 2. What The Provisional Should Actually Cover
+## 3. What The Provisional Should Actually Cover
 
-The patent should not be framed as "the paper" or "the benchmark suite." The invention is the detector system and deployment workflow, not the evaluation narrative.
+The patent should not be framed as “the paper” or “the benchmark suite.” The invention is the detector platform and deployment workflow, not the evaluation narrative.
 
-The strongest filing package is:
+The strongest package is:
 
-1. A broad method/system/computer-readable-medium disclosure for a post-residual localized matched-subspace detector for beamformed ultrasound slow-time data.
-2. A second layer covering selective local whitening, where whitening is activated only in tiles or regions that satisfy a clutter-evidence rule.
+1. A broad method, system, and non-transitory computer-readable-medium disclosure for a post-residual localized matched-subspace detector for beamformed ultrasound slow-time data.
+2. A second layer covering selective local whitening, where whitening is activated only in tiles, pixels, or regions that satisfy a clutter-evidence rule.
 3. A third layer covering the optional shrink-only penalty map with a protected set and fail-safe inert mode.
-4. A fourth layer covering deployment-oriented thresholding and calibration transfer, if you want protection on the practical operating workflow and not only on the score computation.
-5. A fifth layer covering exact-output-preserving real-time GPU execution, if commercial deployment speed matters.
+4. A fourth layer covering deployment-oriented thresholding and calibration transfer, if protection is wanted on the practical operating workflow as well as the score computation.
+5. A fifth layer covering exact-output-preserving real-time GPU or accelerator execution, if commercial deployment speed matters.
 
-## 3. Suggested Provisional Title
+## 4. Suggested Provisional Title
 
 Primary title:
 
-- `Localized Matched-Subspace Detection For Functional Ultrasound And Ultrafast Doppler Imaging`
+- `Systems And Methods For Localized Matched-Subspace Detection In Ultrasound Doppler Imaging`
 
 Broader alternative titles:
 
 - `Systems And Methods For Localized Post-Residual Flow Detection In Beamformed Ultrasound Data`
 - `Systems And Methods For Adaptive Local Whitening And Matched-Subspace Scoring In Ultrafast Doppler Imaging`
+- `Systems And Methods For Localized Flow-Consistent Signal Detection In Beamformed Ultrasound Data`
 
-## 4. Core Invention Statement
+Use a broader ultrasound-facing title unless there is a deliberate reason to limit the filing to functional ultrasound only.
+
+## 5. Core Invention Statement
 
 Draft this early and clearly:
 
-> The invention relates to systems and methods for detecting flow-consistent signal in beamformed ultrasound slow-time data after clutter suppression. A residual signal is analyzed locally, using tile-based band-limited matched-subspace scoring rather than conventional power Doppler alone. In some embodiments, local whitening is selectively enabled when guard-band or related clutter-evidence features indicate structured nuisance. In some embodiments, an optional shrink-only penalty layer suppresses high-risk detections without increasing any score and while preserving protected flow-proxy regions. The disclosed methods improve nuisance discrimination, strict-tail behavior, and deployment practicality in functional ultrasound and ultrafast Doppler imaging.
+> The invention relates to systems and methods for detecting flow-consistent signal in beamformed ultrasound slow-time data after clutter suppression. A residual signal is analyzed locally using tile-based band-limited matched-subspace scoring rather than conventional power Doppler alone. In some embodiments, local whitening is selectively enabled when guard-band or related clutter-evidence features indicate structured nuisance. In some embodiments, an optional shrink-only penalty layer suppresses high-risk detections without increasing any score and while preserving protected flow-proxy regions. The disclosed methods improve nuisance discrimination, strict-tail behavior, and deployment practicality in functional ultrasound and ultrafast Doppler imaging.
 
-## 5. Invention Families To Disclose
+## 6. Five Invention Families To Disclose
 
 ### A. Core localized matched-subspace detector
 
@@ -59,7 +81,7 @@ Disclose:
 - optional baseline residualization or clutter suppression
 - spatial tiling or regional partitioning
 - tile-local slow-time vector extraction
-- flow-band, guard-band, alias-band, and clutter-band operators
+- flow-band, guard-band, alias-band, and clutter-band operators or equivalent subspaces
 - matched-subspace score using band-limited energy, optionally self-normalized
 - overlap-add or other aggregation back to a pixel map
 
@@ -69,79 +91,81 @@ Key point to make explicit:
 
 ### B. Selective local whitening / adaptive branch
 
-This is likely the most commercially valuable extension.
+This is likely the strongest secondary claim family.
 
 Disclose:
 
 - a default non-whitened detector path
 - a whitened detector path using local covariance adaptation
-- a gating feature based on guard-band energy, alias-to-flow ratio, motion indicator, or other clutter evidence
+- a gating feature based on guard-band energy, alias-to-flow ratio, motion indicator, covariance conditioning, or other clutter evidence
 - switching, promotion, interpolation, blending, or mixed execution between fixed and whitened branches
-- switching at pixel level, tile level, block level, or region level
+- switching at pixel level, tile level, block level, region level, or frame level
 
 Make this broad:
 
 - do not tie it only to one guard-band fraction formula
-- cover any feature derived from energy, covariance, telemetry, motion, side-information, or nuisance-risk
+- cover features derived from energy, covariance, telemetry, motion, side-information, or nuisance-risk
 
-### C. Fully whitened specialist branch
+### C. Fully whitened covariance-adaptive branch
 
 Disclose:
 
 - local covariance estimation from tile-local training support
-- SCM, Tyler, Huber, trimmed covariance, shrinkage covariance, diagonal loading, or other conditioned covariance
+- SCM, Tyler, Huber, trimmed covariance, shrinkage covariance, diagonal loading, eigenvalue flooring, or other conditioned covariance
 - whitening followed by matched-subspace detection, power scoring, GLRT-style variants, or self-normalized score variants
-- different training-support strategies, including Hankelized, pooled, subsampled, capped, or stride-selected support
+- training-support strategies including Hankelized, pooled, subsampled, capped, or stride-selected support
 
 ### D. Shrink-only penalty layer
 
-This is a distinct invention family and should be disclosed even if not made central in the paper narrative.
+This is a distinct invention family and should be disclosed even if it is not the paper’s main story.
 
 Disclose:
 
-- side-information features computed from the same local data or from auxiliary maps
+- side-information features computed from the same local data or auxiliary maps
 - candidate set and protected set logic
 - a strictly non-increasing mapping applied to scores
-- inert-mode behavior when evidence is weak or out of regime
+- inert-mode behavior when evidence is weak, missing, flat, or out of regime
 - protected flow-proxy or vessel-proxy regions that remain unpenalized
 - use of alias-band, guard-band, and flow-support features to drive shrinkage
 
-This part is worth protecting because it is a clean safety-oriented mechanism:
+This part is worth protecting because it is a clean safety mechanism:
 
 - it reduces scores only
 - it preserves a protected set
-- it fails safely to "off"
+- it fails safely to “off”
 
-### E. Empirical tail-calibration / deployment thresholding workflow
+### E. System, deployment, and threshold-transfer family
 
-This should be included if you want protection around practical deployment, not just score computation.
+This should be included if protection is wanted around practical deployment, not only around the score computation.
 
 Disclose:
 
+- scanner-integrated, workstation, GPU, edge, software-only, and medium embodiments
 - calibration of thresholds from negative-only banks or separate calibration sets
-- transfer of thresholds across windows, blocks, animals, or sessions without per-window retuning
+- transfer of thresholds across windows, blocks, animals, sessions, devices, or scanners without per-window retuning
 - right-tail score calibration using background or nuisance sets
 - calibration for fixed FPR or matched operating points
 - adaptation of thresholds across detector branches or variants
+- output to display, storage, alerting, downstream analytics, or control logic
+- exact-output-preserving batched execution as one deployment embodiment
 
-Do not oversell this as solved. Just disclose the workflow and embodiments.
+Do not oversell this family as a solved clinical workflow. Disclose it as a practical operating embodiment with multiple variants.
 
-### F. Real-time batched execution architecture
+## 7. What Not To Lock To
 
-This is optional but worth including if you may commercialize.
+Do not hard-code the filing to the paper’s current evaluation or implementation choices. These are embodiments only:
 
-Disclose:
+- MC-SVD or any other single residualizer
+- Gammex, SIMUS/PyMUST, ULM, PALA, Shin, or any named dataset
+- 32-frame, 64-frame, or 128-frame windows
+- any one tile size, stride, or covariance recipe
+- a single guard statistic or threshold formula
+- RTX 4080, CUDA graphs, or any one hardware platform
+- any one benchmark or figure from the manuscript
 
-- GPU batching of tile extraction, temporal embedding, covariance, whitening, and scoring
-- exact-output-preserving cached geometry operations
-- conditional execution of whitening only in selected tiles
-- graph-captured or replayed kernels
-- overlap-add stitching
-- latency-aware variants that omit nonessential diagnostics
+The specification should present these as examples in certain embodiments, followed immediately by alternatives.
 
-This may support separate system claims later, even if the first nonprovisional focuses mainly on the detector itself.
-
-## 6. What Not To Make Central
+## 8. What Not To Make Central
 
 Do not make these the core invention:
 
@@ -149,65 +173,78 @@ Do not make these the core invention:
 - the paper narrative
 - specific datasets
 - the exact numbers in the paper
-- specific reviewer-facing terminology
+- reviewer-facing terminology
 
 These should be supporting examples only.
 
-## 7. Suggested Section Outline For The Provisional
+## 9. Suggested Section Outline For The Provisional
 
 ### Title
 
 Use one of the titles above.
 
+### Applicant details and filing cover information
+
+- inventor names and residences
+- applicant or assignee
+- correspondence address
+- any government-interest statement, if applicable
+
 ### Field
 
 - ultrasound signal processing
-- functional ultrasound
 - ultrafast Doppler
+- functional ultrasound
 - post-residual flow detection
 
 ### Background
 
-Keep this short and practical:
+Keep this measured and practical:
 
 - conventional clutter suppression often leaves structured nuisance
-- PD/Kasai-style scoring can mis-rank nuisance as flow
-- global methods do not address local residual heterogeneity well
-- low-FPR use cases make rare nuisance especially damaging
+- power-based downstream readouts can mis-rank nuisance as flow
+- local residual heterogeneity creates a downstream detector problem
+- low-false-positive operating regions make rare nuisance especially damaging
 
 ### Summary
 
-One to three pages that explain:
+Use separate short paragraphs for:
 
-- fixed detector
-- adaptive detector
-- fully whitened detector
-- optional shrink-only penalty
-- deployment-oriented threshold calibration
-- real-time implementation
+- fixed detector family
+- adaptive detector family
+- fully whitened detector family
+- shrink-only penalty family
+- threshold-transfer family
+- system and hardware embodiments
 
 ### Brief Description Of Drawings
 
-Include a one-paragraph description of each figure.
+Include one paragraph per figure.
 
 ### Detailed Description
 
 Recommended subsections:
 
-1. Input data and baseline residualization
-2. Tile extraction and temporal support formation
-3. Doppler band geometry
-4. Fixed matched-subspace detector
-5. Local covariance estimation and whitening
-6. Adaptive switching between fixed and whitened branches
-7. Score aggregation
-8. Optional shrink-only penalty layer
-9. Threshold calibration and transfer
-10. Real-time batched implementation
-11. Example operating settings
-12. Alternative embodiments
+1. Definitions and construction notes
+2. Input data and baseline residualization
+3. Tile extraction and temporal support formation
+4. Doppler band geometry
+5. Fixed matched-subspace detector
+6. Local covariance estimation and whitening
+7. Adaptive switching between fixed and whitened branches
+8. Score aggregation
+9. Optional shrink-only penalty layer
+10. Threshold calibration and transfer
+11. Real-time batched implementation
+12. System and medium embodiments
+13. Example operating settings
+14. Alternative embodiments
 
-## 8. Drawings To Include
+### Optional claim appendix
+
+Claims are not required for a provisional, but including a draft claim appendix is useful because it forces the disclosure to support the scope you actually want later.
+
+## 10. Drawings To Include
 
 At minimum, include these figures or patent-clean redrawings of them:
 
@@ -221,46 +258,83 @@ At minimum, include these figures or patent-clean redrawings of them:
    - based on [figs/paper/doppler_band_geometry_psd.pdf](/home/arthu/stap-for-fus/figs/paper/doppler_band_geometry_psd.pdf)
 
 4. Adaptive switching logic
-   - new drawing recommended: fixed path, guard-band trigger, whitened path, merged output
+   - new drawing recommended: fixed path, clutter-evidence trigger, whitened path, merged output
 
 5. Shrink-only penalty logic
    - new drawing recommended: candidate set, protected set, weight map, inert-mode sentinel
 
-6. Real-time processing architecture
-   - new drawing recommended: tile batch extraction, local processing, overlap-add, optional GPU execution
+6. Threshold-transfer workflow
+   - calibration bank, fixed threshold family, held-out deployment data
 
-7. Example output maps
-   - one structural example is enough to support utility; do not overload with paper figures
+7. Real-time processing architecture
+   - tile batch extraction, local processing, overlap-add, optional GPU or accelerator execution
+
+8. System hardware architecture
+   - scanner-integrated embodiment, workstation embodiment, edge embodiment
+
+9. Example output maps
+   - one or two clean examples are enough to support utility
 
 The drawings do not need journal polish. They do need clarity and technical completeness.
 
-## 9. Claim-Style Coverage To Seed In The Provisional
+## 11. Claim-Style Coverage To Seed In The Provisional
 
 Even though claims are not required, write the disclosure so later claims can be supported across broad, medium, and narrow scope.
 
-### Broad claim themes
+Primary independent claim directions:
 
-- A method for processing beamformed ultrasound slow-time data by locally scoring residual signal with a matched-subspace detector.
-- A method for detecting flow-consistent signal in ultrasound using regional band-limited matched-subspace scoring after clutter suppression.
-- A system comprising a processor configured to compute tile-local matched-subspace scores and generate a detection map.
-- A non-transitory computer-readable medium storing instructions for same.
+1. `Method claim`
+   - localized matched-subspace scoring on post-residual ultrasound slow-time data
 
-### Medium-scope themes
+2. `Adaptive method claim`
+   - branch selection between fixed and whitened detection using clutter evidence
 
-- The method wherein the detector selectively enables local whitening based on a clutter-evidence feature.
-- The method wherein the clutter-evidence feature is derived from guard-band energy, alias-band energy, motion metrics, covariance condition metrics, or combinations thereof.
-- The method wherein the score is self-normalized by out-of-band or orthogonal-complement energy.
-- The method wherein overlapping tiles are aggregated by overlap-add or weighted fusion.
+3. `Penalty-layer claim`
+   - shrink-only post-score suppression with a protected set and inert fallback
 
-### Narrower fallback themes
+4. `System claim`
+   - processor, memory, and ultrasound-data interface configured to perform the method
 
-- A guard-band-triggered switch between fixed and whitened detector branches.
-- A shrink-only post-score penalty map with a protected set and fail-safe inert mode.
-- A covariance-estimation workflow using robust estimation and conditioning for local whitening.
-- A fixed-threshold transfer workflow using a calibration bank learned on one set of windows and applied to held-out windows.
-- A batched GPU pipeline for exact-output-preserving implementation of the detector.
+5. `Non-transitory computer-readable-medium claim`
+   - software instructions causing a processor to perform the method
 
-## 10. Specific Technical Alternatives To Enumerate
+Dependent support themes:
+
+- beamformed IQ input vs residual-cube input
+- tile geometry and overlap
+- with and without temporal embedding or Hankelization
+- different band constructions
+- ratio scores vs energy scores vs GLRT-style scores
+- covariance estimators and conditioners
+- hard switch vs soft switch vs blended switch
+- protected-set construction
+- calibration-bank and threshold-transfer rules
+- hardware embodiment
+- fallback and safe-disable logic
+
+## 12. Definitions To Put In The Specification
+
+The specification should explicitly define the special terms that later claim construction may depend on. At minimum:
+
+- beamformed IQ
+- residual data or residual cube
+- tile or localized support region
+- slow-time vector or slow-time snapshot
+- flow band
+- guard band
+- alias band
+- matched-subspace score
+- fixed detector
+- fully whitened detector
+- adaptive detector
+- candidate set
+- protected set
+- shrink-only penalty
+- score map
+
+Do not assume the paper’s notation is enough. Put the operative definitions into the provisional itself.
+
+## 13. Specific Technical Alternatives To Enumerate
 
 The biggest provisional mistake is under-disclosing variants and then being unable to add them later without new-matter problems.
 
@@ -279,45 +353,87 @@ Explicitly enumerate:
 - different switch rules:
   - thresholded, probabilistic, blended, hard-switched, learned but frozen
 - different penalty maps:
-  - multiplicative shrinkage, additive suppression, capped suppression, monotone non-increasing transforms
+  - multiplicative shrinkage, capped suppression, monotone non-increasing transforms
 - different deployment calibrations:
   - per-device, per-probe, per-session, separate-bank transfer, online recalibration, nuisance-class calibration
 - different hardware:
-  - CPU, GPU, FPGA, ASIC, edge device, ultrasound scanner backend
+  - CPU, GPU, FPGA, ASIC, edge device, scanner backend
 
-## 11. Concrete Repo Material To Reuse In Drafting
+## 14. Concrete Repo Material To Reuse In Drafting
 
-Good starting sources:
+Strongest source material:
 
 - [stap_fus_methodology.tex](/home/arthu/stap-for-fus/stap_fus_methodology.tex)
-  - introduction / method / score definitions / deployment-transfer language
+- [provisional_patent_draft_specification.md](/home/arthu/stap-for-fus/provisional_patent_draft_specification.md)
+- [pipeline/stap/temporal.py](/home/arthu/stap-for-fus/pipeline/stap/temporal.py)
+- [pipeline/stap/temporal_shared.py](/home/arthu/stap-for-fus/pipeline/stap/temporal_shared.py)
+- [sim/kwave/common.py](/home/arthu/stap-for-fus/sim/kwave/common.py)
+- [sim/kwave/icube_bundle.py](/home/arthu/stap-for-fus/sim/kwave/icube_bundle.py)
+
+Useful drawing sources:
+
 - [figs/paper/stap_pipeline_bayes_block.pdf](/home/arthu/stap-for-fus/figs/paper/stap_pipeline_bayes_block.pdf)
 - [figs/paper/hankelization_local_stap.pdf](/home/arthu/stap-for-fus/figs/paper/hankelization_local_stap.pdf)
 - [figs/paper/doppler_band_geometry_psd.pdf](/home/arthu/stap-for-fus/figs/paper/doppler_band_geometry_psd.pdf)
-- [sim/kwave/common.py](/home/arthu/stap-for-fus/sim/kwave/common.py)
-- [pipeline/stap/temporal.py](/home/arthu/stap-for-fus/pipeline/stap/temporal.py)
-- [pipeline/stap/temporal_shared.py](/home/arthu/stap-for-fus/pipeline/stap/temporal_shared.py)
+- [figs/paper/shrink_only_tail_suppression.pdf](/home/arthu/stap-for-fus/figs/paper/shrink_only_tail_suppression.pdf)
 
-These are especially important to support enablement:
+Do not paste these verbatim. Convert them into patent-style prose with alternatives, ranges, and multiple embodiments.
 
-- actual score formulas
-- actual adaptive switching rule
-- actual shrink-only logic
-- actual real-time execution path
+## 15. What To Add That Is Not Strong Enough In The Paper
 
-## 12. What I Would Put In The First Draft Now
+The manuscript is good source material, but the provisional should be broader than the paper in these ways:
 
-If I were drafting the provisional this week, I would include:
+- define special terms explicitly
+- describe the invention as a practical process and system, not just a score
+- enumerate alternatives for every branch and score form
+- describe broader calibration and transfer embodiments
+- describe broader hardware embodiments
+- include safe-failure and fallback behavior
+- include medium and system embodiments
 
-- 1 to 2 pages of background
-- 2 to 3 pages of summary
-- 8 to 15 pages of detailed description
-- 6 to 10 figures
-- at least 2 pages enumerating variants and alternatives
+## 16. Do Not Rely On The Repo Or Preprint To Supply Missing Disclosure
 
-That is enough for a serious provisional. It does not need to look like a journal paper. It does need to disclose enough technical detail that later claims are supported.
+Do not assume a repository link, a future supplement, or the manuscript itself will cure missing disclosure. The filed specification and drawings should contain the operative technical description needed to support later claims. If a later claim depends on details that were not in the filed provisional, those details may be treated as new matter and lose the earlier filing date.
 
-## 13. Practical Priority Order
+## 17. Inventorship And Ownership Checklist
+
+Before filing, confirm:
+
+- who conceived the core fixed detector family
+- who conceived the adaptive switching family
+- who conceived the shrink-only penalty family
+- who conceived the threshold-transfer or deployment family
+- whether assignment to SkyMesa Systems Inc. is required before filing
+- whether any government-interest statement is required
+
+Inventorship should be mapped to the claim families expected later, not just to paper authorship.
+
+## 18. Practical Filing Mechanics
+
+- File before the preprint if foreign filing optionality matters.
+- Use Patent Center or the current USPTO provisional filing workflow.
+- Include the required cover sheet or ADS information.
+- Include drawings up front if they are needed to understand the invention.
+- Watch sheet count and size fees if tempted to dump the manuscript and appendix into the filing.
+- Keep a dated internal record of the exact provisional package that was filed.
+
+## 19. Recommended Filing Package
+
+Best near-term package:
+
+1. `Patent-style provisional specification`
+   - broad method/system description with alternatives
+
+2. `Patent-clean figure set`
+   - 8 to 12 black-and-white line drawings are enough
+
+3. `Inventorship and assignment checklist`
+   - to hand to counsel before filing
+
+4. `Optional claim appendix`
+   - even though not required, it forces scope discipline
+
+## 20. Practical Priority Order
 
 If time is tight before the preprint:
 
@@ -325,12 +441,12 @@ If time is tight before the preprint:
 2. Make sure selective whitening is fully disclosed.
 3. Make sure the shrink-only penalty layer is fully disclosed.
 4. Add the threshold-transfer embodiments.
-5. Add the real-time GPU embodiments.
+5. Add the system and real-time execution embodiments.
 
 If something must be cut for time, cut benchmark detail before cutting algorithm variants.
 
-## 14. Recommended Attorney Hand-Off Note
+## 21. Recommended Attorney Hand-Off Note
 
 When sending this to counsel, the short note should be:
 
-> We want a provisional centered on a post-residual localized matched-subspace detector family for beamformed fUS/ultrafast Doppler slow-time data, with broad coverage on tile-local matched-subspace scoring, selective local whitening driven by clutter evidence, an optional shrink-only penalty layer with protected sets, fixed-threshold transfer embodiments, and exact-output-preserving real-time batched implementations. The paper and code are supporting disclosure materials, but the patent should be drafted as a detector and deployment platform, not as a benchmark paper.
+> We want a provisional centered on a post-residual localized matched-subspace detector family for beamformed ultrasound slow-time data, with broad coverage on tile-local matched-subspace scoring, selective local whitening driven by clutter evidence, an optional shrink-only penalty layer with protected sets, threshold-transfer embodiments, and exact-output-preserving real-time batched implementations. The manuscript and code are supporting disclosure materials, but the filing should be drafted as a detector and deployment platform rather than as a benchmark paper.
