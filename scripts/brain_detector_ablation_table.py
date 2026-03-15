@@ -8,7 +8,7 @@ variants evaluated on identical Brain-* k-Wave windows:
   1) PD on the MC--SVD residual (baseline score)
   2) Whitened total power (no Doppler band partition; "whitened PD" ablation)
   3) Unwhitened matched-subspace ratio (no whitening; "no-STAP" ablation)
-  4) Full STAP score (whitened matched-subspace ratio; pre-KA)
+  4) Fully whitened matched-subspace detector
 
 It reads per-window rows from scripts/fair_filter_comparison.py (matrix mode)
 and reports medians (IQR) over the five disjoint 64-frame windows.
@@ -113,7 +113,7 @@ def _method_display() -> dict[str, str]:
         "MC-SVD": "PD on MC--SVD residual",
         "Detector ablation: whitened power (no band)": "Whitened power (no band)",
         "Detector ablation: unwhitened ratio (no whitening)": "Unwhitened ratio (no whitening)",
-        "STAP (MC-SVD+STAP, full)": "STAP (whitened ratio; pre-KA)",
+        "STAP (MC-SVD+STAP, full)": "Fully whitened matched-subspace detector",
     }
 
 
@@ -196,7 +196,7 @@ def _render_table_tex(
         "\\caption{Detector ablations on labeled brain simulation stress tests (MC--SVD residual, prespecified settings). "
         "All rows share the identical MC--SVD residual cube and differ only in the detector statistic: "
         "baseline PD, total power after tile-local whitening (no Doppler band partition), "
-        "matched-subspace ratio without whitening (R=I), and the full STAP whitened matched-subspace ratio. "
+        "matched-subspace ratio without whitening (R=I), and the fully whitened matched-subspace detector. "
         "The two column groups correspond to an open-skull surface-artifact stress test and a structured-clutter leakage stress test. "
         "Numbers are medians (IQR) over five disjoint 64-frame windows (offsets 0/64/128/192/256).}"
     )

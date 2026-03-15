@@ -213,7 +213,7 @@ def main() -> int:
             axes[1],
             bg=bg_stap,
             flow=flow_stap,
-            title="MC--SVD residual + STAP (pre-KA) score",
+            title="MC--SVD residual + matched-subspace score",
             alphas=alphas,
         )
         axes[0].legend(loc="upper right", frameon=True)

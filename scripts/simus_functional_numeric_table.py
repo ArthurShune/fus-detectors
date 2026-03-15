@@ -52,10 +52,10 @@ def main() -> None:
     lines.append("\\centering")
     lines.append("\\small")
     lines.append("\\setlength{\\tabcolsep}{4pt}")
-    lines.append("\\begin{tabular}{P{2.9cm} P{2.8cm} C{1.8cm} C{2.5cm} C{2.5cm}}")
+    lines.append("\\begin{tabular}{P{2.9cm} P{3.2cm} C{1.8cm} C{2.5cm} C{2.5cm}}")
     lines.append("\\hline")
     lines.append(
-        "Benchmark setting & Best end-to-end chain & \\shortstack{STAP-positive\\\\families} & "
+        "Benchmark setting & Best end-to-end chain & \\shortstack{Matched-subspace-positive\\\\families} & "
         "\\shortstack{Median $\\Delta$ selection\\\\score [IQR]} & "
         "\\shortstack{Median $\\Delta$AUC$_{\\mathrm{act/nuis}}$\\\\(IQR)} \\\\"
     )
@@ -65,7 +65,11 @@ def main() -> None:
         eval_sub = [r for r in eval_rows if r["base_profile"] == key]
         head_sub = [r for r in head_rows if r["base_profile"] == key]
         best = max(eval_sub, key=lambda r: float(r["selection_score"]))
-        best_chain = best["pipeline_label"].replace(" -> ", " $\\rightarrow$ ")
+        best_chain = (
+            best["pipeline_label"]
+            .replace("PD-after-STAP", "PD after matched-subspace")
+            .replace(" -> ", " $\\rightarrow$ ")
+        )
         delta_sel = [float(r["delta_selection_eval"]) for r in head_sub]
         delta_auc_nuis = [
             float(r["stap_auc_activation_vs_nuisance_eval"]) - float(r["native_auc_activation_vs_nuisance_eval"])
@@ -82,10 +86,10 @@ def main() -> None:
     lines.append(
         "\\caption{Held-out functional same-residual detector-head summary on the prespecified SIMUS/PyMUST settings "
         "using the common readout \\texttt{bgcdf\\_outside\\_glm}. ``Best end-to-end chain'' is the strongest full "
-        "held-out processing chain on that setting. ``STAP-positive families'' counts how many of the six prespecified "
-        "residual families favored the STAP-based score over the native conventional score in the stricter held-out "
-        "same-residual comparison. $\\Delta$ selection score and $\\Delta$AUC$_{\\mathrm{act/nuis}}$ are reported as "
-        "STAP minus native, summarized by the median and interquartile range across those six families.}"
+        "held-out processing chain on that setting. ``Matched-subspace-positive families'' counts how many of the six prespecified "
+        "residual families favored the matched-subspace detector stage over the native conventional score in the stricter held-out "
+        "same-residual comparison. ``PD after matched-subspace'' denotes the paper's prespecified downstream PD-style readout after the matched-subspace stage; see Methods for the exact implementation. "
+        "$\\Delta$ selection score and $\\Delta$AUC$_{\\mathrm{act/nuis}}$ are reported as matched-subspace minus native, summarized by the median and interquartile range across those six families.}"
     )
     lines.append("\\label{tab:accepted_v2_functional_main}")
     lines.append("\\end{table}")

@@ -330,7 +330,7 @@ def main() -> int:
     ax01.contour(mask_flow.astype(float), levels=[0.5], colors=["black"], linewidths=[1.6], origin="upper")
     ax01.contour(mask_flow.astype(float), levels=[0.5], colors=[c_stap], linewidths=[1.1], origin="upper")
     ax01.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, edgecolor="white", linewidth=1.4))
-    ax01.set_title("STAP score (pre-KA)", fontsize=10)
+    ax01.set_title("Matched-subspace score", fontsize=10)
 
     # Difference panel underlay: B-mode ROI reference (CFM coordinates).
     ax02.imshow(tube.I_ref_norm, cmap="gray", vmin=0.0, vmax=1.0, origin="upper", interpolation="nearest")
@@ -344,7 +344,7 @@ def main() -> int:
     ax02.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, edgecolor="white", linewidth=1.4))
     ax02.set_title(f"Decision diff @ FPR={alpha:g}", fontsize=10)
     ax02.legend(
-        handles=[Patch(facecolor=c_stap, edgecolor="none", label="STAP only"), Patch(facecolor=c_base, edgecolor="none", label="Baseline only")],
+        handles=[Patch(facecolor=c_stap, edgecolor="none", label="Matched-subspace only"), Patch(facecolor=c_base, edgecolor="none", label="Baseline only")],
         loc="lower right",
         frameon=True,
         fontsize=8,
@@ -359,7 +359,7 @@ def main() -> int:
     ax11.imshow(stap_log[y0:y1, x0:x1], cmap="viridis", vmin=stap_vmin, vmax=stap_vmax, origin="upper", interpolation="nearest")
     ax11.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=["black"], linewidths=[1.6], origin="upper")
     ax11.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=[c_stap], linewidths=[1.1], origin="upper")
-    ax11.set_title("STAP (zoom)", fontsize=10)
+    ax11.set_title("Matched-subspace (zoom)", fontsize=10)
 
     ax12.imshow(tube.I_ref_norm[y0:y1, x0:x1], cmap="gray", vmin=0.0, vmax=1.0, origin="upper", interpolation="nearest")
     ax12.imshow(diff[y0:y1, x0:x1], cmap=cmap, vmin=0, vmax=2, origin="upper", interpolation="nearest")
