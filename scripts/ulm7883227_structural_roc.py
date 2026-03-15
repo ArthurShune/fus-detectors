@@ -739,14 +739,16 @@ def _score_specs(
     stap_variant: str = "msd_ratio",
     *,
     include_postka: bool = False,
+    include_detector_filtered_pd: bool = False,
 ) -> list[tuple[str, str, str]]:
     specs = [
         ("pd", "score_base.npy", "Baseline (power Doppler)"),
         ("log_pd", "score_base_pdlog.npy", "Baseline (log-power Doppler)"),
         ("kasai", "score_base_kasai.npy", "Baseline (Kasai lag-1 magnitude)"),
-        ("stap_pd", "pd_stap.npy", "Detector-filtered power Doppler"),
         ("matched_subspace", "score_stap_preka.npy", _stap_variant_label(stap_variant)),
     ]
+    if include_detector_filtered_pd:
+        specs.insert(3, ("stap_pd", "pd_stap.npy", "Detector-filtered power Doppler"))
     if include_postka:
         specs.append(
             (
@@ -991,8 +993,25 @@ def _write_summary_table(
 ) -> None:
     stap_variant = str(((summary.get("frozen_profile") or {}).get("stap_detector_variant")) or "msd_ratio")
     include_postka = bool(((summary.get("frozen_profile") or {}).get("score_ka_v2_enable")) or False)
-    score_order = [k for k, _, _ in _score_specs(stap_variant, include_postka=include_postka)]
-    score_labels = {k: lbl for k, _, lbl in _score_specs(stap_variant, include_postka=include_postka)}
+    include_detector_filtered_pd = bool(
+        ((summary.get("frozen_profile") or {}).get("include_detector_filtered_pd")) or False
+    )
+    score_order = [
+        k
+        for k, _, _ in _score_specs(
+            stap_variant,
+            include_postka=include_postka,
+            include_detector_filtered_pd=include_detector_filtered_pd,
+        )
+    ]
+    score_labels = {
+        k: lbl
+        for k, _, lbl in _score_specs(
+            stap_variant,
+            include_postka=include_postka,
+            include_detector_filtered_pd=include_detector_filtered_pd,
+        )
+    }
     col_tags = [f"{float(fpr):.0e}" for fpr in fprs]
     ref_mode = str(((summary.get("reference_design") or {}).get("reference_mode")) or "local_density")
     window_frames = int(((summary.get("reference_design") or {}).get("window_frames")) or 128)
@@ -1142,6 +1161,12 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--shell-outer-dilate-iters", type=int, default=10)
     ap.add_argument("--fprs", type=float, nargs="+", default=[1e-1, 1e-2, 1e-3])
     ap.add_argument("--tpr-targets", type=float, nargs="+", default=[0.5])
+    ap.add_argument(
+        "--include-detector-filtered-pd",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Include the derived detector-filtered PD diagnostic in exported tables and summaries.",
+    )
     ap.add_argument(
         "--fprs-plot",
         type=float,
@@ -1352,6 +1377,7 @@ def main() -> None:
             for score_key, _, score_label in _score_specs(
                 str(args.stap_detector_variant),
                 include_postka=bool(args.score_ka_v2_enable),
+                include_detector_filtered_pd=bool(args.include_detector_filtered_pd),
             ):
                 score = scores.get(score_key)
                 if score is None:
@@ -1385,6 +1411,7 @@ def main() -> None:
     for score_key, _, score_label in _score_specs(
         str(args.stap_detector_variant),
         include_postka=bool(args.score_ka_v2_enable),
+        include_detector_filtered_pd=bool(args.include_detector_filtered_pd),
     ):
         rows = [r for r in per_window_rows if r["score_key"] == score_key]
         if not rows:
@@ -1446,6 +1473,7 @@ def main() -> None:
             "baseline": "MC-SVD",
             "svd_energy_frac": float(args.svd_energy_frac),
             "stap_detector_variant": str(args.stap_detector_variant),
+            "include_detector_filtered_pd": bool(args.include_detector_filtered_pd),
             "tile_h": int(args.tile_h),
             "tile_w": int(args.tile_w),
             "tile_stride": int(args.tile_stride),
