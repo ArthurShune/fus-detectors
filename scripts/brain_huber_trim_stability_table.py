@@ -74,7 +74,7 @@ def _render_table(rows: dict[tuple[str, str, str, str], dict[str, float]]) -> st
     lines.append("\\end{tabular}%")
     lines.append("}")
     lines.append(
-        "\\caption{Robust-whitening stability audit for the prespecified Huber-whitened STAP variant on the labeled brain stress tests. "
+        "\\caption{Robust-whitening stability audit for the prespecified fully whitened detector on the labeled brain stress tests. "
         "The only changing parameter is the high-energy covariance-training trim $q$. "
         "Entries report within-window TPR at the strictest operating point ($\\alpha=10^{-4}$) together with realized FPR under pairwise cross-window transfer and a leave-one-window-out fixed calibration bank. "
         "The reported values are numerically unchanged across $q\\in\\{0.05,0.08,0.10\\}$, indicating that the finalized advanced recipe is stable to modest covariance-training trim variation in these stress tests.}"
