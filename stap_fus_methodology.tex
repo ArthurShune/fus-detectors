@@ -510,9 +510,11 @@ Shin rat-brain IQ sequence & open real kHz IQ & no independent task labels & sec
 \hline
 \end{tabular}
 \endgroup
-\caption{Claim-support map and canonical benchmark names used throughout the paper. Quantitative detection performance is reported across three labeled tiers: brain simulation stress tests, the structurally labeled Gammex phantom, and one bounded same-acquisition ULM structural audit using a published localization-derived vascular reference. The SIMUS translational benchmark provides the main held-out stress-test tier. The other real-IQ sections remain explicitly bounded as robustness or corroborative audits rather than as broad task ROC benchmarks.}
+\caption{Claim-support map, canonical benchmark names, and validation ladder used throughout the paper. Quantitative detection performance is reported across three labeled tiers: brain simulation stress tests, the structurally labeled Gammex phantom, and one bounded same-acquisition ULM structural audit using a published localization-derived vascular reference. The SIMUS translational benchmark provides the main held-out stress-test tier. The other real-IQ sections remain explicitly bounded as robustness or corroborative audits rather than as broad task ROC benchmarks.}
 \label{tab:claims_discipline}
 \end{table}
+
+Table~\ref{tab:claims_discipline} also makes the current validation ladder explicit. This paper covers simulation, phantom, and one bounded same-acquisition structural audit on open real IQ, but the next rung is only now becoming public and remains fragmented rather than standardized. Recent resources include simultaneous fUS--Neuropixels recordings in awake mice with open superior-colliculus fUS and electrophysiology data, raw fUS plus two-photon multimodal platforms in awake mice, and bedside or human task-fUS releases through craniectomy or sonolucent cranial windows \cite{LambertNeuropixels2025,COMBOWindow2024,ChenComa2025,Rabut2024,MobileFUS2025}. Those advances are highly encouraging, but they still do not yet constitute a single public benchmark that combines open slow-time data, exact task timing, an independent biological anchor, and repeated sessions suitable for threshold-transfer evaluation.
 
 \begin{table}[t]
 \centering
@@ -937,7 +939,11 @@ One deployment point is worth stating explicitly. The strict-tail operating poin
 \subsection*{Real-data scope and clinical interpretation}
 The optional shrink-only regularizer is deliberately conservative. It can only shrink scores, it preserves an explicit do-not-penalize set, and it is designed to remain inert when the side information is weak or ambiguous. The calculi audit is therefore meant to show bounded behavior rather than dramatic uplift: the regularizer modestly compresses the extreme tail while leaving protected locations unchanged. That is the right role for this layer in a medical signal-processing pipeline, where bounded failure modes matter more than aggressive apparent gains. It is also why we do not make it part of the main headline claim.
 
-A broader practical limitation is data availability. Most public \emph{in vivo} fUS releases do not preserve the raw high-PRF complex IQ and metadata needed for independent detector evaluation after beamforming. For that reason, the strongest quantitative efficacy evidence in this paper still comes from labeled simulations and structurally labeled phantom data, while the open real-IQ sections are framed more narrowly as robustness, same-residual, and map-stability audits. The ULM structural audit partially closes that gap: on a bounded vessel-core versus perivascular-shell endpoint derived from a published localization rendering, the fully whitened matched-subspace specialist is modestly but consistently stronger than PD and Kasai, and the prespecified 64-frame no-registration implementation remains below the acquisition-time budget on an RTX~4080 SUPER. The effect size is modest, and it should be read that way. What matters is that the direction is consistent on a bounded same-acquisition structural audit using a localization-derived vascular reference, with labels derived from a fundamentally different physical process than the Doppler detector itself. That is not the same as independent multimodal validation, and it is not a claim about functional activation or hemodynamic-response recovery, but it is materially stronger than a purely label-free map-stability claim. Even with that remaining limitation, the clinical interpretation is already useful: this is a step toward more trustworthy fUS maps in realistic nuisance and mild-motion conditions, because it reduces artifactual hot spots and nuisance leakage without requiring a new acquisition pipeline. The intended gain is not merely better vessel conspicuity, but more stable decision-relevant maps at matched parenchymal sensitivity when rare false positives would otherwise dominate interpretation.
+A broader practical limitation is data availability. Most public \emph{in vivo} fUS releases do not preserve the raw high-PRF complex IQ and metadata needed for independent detector evaluation after beamforming. For that reason, the strongest quantitative efficacy evidence in this paper still comes from labeled simulations and structurally labeled phantom data, while the open real-IQ sections are framed more narrowly as robustness, same-residual, and map-stability audits. The ULM structural audit partially closes that gap: on a bounded vessel-core versus perivascular-shell endpoint derived from a published localization rendering, the fully whitened matched-subspace specialist is modestly but consistently stronger than PD and Kasai, and the prespecified 64-frame no-registration implementation remains below the acquisition-time budget on an RTX~4080 SUPER. The effect size is modest, and it should be read that way. What matters is that the direction is consistent on a bounded same-acquisition structural audit using a localization-derived vascular reference, with labels derived from a fundamentally different physical process than the Doppler detector itself. That is not the same as independent multimodal validation, and it is not a claim about functional activation or hemodynamic-response recovery, but it is materially stronger than a purely label-free map-stability claim.
+
+The important field-level point is that this remaining gap is no longer just a gap in this manuscript. Public resources are now beginning to supply the right ingredients in separate places: simultaneous fUS--Neuropixels recordings in awake mice, raw fUS plus two-photon multimodal datasets, and translational human task-fUS studies with cranial windows or sonolucent implants \cite{LambertNeuropixels2025,COMBOWindow2024,ChenComa2025,Rabut2024,MobileFUS2025}. What is still missing is a standardized open benchmark that packages those ingredients in a detector-ready way for post-beamformed evaluation across repeated sessions and fixed-threshold transfer.
+
+We therefore interpret the present real-data results as evidence for improved vascular/nuisance discrimination at the detector stage rather than as direct evidence of improved biological inference. Studies linking fUS to neural activity already show that this translation depends on neurovascular coupling and temporal transfer structure rather than on detector quality alone \cite{NunezElizalde2022}. Even with that remaining limitation, the clinical interpretation is already useful: this is a step toward more trustworthy fUS maps in realistic nuisance and mild-motion conditions, because it reduces artifactual hot spots and nuisance leakage without requiring a new acquisition pipeline. The intended gain is not merely better vessel conspicuity, but more stable decision-relevant maps at matched parenchymal sensitivity when rare false positives would otherwise dominate interpretation.
 
 \subsection*{Detector policy and next validation step}
 The current evidence supports a simple three-part policy. The fixed band-limited matched-subspace detector is the main result and default for held-out structural use. The adaptive mode is the practical extension when one wants additional clutter suppression without forcing whitening everywhere. The fully whitened variant remains a bounded specialist mode for the regimes in which full covariance adaptation already earns its complexity, especially the across-view phantom, the held-out functional audit, and the bounded ULM structural audit. The main-text held-out stress frontier is the clearest reason this hierarchy is needed at all: under the cardiac-reference and shortest-ensemble rows, the fixed matched-subspace default is already best, whereas the harsher pulsation rows and the intermediate short-ensemble row are won by the fully whitened specialist. The ULM structural audit shows the same principle on real data for a different reason: vessel-core concentration relative to the immediately adjacent shell favors the fully whitened matched-subspace specialist, whereas nuisance-control on the SIMUS translational benchmark favors the simpler fixed head. A compact policy table is kept in the Supplementary Material so the main paper can remain focused on the core evidence rather than on deployment bookkeeping.
@@ -1076,6 +1082,30 @@ Soloukey, S., et al.
 \newblock Mobile human brain imaging using functional ultrasound.
 \newblock \emph{Science Advances} 11(25), eadu9133 (2025).
 \newblock DOI: \url{https://doi.org/10.1126/sciadv.adu9133}.
+
+\bibitem{LambertNeuropixels2025}
+Lambert, T., Brunner, C., Urban, A., et al.
+\newblock Functional ultrasound imaging and neuronal activity: How accurate is the spatiotemporal match?
+\newblock \emph{Imaging Neuroscience} 3, IMAG.a.34 (2025).
+\newblock DOI: \url{https://doi.org/10.1162/IMAG.a.34}.
+
+\bibitem{COMBOWindow2024}
+Edelman, B. J., et al.
+\newblock The COMBO window: A chronic cranial implant for multiscale circuit interrogation in mice.
+\newblock \emph{PLOS Biology} 22(6), e3002664 (2024).
+\newblock DOI: \url{https://doi.org/10.1371/journal.pbio.3002664}.
+
+\bibitem{ChenComa2025}
+Chen, Z., et al.
+\newblock Functional ultrasound imaging of auditory responses in comatose patients.
+\newblock \emph{Research} 8, 0709 (2025).
+\newblock DOI: \url{https://doi.org/10.34133/research.0709}.
+
+\bibitem{NunezElizalde2022}
+Nunez-Elizalde, A. O., et al.
+\newblock Neural correlates of blood flow measured by ultrasound.
+\newblock \emph{Neuron} 110(10), 1631--1640.e4 (2022).
+\newblock DOI: \url{https://doi.org/10.1016/j.neuron.2022.02.012}.
 
 \bibitem{Aaslid1982}
 Aaslid, R., Markwalder, T.-M., and Nornes, H.
