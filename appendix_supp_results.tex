@@ -22,22 +22,8 @@ When KA is enabled, it is shrink-only and preserves a protected do-not-penalize 
   \item \textbf{Real-IQ supporting audits:} ULM motion variants and structural audit, Shin real-IQ proxy/motion/hygiene details, and the compact real-IQ same-residual score audit later in this appendix.
   \item \textbf{PD-only and whole-brain retrospectives:} the Mac{\'e}/Urban alias-gating and atlas-based summary panels.
   \item \textbf{Supplementary simulation and held-out benchmark details:} detailed labeled brain tables, corrected SIMUS/PyMUST fairness checkpoints, the secondary held-out functional same-cube audit, and the use-case-motivated synthetic checkpoint tables (Tables~\ref{tab:simus_frozen_benchmark_v1p2}, \ref{tab:simus_symmetric_pipeline_v1p2}, and \ref{tab:simus_v2_structural_latency}).
-  \item \textbf{Detector-family policy summaries:} the compact detector-family policy table and baseline-family summary (Table~\ref{tab:detector_family_policy} and Table~\ref{tab:brain_baseline_summary}).
+  \item \textbf{Baseline-family summaries:} the compact baseline-family summary (Table~\ref{tab:brain_baseline_summary}).
 \end{itemize}
-
-\IfFileExists{reports/detector_family_policy_table.tex}{%
-  \input{reports/detector_family_policy_table.tex}%
-}{%
-  \begin{table}[t]
-  \centering
-  \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/detector_family_policy_table.tex}.\\
-    Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/detector_family_policy_summary.py}.
-  \end{minipage}}
-  \caption{Detector-family policy implied by the current evidence.}
-  \label{tab:detector_family_policy}
-\end{table}
-}
 
 \subsection*{Supporting Structural Audits}
 This block collects supplementary labeled and structurally labeled checks that reinforce the main structural claims without adding new benchmark families.
