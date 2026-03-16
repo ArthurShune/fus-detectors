@@ -7,7 +7,9 @@
 \usepackage{enumitem}
 \usepackage{array}
 \usepackage{cite}
+\usepackage{float}
 \usepackage{iftex}
+\usepackage[section]{placeins}
 \usepackage{url}
 \usepackage{graphicx}
 \usepackage{caption}
@@ -111,10 +113,6 @@ Functional ultrasound and ultrafast Doppler maps can remain vulnerable to nuisan
 \textbf{Evidence at a glance.}
 The paper makes four kinds of claims, from controlled labeled detection to more limited real-IQ corroboration. The validation ladder below appears before the method section so readers can see the scope of the evidence before the technical details.
 
-\medskip
-\noindent\textbf{Immediate external test.}
-The clearest next validation step is prospective labeled \emph{in vivo} evaluation on raw high-PRF IQ with an independent anatomical or task anchor and a genuinely fixed threshold-transfer workflow across repeated sessions.
-
 \captionsetup{type=table}
 \centering
 \small
@@ -209,9 +207,6 @@ After conventional clutter suppression, a localized matched-subspace downstream 
 
 \paragraph{Scope and claims.}
 Claims are stratified by data regime and summarized first in the compact validation ladder of Table~\ref{tab:validation_ladder_intro}, then in the fuller claim-support map of Table~\ref{tab:claims_discipline}. Quantitative detection efficacy is limited to regimes with independent $H_1/H_0$ labels or a structural reference that is external to the short-window detector outputs being scored. Open in-vivo IQ and PD-only datasets are otherwise used for robustness and translation audits. The ULM section adds one structural audit using a localization-derived vascular reference, not a task-activation benchmark.
-
-\paragraph{Next external test.}
-The practical collaboration target is now straightforward: prospective labeled \emph{in vivo} validation on raw high-PRF IQ with an independent anatomical or task anchor and repeated sessions suitable for fixed-threshold transfer. Later in the paper we explain why that benchmark is still not available in one standardized public package, even though simultaneous fUS--Neuropixels, raw fUS plus two-photon, and early human task-fUS resources are beginning to make that next study realistic.
 
 \paragraph{Canonical benchmark naming.}
 To keep the naming consistent, the remainder of the paper uses a dataset -- label type -- endpoint pattern. Representative examples are: \emph{k-Wave brain -- simulated labels -- low-FPR stress ROC}, \emph{Gammex phantom -- B-mode structure labels -- structural ROC}, \emph{SIMUS mobile -- simulated structure labels -- nuisance-control ROC}, \emph{ULM 7883227 -- localization-derived structure labels -- vessel-core ROC}, and \emph{Shin rat brain -- no labels -- residual-motion corroboration}. Development-generation labels, internal profile identifiers, and reproduction-script names are kept in the Supplementary Material and repository manifests rather than in the main reader path.
@@ -843,7 +838,7 @@ Several baseline rows in the supplementary labeled-brain strict-tail table take 
 \paragraph{Why PD-after-filter baselines can collapse in the strict tail.}
 Figure~\ref{fig:strict_tail_collapse_concept} shows the general mechanism: a baseline clutter filter can still show moderate-FPR separation yet fail at ultra-low FPR if the background score distribution has an extreme right tail. Then the background-calibrated threshold $\tau_\alpha$ can lie above essentially all $H_1$ pixels, yielding $\mathrm{TPR}(\alpha)\approx 0$ by construction. In a representative open-skull labeled brain window the MC--SVD+PD baseline background quantiles are $q_{0.99}\approx 5.9$ and $q_{0.999}\approx 9.3$ while the flow $q_{0.999}\approx 0.094$, so no flow pixels exceed the $\alpha=10^{-3}$ threshold. Figure~\ref{fig:brain_tail_collapse_visual} is one dataset-specific example of that geometry on the labeled brain benchmark. This tail-dominance failure mode motivates both the strict low-FPR operating discipline and detector heads that explicitly reshape the tail, beginning with band-limited matched-subspace scoring and, when needed, tile-local covariance whitening.
 
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \IfFileExists{figs/paper/brain_tail_collapse_visual.pdf}{%
   \includegraphics[width=\linewidth]{figs/paper/brain_tail_collapse_visual.pdf}%
@@ -860,7 +855,7 @@ Figure~\ref{fig:strict_tail_collapse_concept} shows the general mechanism: a bas
 \label{fig:brain_tail_collapse_visual}
 \end{figure}
 
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{figs/paper/brain_kwave_roc_curves.pdf}
 \caption{Controlled labeled-brain stress tests: ROC-style curves (TPR vs FPR on a log-x axis) under the same 64-frame window protocol used for the low-FPR operating-point reporting in the main text. Curves include MC--SVD, adaptive and local SVD baselines, RPCA, HOSVD, and the matched-subspace detector; each curve shows the median and interquartile range over five disjoint windows. For readability the main figure keeps the two more clinically interpretable simulation settings (open-skull surface artifact and structured-clutter leakage); the alias-dominant positive control is reported in the Supplementary Material. The moderate-FPR region illustrates that several PD-after-filter baselines can show separation at relaxed operating points while saturating at strict-tail operating points. The vertical dashed line indicates the supported floor $fpr_{\min}=1/n_{\mathrm{neg}}$.}
@@ -888,7 +883,7 @@ We use the open-access Doppler Twinkling Artifact database \cite{LeonovTwinkling
 \paragraph{B-mode-only structural tube masks (independent $H_1/H_0$).}
 For the Gammex flow phantom sequences we derive evaluation masks from B-mode structure only (no Doppler or matched-subspace outputs). Using acquisition geometry metadata that specifies the CFM region-of-interest (ROI) within the B-mode grid (beam and sample offsets and any beam subsampling), we map the B-mode ROI onto the CFM grid and segment the tube lumen on a median log-envelope reference image. This yields (i) a conservative lumen (flow) mask, eroded to avoid wall pixels and (ii) a background mask that excludes a guard band around the lumen and bright reflectors. Mask provenance and QC metrics are recorded with each experiment; Figure~\ref{fig:twinkling_gammex_masks} shows representative overlays. These structural labels support a defensible phantom ROC.
 
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \begin{minipage}[t]{0.63\linewidth}
   \centering
@@ -913,7 +908,7 @@ The view asymmetry still matters: the across view provides the clearest structur
 
 \input{reports/twinkling_gammex_detector_ablation_table.tex}
 
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \IfFileExists{figs/paper/twinkling_gammex_baseline_tail.pdf}{%
   \includegraphics[width=0.92\linewidth]{figs/paper/twinkling_gammex_baseline_tail.pdf}%
@@ -930,7 +925,7 @@ The view asymmetry still matters: the across view provides the clearest structur
 \label{fig:twinkling_gammex_baseline_tail}
 \end{figure}
 
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{figs/paper/twinkling_gammex_structural_roc_curves.pdf}
 \caption{Gammex flow phantom same-residual score comparison in the strict low-FPR region used for the main phantom table. Curves connect the three reported operating points for baseline power Doppler, whitened power, the fixed matched-subspace detector, and the fully whitened matched-subspace detector before the optional shrink-only penalty. The two panels use panel-specific TPR ranges so that the operating-point differences are readable.}
@@ -942,7 +937,7 @@ The view asymmetry still matters: the across view provides the clearest structur
 \paragraph{Within-ensemble motion ladders (labeled, real acquisition).}
 To obtain a labeled motion-robustness curve on a real acquisition without external motion ground truth, we inject synthetic \emph{within-ensemble} motion directly into the CFM cube: for each cine frame we apply a per-shot rigid translation $(\Delta y_t,\Delta x_t)$ to the $N$ CFM shots prior to baseline and matched-subspace scoring, with motion kinds \texttt{rw} (random walk) and \texttt{step}. Because the structural tube masks are derived from B-mode and fixed per frame, this produces a labeled ``motion ladder'' where the only change is within-ensemble corruption. We generate motion-corrupted ensembles (85 cine frames; amplitudes $0$--$2$ px) and aggregate using frame-level bootstraps for CIs together with an explicit amp=0 equivalence check against the non-motion reference. Figure~\ref{fig:twinkling_within_ensemble_motion} shows the resulting curves; reproducibility details are provided in \SuppOrApp{app:repro}.
 
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{figs/paper/twinkling_gammex_alonglinear17_prf2500_within_ensemble_motion_ladder_rw_ci_v2.png}
 \par\medskip
@@ -955,7 +950,7 @@ To obtain a labeled motion-robustness curve on a real acquisition without extern
 \label{sec:ka-calculi-audit}
 Because the main labeled detection tables report the matched-subspace score before the optional shrink-only penalty, we include one compact quantitative penalty audit in a regime where the regularizer is expected to act conservatively rather than to introduce a new headline efficacy claim. We use the artifact-heavy Twinkling calculi sequences under the prespecified short-ensemble setting and summarize activation, protected-set invariance, and fixed-threshold tail hygiene.
 
-\begin{table}[t]
+\begin{table}[H]
 \centering
 \small
 \setlength{\tabcolsep}{4pt}
@@ -986,7 +981,7 @@ We evaluate motion robustness by injecting controlled motion directly into the b
 
 \emph{Endpoint definition.} For a score map $S_{\mathrm{meth}}(a)$ at motion amplitude $a$ and the corresponding no-motion reference $S_{\mathrm{meth}}(0)$ (same block), we compute $\rho_{\mathrm{meth}}(a)$ as the Pearson correlation between the aligned maps on a central crop $\Omega_a$ that excludes a margin of $\lceil a\rceil+2$ pixels to avoid boundary artifacts from warping. Correlations are computed directly on the exported right-tail scores (no log transform) and use the same crop/alignment for baseline and matched-subspace maps in the ``common'' alignment modes.
 
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \IfFileExists{figs/paper/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_brainlike_e975.png}{%
 \includegraphics[width=\linewidth]{figs/paper/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_brainlike_e975.png}%
@@ -1034,7 +1029,7 @@ They should also not be read as a replacement for upstream motion correction or 
 \paragraph{Shin rat brain -- no labels -- residual-motion corroboration.}
 To avoid making the real-IQ story depend on a single open dataset, we also summarize the strongest existing Shin rat-brain motion-stress result from the supplement \cite{ShinLOCAULM2024,ShinZenodo10711806}. Shin does not provide independent flow/background labels, so we do not treat it as a detection benchmark. Instead, under a prespecified low-frequency operating setting and a controlled residual-motion stress test, we ask whether the same qualitative robustness pattern seen on ULM recurs on a second open real-IQ source. It does: across all three audited windows, the matched-subspace score map is more stable than the MC--SVD baseline map under the same 2~px residual-motion stress, and the matched background-tail operating point yields a nonzero flow-proxy hit rate only for the matched-subspace detector.
 
-\begin{table}[t]
+\begin{table}[H]
 \centering
 \small
 \setlength{\tabcolsep}{4pt}
@@ -1067,6 +1062,7 @@ A separate fixed-threshold check on Shin asks a different question. Using the sa
 
 The real-data results span four roles: Gammex phantom -- B-mode structure labels -- structural ROC provides structurally labeled phantom evidence, ULM 7883227 -- no labels -- motion robustness provides open real-IQ robustness evidence, ULM 7883227 -- localization-derived structure labels -- vessel-core ROC adds a same-acquisition structural check using a localization-derived vascular reference plus block-split threshold transfer, and Shin rat brain -- no labels -- residual-motion corroboration provides a second open real-IQ corroboration under controlled residual-motion stress plus a negative cross-clip proxy-transfer check. A compact same-cube score audit across those real-IQ bundles is kept in the Supplementary Material, together with additional label-free audits such as whole-brain PD-only retrospectives, Shin contract summaries, and extended motion variants.
 
+\FloatBarrier
 \section{Discussion}
 \label{sec:discussion}
 
@@ -1075,7 +1071,7 @@ Post-beamformed fUS benefits from a better detector, not only from better residu
 
 Those same ablations also define the current boundary of the method family. On the labeled brain structural stress tests, most of the gain comes from band-limited matched-subspace scoring rather than from whitening alone. Whitening therefore helps in some regimes but not in all of them. It is not the main source of gain in the labeled brain structural stress tests, but it is useful in the artifact-heavy phantom, in the ULM structural audit, and in selected functional and stress-frontier settings. On the held-out structural benchmark, the unwhitened head remains the strongest fixed nuisance-control choice. The adaptive modes still matter, but in a narrower way: the adaptive switch appears to preserve fixed-head behavior in cleaner structural settings while recovering some whitening benefits in selected clutter-heavy conditions, and the fully whitened mode is most convincing where the extra covariance adaptation clearly earns its complexity. The practical result is a detector family with a clear fixed default and two more specialized extensions, not a claim that one whitened score is best everywhere.
 
-The strict-tail operating points in the labeled experiments are calibrated using known negative sets, but a scanner does not have frame-by-frame labeled negatives at runtime. Here that tail calibration is an \emph{evaluation protocol}, not the intended clinical operating rule. The more deployment-relevant evidence appears in the main text: a separate-bank threshold transfer on the held-out SIMUS/PyMUST benchmark, a complementary block-split fixed-calibration transfer on the ULM structural audit, and a cross-clip proxy transfer on Shin without per-window retuning on the evaluation data. Those checks sharpen the boundary rather than closing it. The main benchmark and the ULM structural audit retain non-retrospective fixed-threshold signal, while the Shin proxy transfer collapses for all methods at nominal $10^{-3}$. The remaining external step is still prospective validation of a practical thresholding workflow on raw \emph{in vivo} IQ without retrospective labels.
+The strict-tail operating points in the labeled experiments are calibrated using known negative sets, but a scanner does not have frame-by-frame labeled negatives at runtime. Here that tail calibration is an \emph{evaluation protocol}, not the intended clinical operating rule. The more deployment-relevant evidence appears in the main text: a separate-bank threshold transfer on the held-out SIMUS/PyMUST benchmark, a complementary block-split fixed-calibration transfer on the ULM structural audit, and a cross-clip proxy transfer on Shin without per-window retuning on the evaluation data. Those checks sharpen the boundary rather than closing it. The main benchmark and the ULM structural audit retain non-retrospective fixed-threshold signal, while the Shin proxy transfer collapses for all methods at nominal $10^{-3}$. A practical thresholding workflow on raw \emph{in vivo} IQ therefore remains unestablished.
 
 \subsection*{Real-data scope and clinical interpretation}
 The optional shrink-only regularizer is deliberately conservative. It can only shrink scores, it preserves an explicit do-not-penalize set, and it is designed to remain inert when the side information is weak or ambiguous. The calculi audit is therefore meant to show bounded behavior rather than dramatic uplift: the regularizer modestly compresses the extreme tail while leaving protected locations unchanged. That is the right role for this layer in a medical signal-processing pipeline, where bounded failure modes matter more than aggressive apparent gains. It is also why we do not make it part of the main headline claim.
@@ -1101,6 +1097,7 @@ All datasets used in this work are either publicly available (as cited) or deriv
 The reference implementation and reproduction scripts are available at \path{https://github.com/ArthurShune/stap-for-fus}. The canonical commit hash and release information are recorded in the reproducibility manifest (\SuppOrApp{app:repro}).
 
 \fi % end main-text block (skipped in supplement-only build)
+\FloatBarrier
 \begin{thebibliography}{99}
 \raggedright
 
