@@ -2,180 +2,83 @@
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
-from typing import Tuple
 
 import numpy as np
 
-from pipeline.realdata.twinkling_artifact import RawBCFPar, decode_rawbcf_cfm_cube, parse_rawbcf_par, read_rawbcf_frame
-from pipeline.realdata.twinkling_bmode_mask import build_tube_masks_from_rawbcf
-from sim.kwave.icube_bundle import write_acceptance_bundle_from_icube
 
-
-def _parse_indices(spec: str, n_max: int) -> list[int]:
-    spec = (spec or "").strip()
-    if not spec:
-        return list(range(n_max))
-    if "," in spec:
-        out: list[int] = []
-        for part in spec.split(","):
-            part = part.strip()
-            if part:
-                out.append(int(part))
-        return out
-    if ":" in spec:
-        parts = [p.strip() for p in spec.split(":")]
-        if len(parts) not in (2, 3):
-            raise ValueError(f"Invalid slice spec: {spec!r}")
-        start = int(parts[0]) if parts[0] else 0
-        stop = int(parts[1]) if parts[1] else n_max
-        step = int(parts[2]) if len(parts) == 3 and parts[2] else 1
-        return list(range(start, min(stop, n_max), step))
-    return [int(spec)]
-
-
-def _right_tail_threshold(bg_scores: np.ndarray, alpha: float) -> tuple[float, float]:
-    bg = np.asarray(bg_scores, dtype=np.float64).ravel()
-    bg = bg[np.isfinite(bg)]
-    n = int(bg.size)
-    if n <= 0:
-        raise ValueError("Empty background score pool.")
-    a = float(alpha)
-    if not np.isfinite(a) or a <= 0.0:
-        tau = float("inf")
-        return tau, 0.0
-    if a >= 1.0:
-        tau = float(np.min(bg))
-        return tau, 1.0
-    k = int(np.ceil(a * n))
-    k = max(1, min(k, n))
-    tau = float(np.partition(bg, n - k)[n - k])
-    realized = float(np.mean(bg >= tau))
-    return tau, realized
+DEFAULT_RATIO_BUNDLE = Path(
+    "runs/real/twinkling_gammex_alonglinear17_prf2500_str6_msd_ratio_fast/"
+    "data_twinkling_artifact_Flow_in_Gammex_phantom_Flow_in_Gammex_phantom__along_-_linear_probe___RawBCFCine/"
+    "frame000"
+)
+DEFAULT_POWER_BUNDLE = Path(
+    "runs/real/twinkling_gammex_alonglinear17_prf2500_str6_whitened_power/"
+    "data_twinkling_artifact_Flow_in_Gammex_phantom_Flow_in_Gammex_phantom__along_-_linear_probe___RawBCFCine/"
+    "frame000"
+)
 
 
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(
         description=(
-            "Generate a leading qualitative figure: baseline vs STAP score maps, plus a matched-FPR "
-            "decision-difference panel, on a structurally labeled Gammex flow phantom acquisition."
+            "Generate the leading Gammex structural-fidelity figure from frozen audited bundle outputs. "
+            "The figure compares baseline, matched-subspace, and whitened-power score maps on the same "
+            "along-view phantom frame."
         )
     )
     ap.add_argument(
-        "--seq-dir",
+        "--ratio-bundle",
         type=Path,
-        default=Path(
-            "data/twinkling_artifact/Flow in Gammex phantom/Flow in Gammex phantom (along - linear probe)"
-        ),
-        help="Gammex sequence directory containing RawBCFCine.dat / RawBCFCine.par (default: %(default)s).",
-    )
-    ap.add_argument("--par-path", type=Path, default=None, help="Optional explicit .par path (default: auto).")
-    ap.add_argument("--dat-path", type=Path, default=None, help="Optional explicit .dat path (default: auto).")
-    ap.add_argument("--frame-idx", type=int, default=0, help="Frame index to render (default: %(default)s).")
-    ap.add_argument(
-        "--mask-ref-frames",
-        type=str,
-        default="0:10",
-        help="Frame indices used to build the median B-mode reference for tube segmentation (default: %(default)s).",
-    )
-    ap.add_argument("--prf-hz", type=float, default=2500.0, help="Assumed Doppler PRF in Hz (default: %(default)s).")
-    ap.add_argument("--Lt", type=int, default=16, help="STAP temporal aperture Lt (default: %(default)s).")
-    ap.add_argument(
-        "--tile-hw",
-        type=int,
-        nargs=2,
-        default=(8, 8),
-        metavar=("H", "W"),
-        help="Tile height/width in pixels (default: %(default)s).",
-    )
-    ap.add_argument("--tile-stride", type=int, default=6, help="Tile stride (default: %(default)s).")
-    ap.add_argument("--cov-estimator", type=str, default="tyler_pca", help="Covariance estimator (default: %(default)s).")
-    ap.add_argument("--diag-load", type=float, default=0.07, help="Diagonal loading (default: %(default)s).")
-    ap.add_argument(
-        "--stap-device",
-        type=str,
-        default="auto",
-        choices=["auto", "cpu", "cuda"],
-        help="STAP compute device inside bundle writer (default: %(default)s).",
+        default=DEFAULT_RATIO_BUNDLE,
+        help="Frame-level bundle directory for the matched-subspace run.",
     )
     ap.add_argument(
-        "--stap-fast-path",
-        action="store_true",
-        help="Enable STAP fast path (sets STAP_FAST_PATH=1; default: off).",
+        "--power-bundle",
+        type=Path,
+        default=DEFAULT_POWER_BUNDLE,
+        help="Frame-level bundle directory for the whitened-power run.",
     )
     ap.add_argument(
-        "--fd-span-mode",
-        type=str,
-        default="psd",
-        choices=["psd", "flow_band", "fixed", "band"],
-        help="STAP flow-subspace frequency grid policy (default: %(default)s).",
-    )
-    ap.add_argument(
-        "--feasibility-mode",
-        type=str,
-        default="legacy",
-        choices=["legacy", "updated", "blend"],
-        help="STAP feasibility mode (default: %(default)s).",
-    )
-    ap.add_argument(
-        "--svd-keep-min",
-        type=int,
-        default=2,
-        help="Baseline SVD band-pass keep-min index (default: %(default)s).",
-    )
-    ap.add_argument(
-        "--svd-keep-max",
-        type=int,
-        default=17,
-        help="Baseline SVD band-pass keep-max index (default: %(default)s).",
+        "--underlay",
+        choices=["pd_base", "score_base", "none"],
+        default="pd_base",
+        help="Background image used under the decision-difference panel.",
     )
     ap.add_argument(
         "--fpr",
         type=float,
         default=1e-2,
-        help="Background FPR target used to threshold each method (default: %(default)s).",
-    )
-    ap.add_argument(
-        "--flow-band-hz",
-        type=float,
-        nargs=2,
-        default=(150.0, 450.0),
-        metavar=("F_LO", "F_HI"),
-        help=(
-            "Flow band in Hz used for band-ratio telemetry + (indirectly) Pf/Pa-aware STAP heuristics "
-            "(default: %(default)s; matches scripts/twinkling_make_bundles.py)."
-        ),
-    )
-    ap.add_argument(
-        "--alias-band-hz",
-        type=float,
-        nargs=2,
-        default=(700.0, 1200.0),
-        metavar=("A_LO", "A_HI"),
-        help=(
-            "Alias band in Hz used for band-ratio telemetry + (indirectly) Pf/Pa-aware STAP heuristics "
-            "(default: %(default)s; matches scripts/twinkling_make_bundles.py)."
-        ),
+        help="Background FPR target used to threshold each method.",
     )
     ap.add_argument(
         "--out",
         type=Path,
         default=Path("figs/paper/leading_structural_fidelity_gammex.pdf"),
-        help="Output PDF path (default: %(default)s).",
+        help="Output PDF path.",
     )
-    ap.add_argument(
-        "--dpi",
-        type=int,
-        default=250,
-        help="Output DPI (used mainly for rasterized elements; default: %(default)s).",
-    )
+    ap.add_argument("--dpi", type=int, default=250, help="Figure DPI.")
     return ap.parse_args()
 
 
-def _robust_log_image(x: np.ndarray, *, eps: float = 1e-12) -> Tuple[np.ndarray, float, float]:
-    x = np.asarray(x, dtype=np.float64)
-    xx = np.log10(np.clip(x, 0.0, None) + float(eps))
+def _right_tail_threshold(bg_scores: np.ndarray, alpha: float) -> tuple[float, float]:
+    bg = np.asarray(bg_scores, dtype=np.float64).ravel()
+    bg = bg[np.isfinite(bg)]
+    if bg.size == 0:
+        raise ValueError("Empty background score pool.")
+    if not np.isfinite(alpha) or alpha <= 0.0:
+        return float("inf"), 0.0
+    if alpha >= 1.0:
+        tau = float(np.min(bg))
+        return tau, 1.0
+    k = int(np.ceil(float(alpha) * int(bg.size)))
+    k = max(1, min(k, int(bg.size)))
+    tau = float(np.partition(bg, int(bg.size) - k)[int(bg.size) - k])
+    return tau, float(np.mean(bg >= tau))
+
+
+def _robust_log_image(x: np.ndarray, *, eps: float = 1e-12) -> tuple[np.ndarray, float, float]:
+    xx = np.log10(np.clip(np.asarray(x, dtype=np.float64), 0.0, None) + float(eps))
     finite = xx[np.isfinite(xx)]
     if finite.size == 0:
         return xx.astype(np.float32, copy=False), 0.0, 1.0
@@ -195,101 +98,71 @@ def _bbox_from_mask(mask: np.ndarray, *, pad: int = 8) -> tuple[int, int, int, i
         raise ValueError("Empty mask; cannot compute zoom region.")
     y0, y1 = int(yy.min()), int(yy.max()) + 1
     x0, x1 = int(xx.min()), int(xx.max()) + 1
-    y0 = max(0, y0 - int(pad))
-    x0 = max(0, x0 - int(pad))
-    y1 = min(int(mask.shape[0]), y1 + int(pad))
-    x1 = min(int(mask.shape[1]), x1 + int(pad))
-    return y0, y1, x0, x1
+    return (
+        max(0, y0 - int(pad)),
+        min(int(mask.shape[0]), y1 + int(pad)),
+        max(0, x0 - int(pad)),
+        min(int(mask.shape[1]), x1 + int(pad)),
+    )
+
+
+def _load_required(bundle_dir: Path, name: str, *, dtype=None) -> np.ndarray:
+    path = bundle_dir / name
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing required bundle artifact: {path}")
+    arr = np.load(path, allow_pickle=False)
+    if dtype is not None:
+        arr = arr.astype(dtype, copy=False)
+    return arr
 
 
 def main() -> int:
     args = parse_args()
-    if bool(args.stap_fast_path):
-        os.environ["STAP_FAST_PATH"] = "1"
 
-    seq_dir = Path(args.seq_dir)
-    if not seq_dir.is_dir():
-        raise SystemExit(f"Missing sequence dir: {seq_dir}")
+    ratio_bundle = Path(args.ratio_bundle)
+    power_bundle = Path(args.power_bundle)
+    if not ratio_bundle.is_dir():
+        raise SystemExit(f"Missing ratio bundle dir: {ratio_bundle}")
+    if not power_bundle.is_dir():
+        raise SystemExit(f"Missing whitened-power bundle dir: {power_bundle}")
 
-    par_path = Path(args.par_path) if args.par_path is not None else (seq_dir / "RawBCFCine.par")
-    dat_path = Path(args.dat_path) if args.dat_path is not None else (seq_dir / "RawBCFCine.dat")
-    if not par_path.is_file():
-        raise SystemExit(f"Missing .par file: {par_path}")
-    if not dat_path.is_file():
-        raise SystemExit(f"Missing .dat file: {dat_path}")
+    score_base = _load_required(ratio_bundle, "score_base.npy", dtype=np.float64)
+    score_ratio = _load_required(ratio_bundle, "score_stap_preka.npy", dtype=np.float64)
+    score_power = _load_required(power_bundle, "score_stap_preka.npy", dtype=np.float64)
+    mask_flow = _load_required(ratio_bundle, "mask_flow.npy", dtype=bool)
+    mask_bg = _load_required(ratio_bundle, "mask_bg.npy", dtype=bool)
 
-    par_dict = parse_rawbcf_par(par_path)
-    par = RawBCFPar.from_dict(par_dict)
-    par.validate()
-
-    frame_idx = int(args.frame_idx)
-    if frame_idx < 0 or frame_idx >= int(par.num_frames):
-        raise SystemExit(f"--frame-idx out of range: {frame_idx} (NumOfFrames={par.num_frames})")
-
-    ref_frames = _parse_indices(str(args.mask_ref_frames), int(par.num_frames))
-    if not ref_frames:
-        raise SystemExit("--mask-ref-frames parsed as empty.")
-
-    tube = build_tube_masks_from_rawbcf(dat_path, par, ref_frame_indices=ref_frames)
-
-    frame = read_rawbcf_frame(dat_path, par, int(frame_idx))
-    Icube = decode_rawbcf_cfm_cube(frame, par, order="beam_major")
-
-    flow_lo, flow_hi = float(args.flow_band_hz[0]), float(args.flow_band_hz[1])
-    alias_lo, alias_hi = float(args.alias_band_hz[0]), float(args.alias_band_hz[1])
-    alias_center = 0.5 * (alias_lo + alias_hi)
-    alias_width = 0.5 * (alias_hi - alias_lo)
-
-    out_root = Path("runs/_tmp_leading_structural_fidelity")
-    dataset_name = f"gammex_leading/frame{frame_idx:03d}"
-    paths = write_acceptance_bundle_from_icube(
-        out_root=out_root,
-        dataset_name=dataset_name,
-        Icube=Icube,
-        prf_hz=float(args.prf_hz),
-        tile_hw=(int(args.tile_hw[0]), int(args.tile_hw[1])),
-        tile_stride=int(args.tile_stride),
-        Lt=int(args.Lt),
-        diag_load=float(args.diag_load),
-        cov_estimator=str(args.cov_estimator),
-        baseline_type="svd_bandpass",
-        svd_keep_min=int(args.svd_keep_min),
-        svd_keep_max=int(args.svd_keep_max),
-        score_mode="msd",
-        stap_device=str(args.stap_device),
-        stap_conditional_enable=False,
-        band_ratio_flow_low_hz=flow_lo,
-        band_ratio_flow_high_hz=flow_hi,
-        band_ratio_alias_center_hz=alias_center,
-        band_ratio_alias_width_hz=alias_width,
-        fd_span_mode=str(args.fd_span_mode),
-        feasibility_mode=str(args.feasibility_mode),
-        mask_flow_override=tube.mask_flow,
-        mask_bg_override=tube.mask_bg,
-        score_ka_v2_enable=False,
-    )
-
-    bundle_dir = Path(paths["meta"]).parent
-    score_base = np.load(bundle_dir / "score_base.npy", allow_pickle=False).astype(np.float64, copy=False)
-    score_stap = np.load(bundle_dir / "score_stap_preka.npy", allow_pickle=False).astype(np.float64, copy=False)
-    mask_flow = np.load(bundle_dir / "mask_flow.npy", allow_pickle=False).astype(bool, copy=False)
-    mask_bg = np.load(bundle_dir / "mask_bg.npy", allow_pickle=False).astype(bool, copy=False)
-
-    if score_base.shape != score_stap.shape or score_base.shape != mask_flow.shape:
+    if (
+        score_base.shape != score_ratio.shape
+        or score_base.shape != score_power.shape
+        or score_base.shape != mask_flow.shape
+        or score_base.shape != mask_bg.shape
+    ):
         raise SystemExit(
-            f"Shape mismatch: base={score_base.shape} stap={score_stap.shape} flow={mask_flow.shape}"
+            "Shape mismatch among loaded Gammex artifacts: "
+            f"base={score_base.shape}, ratio={score_ratio.shape}, power={score_power.shape}, "
+            f"flow={mask_flow.shape}, bg={mask_bg.shape}"
         )
 
+    underlay_map: np.ndarray | None
+    if args.underlay == "pd_base":
+        pd_path = ratio_bundle / "pd_base.npy"
+        underlay_map = np.load(pd_path, allow_pickle=False).astype(np.float64, copy=False) if pd_path.is_file() else score_base
+    elif args.underlay == "score_base":
+        underlay_map = score_base
+    else:
+        underlay_map = None
+
     alpha = float(args.fpr)
-    thr_base, fpr_base = _right_tail_threshold(score_base[mask_bg], alpha=alpha)
-    thr_stap, fpr_stap = _right_tail_threshold(score_stap[mask_bg], alpha=alpha)
+    thr_base, fpr_base = _right_tail_threshold(score_base[mask_bg], alpha)
+    thr_ratio, fpr_ratio = _right_tail_threshold(score_ratio[mask_bg], alpha)
+    thr_power, fpr_power = _right_tail_threshold(score_power[mask_bg], alpha)
 
-    det_base = score_base >= float(thr_base)
-    det_stap = score_stap >= float(thr_stap)
-    base_only = det_base & (~det_stap)
-    stap_only = det_stap & (~det_base)
+    det_base = score_base >= thr_base
+    det_power = score_power >= thr_power
+    base_only = det_base & (~det_power)
+    power_only = det_power & (~det_base)
 
-    # --- Plot ---
     import matplotlib as mpl
 
     mpl.use("Agg", force=True)
@@ -297,94 +170,116 @@ def main() -> int:
     from matplotlib.patches import Patch, Rectangle
 
     base_log, base_vmin, base_vmax = _robust_log_image(score_base, eps=1e-9)
-    stap_log, stap_vmin, stap_vmax = _robust_log_image(score_stap, eps=1e-14)
+    ratio_log, ratio_vmin, ratio_vmax = _robust_log_image(score_ratio, eps=1e-14)
+    power_log, power_vmin, power_vmax = _robust_log_image(score_power, eps=1e-14)
+    if underlay_map is None:
+        underlay_log = None
+        underlay_vmin, underlay_vmax = 0.0, 1.0
+    else:
+        underlay_log, underlay_vmin, underlay_vmax = _robust_log_image(underlay_map, eps=1e-9)
 
     y0, y1, x0, x1 = _bbox_from_mask(mask_flow, pad=10)
 
     dpi = int(args.dpi)
-    fig = plt.figure(figsize=(10.0, 6.4), dpi=dpi)
-    gs = fig.add_gridspec(2, 3, wspace=0.04, hspace=0.08)
-
-    ax00 = fig.add_subplot(gs[0, 0])
-    ax01 = fig.add_subplot(gs[0, 1])
-    ax02 = fig.add_subplot(gs[0, 2])
-    ax10 = fig.add_subplot(gs[1, 0])
-    ax11 = fig.add_subplot(gs[1, 1])
-    ax12 = fig.add_subplot(gs[1, 2])
-
-    for ax in (ax00, ax01, ax02, ax10, ax11, ax12):
+    fig = plt.figure(figsize=(13.0, 6.4), dpi=dpi)
+    gs = fig.add_gridspec(2, 4, wspace=0.04, hspace=0.08)
+    axes = [fig.add_subplot(gs[r, c]) for r in range(2) for c in range(4)]
+    for ax in axes:
         ax.set_axis_off()
+    ax00, ax01, ax02, ax03, ax10, ax11, ax12, ax13 = axes
 
-    # Okabe-Ito palette.
-    c_stap = "#0072B2"  # blue
-    c_base = "#D55E00"  # vermillion
+    c_ratio = "#0072B2"
+    c_power = "#009E73"
+    c_base = "#D55E00"
 
-    # Full-view maps.
     ax00.imshow(base_log, cmap="viridis", vmin=base_vmin, vmax=base_vmax, origin="upper", interpolation="nearest")
     ax00.contour(mask_flow.astype(float), levels=[0.5], colors=["black"], linewidths=[1.6], origin="upper")
-    ax00.contour(mask_flow.astype(float), levels=[0.5], colors=[c_stap], linewidths=[1.1], origin="upper")
+    ax00.contour(mask_flow.astype(float), levels=[0.5], colors=[c_ratio], linewidths=[1.1], origin="upper")
     ax00.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, edgecolor="white", linewidth=1.4))
     ax00.set_title("Baseline score", fontsize=10)
 
-    ax01.imshow(stap_log, cmap="viridis", vmin=stap_vmin, vmax=stap_vmax, origin="upper", interpolation="nearest")
+    ax01.imshow(ratio_log, cmap="viridis", vmin=ratio_vmin, vmax=ratio_vmax, origin="upper", interpolation="nearest")
     ax01.contour(mask_flow.astype(float), levels=[0.5], colors=["black"], linewidths=[1.6], origin="upper")
-    ax01.contour(mask_flow.astype(float), levels=[0.5], colors=[c_stap], linewidths=[1.1], origin="upper")
+    ax01.contour(mask_flow.astype(float), levels=[0.5], colors=[c_ratio], linewidths=[1.1], origin="upper")
     ax01.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, edgecolor="white", linewidth=1.4))
     ax01.set_title("Matched-subspace score", fontsize=10)
 
-    # Difference panel underlay: B-mode ROI reference (CFM coordinates).
-    ax02.imshow(tube.I_ref_norm, cmap="gray", vmin=0.0, vmax=1.0, origin="upper", interpolation="nearest")
+    ax02.imshow(power_log, cmap="viridis", vmin=power_vmin, vmax=power_vmax, origin="upper", interpolation="nearest")
+    ax02.contour(mask_flow.astype(float), levels=[0.5], colors=["black"], linewidths=[1.6], origin="upper")
+    ax02.contour(mask_flow.astype(float), levels=[0.5], colors=[c_power], linewidths=[1.1], origin="upper")
+    ax02.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, edgecolor="white", linewidth=1.4))
+    ax02.set_title("Whitened-power score", fontsize=10)
+
+    if underlay_log is None:
+        ax03.imshow(np.zeros_like(score_base), cmap="gray", vmin=0.0, vmax=1.0, origin="upper", interpolation="nearest")
+    else:
+        ax03.imshow(underlay_log, cmap="gray", vmin=underlay_vmin, vmax=underlay_vmax, origin="upper", interpolation="nearest")
     diff = np.zeros(mask_flow.shape, dtype=np.uint8)
     diff[base_only] = 1
-    diff[stap_only] = 2
-    cmap = mpl.colors.ListedColormap([(0, 0, 0, 0.0), mpl.colors.to_rgba(c_base, 0.85), mpl.colors.to_rgba(c_stap, 0.85)])
-    ax02.imshow(diff, cmap=cmap, vmin=0, vmax=2, origin="upper", interpolation="nearest")
-    ax02.contour(mask_flow.astype(float), levels=[0.5], colors=["black"], linewidths=[1.6], origin="upper")
-    ax02.contour(mask_flow.astype(float), levels=[0.5], colors=[c_stap], linewidths=[1.1], origin="upper")
-    ax02.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, edgecolor="white", linewidth=1.4))
-    ax02.set_title(f"Decision diff @ FPR={alpha:g}", fontsize=10)
-    ax02.legend(
-        handles=[Patch(facecolor=c_stap, edgecolor="none", label="Matched-subspace only"), Patch(facecolor=c_base, edgecolor="none", label="Baseline only")],
+    diff[power_only] = 2
+    diff_cmap = mpl.colors.ListedColormap(
+        [(0, 0, 0, 0.0), mpl.colors.to_rgba(c_base, 0.85), mpl.colors.to_rgba(c_power, 0.85)]
+    )
+    ax03.imshow(diff, cmap=diff_cmap, vmin=0, vmax=2, origin="upper", interpolation="nearest")
+    ax03.contour(mask_flow.astype(float), levels=[0.5], colors=["black"], linewidths=[1.6], origin="upper")
+    ax03.contour(mask_flow.astype(float), levels=[0.5], colors=[c_power], linewidths=[1.1], origin="upper")
+    ax03.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, edgecolor="white", linewidth=1.4))
+    ax03.set_title(f"Whitened-power vs baseline @ FPR={alpha:g}", fontsize=10)
+    ax03.legend(
+        handles=[
+            Patch(facecolor=c_power, edgecolor="none", label="Whitened-power only"),
+            Patch(facecolor=c_base, edgecolor="none", label="Baseline only"),
+        ],
         loc="lower right",
         frameon=True,
         fontsize=8,
     )
 
-    # Zoomed maps.
     ax10.imshow(base_log[y0:y1, x0:x1], cmap="viridis", vmin=base_vmin, vmax=base_vmax, origin="upper", interpolation="nearest")
     ax10.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=["black"], linewidths=[1.6], origin="upper")
-    ax10.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=[c_stap], linewidths=[1.1], origin="upper")
+    ax10.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=[c_ratio], linewidths=[1.1], origin="upper")
     ax10.set_title("Baseline (zoom)", fontsize=10)
 
-    ax11.imshow(stap_log[y0:y1, x0:x1], cmap="viridis", vmin=stap_vmin, vmax=stap_vmax, origin="upper", interpolation="nearest")
+    ax11.imshow(ratio_log[y0:y1, x0:x1], cmap="viridis", vmin=ratio_vmin, vmax=ratio_vmax, origin="upper", interpolation="nearest")
     ax11.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=["black"], linewidths=[1.6], origin="upper")
-    ax11.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=[c_stap], linewidths=[1.1], origin="upper")
+    ax11.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=[c_ratio], linewidths=[1.1], origin="upper")
     ax11.set_title("Matched-subspace (zoom)", fontsize=10)
 
-    ax12.imshow(tube.I_ref_norm[y0:y1, x0:x1], cmap="gray", vmin=0.0, vmax=1.0, origin="upper", interpolation="nearest")
-    ax12.imshow(diff[y0:y1, x0:x1], cmap=cmap, vmin=0, vmax=2, origin="upper", interpolation="nearest")
+    ax12.imshow(power_log[y0:y1, x0:x1], cmap="viridis", vmin=power_vmin, vmax=power_vmax, origin="upper", interpolation="nearest")
     ax12.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=["black"], linewidths=[1.6], origin="upper")
-    ax12.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=[c_stap], linewidths=[1.1], origin="upper")
-    ax12.set_title("Decision diff (zoom)", fontsize=10)
+    ax12.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=[c_power], linewidths=[1.1], origin="upper")
+    ax12.set_title("Whitened-power (zoom)", fontsize=10)
 
-    fig.suptitle(
-        f"Gammex flow phantom (along-linear; frame {frame_idx}) — matched background FPR thresholds",
-        fontsize=11,
-        y=0.98,
-    )
+    if underlay_log is None:
+        ax13.imshow(np.zeros_like(score_base[y0:y1, x0:x1]), cmap="gray", vmin=0.0, vmax=1.0, origin="upper", interpolation="nearest")
+    else:
+        ax13.imshow(
+            underlay_log[y0:y1, x0:x1],
+            cmap="gray",
+            vmin=underlay_vmin,
+            vmax=underlay_vmax,
+            origin="upper",
+            interpolation="nearest",
+        )
+    ax13.imshow(diff[y0:y1, x0:x1], cmap=diff_cmap, vmin=0, vmax=2, origin="upper", interpolation="nearest")
+    ax13.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=["black"], linewidths=[1.6], origin="upper")
+    ax13.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=[c_power], linewidths=[1.1], origin="upper")
+    ax13.set_title("Decision diff (zoom)", fontsize=10)
 
-    out_path = Path(args.out)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=dpi, bbox_inches="tight")
+    fig.subplots_adjust(left=0.015, right=0.995, top=0.975, bottom=0.035)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(args.out, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
 
-    tpr_base = float(np.mean(score_base[mask_flow] >= float(thr_base)))
-    tpr_stap = float(np.mean(score_stap[mask_flow] >= float(thr_stap)))
-    print(f"[leading-fig] bundle={bundle_dir} out={out_path}")
-    print(f"[leading-fig] base: thr={thr_base:.6g} realized_fpr={fpr_base:.6g}")
-    print(f"[leading-fig] stap: thr={thr_stap:.6g} realized_fpr={fpr_stap:.6g}")
-    print(f"[leading-fig] base: tpr={tpr_base:.6g}")
-    print(f"[leading-fig] stap: tpr={tpr_stap:.6g}")
+    tpr_base = float(np.mean(score_base[mask_flow] >= thr_base))
+    tpr_ratio = float(np.mean(score_ratio[mask_flow] >= thr_ratio))
+    tpr_power = float(np.mean(score_power[mask_flow] >= thr_power))
+    print(f"[leading-fig] ratio_bundle={ratio_bundle}")
+    print(f"[leading-fig] power_bundle={power_bundle}")
+    print(f"[leading-fig] out={args.out}")
+    print(f"[leading-fig] base: thr={thr_base:.6g} realized_fpr={fpr_base:.6g} tpr={tpr_base:.6g}")
+    print(f"[leading-fig] ratio: thr={thr_ratio:.6g} realized_fpr={fpr_ratio:.6g} tpr={tpr_ratio:.6g}")
+    print(f"[leading-fig] power: thr={thr_power:.6g} realized_fpr={fpr_power:.6g} tpr={tpr_power:.6g}")
     return 0
 
 
