@@ -84,12 +84,14 @@ def main() -> None:
     lines.append("\\hline")
     lines.append("\\end{tabular}")
     lines.append(
-        "\\caption{Held-out functional same-residual detector-head summary on the prespecified SIMUS/PyMUST settings "
-        "using the common readout \\texttt{bgcdf\\_outside\\_glm}. ``Best end-to-end chain'' is the strongest full "
-        "held-out processing chain on that setting. ``Matched-subspace-positive families'' counts how many of the six prespecified "
-        "residual families favored the matched-subspace detector stage over the native conventional score in the stricter held-out "
-        "same-residual comparison. ``PD after matched-subspace'' denotes the paper's prespecified downstream PD-style readout after the matched-subspace stage; see Methods for the exact implementation. "
-        "$\\Delta$ selection score and $\\Delta$AUC$_{\\mathrm{act/nuis}}$ are reported as matched-subspace minus native, summarized by the median and interquartile range across those six families.}"
+        "\\caption{Secondary held-out functional summary on the prespecified SIMUS/PyMUST settings. "
+        "This table uses one common background-controlled activation readout for every compared pipeline, so the rows differ only in the upstream residualizer and downstream detector head. "
+        "``Best end-to-end chain'' is the strongest full held-out pipeline on that setting under that common readout. "
+        "``Matched-subspace-positive families'' counts how many of the six prespecified residual families improved when the matched-subspace detector stage replaced the native conventional score on the same residual cube. "
+        "``PD after matched-subspace'' denotes a power-Doppler-style summary map formed after the matched-subspace detector stage. "
+        "$\\Delta$ selection score is the held-out pipeline-ranking metric used in this functional benchmark, reported as matched-subspace minus native. "
+        "$\\Delta$AUC$_{\\mathrm{act/nuis}}$ is the corresponding change in separation between simulated activation and nuisance regions under the same readout. "
+        "Both deltas are summarized by the median and interquartile range across the six residual families.}"
     )
     lines.append("\\label{tab:accepted_v2_functional_main}")
     lines.append("\\end{table}")
