@@ -697,7 +697,7 @@ Because the cleaner held-out checkpoint can otherwise look deceptively easy, we 
   \end{center}
 }
 
-\noindent Table~\ref{tab:simus_stress_frontier_headline} is the harder headline structural result. On every held-out stressed row, the strongest detector-family stack outperforms the strongest public comparator evaluated on that same stressed row. The public reference on these rows is not a cleaner operating point but the best conventional stack under the same perturbation, which keeps the comparison honest. The row-wise winner is not uniform, and that is scientifically useful: the simpler matched-subspace default already wins the cardiac reference row and the shortest-ensemble row, whereas the fully whitened specialist takes the more aggressive pulsation rows and the intermediate short-ensemble row. This is the clearest evidence in the paper for why a detector family is needed at all rather than a single universal score.
+\noindent Table~\ref{tab:simus_stress_frontier_headline} is the harder headline structural result. On every held-out stressed row, the strongest detector-family stack outperforms the strongest public comparator evaluated on that same stressed row. The public reference on these rows is not a cleaner operating point but the best conventional stack under the same perturbation, which keeps the comparison honest. The row-wise winner is not uniform, and that is scientifically useful: the simpler matched-subspace default already wins the cardiac reference row and the shortest-ensemble row, whereas the fully whitened specialist takes the more aggressive pulsation rows and the intermediate short-ensemble row. This is the clearest evidence in the paper for why a detector family is needed at all rather than a single universal score. Because this stress confirmation uses one held-out evaluation seed per axis, the uncertainty notation in Tables~\ref{tab:simus_stress_frontier_headline} and \ref{tab:simus_stress_frontier_rpca_heads} is a within-seed bootstrap interval over the held-out masked scores rather than a between-seed interval.
 
 \IfFileExists{reports/simus_clinical_stress_frontier_rpca_heads_table.tex}{%
   \input{reports/simus_clinical_stress_frontier_rpca_heads_table.tex}%
@@ -713,27 +713,20 @@ Because the cleaner held-out checkpoint can otherwise look deceptively easy, we 
 
 \noindent Table~\ref{tab:simus_stress_frontier_rpca_heads} makes that story less dependent on row-wise family selection. It repeats the same held-out stress rows, but now fixes the residualizer to RPCA and reports the fixed, adaptive, and fully whitened heads separately. The pattern remains coherent without any family-level winner-take-all summary: the fully whitened head is strongest on the cardiac-pulsation rows and the 48-frame row, while the fixed head remains strongest on the reference row and the hardest 32-frame row. On these reduced stress rows the adaptive head is numerically identical to the fixed head, so the family-level advantage is not coming from freely switching among all three modes on every row.
 
-\begin{center}
-\captionsetup{type=table}
-\small
-\setlength{\tabcolsep}{4pt}
-\resizebox{\linewidth}{!}{%
-\begin{tabular}{l c c c c}
-\hline
-Processing chain & \shortstack{Total\\runtime (s)} & \shortstack{AUC$_{\mathrm{main/bg}}$} & \shortstack{AUC$_{\mathrm{main/nuis}}$} & \shortstack{FPR$_{\mathrm{nuis}}$ at\\TPR$_{\mathrm{main}}=0.5$} \\
-\hline
-HOSVD $\rightarrow$ Kasai & 0.167 & 0.753 & 0.561 & 0.453 \\
-Adaptive Global SVD $\rightarrow$ matched-subspace default & 0.638 & 0.851 & 0.953 & 0.000 \\
-RPCA $\rightarrow$ Kasai & 1.783 & 0.837 & 0.442 & 0.593 \\
-RPCA $\rightarrow$ matched-subspace default & 2.407 & 0.994 & 1.000 & 0.000 \\
-\hline
-\end{tabular}%
+\newpage
+\IfFileExists{reports/accepted_v2_structural_main_table.tex}{%
+  \input{reports/accepted_v2_structural_main_table.tex}%
+}{%
+  \begin{center}
+  \refstepcounter{table}\label{tab:accepted_v2_structural_main}%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/accepted_v2_structural_main_table.tex}.\\
+    Reproduce it with \path{PYTHONPATH=. python scripts/simus_cleaner_structural_checkpoint_table.py}.
+  \end{minipage}}
+  \end{center}
 }
-\caption{Cleaner prespecified held-out SIMUS/PyMUST structural checkpoint on held-out evaluation seeds under the prespecified evaluation setting. We highlight two conventional references and the two strongest fixed-head detector-family chains. \emph{AUC$_{\mathrm{main/bg}}$} is the area under the ROC curve for separating main signal from background. \emph{AUC$_{\mathrm{main/nuis}}$} is the area under the ROC curve for separating main signal from nuisance-labeled pixels. \emph{FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$} is the nuisance false-positive rate at the threshold where main-signal true-positive rate equals 0.5. The two rows sharing the same downstream matched-subspace head both drive \emph{FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$} to 0.000 despite using different upstream residualizers. This checkpoint identifies the simpler band-limited matched-subspace detector as the fixed structural default; the harder nuisance-pressure rows in Table~\ref{tab:simus_stress_frontier_headline} show where the adaptive and fully whitened extensions add value.}
-\label{tab:accepted_v2_structural_main}
-\end{center}
 
-\noindent Table~\ref{tab:accepted_v2_structural_main} should therefore be read as the cleaner default-selection checkpoint rather than as the only headline structural result. The first two metric columns still measure separability, while the last metric column directly measures nuisance leakage at a matched main-signal sensitivity operating point. The most important pattern in this checkpoint is that both ``Adaptive Global SVD $\rightarrow$ matched-subspace default'' and ``RPCA $\rightarrow$ matched-subspace default'' drive the nuisance-leakage column to 0.000, even though the upstream residualizers are different. That common result is why we interpret the matched-subspace head itself, rather than only the choice of residualizer, as the main driver of the nuisance-tail gain on this benchmark. The checkpoint is scientifically useful because it identifies the simpler band-limited matched-subspace head as the strongest fixed default on held-out structural data, while the harder rows in Table~\ref{tab:simus_stress_frontier_headline} show where the adaptive and fully whitened variants add value in clutter-heavier regimes.
+\noindent Table~\ref{tab:accepted_v2_structural_main} should therefore be read as the cleaner default-selection checkpoint rather than as the only headline structural result. It now reports the held-out seeds explicitly instead of rounding them into one cleaner-looking summary row. On the mobile setting, the strongest conventional comparator is HOSVD $\rightarrow$ Kasai, while the strongest fixed detector chain is Adaptive Global SVD $\rightarrow$ fixed matched-subspace. On the intra-operative parenchymal setting, the strongest conventional comparator is again HOSVD $\rightarrow$ Kasai, while RPCA $\rightarrow$ fixed matched-subspace is the strongest fixed detector chain. The fixed-chain rows keep nuisance leakage at 0.000 on all four held-out seed-setting pairs, but the reported AUC values are now the actual held-out seed values rather than rounded cross-seed summaries. That is why we interpret the matched-subspace head itself, rather than only the choice of residualizer, as the main driver of the nuisance-tail gain on this benchmark. The checkpoint remains useful because it identifies the simpler band-limited matched-subspace head as the strongest fixed default on held-out structural data, while the harder rows in Table~\ref{tab:simus_stress_frontier_headline} show where the adaptive and fully whitened variants add value in clutter-heavier regimes.
 
 To isolate that detector-head claim directly on the main benchmark, Table~\ref{tab:simus_detector_family_ablation} fixes one held-out MC--SVD residual stream and swaps only the downstream score head. This removes residualizer choice from the comparison. On that fixed residual, PD and Kasai still rank nuisance highly, the fixed matched-subspace head is the strongest same-residual detector, and the fully whitened detector is worse on both held-out settings. The adaptive detector is numerically identical to the fixed head here because its frozen guard-promotion rule does not activate on these cleaner MC--SVD residuals. That behavior is useful rather than accidental: on this benchmark, the adaptive extension preserves the fixed default when the clutter evidence is weak instead of forcing whitening where it does not help.
 
