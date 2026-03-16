@@ -256,25 +256,8 @@ This is ordinary power Doppler on $X_{\mathrm{base}}$. For short-ensemble regime
 to make it explicit that the quantity is being used for visualization or mask construction rather than as the ROC score itself.
 
 \subsection{Score definitions}
-\begin{table}[t]
-\centering
-\small
-\begingroup
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}P{2.8cm} P{5.3cm} P{4.2cm} P{2.6cm}@{}}
-\hline
-Symbol / name & What it measures & Used for & Data requirement \\
-\hline
-$S_{\mathrm{base}}$ & baseline ROC score map on $X_{\mathrm{base}}$ (PD power; higher = more flow-like) & baseline ROC / low-FPR tables & IQ \\
-$S_{\mathrm{stap,pre}}$ & pre-regularization matched-subspace detector score map & detector ROC / low-FPR tables & IQ + local covariance \\
-$S_{\mathrm{stap,post}}$ & post-regularization shrink-only score map $wS_{\mathrm{stap,pre}}$ & regularizer behavior audits & IQ + feature map \\
-$\mathrm{PD}^{\uparrow}$ (display PD), masks & PD display/proxy map and derived masks & visualization and deterministic preprocessing (gating/protected sets) & IQ (or PD-only proxy mode) \\
-\hline
-\end{tabular}
-\endgroup
-\caption{Detector-score and display-map taxonomy used throughout. ROC score maps are kept separate from display/proxy maps used only for visualization and deterministic preprocessing. Display/proxy maps are never used to compute ROC/TPR/FPR (only to define gating/protected-set masks, which are audited separately).}
-\label{tab:score_taxonomy}
-\end{table}
+\addtocounter{table}{1}
+A compact score-taxonomy table is kept in the Supplementary Material so the main text can move more quickly from notation to the detector family and results. In the main text, $S_{\mathrm{base}}$ denotes the baseline ROC score map on $X_{\mathrm{base}}$, $S_{\mathrm{stap,pre}}$ the pre-regularization matched-subspace detector score map, $S_{\mathrm{stap,post}}$ the optional shrink-only post-regularization score map, and $\mathrm{PD}^{\uparrow}$ a display or proxy map used only for visualization or deterministic preprocessing rather than for ROC scoring.
 \noindent Unless explicitly stated, the paper discusses three pre-regularization detector variants built from the same band-limited score family: a fixed matched-subspace head without whitening, a prespecified adaptive variant that promotes selected pixels onto a whitened branch when guard-band evidence indicates clutter, and a fully whitened covariance-adaptive variant. To keep the notation manageable, the remainder of the paper refers to these simply as the fixed, adaptive, and fully whitened detector modes. The shrink-only regularizer is analyzed separately as an optional post-processing layer.
 
 \section{Method}
@@ -328,12 +311,10 @@ Method component & What it does & Status in paper & Where it is used \\
 Fixed matched-subspace detector & Band-limited matched-subspace score on each tile, with no local whitening. & Primary method and default fixed head & SIMUS mobile / intra-op -- simulated structure labels -- nuisance-control ROC, k-Wave brain -- simulated labels -- low-FPR stress ROC, and the default detector discussion throughout the paper \\
 Adaptive detector & Uses the fixed detector by default and turns on local whitening only when guard-band clutter evidence exceeds a fixed threshold. & Practical extension & SIMUS mobile -- simulated labels -- nuisance-pressure confirmation, selected deployment-oriented real-IQ analyses, and the adaptive routing discussion \\
 Fully whitened detector & Applies local covariance whitening before the same band-limited score on every tile. & Specialist mode & Gammex phantom -- B-mode structure labels -- structural ROC, ULM 7883227 -- localization-derived structure labels -- vessel-core ROC, and selected functional or clutter-heavy settings where full covariance adaptation helps \\
-Huber-whitened recipe & Robust covariance recipe for the fully whitened detector in contamination-heavy or short-support settings. This is an implementation choice, not a separate detector family member. & Whitening implementation detail & Labeled-brain whitened audits and finalized fully whitened recipes reported in the results and supplement \\
-ULM 64-frame specialist profile & No-registration 64-frame fully whitened profile fixed specifically for the ULM vessel-core endpoint. & Regime-specific specialist preset & ULM 7883227 -- localization-derived structure labels -- vessel-core ROC and its fixed-calibration transfer check only \\
 Optional shrink-only penalty & Downweights scores on a candidate set while leaving protected locations unchanged; it cannot increase any score. & Secondary optional add-on & Calculi regularizer audit and supplementary hygiene analyses, not the main efficacy claim \\
 \hline
 \end{tabular}
-\caption{Primary method, optional variants, and where each is used. The core method in this paper is the fixed matched-subspace detector. The adaptive and fully whitened rows are alternate detector modes built on the same band geometry, while the Huber-whitened recipe and the ULM 64-frame profile are regime-specific implementations of the fully whitened mode rather than separate algorithms. The shrink-only penalty is a separate optional add-on analyzed mainly for bounded behavior.}
+\caption{Primary method, optional variants, and where each is used. The core method in this paper is the fixed matched-subspace detector. The adaptive and fully whitened rows are alternate detector modes built on the same band geometry, and regime-specific whitening recipes are listed later in Table~\ref{tab:result_table_score_map}. The shrink-only penalty is a separate optional add-on analyzed mainly for bounded behavior.}
 \label{tab:method_family_summary}
 \end{table}
 
@@ -1385,6 +1366,26 @@ Safeguards & Automatic checks that disable the optional penalty layer or force c
 \label{tab:appendix_translation}
 \end{table}
 
+\begin{table}[t]
+\centering
+\small
+\begingroup
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}P{2.8cm} P{5.3cm} P{4.2cm} P{2.6cm}@{}}
+\hline
+Symbol / name & What it measures & Used for & Data requirement \\
+\hline
+$S_{\mathrm{base}}$ & baseline ROC score map on $X_{\mathrm{base}}$ (PD power; higher = more flow-like) & baseline ROC / low-FPR tables & IQ \\
+$S_{\mathrm{stap,pre}}$ & pre-regularization matched-subspace detector score map & detector ROC / low-FPR tables & IQ + local covariance \\
+$S_{\mathrm{stap,post}}$ & post-regularization shrink-only score map $wS_{\mathrm{stap,pre}}$ & regularizer behavior audits & IQ + feature map \\
+$\mathrm{PD}^{\uparrow}$ (display PD), masks & PD display/proxy map and derived masks & visualization and deterministic preprocessing (gating/protected sets) & IQ (or PD-only proxy mode) \\
+\hline
+\end{tabular}
+\endgroup
+\caption{Detector-score and display-map taxonomy used throughout. ROC score maps are kept separate from display/proxy maps used only for visualization and deterministic preprocessing. Display/proxy maps are never used to compute ROC/TPR/FPR, only to define gating or protected-set masks that are audited separately.}
+\label{tab:score_taxonomy}
+\end{table}
+
 \input{appendix_ka_contract_theory.tex}
 
 \input{appendix_supp_results.tex}
@@ -1697,7 +1698,7 @@ For convenience (and compatibility with legacy \path{pd} arrays), bundles store 
 A binary \path{ka_gate_map.npy} stores the penalized region. Protected pixels are enforced by setting $\gamma=1$ on the protected set (flow mask and extreme-score pixels as in \ifSTAPSUPPLEMENTONLY the main paper\else Section~\ref{sec:ka-contract-v2}\fi).
 
 \paragraph{Implementation score conventions.}
-Throughout the manuscript, quantitative low-FPR operating points are reported using flow-evidence score maps under a right-tail convention (higher = more flow-like; thresholds calibrated on the high-score tail) intended for labeled ROC and robustness reporting \ifSTAPSUPPLEMENTONLY (see the score taxonomy table in the main paper)\else (Table~\ref{tab:score_taxonomy})\fi. Exported bundles include the baseline score and the matched-subspace score before the optional shrink-only penalty, along with optional conventional baseline comparators (e.g.\ log-PD and Kasai) and diagnostic/proxy maps used for gating and audits. Proxy maps are not used as the primary detector scores for labeled ROC reporting. When the shrink-only penalty is enabled, the exported maps enforce a shrink-only mapping on the chosen detector score: in this right-tail score space, $S_{\mathrm{post}}=w\,S_{\mathrm{pre}}$ with $w\in(0,1]$; for convenience, bundles also store the equivalent per-pixel scale map $\gamma=1/w\ge 1$ applied on the penalized region.
+Throughout the manuscript, quantitative low-FPR operating points are reported using flow-evidence score maps under a right-tail convention (higher = more flow-like; thresholds calibrated on the high-score tail) intended for labeled ROC and robustness reporting (Table~\ref{tab:score_taxonomy}). Exported bundles include the baseline score and the matched-subspace score before the optional shrink-only penalty, along with optional conventional baseline comparators (e.g.\ log-PD and Kasai) and diagnostic/proxy maps used for gating and audits. Proxy maps are not used as the primary detector scores for labeled ROC reporting. When the shrink-only penalty is enabled, the exported maps enforce a shrink-only mapping on the chosen detector score: in this right-tail score space, $S_{\mathrm{post}}=w\,S_{\mathrm{pre}}$ with $w\in(0,1]$; for convenience, bundles also store the equivalent per-pixel scale map $\gamma=1/w\ge 1$ applied on the penalized region.
 
 \section{Simulation details (supplementary)}
 \label{app:sim-details}
