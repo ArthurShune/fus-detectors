@@ -33,6 +33,25 @@ def _fmt(x: float | None, digits: int = 3, *, signed: bool = False) -> str:
     return format(float(x), spec)
 
 
+def _fmt_sci(x: float | None, digits: int = 1) -> str:
+    if x is None or not math.isfinite(float(x)):
+        return "--"
+    value = float(x)
+    if value == 0.0:
+        return "0"
+    text = format(value, f".{digits}e")
+    return text.replace("e-0", "e-").replace("e+0", "e+")
+
+
+def _fmt_interval(center: float | None, lo: float | None, hi: float | None, *, digits: int = 3) -> str:
+    vals = [v for v in (center, lo, hi) if v is not None and math.isfinite(float(v))]
+    if not vals:
+        return "--"
+    if max(abs(float(v)) for v in vals) < 1e-3:
+        return f"{_fmt_sci(center)} [{_fmt_sci(lo)},{_fmt_sci(hi)}]"
+    return f"{_fmt(center, digits)} [{_fmt(lo, digits)},{_fmt(hi, digits)}]"
+
+
 def _quartiles(xs: list[float]) -> tuple[float, float, float]:
     vals = sorted(float(x) for x in xs)
     if not vals:
@@ -200,10 +219,10 @@ def _build_family_table(payload: dict[str, Any]) -> str:
         fpr70 = row["fpr_70"]
         lines.append(
             f"{row['label']} & "
-            f"{_fmt(auc['center'])} [{_fmt(auc['lo'])},{_fmt(auc['hi'])}] & "
-            f"{_fmt(tpr2['center'])} [{_fmt(tpr2['lo'])},{_fmt(tpr2['hi'])}] & "
-            f"{_fmt(tpr3['center'])} [{_fmt(tpr3['lo'])},{_fmt(tpr3['hi'])}] & "
-            f"{_fmt(fpr70['center'])} [{_fmt(fpr70['lo'])},{_fmt(fpr70['hi'])}] \\\\"
+            f"{_fmt_interval(auc['center'], auc['lo'], auc['hi'])} & "
+            f"{_fmt_interval(tpr2['center'], tpr2['lo'], tpr2['hi'])} & "
+            f"{_fmt_interval(tpr3['center'], tpr3['lo'], tpr3['hi'])} & "
+            f"{_fmt_interval(fpr70['center'], fpr70['lo'], fpr70['hi'])} \\\\"
         )
     lines.append("\\hline")
     lines.append("\\end{tabular}")
