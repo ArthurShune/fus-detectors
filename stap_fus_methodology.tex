@@ -317,6 +317,28 @@ Readers do not need radar background to follow the method. The fixed head can be
 \label{fig:stap_pipeline}
 \end{figure}
 
+Table~\ref{tab:method_family_summary} summarizes the method family before the derivations below. The fixed detector is the core method in the paper. The other rows are implementation variants or optional add-ons used only in the regimes named there.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}P{3.0cm} P{4.9cm} P{2.6cm} P{4.8cm}@{}}
+\hline
+Method component & What it does & Status in paper & Where it is used \\
+\hline
+Fixed matched-subspace detector & Band-limited matched-subspace score on each tile, with no local whitening. & Primary method and default fixed head & Held-out SIMUS/PyMUST structural benchmark, labeled brain stress tests, and the default detector discussion throughout the paper \\
+Adaptive detector & Uses the fixed detector by default and turns on local whitening only when guard-band clutter evidence exceeds a fixed threshold. & Practical extension & Held-out SIMUS/PyMUST stress frontier, selected deployment-oriented real-IQ analyses, and the adaptive routing discussion \\
+Fully whitened detector & Applies local covariance whitening before the same band-limited score on every tile. & Specialist mode & Gammex phantom, ULM structural audit, and selected functional or clutter-heavy settings where full covariance adaptation helps \\
+Huber-whitened recipe & Robust covariance recipe for the fully whitened detector in contamination-heavy or short-support settings. This is an implementation choice, not a separate detector family member. & Whitening implementation detail & Labeled-brain whitened audits and finalized fully whitened recipes reported in the results and supplement \\
+ULM 64-frame specialist profile & No-registration 64-frame fully whitened profile fixed specifically for the ULM structural audit. & Regime-specific specialist preset & ULM structural audit and its fixed-calibration transfer check only \\
+Optional shrink-only penalty & Downweights scores on a candidate set while leaving protected locations unchanged; it cannot increase any score. & Secondary optional add-on & Calculi regularizer audit and supplementary hygiene analyses, not the main efficacy claim \\
+\hline
+\end{tabular}
+\caption{Primary method, optional variants, and where each is used. The core method in this paper is the fixed matched-subspace detector. The adaptive and fully whitened rows are alternate detector modes built on the same band geometry, while the Huber-whitened recipe and the ULM 64-frame profile are regime-specific implementations of the fully whitened mode rather than separate algorithms. The shrink-only penalty is a separate optional add-on analyzed mainly for bounded behavior.}
+\label{tab:method_family_summary}
+\end{table}
+
 \paragraph{Three detector variants.}
 Let $S_{0}(i)$ denote the non-whitened band-limited matched-subspace score on tile $i$ and let $S_{w}(i)$ denote the fully whitened robust matched-subspace score computed from the same band geometry. The paper studies three concrete detector variants. The fixed detector uses $S_{0}(i)$ everywhere. The prespecified adaptive detector uses
 \[
