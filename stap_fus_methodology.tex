@@ -250,12 +250,18 @@ We use band operators $(\Po,\Pf,\Pg,\Pa)$ for clutter/DC, flow, guard, and alias
 Let $X[t,y,x]\in\mathbb{C}$ denote a beamformed slow-time IQ movie over $t=0,\dots,T-1$ and spatial indices $(y,x)$. We first apply a baseline clutter-suppression operator (e.g.\ motion-compensated SVD), producing a residual cube $X_{\mathrm{base}}[t,y,x]$ used for both baseline scoring and as the input to the detector family.
 
 \paragraph{Power Doppler proxy and baseline scores.}
-From the baseline-filtered cube we define a conventional power Doppler (PD) brightness map used only as a display/proxy map for deterministic preprocessing (e.g.\ proxy masks) and visualization,
+From the baseline-filtered cube we define the baseline ROC score map
+\begin{equation}
+  S_{\mathrm{base}}(y,x):=\frac{1}{T}\sum_{t=0}^{T-1}\left|X_{\mathrm{base}}(t,y,x)\right|^2.
+  \label{eq:sbase}
+\end{equation}
+This is ordinary power Doppler on $X_{\mathrm{base}}$. For short-ensemble regimes we additionally report auxiliary conventional comparators such as log-power Doppler and Kasai lag-1 magnitude \cite{KasaiAutocorrelation1985} so that baseline-score idiosyncrasies do not dominate the comparison.
+
+\noindent When the same power statistic is used only as a display or proxy map for deterministic preprocessing, we write
 \[
-  \mathrm{PD}^{\uparrow}(y,x)=\frac{1}{T}\sum_{t=0}^{T-1}\left|X_{\mathrm{base}}(t,y,x)\right|^2.
+  \mathrm{PD}^{\uparrow}(y,x)\equiv S_{\mathrm{base}}(y,x),
 \]
-For quantitative evaluation and thresholding we use \emph{flow-evidence} score maps where higher values indicate stronger evidence of flow, and we calibrate thresholds on the right tail of these score distributions. We denote the baseline ROC score map as $S_{\mathrm{base}}(y,x)$ (power Doppler on $X_{\mathrm{base}}$). For short-ensemble regimes we additionally report auxiliary, conventional baseline comparators (e.g.\ log-power Doppler and Kasai lag-1 magnitude \cite{KasaiAutocorrelation1985}) to avoid baseline-score idiosyncrasies dominating conclusions (Notation).
-\noindent Note: $\mathrm{PD}^{\uparrow}$ and $S_{\mathrm{base}}$ use the same underlying power statistic (up to fixed scaling); we keep separate names to make it explicit when PD is used only as a display/proxy map (masks/visuals) versus as a ROC score map.
+to make it explicit that the quantity is being used for visualization or mask construction rather than as the ROC score itself.
 
 \subsection{Score definitions}
 \begin{table}[t]
@@ -340,14 +346,27 @@ Optional shrink-only penalty & Downweights scores on a candidate set while leavi
 \end{table}
 
 \paragraph{Three detector variants.}
-Let $S_{0}(i)$ denote the non-whitened band-limited matched-subspace score on tile $i$ and let $S_{w}(i)$ denote the fully whitened robust matched-subspace score computed from the same band geometry. The paper studies three concrete detector variants. The fixed detector uses $S_{0}(i)$ everywhere. The prespecified adaptive detector uses
-\[
+On tile $i$, let $x_{i,k}$ denote the unwhitened slow-time snapshots and $y_{i,k}=R_i^{-1/2}x_{i,k}$ the whitened snapshots when whitening is active. The fixed detector is
+\begin{equation}
+  S_{0}(i):=\frac{1}{K}\sum_{k=1}^K
+  \frac{x_{i,k}\Hh \Pf\, x_{i,k}}{x_{i,k}\Hh (I-\Pf)\, x_{i,k}+\rho\, x_{i,k}\Hh x_{i,k}+\epsilon},
+  \label{eq:s0}
+\end{equation}
+which is the same band-limited matched-subspace ratio with $R_i=I$. The fully whitened detector is
+\begin{equation}
+  S_{w}(i):=\frac{1}{K}\sum_{k=1}^K
+  \frac{y_{i,k}\Hh \Pf\, y_{i,k}}{y_{i,k}\Hh (I-\Pf)\, y_{i,k}+\rho\, y_{i,k}\Hh y_{i,k}+\epsilon}.
+  \label{eq:sw}
+\end{equation}
+The paper studies three concrete detector variants. The fixed detector uses $S_{0}(i)$ everywhere. The prespecified adaptive detector uses
+\begin{equation}
   S(i)=
   \begin{cases}
     S_{w}(i), & r^{\mathrm{base}}_{g}(i)\ge \tau_g,\\
     S_{0}(i), & r^{\mathrm{base}}_{g}(i)<\tau_g,
   \end{cases}
-\]
+  \label{eq:sadapt}
+\end{equation}
 where $r^{\mathrm{base}}_{g}(i)$ is a baseline guard-band energy fraction and $\tau_g$ is fixed once and then held fixed across all reported experiments. The fully whitened detector uses $S_{w}(i)$ everywhere. In words, the adaptive detector keeps the simpler score in clean tiles and only turns on full whitening where the residual itself shows guard-band evidence of localized clutter.
 
 \subsection{Localized detector core and Doppler band geometry}
@@ -601,6 +620,32 @@ ULM Zenodo 7883227 motion and same-residual audits (PRF 1000; 128-frame blocks) 
 \endgroup
 \caption{Prespecified operating settings for the main regimes. All settings are fixed per regime prior to reporting results; exact commands and exported metadata are provided in \SuppOrApp{app:repro}. The bounded ULM structural audit uses a separate prespecified 64-frame no-registration specialist configuration described explicitly in Section~\ref{sec:ulm7883227}.}
 \label{tab:fixed_profiles}
+\end{table}
+
+Table~\ref{tab:result_table_score_map} maps each main result table to the exact score formula and covariance recipe used there. Equation~\eqref{eq:sbase} defines the baseline ROC score, Equation~\eqref{eq:s0} the fixed detector, Equation~\eqref{eq:sadapt} the adaptive detector, and Equation~\eqref{eq:sw} the fully whitened detector.
+
+\begin{table}[t]
+\centering
+\small
+\begingroup
+\setlength{\tabcolsep}{4pt}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{@{}P{4.0cm} P{5.1cm} P{5.4cm} P{4.0cm}@{}}
+\hline
+Main result table(s) & Conventional score formula reported there & Detector score formula reported there & Covariance recipe when whitening is active \\
+\hline
+Tables~\ref{tab:simus_stress_frontier_headline} and \ref{tab:accepted_v2_structural_main} & Row-named conventional score on the row-named residualizer output: usually Equation~\eqref{eq:sbase}, or Kasai on the same residual cube where explicitly named & Row-named detector head on that same residualizer output: fixed $=$ Equation~\eqref{eq:s0}; adaptive $=$ Equation~\eqref{eq:sadapt}; fully whitened $=$ Equation~\eqref{eq:sw} & No covariance for fixed rows ($R_i=I$). When whitening is active, use the prespecified Huber-whitened SIMUS/PyMUST recipe described in the covariance paragraph above \\
+Table~\ref{tab:accepted_v2_functional_main} & The native family score entering the common functional readout \texttt{bgcdf\_outside\_glm}; some best chains then report PD after the detector stage as the downstream readout & The same common functional readout applied after Equation~\eqref{eq:s0}, \eqref{eq:sadapt}, or \eqref{eq:sw}, depending on the row-named detector family & Fixed rows use $R_i=I$; whitened families use the same prespecified Huber-whitened recipe carried across the functional audit \\
+Tables~\ref{tab:brain_detector_ablation}, \ref{tab:brain_detector_swap}, and \ref{tab:brain_huber_trim_stability} & Equation~\eqref{eq:sbase} on the named residual; Table~\ref{tab:brain_detector_ablation} also adds whitened total power without Doppler band partition as a geometry-free comparator & Table~\ref{tab:brain_detector_ablation}: Equations~\eqref{eq:s0} and \eqref{eq:sw}; Table~\ref{tab:brain_detector_swap}: Equation~\eqref{eq:s0} on RPCA or HOSVD residuals; Table~\ref{tab:brain_huber_trim_stability}: Equation~\eqref{eq:sw} only & Tyler-type covariance with $\lambda=0.07$ for the whitened-power and Equation~\eqref{eq:sw} rows; none for Equation~\eqref{eq:s0}; Huber-whitened recipe with trim $q$ varied in Table~\ref{tab:brain_huber_trim_stability} \\
+Table~\ref{tab:twinkling_gammex_structural_roc} & Equation~\eqref{eq:sbase} and Kasai lag-1 power on the identical baseline SVD band-pass residual cube & Whitened power, Equation~\eqref{eq:s0}, and Equation~\eqref{eq:sw} on that same residual cube & Tyler-type covariance with $\lambda=0.07$ for whitened-power and Equation~\eqref{eq:sw}; none for Equation~\eqref{eq:s0} \\
+Tables~\ref{tab:ulm7883227_structural_roc} and \ref{tab:ulm_fixed_calibration_transfer} & Equation~\eqref{eq:sbase} or log-power Doppler, plus Kasai, on the same 64-frame MC--SVD residual window & Equation~\eqref{eq:sw} under the fixed no-registration ULM specialist profile & SCM covariance with $\lambda=0.07$ in the 64-frame no-registration ULM structural-audit profile \\
+Table~\ref{tab:shin_motion_endpoints_main} & Equation~\eqref{eq:sbase} exported as the baseline PD-mode map on the frozen Shin-U MC--SVD residual stream & Equation~\eqref{eq:sadapt} exported as the matched-subspace PD-mode map, with the optional shrink-only penalty disabled & Whitening is active only on promoted tiles; promoted tiles use the frozen Shin-U adaptive low-frequency covariance recipe, and non-promoted tiles use $R_i=I$ \\
+\hline
+\end{tabular}%
+}
+\endgroup
+\caption{Explicit mapping from each main result table to the score formula and covariance recipe used there. The purpose is purely notational: readers should be able to tell, from one place, which tables use baseline power Doppler, the fixed detector, the adaptive detector, or the fully whitened detector, and which whitening recipe accompanies each case.}
+\label{tab:result_table_score_map}
 \end{table}
 
 \section{Results}
