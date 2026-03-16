@@ -650,7 +650,7 @@ Table~\ref{tab:result_table_score_map} maps each main result table to the exact 
 \hline
 Main result table(s) & Detector head actually reported there & Covariance estimator and loading when whitening is active & Training support used for whitening & Notes / exact profile \\
 \hline
-Tables~\ref{tab:simus_stress_frontier_headline}, \ref{tab:accepted_v2_structural_main}, \ref{tab:simus_detector_family_ablation} & Fixed / adaptive / fully whitened rows on the named residualizer; conventional rows use PD or Kasai on that same residual cube & Fixed: none. Adaptive / fully whitened: Huber covariance, $c=5$, $\lambda=0.10$, target $\kappa=200$, ridge $0.25$ & Pooled tile-local Hankel snapshots from the prespecified window; trim $q=0.08$ on whitened rows; adaptive head whitens only promoted tiles & Canonical SIMUS recipe. Table~\ref{tab:simus_detector_family_ablation} holds the residual fixed at MC--SVD and changes only the downstream head. \\
+Tables~\ref{tab:simus_stress_frontier_headline}, \ref{tab:simus_stress_frontier_rpca_heads}, \ref{tab:accepted_v2_structural_main}, \ref{tab:simus_detector_family_ablation} & Fixed / adaptive / fully whitened rows on the named residualizer; conventional rows use PD or Kasai on that same residual cube & Fixed: none. Adaptive / fully whitened: Huber covariance, $c=5$, $\lambda=0.10$, target $\kappa=200$, ridge $0.25$ & Pooled tile-local Hankel snapshots from the prespecified window; trim $q=0.08$ on whitened rows; adaptive head whitens only promoted tiles & Canonical SIMUS recipe. Table~\ref{tab:simus_stress_frontier_rpca_heads} freezes the stress rows to RPCA; Table~\ref{tab:simus_detector_family_ablation} freezes the cleaner benchmark to MC--SVD and changes only the downstream head. \\
 Table~\ref{tab:accepted_v2_functional_main} & Same detector-family mapping, but passed through the common functional readout & Same Huber recipe as structural SIMUS rows: $c=5$, $\lambda=0.10$, $\kappa=200$, ridge $0.25$ & Same pooled Hankel support; trim $q=0.08$ on whitened rows & No separate functional covariance profile \\
 Tables~\ref{tab:brain_detector_ablation}, \ref{tab:brain_detector_swap}, \ref{tab:brain_huber_trim_stability} & Fixed ratio, whitened power, or fully whitened ratio, depending on the row/table & Default whitened brain rows: Tyler-type, $\lambda=0.07$. Stability table: Huber, $c=5$, $\lambda=0.10$, $\kappa=200$, ridge $0.25$ & 64-frame windows with $L_t=8$; pooled tile-local Hankel snapshots. Stability table varies trim $q\in\{0.05,0.08,0.10\}$ & Separates earlier Tyler-style whitening from finalized Huber audit \\
 Table~\ref{tab:twinkling_gammex_structural_roc} & Whitened power, fixed ratio, and fully whitened ratio on the same short-ensemble residual cube; PD/Kasai are conventional rows & Tyler-type, $\lambda=0.07$ for whitened rows; fixed ratio uses $R_i=I$ & Short-ensemble pooled support with $N=17$, $L_t=16$: two overlapping temporal snapshots per pixel within each tile; no trim & Short-support Tyler recipe, not the SIMUS Huber recipe \\
@@ -698,6 +698,20 @@ Because the cleaner held-out checkpoint can otherwise look deceptively easy, we 
 }
 
 \noindent Table~\ref{tab:simus_stress_frontier_headline} is the harder headline structural result. On every held-out stressed row, the strongest detector-family stack outperforms the strongest public comparator evaluated on that same stressed row. The public reference on these rows is not a cleaner operating point but the best conventional stack under the same perturbation, which keeps the comparison honest. The row-wise winner is not uniform, and that is scientifically useful: the simpler matched-subspace default already wins the cardiac reference row and the shortest-ensemble row, whereas the fully whitened specialist takes the more aggressive pulsation rows and the intermediate short-ensemble row. This is the clearest evidence in the paper for why a detector family is needed at all rather than a single universal score.
+
+\IfFileExists{reports/simus_clinical_stress_frontier_rpca_heads_table.tex}{%
+  \input{reports/simus_clinical_stress_frontier_rpca_heads_table.tex}%
+}{%
+  \begin{center}
+  \refstepcounter{table}\label{tab:simus_stress_frontier_rpca_heads}%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/simus_clinical_stress_frontier_rpca_heads_table.tex}.\\
+    Reproduce it with \path{PYTHONPATH=. python scripts/simus_clinical_stress_frontier_tables.py}.
+  \end{minipage}}
+  \end{center}
+}
+
+\noindent Table~\ref{tab:simus_stress_frontier_rpca_heads} makes that story less dependent on row-wise family selection. It repeats the same held-out stress rows, but now fixes the residualizer to RPCA and reports the fixed, adaptive, and fully whitened heads separately. The pattern remains coherent without any family-level winner-take-all summary: the fully whitened head is strongest on the cardiac-pulsation rows and the 48-frame row, while the fixed head remains strongest on the reference row and the hardest 32-frame row. On these reduced stress rows the adaptive head is numerically identical to the fixed head, so the family-level advantage is not coming from freely switching among all three modes on every row.
 
 \begin{center}
 \captionsetup{type=table}
