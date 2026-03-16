@@ -127,8 +127,8 @@ def _headline_table(rows: list[dict[str, str]]) -> str:
     common_public = public_labels[0] if public_labels and len(set(public_labels)) == 1 else None
 
     lines = [
-        r"\begin{table*}[t]",
-        r"\centering",
+        r"\begin{center}",
+        r"\captionsetup{type=table}",
         r"\footnotesize",
         r"\setlength{\tabcolsep}{5pt}",
     ]
@@ -161,7 +161,7 @@ def _headline_table(rows: list[dict[str, str]]) -> str:
         [
             rf"\caption{{Held-out SIMUS mobile stress frontier. Each row compares the best detector-family stack with the strongest public comparator on the same held-out evaluation seed.{(' On every row in this reduced table, the strongest public comparator was ' + _pipeline_caption(common_public) + '.') if common_public else ''} The cleaner structural checkpoint is shown separately to identify the fixed default detector head.}}",
             r"\label{tab:simus_stress_frontier_headline}",
-            r"\end{table*}",
+            r"\end{center}",
             "",
         ]
     )
