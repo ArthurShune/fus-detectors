@@ -579,7 +579,7 @@ Table~\ref{tab:shin_fixed_calibration_transfer} & Fixed matched-subspace detecto
 \label{sec:results}
 
 \paragraph{Results roadmap.}
-We begin with SIMUS mobile / intra-op -- simulated labels -- nuisance-control ROC and lead with the held-out stress regime before the held-out reference regime. That sequence shows the detector family first under clinically grounded pulsation and short-ensemble pressure, then on the reference regime that determines the default fixed head. We then report k-Wave brain -- simulated labels -- low-FPR stress ROC, Gammex phantom -- B-mode structure labels -- structural ROC, ULM 7883227 -- no labels -- motion robustness, ULM 7883227 -- localization-derived structure labels -- vessel-core ROC, and Shin rat brain -- no labels -- residual-motion corroboration. Additional dataset evaluations and diagnostic panels are provided in \SuppOrApp{app:supp-results}.
+We begin with SIMUS mobile / intra-op -- simulated labels -- nuisance-control ROC and lead with the held-out stress regime before the held-out reference regime. That sequence shows the detector family first under clinically grounded pulsation and short-ensemble pressure, then on the reference regime that determines the default fixed head. We then report k-Wave brain -- simulated labels -- low-FPR stress ROC, Gammex phantom -- B-mode structure labels -- structural ROC, ULM 7883227 -- localization-derived structure labels -- vessel-core ROC, ULM 7883227 -- no labels -- motion robustness, and Shin rat brain -- no labels -- residual-motion corroboration. Additional dataset evaluations and diagnostic panels are provided in \SuppOrApp{app:supp-results}.
 
 \subsection{Held-out SIMUS/PyMUST benchmark}
 \label{sec:accepted-v2-main}
@@ -852,7 +852,7 @@ To obtain a labeled motion-robustness curve on a real acquisition without extern
 \label{fig:twinkling_within_ensemble_motion}
 \end{figure}
 
-\subsection{ULM motion audit (real kHz IQ)}
+\subsection{ULM real-IQ audits}
 \label{sec:ulm7883227}
 
 \paragraph{Dataset and loader.}
@@ -861,32 +861,7 @@ We use a real kHz IQ dataset released for ultrasound localization microscopy ben
 \paragraph{One-time label-free baseline selection.}
 For ULM we select a single MC--SVD energy-fraction cutoff by a one-time label-free sweep on blocks 1--3 over frames $0{:}128$, and then freeze it for all subsequent ULM motion experiments. The sweep uses baseline-only runs and relies on label-free integrity and stability criteria (no task labels); it yields a frozen energy fraction $e=0.975$ (full sweep details in \SuppOrApp{app:repro}).
 
-\paragraph{Nonrigid motion injection and fairness alignment ablation.}
-We evaluate motion robustness by injecting controlled motion directly into the beamformed IQ cube and re-running the baseline plus matched-subspace detector under a frozen ULM profile (PRF $=1000$ Hz; $L_t=64$; tiles $8\times 8$; stride 3; SCM covariance; diagonal loading $\lambda=0.07$; baseline MC--SVD with frozen $e=0.975$). Because motion is injected at the beamformed IQ stage, this test stresses post-beamforming robustness to residual motion mismatch; it does not model channel-domain decorrelation or skull-induced phase-aberration physics. Motion ladders span two nonrigid families: \texttt{brainlike} (rigid random-walk translation plus a smooth, depth-decaying elastic warp with temporally correlated coefficients and micro-jitter) and \texttt{elastic} (nonrigid-only; rigid and micro-jitter disabled). For each amplitude we compute label-free robustness endpoints on the baseline score $S_{\mathrm{base}}$ and the matched-subspace score $S_{\mathrm{stap,pre}}$ relative to the no-motion reference under three \emph{common} alignment modes (none / common B-mode / injected GT proxy) plus a diagnostic per-method ``self'' alignment. We additionally report degeneracy checks (std ratios, top-$k$ overlap, and tail quantile ratios) to rule out ``stability by collapse.'' Figure~\ref{fig:ulm_brainlike_e975} shows the main \texttt{brainlike} sweep; additional motion variants are provided in \SuppOrApp{app:supp-results}.
-
-\emph{Endpoint definition.} For a score map $S_{\mathrm{meth}}(a)$ at motion amplitude $a$ and the corresponding no-motion reference $S_{\mathrm{meth}}(0)$ (same block), we compute $\rho_{\mathrm{meth}}(a)$ as the Pearson correlation between the aligned maps on a central crop $\Omega_a$ that excludes a margin of $\lceil a\rceil+2$ pixels to avoid boundary artifacts from warping. Correlations are computed directly on the exported right-tail scores (no log transform) and use the same crop/alignment for baseline and matched-subspace maps in the ``common'' alignment modes.
-
-\begin{figure}[H]
-\centering
-\IfFileExists{figs/paper/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_brainlike_e975.png}{%
-\includegraphics[width=\linewidth]{figs/paper/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_brainlike_e975.png}%
-}{%
-\fbox{%
-\parbox{0.96\linewidth}{%
-\textbf{ULM motion-sweep asset unavailable in this checkout.}
-The figure is regenerated by \texttt{scripts/ulm\_zenodo\_7883227\_motion\_sweep.py}, but the
-required ULM 7883227 IQ archive (\texttt{data/ulm\_zenodo\_7883227/IQ\_001\_to\_025.zip}) is
-not present locally. Reproducibility details are provided in \SuppOrApp{app:repro}.%
-}%
-}%
-}
-\caption{ULM 7883227 motion sweep (blocks 1--3; frames $0{:}128$; frozen baseline $e=0.975$): \texttt{brainlike} motion (rigid + elastic). Each panel reports correlation vs the no-motion reference under a different alignment mode (none / common B-mode / injected GT proxy) for the baseline score $S_{\mathrm{base}}$ and the matched-subspace score $S_{\mathrm{stap,pre}}$; shaded bands show median$\pm$IQR over blocks. Reproducibility details are provided in \SuppOrApp{app:repro}.}
-\label{fig:ulm_brainlike_e975}
-\end{figure}
-
-\paragraph{Representative quantitative endpoints (ULM).}
-At a 3~px motion amplitude under the injected GT alignment proxy, the median correlation on the baseline score $S_{\mathrm{base}}$ drops to $\approx 0.20$ (\texttt{brainlike}), while the matched-subspace score $S_{\mathrm{stap,pre}}$ remains $\approx 0.75$ (medians over blocks 1--3; full tabular summaries and additional motion variants are provided in \SuppOrApp{app:supp-results}). Degeneracy checks confirm that this stability is not explained by map collapse: the median std ratio and 0.999-quantile ratio of $S_{\mathrm{stap,pre}}$ remain nontrivial across amplitudes, and top-$k$ overlap decays gradually rather than saturating to trivial values.
-
+\subsubsection{Localization-derived structural audit}
 \paragraph{ULM 7883227 -- localization-derived structure labels -- vessel-core ROC.}
 To obtain a more anatomical structural readout on the same open real-IQ data, we use the published PALA rat-brain ULM example as an external vascular reference derived from microbubble localization microscopy rather than from the Doppler scores being evaluated \cite{ChavignonZenodo7883227,HeilesULMBenchmark2021}. We first reproduce the corresponding short-horizon PALA PowDop rendering from the Zenodo IQ blocks using the published odd-block selection and SVD cutoff, register that published PowDop crop back to the Zenodo IQ field of view, and then downsample the published super-resolution MatOut vascular rendering onto the short-window evaluation lattice. From that registered localization map we derive a conservative vessel-core versus perivascular-shell label pair: the vessel mask is a peak-based core mask, and the background mask is the surrounding shell, so the endpoint asks whether a short-window detector concentrates score on the vascular core rather than the immediately adjacent parenchyma. That one-time PALA-to-IQ registration is part of the label construction only. For the short-window detector itself we keep frame-to-frame registration disabled in the frozen audit, because re-enabling it changes the structural ROC only below the fourth decimal place while adding substantial latency.
 
@@ -920,8 +895,34 @@ A second deployment-oriented check uses the same structural endpoint but removes
   \end{center}
 }
 
-These real-IQ experiments are best interpreted as bounded structural and robustness audits rather than as definitive labeled \emph{in vivo} task benchmarks.
-They should also not be read as a replacement for upstream motion correction or registration. Motion correction remains central in ULM and Doppler pipelines because residual motion and clutter leakage can dominate downstream vascular estimates \cite{HingotULMMotion2017,HeilesULMBenchmark2021,InsanaRegistration2022}. The narrower claim here is that a local nuisance-aware detector head can make the exported score map less brittle to residual motion mismatch after ordinary residualization. That is still practically useful, because many acquisitions fail by producing unstable hot spots and threshold drift rather than by complete loss of flow signal.
+\subsubsection{Motion robustness audit}
+\paragraph{Nonrigid motion injection and fairness alignment ablation.}
+We evaluate motion robustness by injecting controlled motion directly into the beamformed IQ cube and re-running the baseline plus matched-subspace detector under a frozen ULM profile (PRF $=1000$ Hz; $L_t=64$; tiles $8\times 8$; stride 3; SCM covariance; diagonal loading $\lambda=0.07$; baseline MC--SVD with frozen $e=0.975$). Because motion is injected at the beamformed IQ stage, this test stresses post-beamforming robustness to residual motion mismatch; it does not model channel-domain decorrelation or skull-induced phase-aberration physics. Motion ladders span two nonrigid families: \texttt{brainlike} (rigid random-walk translation plus a smooth, depth-decaying elastic warp with temporally correlated coefficients and micro-jitter) and \texttt{elastic} (nonrigid-only; rigid and micro-jitter disabled). For each amplitude we compute label-free robustness endpoints on the baseline score $S_{\mathrm{base}}$ and the matched-subspace score $S_{\mathrm{stap,pre}}$ relative to the no-motion reference under three \emph{common} alignment modes (none / common B-mode / injected GT proxy) plus a diagnostic per-method ``self'' alignment. We additionally report degeneracy checks (std ratios, top-$k$ overlap, and tail quantile ratios) to rule out ``stability by collapse.'' Figure~\ref{fig:ulm_brainlike_e975} shows the main \texttt{brainlike} sweep; additional motion variants are provided in \SuppOrApp{app:supp-results}.
+
+\emph{Endpoint definition.} For a score map $S_{\mathrm{meth}}(a)$ at motion amplitude $a$ and the corresponding no-motion reference $S_{\mathrm{meth}}(0)$ (same block), we compute $\rho_{\mathrm{meth}}(a)$ as the Pearson correlation between the aligned maps on a central crop $\Omega_a$ that excludes a margin of $\lceil a\rceil+2$ pixels to avoid boundary artifacts from warping. Correlations are computed directly on the exported right-tail scores (no log transform) and use the same crop/alignment for baseline and matched-subspace maps in the ``common'' alignment modes.
+
+\begin{figure}[H]
+\centering
+\IfFileExists{figs/paper/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_brainlike_e975.png}{%
+\includegraphics[width=\linewidth]{figs/paper/ulm7883227_motion_sweep_ULM_blocks1_3_0000_0128_brainlike_e975.png}%
+}{%
+\fbox{%
+\parbox{0.96\linewidth}{%
+\textbf{ULM motion-sweep asset unavailable in this checkout.}
+The figure is regenerated by \texttt{scripts/ulm\_zenodo\_7883227\_motion\_sweep.py}, but the
+required ULM 7883227 IQ archive (\texttt{data/ulm\_zenodo\_7883227/IQ\_001\_to\_025.zip}) is
+not present locally. Reproducibility details are provided in \SuppOrApp{app:repro}.%
+}%
+}%
+}
+\caption{ULM 7883227 motion sweep (blocks 1--3; frames $0{:}128$; frozen baseline $e=0.975$): \texttt{brainlike} motion (rigid + elastic). Each panel reports correlation vs the no-motion reference under a different alignment mode (none / common B-mode / injected GT proxy) for the baseline score $S_{\mathrm{base}}$ and the matched-subspace score $S_{\mathrm{stap,pre}}$; shaded bands show median$\pm$IQR over blocks. Reproducibility details are provided in \SuppOrApp{app:repro}.}
+\label{fig:ulm_brainlike_e975}
+\end{figure}
+
+\paragraph{Representative quantitative endpoints (ULM).}
+At a 3~px motion amplitude under the injected GT alignment proxy, the median correlation on the baseline score $S_{\mathrm{base}}$ drops to $\approx 0.20$ (\texttt{brainlike}), while the matched-subspace score $S_{\mathrm{stap,pre}}$ remains $\approx 0.75$ (medians over blocks 1--3; full tabular summaries and additional motion variants are provided in \SuppOrApp{app:supp-results}). Degeneracy checks confirm that this stability is not explained by map collapse: the median std ratio and 0.999-quantile ratio of $S_{\mathrm{stap,pre}}$ remain nontrivial across amplitudes, and top-$k$ overlap decays gradually rather than saturating to trivial values.
+
+These real-IQ experiments are best interpreted as bounded structural and robustness audits rather than as definitive labeled \emph{in vivo} task benchmarks. They should also not be read as a replacement for upstream motion correction or registration. Motion correction remains central in ULM and Doppler pipelines because residual motion and clutter leakage can dominate downstream vascular estimates \cite{HingotULMMotion2017,HeilesULMBenchmark2021,InsanaRegistration2022}. The narrower claim here is that a local nuisance-aware detector head can make the exported score map less brittle to residual motion mismatch after ordinary residualization. That is still practically useful, because many acquisitions fail by producing unstable hot spots and threshold drift rather than by complete loss of flow signal.
 
 \paragraph{Shin rat brain -- no labels -- residual-motion corroboration.}
 To avoid making the real-IQ story depend on a single open dataset, we also summarize the strongest existing Shin rat-brain motion-stress result from the supplement \cite{ShinLOCAULM2024,ShinZenodo10711806}. Shin does not provide independent flow/background labels, so we do not treat it as a detection benchmark. Instead, under a prespecified low-frequency operating setting and a controlled residual-motion stress test, we ask whether the same qualitative robustness pattern seen on ULM recurs on a second open real-IQ source. It does: across all three audited windows, the matched-subspace score map is more stable than the MC--SVD baseline map under the same 2~px residual-motion stress, and the matched background-tail operating point yields a nonzero flow-proxy hit rate only for the matched-subspace detector.
@@ -957,7 +958,7 @@ A separate fixed-threshold check on Shin asks a different question. Using the sa
   \end{center}
 }
 
-The real-data results span four roles: Gammex phantom -- B-mode structure labels -- structural ROC provides structurally labeled phantom evidence, ULM 7883227 -- no labels -- motion robustness provides open real-IQ robustness evidence, ULM 7883227 -- localization-derived structure labels -- vessel-core ROC adds a same-acquisition structural check using a localization-derived vascular reference plus block-split threshold transfer, and Shin rat brain -- no labels -- residual-motion corroboration provides a second open real-IQ corroboration under controlled residual-motion stress plus a negative cross-clip proxy-transfer check. A compact same-cube score audit across those real-IQ bundles is kept in the Supplementary Material, together with additional label-free audits such as whole-brain PD-only retrospectives, Shin contract summaries, and extended motion variants.
+The real-data results span four roles: Gammex phantom -- B-mode structure labels -- structural ROC provides structurally labeled phantom evidence, ULM 7883227 -- localization-derived structure labels -- vessel-core ROC adds a same-acquisition structural check using a localization-derived vascular reference plus block-split threshold transfer, ULM 7883227 -- no labels -- motion robustness provides open real-IQ robustness evidence, and Shin rat brain -- no labels -- residual-motion corroboration provides a second open real-IQ corroboration under controlled residual-motion stress plus a negative cross-clip proxy-transfer check. A compact same-cube score audit across those real-IQ bundles is kept in the Supplementary Material, together with additional label-free audits such as whole-brain PD-only retrospectives, Shin contract summaries, and extended motion variants.
 
 \FloatBarrier
 \section{Discussion}
