@@ -6,6 +6,51 @@ In this part we describe regime conditions and operator-level sufficient structu
 \subsection*{How to read this appendix}
 A plain-language glossary for the appendix labels appears first in Appendix~\ref{app:appendix-guide}, and the main-text method overview is shown in Figure~\ref{fig:stap_pipeline}. This appendix then states the formal preconditions under which the optional shrink-only penalty layer is allowed to modify scores; if any precondition fails, the layer is disabled ($w\equiv 1$).
 
+\subsection{Shrink-only score mapping used in the main manuscript}
+The main paper keeps the optional shrink-only regularizer to a brief summary because the primary efficacy claims do not depend on it. For completeness, we collect the core manuscript-level definitions here. The regularizer is driven by deterministic side-information features computed from the same tile-local slow-time vector $z_i$ and Doppler-band projectors $(\Po,\Pf,\Pg,\Pa)$ used by the detector:
+\[
+  E_f(i)=z_i\Hh \Pf z_i,\qquad
+  E_g(i)=z_i\Hh \Pg z_i,\qquad
+  E_a(i)=z_i\Hh \Pa z_i,
+\]
+with total in-band energy $E_{\mathrm{tot}}(i)=z_i\Hh z_i+\epsilon$. The main risk statistic is the alias-to-flow ratio
+\[
+  m_{\mathrm{alias}}(i)=\log\frac{E_a(i)+\epsilon}{E_f(i)+\epsilon},
+\]
+and we also track the guard-band fraction
+\[
+  r_g(i)=\frac{E_g(i)}{E_{\mathrm{tot}}(i)}.
+\]
+A deterministic flow-support proxy $c_f(i)\in[0,1]$ defines conservative background-like and flow-like proxy sets
+\[
+  \mathcal{T}_{\mathrm{bg}}:=\{i:\,c_f(i)\le c_{\mathrm{bg}}\},\qquad
+  \mathcal{T}_{\mathrm{flow}}:=\{i:\,c_f(i)\ge c_{\mathrm{flow}}\}.
+\]
+These features are used only to decide whether shrinkage is warranted and where it may be applied; they are not used as class labels for ROC reporting.
+
+The score-space mapping itself is bounded and monotone:
+\[
+  S_{\mathrm{stap,post}}(i)=w(i)\,S_{\mathrm{stap,pre}}(i),\qquad w(i)\in(0,1].
+\]
+The full construction of $w(i)$, including protected sets, regime logic, deterministic sentinels, and the reciprocal scale-map convention used in some exported audit files, is given by the appendix sections below.
+
+\begin{lemma}[Shrink-only monotonicity]
+\label{lem:shrink_only_monotonicity}
+Let $w(i)\in(0,1]$ and define $S_{\mathrm{stap,post}}(i)=w(i)\,S_{\mathrm{stap,pre}}(i)$. For any threshold $\tau$,
+\[
+  \{S_{\mathrm{stap,post}}\ge\tau\}\subseteq \{S_{\mathrm{stap,pre}}\ge\tau\}.
+\]
+Consequently, on any subset $A$ (e.g.\ $H_0$), the tail probability cannot increase at fixed $\tau$:
+\[
+  \mathbb{P}\{S_{\mathrm{stap,post}}\ge\tau\mid A\}\le \mathbb{P}\{S_{\mathrm{stap,pre}}\ge\tau\mid A\}.
+\]
+\end{lemma}
+\begin{proof}
+If $S_{\mathrm{stap,post}}(i)\ge\tau$, then $S_{\mathrm{stap,pre}}(i)=S_{\mathrm{stap,post}}(i)/w(i)\ge\tau$ since $w(i)\le 1$.
+\end{proof}
+
+When reporting strict low-FPR operating points where $\tau$ is reselected after regularization to satisfy $\mathbb{P}\{S_{\mathrm{stap,post}}\ge\tau\mid H_0\}=\alpha$, any TPR change reflects background-tail compression despite scores never increasing.
+
 \subsection{Regime Preconditions (Data--Level, Non--Negotiable)}
 \label{sec:regime}
 

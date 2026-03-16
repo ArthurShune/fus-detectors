@@ -130,7 +130,7 @@ ULM 7883227 / Shin rat brain -- no labels -- motion robustness & no independent 
 \hline
 \end{tabular}
 \endgroup
-\captionof{table}{Compact validation ladder for the paper. Each regime is named as dataset -- label type -- endpoint, so readers can see immediately what data are used, what labels exist, and what task is being evaluated. The evidence progresses from labeled simulation and structurally labeled phantom data to a held-out use-case-motivated synthetic benchmark and one same-acquisition structural audit on open real in-vivo IQ. The fuller claim-support map appears later in Table~\ref{tab:claims_discipline}.}
+\captionof{table}{Compact validation ladder for the paper. Each regime is named as dataset -- label type -- endpoint, so readers can see immediately what data are used, what labels exist, and what task is being evaluated. The evidence progresses from labeled simulation and structurally labeled phantom data to a held-out use-case-motivated synthetic benchmark and one same-acquisition structural audit on open real in-vivo IQ. The fuller claim-to-evidence matrix appears later in Table~\ref{tab:claims_discipline}.}
 \label{tab:validation_ladder_intro}
 \end{minipage}}
 \end{center}
@@ -206,7 +206,7 @@ After conventional clutter suppression, a localized matched-subspace downstream 
 \end{itemize}
 
 \paragraph{Scope and claims.}
-Claims are stratified by data regime and summarized first in the compact validation ladder of Table~\ref{tab:validation_ladder_intro}, then in the fuller claim-support map of Table~\ref{tab:claims_discipline}. Quantitative detection efficacy is limited to regimes with independent $H_1/H_0$ labels or a structural reference that is external to the short-window detector outputs being scored. Open in-vivo IQ and PD-only datasets are otherwise used for robustness and translation audits. The ULM section adds one structural audit using a localization-derived vascular reference, not a task-activation benchmark.
+Claims are stratified by data regime and summarized first in the compact validation ladder of Table~\ref{tab:validation_ladder_intro}, then in the fuller claim-to-evidence matrix of Table~\ref{tab:claims_discipline}. Quantitative detection efficacy is limited to regimes with independent $H_1/H_0$ labels or a structural reference that is external to the short-window detector outputs being scored. Open in-vivo IQ and PD-only datasets are otherwise used for robustness and translation audits. The ULM section adds one structural audit using a localization-derived vascular reference, not a task-activation benchmark.
 
 \paragraph{Canonical benchmark naming.}
 To keep the naming consistent, the remainder of the paper uses a dataset -- label type -- endpoint pattern. Representative examples are: \emph{k-Wave brain -- simulated labels -- low-FPR stress ROC}, \emph{Gammex phantom -- B-mode structure labels -- structural ROC}, \emph{SIMUS mobile -- simulated structure labels -- nuisance-control ROC}, \emph{ULM 7883227 -- localization-derived structure labels -- vessel-core ROC}, and \emph{Shin rat brain -- no labels -- residual-motion corroboration}. Development-generation labels, internal profile identifiers, and reproduction-script names are kept in the Supplementary Material and repository manifests rather than in the main reader path.
@@ -445,79 +445,7 @@ In implementation we report a self-normalized matched-subspace ratio that normal
 \end{figure}
 
 \subsection{Optional shrink-only regularization (brief main-text summary)}
-\noindent The main detector results in this paper are all carried by the pre-regularization detector heads above. We nevertheless study a bounded optional shrink-only regularizer because structured artifacts can still dominate extreme-tail operating points in some regimes. The mapping is deterministic, conservative, and uses auxiliary band-energy and proxy-support statistics only as \emph{side information}; proxies are never used to compute ROC/TPR/FPR (only to define protected/candidate sets and compute masks, which are audited separately). Full construction details and safety contracts are left to the Supplementary Material.
-
-\begin{center}
-\fbox{\begin{minipage}{0.95\linewidth}
-\textbf{Regularizer at a glance.}
-\begin{itemize}[nosep,leftmargin=1.4em]
-  \item \textbf{When it activates:} Only when deterministic sanity/support checks pass (valid band discretization; non-flat risk features; sufficient proxy support). Otherwise it is inert ($w\equiv 1$).
-  \item \textbf{What it changes:} Applies a bounded, shrink-only weight $w(i)\in(0,1]$ on an explicitly defined candidate set while preserving a protected do-not-penalize set (scores unchanged); the post-regularization score is $S_{\mathrm{stap,post}}=w\,S_{\mathrm{stap,pre}}$.
-  \item \textbf{What it cannot do:} It cannot increase any pixel score (no amplification) and proxies are not used for ROC/TPR/FPR reporting; any apparent operating-point uplift reflects background-tail compression under shrink-only mapping.
-  \item \textbf{How it fails safely:} If out of regime, it defaults to ``off'' ($w\equiv 1$) and logs an explicit reason label, reducing to the pre-regularization detector.
-\end{itemize}
-\end{minipage}}
-\end{center}
-\paragraph{Core regularizer features.}
-The optional shrink-only regularizer is driven by a small set of deterministic side-information features computed from the same tile-local slow-time vector $z_i$ and Doppler-band projectors $(\Po,\Pf,\Pg,\Pa)$ used by the detector. We define
-\[
-  E_f(i)=z_i\Hh \Pf z_i,\qquad
-  E_g(i)=z_i\Hh \Pg z_i,\qquad
-  E_a(i)=z_i\Hh \Pa z_i,
-\]
-with total in-band energy $E_{\mathrm{tot}}(i)=z_i\Hh z_i+\epsilon$. The main regularizer risk statistic is the alias-to-flow ratio
-\[
-  m_{\mathrm{alias}}(i)=\log\frac{E_a(i)+\epsilon}{E_f(i)+\epsilon},
-\]
-which is large when a tile is dominated by aliased or high-velocity nuisance rather than the prescribed flow band. We also monitor the guard-band fraction
-\[
-  r_g(i)=\frac{E_g(i)}{E_{\mathrm{tot}}(i)},
-\]
-and a deterministic flow-support proxy $c_f(i)\in[0,1]$ to define conservative background-like and flow-like proxy sets
-\[
-  \mathcal{T}_{\mathrm{bg}}:=\{i:\,c_f(i)\le c_{\mathrm{bg}}\},\qquad
-  \mathcal{T}_{\mathrm{flow}}:=\{i:\,c_f(i)\ge c_{\mathrm{flow}}\}.
-\]
-These quantities are used only to decide whether shrinkage is warranted and where it may be applied; they are not used as class labels for ROC reporting.
-\paragraph{Shrink-only mapping (guarantee).}
-We implement the optional penalty layer via a bounded weight $w(i)\in(0,1]$ applied in score space:
-\[
-  S_{\mathrm{stap,post}}(i)=w(i)\,S_{\mathrm{stap,pre}}(i),\qquad w(i)\in(0,1].
-\]
-The Supplementary Material gives the full construction of $w(i)$, including protected sets, regime logic, deterministic sentinels, and the reciprocal scale-map convention used for some exported audit files.
-
-\begin{lemma}[Shrink-only monotonicity]
-\label{lem:shrink_only_monotonicity}
-Let $w(i)\in(0,1]$ and define $S_{\mathrm{stap,post}}(i)=w(i)\,S_{\mathrm{stap,pre}}(i)$. For any threshold $\tau$,
-\[
-  \{S_{\mathrm{stap,post}}\ge\tau\}\subseteq \{S_{\mathrm{stap,pre}}\ge\tau\}.
-\]
-Consequently, on any subset $A$ (e.g.\ $H_0$), the tail probability cannot increase at fixed $\tau$:
-\[
-  \mathbb{P}\{S_{\mathrm{stap,post}}\ge\tau\mid A\}\le \mathbb{P}\{S_{\mathrm{stap,pre}}\ge\tau\mid A\}.
-\]
-\end{lemma}
-\begin{proof}
-If $S_{\mathrm{stap,post}}(i)\ge\tau$, then $S_{\mathrm{stap,pre}}(i)=S_{\mathrm{stap,post}}(i)/w(i)\ge\tau$ since $w(i)\le 1$.
-\end{proof}
-When reporting strict low-FPR operating points where $\tau$ is reselected after regularization to satisfy $\mathbb{P}\{S_{\mathrm{stap,post}}\ge\tau\mid H_0\}=\alpha$, changes in TPR reflect background-tail compression despite scores never increasing.
-
-\begin{figure}[t]
-\centering
-\IfFileExists{figs/paper/shrink_only_tail_suppression.pdf}{%
-  \includegraphics[width=\linewidth]{figs/paper/shrink_only_tail_suppression.pdf}%
-}{%
-  \fbox{\begin{minipage}{0.95\linewidth}
-    \centering
-    \vspace{0.5em}
-    Missing figure \path{figs/paper/shrink_only_tail_suppression.pdf}.\\
-    Reproduce it with \path{PYTHONPATH=. python scripts/fig_shrink_only_tail_suppression.py}.
-    \vspace{0.5em}
-  \end{minipage}}%
-}
-\caption{Empirical statistical effect of the strictly bounded, shrink-only penalty on a heavy-tailed background-proxy score distribution from an artificial-calculi acquisition in the open Doppler Twinkling Artifact database. The matched-subspace score before the optional penalty exhibits a heavy right tail characteristic of structured artifacts. Applying the non-increasing weight $w(i)\in(0,1]$ yields the post-penalty score $S_{\mathrm{stap,post}}=w(i)S_{\mathrm{stap,pre}}$, compressing the background tail while preserving an explicit do-not-penalize protected set (scores unchanged on high-confidence flow locations). The vertical line indicates the pre-penalty threshold $\tau_\alpha$ chosen so that $\mathbb{P}\{S_{\mathrm{stap,pre}}\ge \tau_\alpha\mid \text{bg proxy}\}=\alpha$ (here $\alpha=10^{-3}$); the shaded region highlights the corresponding right tail, and the post-penalty tail mass is evaluated at the same $\tau_\alpha$.}
-\label{fig:shrink_only_tail_suppression}
-\end{figure}
+\noindent The main detector results in this paper are carried by the pre-regularization detector heads above. We nevertheless keep one bounded optional shrink-only regularizer because structured artifacts can still dominate the extreme right tail in some regimes. The layer uses deterministic side information from the same tile-local slow-time representation, can only downweight scores, preserves an explicit protected set, and fails safely by defaulting to $w\equiv 1$ when its preconditions are not met. Because the main efficacy claims do not depend on it, the exact feature construction, monotonicity guarantee, and artifact-heavy calculi audits are moved to the Supplementary Material and the extended appendix discussion.
 
 \subsection{Algorithmic integrity and deterministic safeguards}
 To make the architecture auditable and to avoid leakage or discretization artifacts masquerading as performance gains, we enforce deterministic, label-free safeguards:
@@ -529,7 +457,6 @@ To make the architecture auditable and to avoid leakage or discretization artifa
 
 For auditability, we log explicit reason labels so that ``regularizer off'' ($w\equiv 1$) is an expected success mode under flat or non-actionable evidence. \SuppOrApp{app:ka-contract-theory} provides modality-agnostic sufficient conditions and additional sentinels used to interpret when the optional penalty layer should be active or inert.
 
-\clearpage % keep key Method figures (band geometry + KA shrink-only) near their first reference
 \section{Experimental Design}
 \label{sec:experimental-design}
 
@@ -564,7 +491,7 @@ We emphasize $\alpha=10^{-3}$--$10^{-4}$ because those operating points expose n
 Unless otherwise stated, $\tau_\alpha$ is calibrated per window (or per cine sequence) on that unit's negative set to report $\mathrm{TPR}(\alpha)$ at the intended operating point; in labeled regimes, the negative set is available for \emph{exact} calibration, while in deployment it would be estimated via a negative-only training procedure or from a fixed calibration set. This per-window protocol should therefore not be read as requiring oracle per-window tuning in deployment. To keep that distinction explicit, the Results section now includes two non-retrospective transfer checks in the main reader path: a fixed-calibration audit on the held-out SIMUS/PyMUST benchmark and a complementary block-split fixed-calibration audit on the ULM structural audit.
 
 \paragraph{How the prespecified defaults were chosen.}
-The numerical settings in this pipeline do not all play the same role, and they were not selected in the same way. Band edges are tied to acquisition physics: PRF fixes the discrete Doppler grid and Nyquist limit, while the flow/guard/alias partitions are chosen to separate slow parenchymal microvascular content from transition-band and aliased high-velocity nuisance on that grid. Tile geometry and $L_t$ are locality/support choices: they are chosen once per regime to preserve spatial adaptation while retaining enough slow-time support for stable covariance estimation, then held fixed. Conditioning parameters (for the fully whitened mode) are chosen to keep the robust covariance well behaved on development audits rather than to maximize held-out task scores. The adaptive threshold $\tau_g$ is a single frozen guard-energy cutoff chosen to preserve the fixed head in cleaner regimes while turning on whitening only when guard-band clutter evidence is clearly non-negligible. The regularizer proxy thresholds are deliberately coarse rather than finely optimized: $c_{\mathrm{bg}}=0.05$ means ``essentially background-like tile coverage,'' $c_{\mathrm{flow}}=0.20$ means ``substantial flow-support coverage,'' $q_{\mathrm{risk}}=0.90$ defines a conservative upper-tail risk cutoff, and the $p_{\mathrm{shrink}}$ bounds are safety sentinels on how much of the candidate set may be penalized. A supplementary stability audit perturbs the finalized $\tau_g$ and $c_{\mathrm{flow}}$ thresholds by $\pm 10\%$ and shows that the detector family does not qualitatively collapse under those changes (\SuppOrApp{app:param-threshold-sensitivity}).
+The numerical settings in this pipeline do not all play the same role, and they were not selected in the same way. Band edges are tied to acquisition physics: PRF fixes the discrete Doppler grid and Nyquist limit, while the flow/guard/alias partitions are chosen to separate slow parenchymal microvascular content from transition-band and aliased high-velocity nuisance on that grid. Tile geometry and $L_t$ are locality/support choices: they are chosen once per regime to preserve spatial adaptation while retaining enough slow-time support for stable covariance estimation, then held fixed. Conditioning parameters (for the fully whitened mode) are chosen to keep the robust covariance well behaved on development audits rather than to maximize held-out task scores. The adaptive threshold $\tau_g$ is a single frozen guard-energy cutoff chosen to preserve the fixed head in cleaner regimes while turning on whitening only when guard-band clutter evidence is clearly non-negligible. The optional regularizer thresholds are coarse safety sentinels rather than tuned performance knobs, and their perturbation audit is reported only in the Supplementary Material (\SuppOrApp{app:param-threshold-sensitivity}).
 
 \subsection{Integrity checks and deterministic sentinels}
 
@@ -573,7 +500,7 @@ This work is a reproducible processing pipeline (decode $\rightarrow$ baseline $
 \subsection{Regimes and claim scope}
 \label{sec:results-overview}
 
-Claims are stratified by regime so that quantitative detection results remain clearly separated from label-free robustness or translation audits. Table~\ref{tab:claims_discipline} also makes the role of open datasets explicit, because the real-data story in this paper is intentionally bounded but not singular.
+Claims are stratified by regime so that quantitative detection results remain clearly separated from label-free robustness or translation audits. Table~\ref{tab:claims_discipline} now maps the main claims to their supporting evidence and stated limits.
 
 \begin{itemize}[nosep]
   \item \textbf{k-Wave brain -- simulated labels -- low-FPR stress ROC.} These are controlled stress tests for strict-tail behavior. Across the open-skull, alias-dominant, and structured-clutter scenarios, the matched-subspace detector family retains measurable sensitivity at ultra-low FPR, with the strongest gains in the alias-dominant and structured-clutter settings.
@@ -589,23 +516,21 @@ Claims are stratified by regime so that quantitative detection results remain cl
 \small
 \begingroup
 \setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}P{4.1cm} P{2.6cm} P{2.5cm} P{5.1cm}@{}}
+\begin{tabular}{@{}P{4.2cm} P{4.4cm} P{4.4cm} P{3.5cm}@{}}
 \hline
-Dataset -- label type -- endpoint & Open-data status / data type & Independent labels? & What it supports \\
+Main claim & Primary evidence in this paper & Supporting evidence & Boundary stated in the paper \\
 \hline
-k-Wave brain -- simulated labels -- low-FPR stress ROC & project-generated simulated IQ & yes (simulator truth) & controlled strict-tail mechanism and latency stress tests \\
-Gammex phantom -- mixed labels -- structural ROC / regularizer hygiene & open real scanner phantom Doppler IQ & Gammex: yes (B-mode structure); calculi: no & structural ROC on real data, phantom motion ladders, and regularizer hygiene \\
-SIMUS mobile / intra-op -- simulated labels -- nuisance-control ROC and functional audit & open SIMUS/PyMUST forward model with real-data anchoring & yes (simulated label masks) & main held-out structural and functional benchmark, nuisance-pressure confirmation under cardiac-like pulsation and short ensembles, and separate-bank fixed-calibration transfer on held-out seeds \\
-ULM 7883227 -- localization-derived structure labels -- vessel-core ROC & open real kHz IQ & bounded structural labels from a published localization-derived vascular reference & real-IQ motion robustness, same-cube score audit, a bounded structural-label vascular-fidelity audit on real in-vivo brain IQ, and complementary block-split fixed-calibration transfer \\
-Shin rat brain -- no labels -- residual-motion corroboration & open real kHz IQ & no independent task labels & second real-IQ corroboration under controlled residual-motion stress plus a secondary cross-clip proxy-based fixed-calibration transfer check \\
+Downstream detector-head design matters after ordinary residualization & Held-out SIMUS same-residual structural ablation on a fixed MC--SVD residual and labeled-brain same-residual ablations & Gammex same-residual phantom comparison on the identical residual cube & Family-level claim about downstream scoring, not a claim that one score wins everywhere \\
+The fixed band-limited matched-subspace detector is the default structural head & Held-out SIMUS structural checkpoint and held-out same-residual detector-head table & Labeled-brain strict-tail stress tests & Default on the evaluated structural benchmark only; not the strongest head on every phantom or real-IQ endpoint \\
+Adaptive and fully whitened variants help in harsher or more concentrated regimes & Held-out SIMUS nuisance-pressure confirmation & Gammex phantom structural ROC and the bounded ULM vessel-core audit & Specialist extensions, not universal replacements for the fixed head \\
+Real-IQ evidence is structural and robustness-oriented rather than task-activation validation & ULM vessel-core versus shell structural audit and ULM motion robustness audit & Shin residual-motion corroboration & Same-acquisition structural auditing and proxy robustness only; no biological or task-efficacy claim \\
+Fixed-threshold transfer is encouraging in selected settings but not solved & Held-out SIMUS fixed-calibration transfer and ULM block-split fixed-calibration transfer & Negative cross-clip Shin proxy transfer & No scanner-integrated or cross-session deployment claim yet \\
 \hline
 \end{tabular}
 \endgroup
-\caption{Claim-support map and validation ladder used throughout the paper. Each regime is named as dataset -- label type -- endpoint so the reader can see, at a glance, what is being measured and what labels support it. Quantitative detection performance is reported across three labeled tiers: k-Wave brain stress tests, the structurally labeled Gammex phantom, and one bounded same-acquisition ULM structural audit using a published localization-derived vascular reference. The held-out SIMUS/PyMUST benchmark provides the main held-out stress-test tier. The other real-IQ sections remain explicitly bounded as robustness or corroborative audits rather than as broad task ROC benchmarks.}
+\caption{Claim-to-evidence matrix for the main paper. Table~\ref{tab:validation_ladder_intro} already gives the dataset-level validation ladder; this table instead states the main claims, the evidence that carries them, and the limits that are kept explicit in the text.}
 \label{tab:claims_discipline}
 \end{table}
-
-Table~\ref{tab:claims_discipline} also makes the current validation ladder explicit. This paper covers simulation, phantom, and one bounded same-acquisition structural audit on open real IQ, but the next rung is only now becoming public and remains fragmented rather than standardized. Recent resources include simultaneous fUS--Neuropixels recordings in awake mice with open superior-colliculus fUS and electrophysiology data, raw fUS plus two-photon multimodal platforms in awake mice, and bedside or human task-fUS releases through craniectomy or sonolucent cranial windows \cite{LambertNeuropixels2025,COMBOWindow2024,ChenComa2025,Rabut2024,MobileFUS2025}. Those advances are highly encouraging, but they still do not yet constitute a single public benchmark that combines open slow-time data, exact task timing, an independent biological anchor, and repeated sessions suitable for threshold-transfer evaluation.
 
 \begin{table}[t]
 \centering
@@ -640,7 +565,7 @@ Table~\ref{tab:result_table_score_map} maps each main result table to the exact 
 Main result table(s) & Detector head actually reported there & Covariance estimator and loading when whitening is active & Training support used for whitening & Notes / exact profile \\
 \hline
 Tables~\ref{tab:simus_stress_frontier_headline}, \ref{tab:simus_stress_frontier_rpca_heads}, \ref{tab:accepted_v2_structural_main}, \ref{tab:simus_detector_family_ablation} & Fixed / adaptive / fully whitened rows on the named residualizer; conventional rows use PD or Kasai on that same residual cube & Fixed: none. Adaptive / fully whitened: Huber covariance, $c=5$, $\lambda=0.10$, target $\kappa=200$, ridge $0.25$ & Pooled tile-local Hankel snapshots from the prespecified window; trim $q=0.08$ on whitened rows; adaptive head whitens only promoted tiles & Canonical SIMUS recipe. Table~\ref{tab:simus_stress_frontier_rpca_heads} freezes the stress rows to RPCA; Table~\ref{tab:simus_detector_family_ablation} freezes the cleaner benchmark to MC--SVD and changes only the downstream head. \\
-Table~\ref{tab:accepted_v2_functional_main} & Same detector-family mapping, but passed through the common functional readout & Same Huber recipe as structural SIMUS rows: $c=5$, $\lambda=0.10$, $\kappa=200$, ridge $0.25$ & Same pooled Hankel support; trim $q=0.08$ on whitened rows & No separate functional covariance profile \\
+Supplementary functional same-cube detector-head audit & Same detector-family mapping, but passed through the common functional readout & Same Huber recipe as structural SIMUS rows: $c=5$, $\lambda=0.10$, $\kappa=200$, ridge $0.25$ & Same pooled Hankel support; trim $q=0.08$ on whitened rows & Kept supplementary because the main paper is structural-first \\
 Tables~\ref{tab:brain_detector_ablation}, \ref{tab:brain_detector_swap}, \ref{tab:brain_huber_trim_stability} & Fixed ratio, whitened power, or fully whitened ratio, depending on the row/table & Default whitened brain rows: Tyler-type, $\lambda=0.07$. Stability table: Huber, $c=5$, $\lambda=0.10$, $\kappa=200$, ridge $0.25$ & 64-frame windows with $L_t=8$; pooled tile-local Hankel snapshots. Stability table varies trim $q\in\{0.05,0.08,0.10\}$ & Separates earlier Tyler-style whitening from finalized Huber audit \\
 Table~\ref{tab:twinkling_gammex_structural_roc} & Whitened power, fixed ratio, and fully whitened ratio on the same short-ensemble residual cube; PD/Kasai are conventional rows & Tyler-type, $\lambda=0.07$ for whitened rows; fixed ratio uses $R_i=I$ & Short-ensemble pooled support with $N=17$, $L_t=16$: two overlapping temporal snapshots per pixel within each tile; no trim & Short-support Tyler recipe, not the SIMUS Huber recipe \\
 Tables~\ref{tab:ulm7883227_structural_roc}, \ref{tab:ulm_fixed_calibration_transfer} & Fully whitened detector under the fixed 64-frame no-registration ULM structural profile; PD/log-PD/Kasai are conventional rows & SCM, $\lambda=0.07$ & 64-frame windows with $L_t=64$; whitening trained from pooled tile snapshots of that single short window; no trim & PALA-backed structural-audit recipe only \\
@@ -666,7 +591,7 @@ This is a use-case-motivated synthetic benchmark with nuisance settings informed
 
 During an earlier SIMUS motion-ladder audit we found a motion-scaling bug in the moving-scatterer perturbation path: some simulated motion amplitudes were mis-scaled, which changed the absolute difficulty of auxiliary motion-stress runs. After correcting that bug, we refroze the benchmark reported here. All SIMUS results in this paper refer to the corrected held-out benchmark, its nuisance-pressure confirmation, and its fixed-calibration transfer audit. Earlier development variants are retained only in the Supplementary Material as secondary fairness checkpoints.
 
-For transparency, this benchmark is defined by explicit held-out splits and explicit label masks rather than by post hoc example selection. The structural checkpoint uses development seeds 125--126 to choose the final method families and settings, and held-out evaluation seeds 127--128 for the results in Table~\ref{tab:accepted_v2_structural_main}. The functional checkpoint uses a disjoint development split (seeds 221--222) and held-out evaluation split (seeds 223--224) under a common downstream readout. Structurally, each evaluated case exports the masks \texttt{mask\_h1\_pf\_main}, \texttt{mask\_h0\_bg}, \texttt{mask\_h0\_nuisance\_pa}, and \texttt{mask\_h1\_alias\_qc}; the evaluation script computes the summary metrics directly from those masks under a fixed right-tail score convention.
+For transparency, this benchmark is defined by explicit held-out splits and frozen positive/background/nuisance masks rather than by post hoc example selection. The structural checkpoint uses development seeds 125--126 to choose the final method families and settings, and held-out evaluation seeds 127--128 for the results in Table~\ref{tab:accepted_v2_structural_main}. The functional checkpoint uses a disjoint development split (seeds 221--222) and held-out evaluation split (seeds 223--224) under a common downstream readout. The evaluation script computes the reported nuisance-control metrics directly from those frozen masks under a fixed right-tail score convention.
 
 For the structural task, the positive class is unaliased parenchymal Pf-band flow and the negative classes are (i) ordinary background and (ii) explicit nuisance structures such as superficial high-velocity or specular components. The three summary metrics used throughout this section are therefore plain-language clinical surrogates: \emph{AUC$_{\mathrm{main/bg}}$} measures separation of target flow from ordinary background, \emph{AUC$_{\mathrm{main/nuis}}$} measures separation of target flow from clinically relevant nuisance, and \emph{FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$} asks how many nuisance detections survive when the detector is tuned to retain half of the target positives. This last quantity is the most direct nuisance-tail metric in the table.
 
@@ -751,23 +676,7 @@ That per-window operating-point protocol is still an evaluation protocol, not a 
 The nuisance-pressure table should also prevent the wrong reading of the cleaner checkpoint. The near-perfect nuisance numbers in Table~\ref{tab:accepted_v2_structural_main} are not the paper's only structural evidence, and they should not be interpreted as meaning that the benchmark is universally trivial. Once the same scene family is pushed toward pulsatile tissue leakage and shorter support, the nuisance-control task becomes visibly harder and the detector-family hierarchy becomes easier to interpret. That is why the main paper now keeps both views of the benchmark together: the harder nuisance-pressure confirmation to show nontrivial held-out difficulty, and the cleaner checkpoint to show which fixed head should actually be deployed by default.
 
 \paragraph{Functional same-cube detector-head comparison.}
-To test whether the fully whitened variant adds value beyond upstream residualization in function-priority settings, we report a compact same-cube comparison on the prespecified functional benchmark settings. This is secondary to the structural results above. For each fixed residual stream, we compare the fully whitened detector to conventional Doppler-style score heads using the same held-out data and the same downstream background-controlled activation readout.
-
-\IfFileExists{reports/simus_functional_numeric_summary_table.tex}{%
-  \input{reports/simus_functional_numeric_summary_table.tex}%
-}{%
-  \begin{center}
-  \refstepcounter{table}\label{tab:accepted_v2_functional_main}%
-  \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/simus_functional_numeric_summary_table.tex}.\\
-    Reproduce it with \path{python3 scripts/simus_functional_numeric_table.py}.
-  \end{minipage}}
-  \end{center}
-}
-
-Table~\ref{tab:accepted_v2_functional_main} is therefore a compact secondary summary rather than a second headline benchmark. In the strict held-out same-cube audit, the fully whitened detector is positive in 5 of 6 residual families in both settings, with median held-out selection-score gains of +0.065 [0.032, 0.091] for the intra-operative parenchymal regime and +0.111 [0.032, 0.142] for the mobile regime. The corresponding median gains in activation-versus-nuisance AUC are +0.026 [0.014, 0.052] and +0.059 [0.011, 0.066]. Those are not large enough to carry the paper by themselves, but they are directionally consistent and quantitatively nontrivial under a common readout. A broader bounded targeted-search follow-up remains positive in 11 of 12 family/setting comparisons and is kept in the Supplementary Material rather than in the main reader path.
-
-Within the detector family itself, the robustly whitened Huber variant therefore remains worth keeping even though it is not the structural default. This is one prespecified whitening recipe carried across the functional, phantom, and labeled-stress-test regimes rather than a different score retuned for each dataset. That cross-regime consistency is the main reason we retain it as a distinct fully whitened variant inside the matched-subspace detector framework. The adaptive variant described later sits between this fully whitened head and the simple fixed default: it does not replace the functional fully whitened result, but it provides a cleaner translational compromise than forcing full whitening everywhere.
+A secondary held-out functional same-cube audit is kept in the Supplementary Material rather than in the main reader path. On that audit, the fully whitened detector remains directionally positive across most residual families under a common activation-versus-nuisance readout, but the structural nuisance-control results remain the main paper.
 
 \paragraph{Scope and low-FPR operating protocol.}
 Quantitative detection performance is reported on k-Wave brain -- simulated labels -- low-FPR stress ROC, Gammex phantom -- B-mode structure labels -- structural ROC, and SIMUS mobile / intra-op -- simulated labels -- nuisance-control ROC using the strict low-FPR operating protocol of Section~\ref{sec:eval}. Open real-IQ datasets are used primarily for bounded score-audit and motion-robustness evidence rather than for task ROC; the ULM section additionally includes ULM 7883227 -- localization-derived structure labels -- vessel-core ROC, which we treat as an in-vivo vascular-fidelity check rather than as a decisive task-efficacy benchmark. Conditional execution is a decision-rule variant that uses a flow-proxy mask; leakage ablations and additional diagnostics are reported in \SuppOrApp{app:supp-results}.
@@ -945,27 +854,6 @@ To obtain a labeled motion-robustness curve on a real acquisition without extern
 \caption{Gammex flow phantom within-ensemble motion ladder on the along-linear PRF=2500 sequence (85 frames). Left: random-walk per-shot translation; right: step translation. Each subpanel reports TPR vs motion amplitude at a fixed FPR target using B-mode structural masks, with the y-axis zoomed to the observed TPR range so that small changes remain visible. Shaded bands are 25--75\% bootstrap intervals over cine frames. Reproducibility details are provided in \SuppOrApp{app:repro}.}
 \label{fig:twinkling_within_ensemble_motion}
 \end{figure}
-
-\subsection{Compact shrink-only penalty audit on artifact-heavy calculi}
-\label{sec:ka-calculi-audit}
-Because the main labeled detection tables report the matched-subspace score before the optional shrink-only penalty, we include one compact quantitative penalty audit in a regime where the regularizer is expected to act conservatively rather than to introduce a new headline efficacy claim. We use the artifact-heavy Twinkling calculi sequences under the prespecified short-ensemble setting and summarize activation, protected-set invariance, and fixed-threshold tail hygiene.
-
-\begin{table}[H]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\resizebox{\linewidth}{!}{%
-\begin{tabular}{lcccc}
-\hline
-Regime & \shortstack{Penalty active / inactive\\bundles} & \shortstack{median\\$p_{\mathrm{shrink}}$} & \shortstack{background-tail rate at\\pre-penalty $\tau_{10^{-3}}$\\(pre$\rightarrow$post)} & \shortstack{background-tail clusters\\at $\tau_{10^{-3}}$\\(pre$\rightarrow$post)} \\
-\hline
-Twinkling calculi (PRF 500; $L_t=8$) & $50/0$ & 0.102 & $1.00\times 10^{-3}\rightarrow 9.38\times 10^{-4}$ & $888\rightarrow 832$ \\
-\hline
-\end{tabular}%
-}
-\caption{Compact shrink-only penalty audit on the artifact-heavy Twinkling calculi regime. Under the prespecified short-ensemble profile, the shrink-only penalty is active on all 50 bundles (49 safety-only, 1 uplift-eligible), and the protected set is preserved exactly (maximum absolute score change $=0$ on protected pixels). The fixed-threshold audit uses the pre-penalty threshold $\tau_{10^{-3}}$ chosen so that the background proxy satisfies $\mathbb{P}\{S_{\mathrm{stap,pre}}\ge\tau_{10^{-3}}\}=10^{-3}$; at that same threshold, the shrink-only penalty modestly compresses the background tail without score inflation. This is a quantitative hygiene audit, not a primary ROC claim. Extended region/reason panels and representative pre/post tail plots remain in \SuppOrApp{app:supp-results}.}
-\label{tab:ka_calculi_compact}
-\end{table}
 
 \subsection{ULM motion audit (real kHz IQ)}
 \label{sec:ulm7883227}

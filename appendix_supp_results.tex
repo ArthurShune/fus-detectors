@@ -15,13 +15,13 @@ When KA is enabled, it is shrink-only and preserves a protected do-not-penalize 
 \end{center}
 
 \paragraph{Supplement roadmap.}
-\noindent The supplementary material is organized as reader-facing support for the main paper, with structurally labeled and real-IQ audits first, optional adaptive/KA diagnostics next, and archival fairness or repository-style material later.
+\noindent The supplementary material is organized as supporting evidence for the main paper, with structurally labeled and real-IQ audits first, optional adaptive/KA diagnostics next, and archival fairness or repository-style material later.
 \begin{itemize}[nosep]
   \item \textbf{Supporting structural audits:} full ROC shapes for labeled regimes, cross-window calibration, whitened-head stability, relaxed-tail sanity checks, open-skull parameter sensitivity, and the Gammex STAP-only / PRF sensitivity check (Figure~\ref{fig:brain_kwave_roc_curves}, Figure~\ref{fig:twinkling_gammex_structural_roc_curves}, Figure~\ref{fig:brain_openskull_profile_sensitivity}, Figure~\ref{fig:twinkling_gammex_ablation_prf_sensitivity}).
   \item \textbf{Adaptive and KA supporting audits:} finalized threshold sensitivity, conditional-execution leakage, and artifact-heavy calculi hygiene (Tables~\ref{tab:adaptive_tau_sensitivity}, \ref{tab:ka_cflow_sensitivity}, and \ref{tab:condstap_leakage_ablation}).
   \item \textbf{Real-IQ supporting audits:} ULM motion variants and structural audit, Shin real-IQ proxy/motion/hygiene details, and the compact real-IQ same-residual score audit later in this appendix.
   \item \textbf{PD-only and whole-brain retrospectives:} the Mac{\'e}/Urban alias-gating and atlas-based summary panels.
-  \item \textbf{Supplementary simulation and held-out benchmark details:} detailed labeled brain tables, corrected SIMUS/PyMUST fairness checkpoints, and the use-case-motivated synthetic checkpoint tables (Tables~\ref{tab:simus_frozen_benchmark_v1p2}, \ref{tab:simus_symmetric_pipeline_v1p2}, \ref{tab:simus_v2_structural_latency}, and \ref{tab:simus_v2_functional_latency}).
+  \item \textbf{Supplementary simulation and held-out benchmark details:} detailed labeled brain tables, corrected SIMUS/PyMUST fairness checkpoints, the secondary held-out functional same-cube audit, and the use-case-motivated synthetic checkpoint tables (Tables~\ref{tab:simus_frozen_benchmark_v1p2}, \ref{tab:simus_symmetric_pipeline_v1p2}, and \ref{tab:simus_v2_structural_latency}).
   \item \textbf{Detector-family policy summaries:} the compact detector-family policy table and baseline-family summary (Table~\ref{tab:detector_family_policy} and Table~\ref{tab:brain_baseline_summary}).
 \end{itemize}
 
@@ -263,6 +263,40 @@ Random mask (matched coverage) & $-3.05\,[-5.65,-0.92]$ & $-2.97\,[-5.68,-0.71]$
 
 \subsection{KA hygiene on artifact-heavy calculi sequences (Twinkling)}
 To illustrate the shrink-only behavior of the KA layer in a strongly artifact-dominated regime, we evaluate Twinkling calculi sequences under a frozen short-ensemble profile. Figure~\ref{fig:twinkling_contract_states_reasons} summarizes the KA prior outputs (region and reason) across Gammex and calculi runs, and Figure~\ref{fig:twinkling_calculi_tail_example} shows a representative calculi example where the post-KA score compresses the background tail without increasing any scores on penalized pixels.
+
+\begin{figure}[t]
+\centering
+\IfFileExists{figs/paper/shrink_only_tail_suppression.pdf}{%
+  \includegraphics[width=\linewidth]{figs/paper/shrink_only_tail_suppression.pdf}%
+}{%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    \centering
+    \vspace{0.5em}
+    Missing figure \path{figs/paper/shrink_only_tail_suppression.pdf}.\\
+    Reproduce it with \path{PYTHONPATH=. python scripts/fig_shrink_only_tail_suppression.py}.
+    \vspace{0.5em}
+  \end{minipage}}%
+}
+\caption{Empirical statistical effect of the strictly bounded, shrink-only penalty on a heavy-tailed background-proxy score distribution from an artificial-calculi acquisition in the open Doppler Twinkling Artifact database. The matched-subspace score before the optional penalty exhibits a heavy right tail characteristic of structured artifacts. Applying the non-increasing weight $w(i)\in(0,1]$ yields the post-penalty score $S_{\mathrm{stap,post}}=w(i)S_{\mathrm{stap,pre}}$, compressing the background tail while preserving an explicit do-not-penalize protected set (scores unchanged on high-confidence flow locations). The vertical line indicates the pre-penalty threshold $\tau_\alpha$ chosen so that $\mathbb{P}\{S_{\mathrm{stap,pre}}\ge \tau_\alpha\mid \text{bg proxy}\}=\alpha$ (here $\alpha=10^{-3}$); the shaded region highlights the corresponding right tail, and the post-penalty tail mass is evaluated at the same $\tau_\alpha$.}
+\label{fig:shrink_only_tail_suppression}
+\end{figure}
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lcccc}
+\hline
+Regime & \shortstack{Penalty active / inactive\\bundles} & \shortstack{median\\$p_{\mathrm{shrink}}$} & \shortstack{background-tail rate at\\pre-penalty $\tau_{10^{-3}}$\\(pre$\rightarrow$post)} & \shortstack{background-tail clusters\\at $\tau_{10^{-3}}$\\(pre$\rightarrow$post)} \\
+\hline
+Twinkling calculi (PRF 500; $L_t=8$) & $50/0$ & 0.102 & $1.00\times 10^{-3}\rightarrow 9.38\times 10^{-4}$ & $888\rightarrow 832$ \\
+\hline
+\end{tabular}%
+}
+\caption{Compact shrink-only penalty audit on the artifact-heavy Twinkling calculi regime. Under the prespecified short-ensemble profile, the shrink-only penalty is active on all 50 bundles (49 safety-only, 1 uplift-eligible), and the protected set is preserved exactly (maximum absolute score change $=0$ on protected pixels). The fixed-threshold audit uses the pre-penalty threshold $\tau_{10^{-3}}$ chosen so that the background proxy satisfies $\mathbb{P}\{S_{\mathrm{stap,pre}}\ge\tau_{10^{-3}}\}=10^{-3}$; at that same threshold, the shrink-only penalty modestly compresses the background tail without score inflation. This is a quantitative hygiene audit, not a primary ROC claim.}
+\label{tab:ka_calculi_compact}
+\end{table}
 
 \begin{figure}[t]
 \centering
@@ -859,7 +893,7 @@ HOSVD & \texttt{ef95\_ds2\_t32} & Kasai & 0.800 & 0.342 & 0.729 & \texttt{Motion
 
 \subsection{Use-case-motivated synthetic SIMUS-ClinUtility-v2 checkpoint: latency versus performance}
 \label{app:simus-v2-latency}
-Tables~\ref{tab:simus_frozen_benchmark_v1p2} and \ref{tab:simus_symmetric_pipeline_v1p2} establish method-family fairness on the broader corrected moving-scatterer checkpoint; Tables~\ref{tab:simus_v2_structural_latency} and \ref{tab:simus_v2_functional_latency} report the narrower use-case-motivated synthetic checkpoint used for translational interpretation. The \emph{SIMUS-ClinUtility-v2} track is intentionally narrower than the corrected frozen-v1 benchmark and uses prespecified nuisance settings informed by reported fUS operating conditions. Competitive structural evaluation is restricted to the mobile and intra-operative parenchymal settings; the more surface-dominated setting remains exploratory. For translational readers, the practical question is not only whether STAP improves nuisance separation, but how much runtime overhead is paid to obtain that improvement. Table~\ref{tab:simus_v2_structural_latency} therefore summarizes the held-out structural checkpoint on an RTX~4080~SUPER using four representative operating points: the fastest strong non-STAP reference (\mbox{HOSVD$\rightarrow$Kasai}), the fastest STAP point on the latency frontier (\mbox{Adaptive~Global~SVD$\rightarrow$STAP}), the same-residual native reference (\mbox{RPCA$\rightarrow$Kasai}), and the highest-quality STAP setting (\mbox{RPCA$\rightarrow$STAP}). These are held-out bundle runtimes for the SIMUS structural cases, not the replay-window latency protocol used for the brain simulations, Shin, and Gammex.
+Tables~\ref{tab:simus_frozen_benchmark_v1p2} and \ref{tab:simus_symmetric_pipeline_v1p2} establish method-family fairness on the broader corrected moving-scatterer checkpoint. Table~\ref{tab:simus_v2_structural_latency} reports the narrower use-case-motivated synthetic structural checkpoint used for translational interpretation, and the secondary same-cube functional audit appears later in this appendix. The \emph{SIMUS-ClinUtility-v2} track is intentionally narrower than the corrected frozen-v1 benchmark and uses prespecified nuisance settings informed by reported fUS operating conditions. Competitive structural evaluation is restricted to the mobile and intra-operative parenchymal settings; the more surface-dominated setting remains exploratory. For translational readers, the practical question is not only whether the matched-subspace detector improves nuisance separation, but how much runtime overhead is paid to obtain that improvement. Table~\ref{tab:simus_v2_structural_latency} therefore summarizes the held-out structural checkpoint on an RTX~4080~SUPER using four representative operating points: the fastest strong non-matched-subspace reference (\mbox{HOSVD$\rightarrow$Kasai}), the fastest matched-subspace point on the latency frontier (\mbox{Adaptive~Global~SVD$\rightarrow$STAP}), the same-residual native reference (\mbox{RPCA$\rightarrow$Kasai}), and the highest-quality matched-subspace setting (\mbox{RPCA$\rightarrow$STAP}). These are held-out bundle runtimes for the SIMUS structural cases, not the replay-window latency protocol used for the brain simulations, Shin, and Gammex.
 
 \begin{table}[t]
 \centering
@@ -891,26 +925,20 @@ The resulting pattern is stronger than the earlier generic stress audit. On ever
 \paragraph{Detector-family ablation on a fixed use-case-motivated synthetic residual.}
 The held-out same-residual SIMUS detector-family ablation now appears in the main text as Table~\ref{tab:simus_detector_family_ablation}. We do not repeat it here. Its role is to hold the MC--SVD residual fixed and change only the downstream head, which sharpens the detector-head claim independently of the end-to-end stack comparisons in Table~\ref{tab:simus_v2_structural_latency}.
 
-The functional checkpoint is reported separately because the common readout is different. On the broader held-out split we freeze the common readout to \texttt{bgcdf\_outside\_glm}, which makes the same-residual score comparison interpretable in the same downstream map-hygiene language across families. Table~\ref{tab:simus_v2_functional_latency} summarizes the best held-out functional pipeline on each setting together with the aggregate fair score-comparison result. The end-to-end best pipeline and the best downstream score answer different questions: the former includes residualizer-setting interactions, whereas the latter isolates whether STAP improves the same residual cube under a common readout. The end-to-end best pipeline remains setting-dependent (intra-operative parenchymal mapping prefers an RPCA+STAP chain, while the mobile setting prefers a native HOSVD+PD chain), but the stricter same-residual comparison still shows STAP as the better score in 11/12 prespecified family/setting comparisons, with the sole remaining miss being an effective tie.
+\paragraph{Held-out functional same-cube detector-head audit.}
+The main paper is structural-first, so the held-out functional same-cube audit is kept here. It fixes the residual stream and asks a narrower question: under a common functional readout, does the fully whitened detector improve activation-versus-nuisance separation relative to conventional Doppler-style score heads on the same held-out data? The answer is directionally positive but secondary. In the strict held-out audit, the fully whitened detector is positive in 5 of 6 residual families in both settings, with median held-out selection-score gains of +0.065 [0.032, 0.091] for the intra-operative parenchymal regime and +0.111 [0.032, 0.142] for the mobile regime. The corresponding median gains in activation-versus-nuisance AUC are +0.026 [0.014, 0.052] and +0.059 [0.011, 0.066]. Those effects are not large enough to carry the paper by themselves, but they remain consistent across the prespecified same-cube comparison.
 
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\resizebox{\linewidth}{!}{%
-\begin{tabular}{l c c c c c}
-\hline
-Functional summary & \shortstack{Runtime\\(s)} & \shortstack{Selection\\score} & \shortstack{AUC$_{\mathrm{act/bg}}$} & \shortstack{AUC$_{\mathrm{act/nuis}}$} & \shortstack{Outside frac\\at $10^{-3}$} \\
-\hline
-Intra-op best pipeline: RPCA $\rightarrow$ PD-after-STAP & 0.763 & 1.434 & 0.708 & 0.728 & 0.00124 \\
-Mobile best pipeline: HOSVD $\rightarrow$ PD & 0.179 & 1.193 & 0.587 & 0.606 & 0.00064 \\
-STAP score aggregate (11/12 positive) & 0.442 & +0.088 & -- & -- & -- \\
-\hline
-\end{tabular}%
+\IfFileExists{reports/simus_functional_numeric_summary_table.tex}{%
+  \input{reports/simus_functional_numeric_summary_table.tex}%
+}{%
+  \begin{center}
+  \refstepcounter{table}\label{tab:accepted_v2_functional_main}%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/simus_functional_numeric_summary_table.tex}.\\
+    Reproduce it with \path{python3 scripts/simus_functional_numeric_table.py}.
+  \end{minipage}}
+  \end{center}
 }
-\caption{Clinically anchored \emph{SIMUS-ClinUtility-v2} functional checkpoint on held-out evaluation seeds using the common readout \texttt{bgcdf\_outside\_glm}. The first two rows report the best end-to-end held-out pipeline on each setting; the final row reports the mean STAP-score runtime in the strict same-residual comparison, where the residualizer is held fixed and only the downstream score is swapped. In that audit the mean native runtime is 0.274~s, the mean STAP runtime is 0.442~s, and the mean held-out selection-score gain is +0.088, with STAP positive in 11/12 prespecified family/setting comparisons.}
-\label{tab:simus_v2_functional_latency}
-\end{table}
 
 \subsection*{Functional and Translation-Support Audits}
 This block collects compact real-data score audits and PD-only whole-brain retrospective summaries that support the translational interpretation without serving as primary labeled efficacy benchmarks.
