@@ -4,10 +4,10 @@
 \footnotesize
 \setlength{\tabcolsep}{4pt}
 \par\medskip\noindent\textbf{Mobile}\par
-\smallskip\noindent Public comparator: HOSVD $\rightarrow$ Kasai. Fixed detector chain: Adaptive Global SVD $\rightarrow$ fixed matched-subspace.\par\smallskip
+\smallskip\noindent Best conventional baseline: HOSVD $\rightarrow$ Kasai. Fixed detector chain: Adaptive Global SVD $\rightarrow$ fixed matched-subspace.\par\smallskip
 \begin{tabular}{@{}l c c c c c c@{}}
 \hline
-Seed & \multicolumn{3}{c}{Public comparator} & \multicolumn{3}{c}{Fixed detector chain} \\
+Seed & \multicolumn{3}{c}{Best conventional baseline} & \multicolumn{3}{c}{Fixed detector chain} \\
 \cline{2-4} \cline{5-7}
  & AUC$_{\mathrm{main/bg}}$ & AUC$_{\mathrm{main/nuis}}$ & FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$ & AUC$_{\mathrm{main/bg}}$ & AUC$_{\mathrm{main/nuis}}$ & FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$ \\
 \hline
@@ -17,10 +17,10 @@ Seed 128 & 0.692 & 0.720 & 0.210 & 0.905 & 0.984 & 0.000 \\
 \end{tabular}
 \medskip
 \par\medskip\noindent\textbf{Intra-operative parenchymal}\par
-\smallskip\noindent Public comparator: HOSVD $\rightarrow$ Kasai. Fixed detector chain: RPCA $\rightarrow$ fixed matched-subspace.\par\smallskip
+\smallskip\noindent Best conventional baseline: HOSVD $\rightarrow$ Kasai. Fixed detector chain: RPCA $\rightarrow$ fixed matched-subspace.\par\smallskip
 \begin{tabular}{@{}l c c c c c c@{}}
 \hline
-Seed & \multicolumn{3}{c}{Public comparator} & \multicolumn{3}{c}{Fixed detector chain} \\
+Seed & \multicolumn{3}{c}{Best conventional baseline} & \multicolumn{3}{c}{Fixed detector chain} \\
 \cline{2-4} \cline{5-7}
  & AUC$_{\mathrm{main/bg}}$ & AUC$_{\mathrm{main/nuis}}$ & FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$ & AUC$_{\mathrm{main/bg}}$ & AUC$_{\mathrm{main/nuis}}$ & FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$ \\
 \hline
@@ -28,6 +28,6 @@ Seed 127 & 0.834 & 0.431 & 0.643 & 0.993 & 0.99998 & 0.000 \\
 Seed 128 & 0.839 & 0.471 & 0.600 & 0.995 & 0.99994 & 0.000 \\
 \hline
 \end{tabular}
-\caption{Cleaner held-out SIMUS/PyMUST structural checkpoint with explicit held-out seed rows. For each evaluated structural setting, we report the strongest conventional comparator from the symmetric baseline sweep and the strongest fixed detector chain from the held-out detector-head search. This avoids compressing the checkpoint into rounded cross-seed summaries and makes the near-zero nuisance leakage rows explicit rather than implicit.}
+\caption{Held-out SIMUS/PyMUST reference regime with explicit held-out seed rows. For each evaluated structural setting, we report the best conventional baseline among evaluated methods from the symmetric baseline sweep and the strongest fixed detector chain from the held-out detector-head search. This avoids compressing the table into rounded cross-seed summaries and makes the near-zero nuisance leakage rows explicit rather than implicit.}
 \label{tab:accepted_v2_structural_main}
 \end{center}
