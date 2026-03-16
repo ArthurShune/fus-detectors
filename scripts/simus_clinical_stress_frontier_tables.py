@@ -43,6 +43,10 @@ LEVEL_DISPLAY = {"reference": "Ref.", "moderate": "Mod.", "hard": "Hard"}
 PIPELINE_DISPLAY = {
     "RPCA -> PD": r"\shortstack[l]{RPCA\\$\rightarrow$ PD}",
     "RPCA -> Matched-subspace default": r"\shortstack[l]{RPCA\\$\rightarrow$ Fixed matched-subspace}",
+    "RPCA -> Adaptive guard": r"\shortstack[l]{RPCA\\$\rightarrow$ Adaptive head}",
+    "RPCA -> Whitened specialist": r"\shortstack[l]{RPCA\\$\rightarrow$ Whitened specialist}",
+    "Adaptive Global SVD -> Matched-subspace default": r"\shortstack[l]{Adaptive-global SVD\\$\rightarrow$ Fixed matched-subspace}",
+    "Adaptive Global SVD -> Adaptive guard": r"\shortstack[l]{Adaptive-global SVD\\$\rightarrow$ Adaptive head}",
     "Adaptive Global SVD -> Whitened specialist": r"\shortstack[l]{Adaptive-global SVD\\$\rightarrow$ Whitened specialist}",
 }
 DETECTOR_DISPLAY = {
@@ -75,6 +79,23 @@ def _best_by(rows: list[dict[str, str]], *, split: str, role: str, axis_key: str
     if not subset:
         raise ValueError(f"missing rows for split={split} role={role} axis={axis_key} level={level}")
     return max(subset, key=lambda row: float(row["selection_score"]))
+
+
+def _headline_rank(row: dict[str, str]) -> float:
+    return float(row["auc_main_vs_nuisance"]) - float(row["fpr_nuisance_match@0p5"])
+
+
+def _best_headline_detector(
+    rows: list[dict[str, str]], *, split: str, axis_key: str, level: str
+) -> dict[str, str]:
+    subset = [
+        row
+        for row in rows
+        if row["split"] == split and row["role"] == "detector" and row["axis_key"] == axis_key and row["level"] == level
+    ]
+    if not subset:
+        raise ValueError(f"missing detector rows for split={split} axis={axis_key} level={level}")
+    return max(subset, key=_headline_rank)
 
 
 def _write(path: Path, text: str) -> None:
@@ -305,7 +326,7 @@ def _headline_table(rows: list[dict[str, str]]) -> str:
             ]
         )
         for level in sorted(meta["levels"], key=lambda l: LEVEL_ORDER[l]):
-            detector = _best_by(rows, split="eval", role="detector", axis_key=axis_key, level=level)
+            detector = _best_headline_detector(rows, split="eval", axis_key=axis_key, level=level)
             public = _best_by(rows, split="eval", role="public", axis_key=axis_key, level=level)
             condition_cell = rf"\shortstack[l]{{{LEVEL_DISPLAY[level]}\\{meta['levels'][level]}}}"
             metrics_cell = _arrow_metric_cell(public, detector, cache=interval_cache)
@@ -315,7 +336,7 @@ def _headline_table(rows: list[dict[str, str]]) -> str:
             lines.append(r"\medskip")
     lines.extend(
         [
-            rf"\caption{{Held-out SIMUS mobile stress regime. Each row compares the best detector-family stack with the best conventional baseline among evaluated methods on the same held-out evaluation seed.{(' On every row in this reduced table, that baseline was ' + _pipeline_caption(common_public) + '.') if common_public else ''} Point estimates are shown as $x_{{\mathrm{{lo}}}}^{{\mathrm{{hi}}}}$ with 95\% nonparametric bootstrap intervals over the held-out masked score samples. Because this table uses one held-out evaluation seed per axis, these intervals describe within-seed score uncertainty rather than between-seed variation. The held-out reference regime is shown separately to identify the fixed default detector head.}}",
+            rf"\caption{{Held-out SIMUS mobile stress regime. Each row compares the detector-family stack with the strongest nuisance-control summary on the displayed endpoints (higher AUC$_{{\mathrm{{main/nuis}}}}$, lower FPR$_{{\mathrm{{nuis}}}}$@$0.5$) against the best conventional baseline among evaluated methods on the same held-out evaluation seed.{(' On every row in this reduced table, that baseline was ' + _pipeline_caption(common_public) + '.') if common_public else ''} Point estimates are shown as $x_{{\mathrm{{lo}}}}^{{\mathrm{{hi}}}}$ with 95\% nonparametric bootstrap intervals over the held-out masked score samples. Because this table uses one held-out evaluation seed per axis, these intervals describe within-seed score uncertainty rather than between-seed variation. The held-out reference regime is shown separately to identify the fixed default detector head.}}",
             r"\label{tab:simus_stress_frontier_headline}",
             r"\end{center}",
             "",
