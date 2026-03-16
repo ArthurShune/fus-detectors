@@ -10,14 +10,14 @@ Method & \multicolumn{3}{c}{Mobile} & \multicolumn{3}{c}{Intra-operative parench
 \cline{2-4} \cline{5-7}
  & AUC$_{\mathrm{main/bg}}$ & AUC$_{\mathrm{main/nuis}}$ & FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$ & AUC$_{\mathrm{main/bg}}$ & AUC$_{\mathrm{main/nuis}}$ & FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$ \\
 \hline
-Baseline (power Doppler) & 0.568 & 0.131 & 0.973 & 0.912 & 0.022 & 1.000 \\
-Baseline (Kasai lag-1 magnitude) & 0.500 & 0.171 & 0.909 & 0.792 & 0.019 & 0.998 \\
-Fixed matched-subspace detector & 0.623 & 0.713 & 0.226 & 0.844 & 0.982 & 0.004 \\
-Adaptive detector & 0.623 & 0.713 & 0.226 & 0.844 & 0.982 & 0.004 \\
-Fully whitened detector & 0.569 & 0.600 & 0.374 & 0.819 & 0.932 & 0.029 \\
+Baseline (power Doppler) & 0.568 [0.562,0.575] & 0.131 [0.127,0.134] & 0.973 [0.968,0.979] & 0.912 [0.909,0.915] & 0.022 [0.016,0.028] & 1.000 [1.000,1.000] \\
+Baseline (Kasai lag-1 magnitude) & 0.500 [0.489,0.512] & 0.171 [0.154,0.188] & 0.909 [0.889,0.928] & 0.792 [0.788,0.795] & 0.019 [0.017,0.022] & 0.998 [0.996,1.000] \\
+Fixed matched-subspace detector & 0.623 [0.587,0.659] & 0.713 [0.677,0.748] & 0.226 [0.178,0.273] & 0.844 [0.831,0.857] & 0.982 [0.981,0.983] & 0.004 [0.004,0.004] \\
+Adaptive detector & 0.623 [0.587,0.659] & 0.713 [0.677,0.748] & 0.226 [0.178,0.273] & 0.844 [0.831,0.857] & 0.982 [0.981,0.983] & 0.004 [0.004,0.004] \\
+Fully whitened detector & 0.569 [0.553,0.585] & 0.600 [0.529,0.672] & 0.374 [0.296,0.451] & 0.819 [0.819,0.820] & 0.932 [0.927,0.936] & 0.029 [0.025,0.032] \\
 \hline
 \end{tabular}%
 }
-\caption{Same-residual detector-family ablation on the held-out use-case-motivated SIMUS/PyMUST structural benchmark using a common MC--SVD residual and the current detector profile (Brain-SIMUS-Clin-MotionRobust-v0). Rows differ only in the downstream score head: power Doppler, Kasai lag-1 magnitude, the fixed flow-band matched-subspace detector without whitening ($R=I$), the adaptive detector that promotes clutter-heavy tiles onto a whitened branch, and the fully whitened detector. Values are means over the two held-out evaluation seeds for each setting. Lower nuisance FPR at matched TPR is better.}
+\caption{Same-residual detector-family ablation on the held-out use-case-motivated SIMUS/PyMUST structural benchmark using a common MC--SVD residual. Rows differ only in the downstream score head: power Doppler, Kasai lag-1 magnitude, the fixed flow-band matched-subspace detector without whitening ($R=I$), the adaptive detector that promotes clutter-heavy tiles onto a whitened branch, and the fully whitened detector. Values are means with [min,max] over held-out evaluation seeds 127 and 128 for each setting. Lower nuisance FPR at matched TPR is better.}
 \label{tab:simus_detector_family_ablation}
 \end{center}

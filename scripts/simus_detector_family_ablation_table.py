@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,11 @@ def _setting_label(run_dir: Path) -> str:
 
 def _dataset_name(run_dir: Path, key: str) -> str:
     return f"{run_dir.name}_{key}"
+
+
+def _seed_from_run_dir(run_dir: Path) -> int | None:
+    match = re.search(r"seed(\d+)", run_dir.name)
+    return int(match.group(1)) if match else None
 
 
 def _tile_iter(shape: tuple[int, int], tile_hw: tuple[int, int], stride: int):
@@ -287,6 +293,15 @@ def _format3(x: float | None) -> str:
     return f"{float(x):.3f}"
 
 
+def _format_mean_minmax(mean: float | None, lo: float | None, hi: float | None) -> str:
+    if mean is None or lo is None or hi is None:
+        return "--"
+    vals = [mean, lo, hi]
+    if not all(np.isfinite(float(v)) for v in vals):
+        return "--"
+    return f"{float(mean):.3f} [{float(lo):.3f},{float(hi):.3f}]"
+
+
 def _build_table(summary_rows: list[dict[str, Any]]) -> str:
     order = [
         "Baseline (power Doppler)",
@@ -324,9 +339,21 @@ def _build_table(summary_rows: list[dict[str, Any]]) -> str:
             item = keyed.get((method, setting), {})
             row.extend(
                 [
-                    _format3(item.get("auc_main_vs_bg_mean")),
-                    _format3(item.get("auc_main_vs_nuisance_mean")),
-                    _format3(item.get("fpr_nuisance_match_0p5_mean")),
+                    _format_mean_minmax(
+                        item.get("auc_main_vs_bg_mean"),
+                        item.get("auc_main_vs_bg_min"),
+                        item.get("auc_main_vs_bg_max"),
+                    ),
+                    _format_mean_minmax(
+                        item.get("auc_main_vs_nuisance_mean"),
+                        item.get("auc_main_vs_nuisance_min"),
+                        item.get("auc_main_vs_nuisance_max"),
+                    ),
+                    _format_mean_minmax(
+                        item.get("fpr_nuisance_match_0p5_mean"),
+                        item.get("fpr_nuisance_match_0p5_min"),
+                        item.get("fpr_nuisance_match_0p5_max"),
+                    ),
                 ]
             )
         lines.append(" & ".join(row) + " \\\\")
@@ -335,12 +362,11 @@ def _build_table(summary_rows: list[dict[str, Any]]) -> str:
     lines.append("}")
     lines.append(
         "\\caption{Same-residual detector-family ablation on the held-out use-case-motivated SIMUS/PyMUST "
-        "structural benchmark using a common MC--SVD residual and the current detector profile "
-        "(Brain-SIMUS-Clin-MotionRobust-v0). Rows differ only in the downstream score head: "
+        "structural benchmark using a common MC--SVD residual. Rows differ only in the downstream score head: "
         "power Doppler, Kasai lag-1 magnitude, the fixed flow-band matched-subspace detector "
         "without whitening ($R=I$), the adaptive detector that promotes clutter-heavy tiles onto "
-        "a whitened branch, and the fully whitened detector. Values are means over the two "
-        "held-out evaluation seeds for each setting. Lower nuisance FPR at matched TPR is better.}"
+        "a whitened branch, and the fully whitened detector. Values are means with [min,max] over "
+        "held-out evaluation seeds 127 and 128 for each setting. Lower nuisance FPR at matched TPR is better.}"
     )
     lines.append("\\label{tab:simus_detector_family_ablation}")
     lines.append("\\end{center}")
@@ -471,6 +497,7 @@ def main() -> None:
             )
             row = {
                 "run": run_dir.name,
+                "seed": _seed_from_run_dir(run_dir),
                 "setting": setting,
                 "method_key": method["key"],
                 "method_label": method["method_label"],
@@ -489,16 +516,32 @@ def main() -> None:
 
     summary_rows: list[dict[str, Any]] = []
     for (setting, method_label), items in sorted(grouped.items()):
+        auc_main_vs_bg_vals = [float(x["auc_main_vs_bg"]) for x in items]
+        auc_main_vs_nuisance_vals = [float(x["auc_main_vs_nuisance"]) for x in items]
+        fpr_nuisance_match_0p5_vals = [float(x["fpr_nuisance_match@0p5"]) for x in items]
+        tpr_main_1e3_vals = [float(x["tpr_main@1e-03"]) for x in items]
+        fpr_nuisance_1e3_vals = [float(x["fpr_nuisance@1e-03"]) for x in items]
         summary_rows.append(
             {
                 "setting": setting,
                 "method_label": method_label,
                 "count": len(items),
-                "auc_main_vs_bg_mean": float(np.mean([float(x["auc_main_vs_bg"]) for x in items])),
-                "auc_main_vs_nuisance_mean": float(np.mean([float(x["auc_main_vs_nuisance"]) for x in items])),
-                "fpr_nuisance_match_0p5_mean": float(np.mean([float(x["fpr_nuisance_match@0p5"]) for x in items])),
-                "tpr_main_1e3_mean": float(np.mean([float(x["tpr_main@1e-03"]) for x in items])),
-                "fpr_nuisance_1e3_mean": float(np.mean([float(x["fpr_nuisance@1e-03"]) for x in items])),
+                "seeds": [int(x["seed"]) for x in items if x.get("seed") is not None],
+                "auc_main_vs_bg_mean": float(np.mean(auc_main_vs_bg_vals)),
+                "auc_main_vs_bg_min": float(np.min(auc_main_vs_bg_vals)),
+                "auc_main_vs_bg_max": float(np.max(auc_main_vs_bg_vals)),
+                "auc_main_vs_nuisance_mean": float(np.mean(auc_main_vs_nuisance_vals)),
+                "auc_main_vs_nuisance_min": float(np.min(auc_main_vs_nuisance_vals)),
+                "auc_main_vs_nuisance_max": float(np.max(auc_main_vs_nuisance_vals)),
+                "fpr_nuisance_match_0p5_mean": float(np.mean(fpr_nuisance_match_0p5_vals)),
+                "fpr_nuisance_match_0p5_min": float(np.min(fpr_nuisance_match_0p5_vals)),
+                "fpr_nuisance_match_0p5_max": float(np.max(fpr_nuisance_match_0p5_vals)),
+                "tpr_main_1e3_mean": float(np.mean(tpr_main_1e3_vals)),
+                "tpr_main_1e3_min": float(np.min(tpr_main_1e3_vals)),
+                "tpr_main_1e3_max": float(np.max(tpr_main_1e3_vals)),
+                "fpr_nuisance_1e3_mean": float(np.mean(fpr_nuisance_1e3_vals)),
+                "fpr_nuisance_1e3_min": float(np.min(fpr_nuisance_1e3_vals)),
+                "fpr_nuisance_1e3_max": float(np.max(fpr_nuisance_1e3_vals)),
             }
         )
 
