@@ -267,7 +267,7 @@ def _provenance_table() -> str:
         [
             r"\hline",
             r"\end{tabular}",
-            r"\caption{Literature-grounded stress axes used in the held-out paper-tier SIMUS stress confirmation. The paper-tier confirmation fixes attention to the residualizer families that dominated the preliminary reduced-grid sweep (RPCA and adaptive-global SVD), then reruns those clinically motivated perturbations on the held-out paper-tier mobile setting. These perturbations are intended to approximate clinically relevant nuisance pressure, not to claim one-to-one replay of any single in vivo acquisition.}",
+            r"\caption{Literature-grounded stress axes used in the held-out SIMUS stress regime. This analysis fixes attention to the residualizer families that dominated the preliminary reduced-grid sweep (RPCA and adaptive-global SVD), then reruns those clinically motivated perturbations on the held-out mobile setting. These perturbations are intended to approximate clinically relevant nuisance pressure rather than replay any single in vivo acquisition one-to-one.}",
             r"\label{tab:simus_clinical_stress_frontier_provenance}",
             r"\end{table}",
             "",
@@ -300,7 +300,7 @@ def _headline_table(rows: list[dict[str, str]]) -> str:
                 rf"\par\medskip\noindent\textbf{{{meta['label']}}}\par\medskip",
                 r"\begin{tabular}{@{}P{4.4cm} P{3.7cm} P{5.1cm}@{}}",
                 r"\hline",
-                r"Level / perturbation & Best detector-family stack & Metrics (Public $\rightarrow$ Detector) \\",
+                r"Level / perturbation & Best detector-family stack & Metrics (Baseline $\rightarrow$ Detector) \\",
                 r"\hline",
             ]
         )
@@ -315,7 +315,7 @@ def _headline_table(rows: list[dict[str, str]]) -> str:
             lines.append(r"\medskip")
     lines.extend(
         [
-            rf"\caption{{Held-out SIMUS mobile stress frontier. Each row compares the best detector-family stack with the strongest public comparator on the same held-out evaluation seed.{(' On every row in this reduced table, the strongest public comparator was ' + _pipeline_caption(common_public) + '.') if common_public else ''} Point estimates are shown as $x_{{\mathrm{{lo}}}}^{{\mathrm{{hi}}}}$ with 95\% nonparametric bootstrap intervals over the held-out masked score samples. Because this stress confirmation uses one held-out evaluation seed per axis, these intervals describe within-seed score uncertainty rather than between-seed variation. The cleaner structural checkpoint is shown separately to identify the fixed default detector head.}}",
+            rf"\caption{{Held-out SIMUS mobile stress regime. Each row compares the best detector-family stack with the best conventional baseline among evaluated methods on the same held-out evaluation seed.{(' On every row in this reduced table, that baseline was ' + _pipeline_caption(common_public) + '.') if common_public else ''} Point estimates are shown as $x_{{\mathrm{{lo}}}}^{{\mathrm{{hi}}}}$ with 95\% nonparametric bootstrap intervals over the held-out masked score samples. Because this table uses one held-out evaluation seed per axis, these intervals describe within-seed score uncertainty rather than between-seed variation. The held-out reference regime is shown separately to identify the fixed default detector head.}}",
             r"\label{tab:simus_stress_frontier_headline}",
             r"\end{center}",
             "",
@@ -348,7 +348,7 @@ def _frozen_rpca_heads_table(rows: list[dict[str, str]]) -> str:
                 rf"\par\medskip\noindent\textbf{{{meta['label']}}}\par\medskip",
                 r"\begin{tabular}{@{}P{3.9cm} P{2.3cm} P{2.3cm} P{2.3cm} P{2.3cm}@{}}",
                 r"\hline",
-                r"Level / perturbation & Public (RPCA$\rightarrow$PD) & Fixed head & Adaptive head & Whitened head \\",
+                r"Level / perturbation & Baseline (RPCA$\rightarrow$PD) & Fixed head & Adaptive head & Whitened head \\",
                 r"\hline",
             ]
         )
@@ -379,7 +379,7 @@ def _frozen_rpca_heads_table(rows: list[dict[str, str]]) -> str:
             lines.append(r"\medskip")
     lines.extend(
         [
-            r"\caption{Concrete detector-head view of the held-out SIMUS mobile stress frontier on the same rows as Table~\ref{tab:simus_stress_frontier_headline}, now fixing the residualizer to RPCA on every row. Entries report AUC$_{\mathrm{main/nuis}}$ (top) and FPR$_{\mathrm{nuis}}$@$0.5$ (bottom), with point estimates shown as $x_{\mathrm{lo}}^{\mathrm{hi}}$ using 95\% nonparametric bootstrap intervals over the held-out masked score samples. RPCA is used because RPCA $\rightarrow$ PD is the strongest public comparator on every stress row in Table~\ref{tab:simus_stress_frontier_headline}. This table separates the fixed, adaptive, and fully whitened heads directly instead of reporting only the best family member on each row.}",
+            r"\caption{Concrete detector-head view of the held-out SIMUS mobile stress regime on the same rows as Table~\ref{tab:simus_stress_frontier_headline}, now fixing the residualizer to RPCA on every row. Entries report AUC$_{\mathrm{main/nuis}}$ (top) and FPR$_{\mathrm{nuis}}$@$0.5$ (bottom), with point estimates shown as $x_{\mathrm{lo}}^{\mathrm{hi}}$ using 95\% nonparametric bootstrap intervals over the held-out masked score samples. RPCA is used because RPCA $\rightarrow$ PD is the best conventional baseline among evaluated methods on every stress row in Table~\ref{tab:simus_stress_frontier_headline}. This table separates the fixed, adaptive, and fully whitened heads directly instead of reporting only the best family member on each row.}",
             r"\label{tab:simus_stress_frontier_rpca_heads}",
             r"\end{center}",
             "",

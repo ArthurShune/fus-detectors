@@ -5,7 +5,7 @@
 \par\medskip\noindent\textbf{Cardiac-like pulsation}\par\medskip
 \begin{tabular}{@{}P{3.9cm} P{2.3cm} P{2.3cm} P{2.3cm} P{2.3cm}@{}}
 \hline
-Level / perturbation & Public (RPCA$\rightarrow$PD) & Fixed head & Adaptive head & Whitened head \\
+Level / perturbation & Baseline (RPCA$\rightarrow$PD) & Fixed head & Adaptive head & Whitened head \\
 \hline
 \shortstack[l]{Ref.\\1.0x cardiac amplitude at 1.30 Hz} & \shortstack[l]{$0.381_{0.345}^{0.416}$\\$0.743_{0.652}^{0.842}$} & \shortstack[l]{$0.879_{0.860}^{0.898}$\\$0.034_{0.023}^{0.047}$} & \shortstack[l]{$0.879_{0.860}^{0.898}$\\$0.034_{0.023}^{0.046}$} & \shortstack[l]{$0.911_{0.894}^{0.925}$\\$0.017_{0.008}^{0.027}$} \\
 \shortstack[l]{Mod.\\2.0x cardiac amplitude at 1.30 Hz} & \shortstack[l]{$0.388_{0.354}^{0.423}$\\$0.668_{0.593}^{0.795}$} & \shortstack[l]{$0.877_{0.857}^{0.895}$\\$0.049_{0.030}^{0.064}$} & \shortstack[l]{$0.877_{0.857}^{0.895}$\\$0.049_{0.030}^{0.064}$} & \shortstack[l]{$0.903_{0.886}^{0.920}$\\$0.030_{0.019}^{0.043}$} \\
@@ -16,13 +16,13 @@ Level / perturbation & Public (RPCA$\rightarrow$PD) & Fixed head & Adaptive head
 \par\medskip\noindent\textbf{Short ensemble}\par\medskip
 \begin{tabular}{@{}P{3.9cm} P{2.3cm} P{2.3cm} P{2.3cm} P{2.3cm}@{}}
 \hline
-Level / perturbation & Public (RPCA$\rightarrow$PD) & Fixed head & Adaptive head & Whitened head \\
+Level / perturbation & Baseline (RPCA$\rightarrow$PD) & Fixed head & Adaptive head & Whitened head \\
 \hline
 \shortstack[l]{Ref.\\64 frames (42.7 ms)} & \shortstack[l]{$0.381_{0.345}^{0.415}$\\$0.743_{0.649}^{0.840}$} & \shortstack[l]{$0.879_{0.861}^{0.897}$\\$0.034_{0.023}^{0.046}$} & \shortstack[l]{$0.879_{0.859}^{0.898}$\\$0.034_{0.023}^{0.047}$} & \shortstack[l]{$0.911_{0.895}^{0.926}$\\$0.017_{0.008}^{0.027}$} \\
 \shortstack[l]{Mod.\\48 frames (32.0 ms)} & \shortstack[l]{$0.390_{0.356}^{0.423}$\\$0.754_{0.708}^{0.814}$} & \shortstack[l]{$0.784_{0.758}^{0.807}$\\$0.137_{0.102}^{0.169}$} & \shortstack[l]{$0.784_{0.759}^{0.808}$\\$0.137_{0.103}^{0.167}$} & \shortstack[l]{$0.846_{0.824}^{0.868}$\\$0.058_{0.034}^{0.080}$} \\
 \shortstack[l]{Hard\\32 frames (21.3 ms)} & \shortstack[l]{$0.426_{0.392}^{0.462}$\\$0.617_{0.536}^{0.727}$} & \shortstack[l]{$0.772_{0.746}^{0.796}$\\$0.166_{0.139}^{0.194}$} & \shortstack[l]{$0.772_{0.746}^{0.797}$\\$0.166_{0.139}^{0.193}$} & \shortstack[l]{$0.716_{0.686}^{0.745}$\\$0.160_{0.130}^{0.207}$} \\
 \hline
 \end{tabular}
-\caption{Concrete detector-head view of the held-out SIMUS mobile stress frontier on the same rows as Table~\ref{tab:simus_stress_frontier_headline}, now fixing the residualizer to RPCA on every row. Entries report AUC$_{\mathrm{main/nuis}}$ (top) and FPR$_{\mathrm{nuis}}$@$0.5$ (bottom), with point estimates shown as $x_{\mathrm{lo}}^{\mathrm{hi}}$ using 95\% nonparametric bootstrap intervals over the held-out masked score samples. RPCA is used because RPCA $\rightarrow$ PD is the strongest public comparator on every stress row in Table~\ref{tab:simus_stress_frontier_headline}. This table separates the fixed, adaptive, and fully whitened heads directly instead of reporting only the best family member on each row.}
+\caption{Concrete detector-head view of the held-out SIMUS mobile stress regime on the same rows as Table~\ref{tab:simus_stress_frontier_headline}, now fixing the residualizer to RPCA on every row. Entries report AUC$_{\mathrm{main/nuis}}$ (top) and FPR$_{\mathrm{nuis}}$@$0.5$ (bottom), with point estimates shown as $x_{\mathrm{lo}}^{\mathrm{hi}}$ using 95\% nonparametric bootstrap intervals over the held-out masked score samples. RPCA is used because RPCA $\rightarrow$ PD is the best conventional baseline among evaluated methods on every stress row in Table~\ref{tab:simus_stress_frontier_headline}. This table separates the fixed, adaptive, and fully whitened heads directly instead of reporting only the best family member on each row.}
 \label{tab:simus_stress_frontier_rpca_heads}
 \end{center}

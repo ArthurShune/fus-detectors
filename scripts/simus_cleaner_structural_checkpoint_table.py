@@ -95,12 +95,12 @@ def _build_table(public_rows: list[dict[str, str]], fixed_rows: list[dict[str, s
         spec = SETTING_ROWS[setting]
         lines.append(rf"\par\medskip\noindent\textbf{{{setting}}}\par")
         lines.append(
-            rf"\smallskip\noindent Public comparator: {spec['public']['label']}. Fixed detector chain: {spec['fixed']['label']}.\par\smallskip"
+            rf"\smallskip\noindent Best conventional baseline: {spec['public']['label']}. Fixed detector chain: {spec['fixed']['label']}.\par\smallskip"
         )
         lines.append(r"\begin{tabular}{@{}l c c c c c c@{}}")
         lines.append(r"\hline")
         lines.append(
-            r"Seed & \multicolumn{3}{c}{Public comparator} & \multicolumn{3}{c}{Fixed detector chain} \\"
+            r"Seed & \multicolumn{3}{c}{Best conventional baseline} & \multicolumn{3}{c}{Fixed detector chain} \\"
         )
         lines.append(r"\cline{2-4} \cline{5-7}")
         lines.append(
@@ -127,7 +127,7 @@ def _build_table(public_rows: list[dict[str, str]], fixed_rows: list[dict[str, s
             lines.append(r"\medskip")
 
     lines.append(
-        r"\caption{Cleaner held-out SIMUS/PyMUST structural checkpoint with explicit held-out seed rows. For each evaluated structural setting, we report the strongest conventional comparator from the symmetric baseline sweep and the strongest fixed detector chain from the held-out detector-head search. This avoids compressing the checkpoint into rounded cross-seed summaries and makes the near-zero nuisance leakage rows explicit rather than implicit.}"
+        r"\caption{Held-out SIMUS/PyMUST reference regime with explicit held-out seed rows. For each evaluated structural setting, we report the best conventional baseline among evaluated methods from the symmetric baseline sweep and the strongest fixed detector chain from the held-out detector-head search. This avoids compressing the table into rounded cross-seed summaries and makes the near-zero nuisance leakage rows explicit rather than implicit.}"
     )
     lines.append(r"\label{tab:accepted_v2_structural_main}")
     lines.append(r"\end{center}")
@@ -136,7 +136,7 @@ def _build_table(public_rows: list[dict[str, str]], fixed_rows: list[dict[str, s
 
 
 def parse_args() -> argparse.Namespace:
-    ap = argparse.ArgumentParser(description="Generate the cleaner held-out SIMUS structural checkpoint table.")
+    ap = argparse.ArgumentParser(description="Generate the held-out SIMUS structural reference-regime table.")
     ap.add_argument(
         "--public-csv",
         type=Path,
