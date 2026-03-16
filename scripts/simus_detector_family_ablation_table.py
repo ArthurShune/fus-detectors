@@ -10,8 +10,13 @@ from typing import Any
 
 import numpy as np
 
-from scripts.simus_eval_structural import evaluate_structural_metrics
-from sim.simus.bundle import derive_bundle_from_run
+ADAPTIVE_GUARD_RULE = {
+    "feature": "base_guard_frac_map",
+    "direction": ">=",
+    "threshold": 0.1453727245330811,
+    "aggregation": "tile_mean",
+    "prefer_advanced_on_invalid": False,
+}
 
 
 def _setting_label(run_dir: Path) -> str:
@@ -25,6 +30,233 @@ def _setting_label(run_dir: Path) -> str:
 
 def _dataset_name(run_dir: Path, key: str) -> str:
     return f"{run_dir.name}_{key}"
+
+
+def _tile_iter(shape: tuple[int, int], tile_hw: tuple[int, int], stride: int):
+    height, width = shape
+    tile_h, tile_w = tile_hw
+    for y0 in range(0, height - tile_h + 1, stride):
+        for x0 in range(0, width - tile_w + 1, stride):
+            yield y0, x0
+
+
+def _tile_scores_to_map(
+    tile_scores: np.ndarray,
+    shape: tuple[int, int],
+    tile_hw: tuple[int, int],
+    stride: int,
+) -> np.ndarray:
+    """Scatter per-tile values back to image space with overlap averaging."""
+    height, width = shape
+    tile_h, tile_w = tile_hw
+    accum = np.zeros((height, width), dtype=np.float32)
+    counts = np.zeros((height, width), dtype=np.float32)
+    idx = 0
+    for y0, x0 in _tile_iter(shape, tile_hw, stride):
+        if idx >= tile_scores.size:
+            raise RuntimeError("Insufficient tile scores for overlap-add reconstruction.")
+        value = float(tile_scores[idx])
+        accum[y0 : y0 + tile_h, x0 : x0 + tile_w] += value
+        counts[y0 : y0 + tile_h, x0 : x0 + tile_w] += 1.0
+        idx += 1
+    if idx != tile_scores.size:
+        raise RuntimeError("Excess tile scores provided for overlap-add reconstruction.")
+    out = np.zeros_like(accum, dtype=np.float32)
+    covered = counts > 0.0
+    out[covered] = accum[covered] / counts[covered]
+    return out
+
+
+def _hybrid_choose_advanced_tile_mask(
+    feature_map: np.ndarray,
+    *,
+    tile_hw: tuple[int, int],
+    stride: int,
+    direction: str,
+    threshold: float,
+    reduction: str,
+    prefer_advanced_on_invalid: bool,
+) -> tuple[np.ndarray, np.ndarray]:
+    feat = np.asarray(feature_map, dtype=np.float32)
+    reduction_norm = {"tile_mean": "mean", "tile_max": "max"}.get(str(reduction).strip().lower(), str(reduction).strip().lower())
+    if reduction_norm not in {"mean", "max"}:
+        raise ValueError(f"Unsupported tile reduction {reduction!r}")
+    tile_promote: list[bool] = []
+    for y0, x0 in _tile_iter(feat.shape, tile_hw, stride):
+        tile = feat[y0 : y0 + tile_hw[0], x0 : x0 + tile_hw[1]]
+        finite = np.isfinite(tile)
+        if not np.any(finite):
+            promote = bool(prefer_advanced_on_invalid)
+        else:
+            vals = np.asarray(tile[finite], dtype=np.float32)
+            stat = float(np.max(vals)) if reduction_norm == "max" else float(np.mean(vals))
+            if str(direction).strip() == ">=":
+                promote = stat >= float(threshold)
+            elif str(direction).strip() == "<=":
+                promote = stat <= float(threshold)
+            else:
+                raise ValueError(f"Unsupported direction {direction!r}")
+        tile_promote.append(bool(promote))
+    tile_promote_arr = np.asarray(tile_promote, dtype=np.bool_)
+    choose_advanced = _tile_scores_to_map(
+        tile_promote_arr.astype(np.float32),
+        feat.shape,
+        tile_hw,
+        stride,
+    ) > 0.0
+    return choose_advanced.astype(np.bool_, copy=False), tile_promote_arr
+
+
+def _finite(x: np.ndarray) -> np.ndarray:
+    arr = np.asarray(x, dtype=np.float64)
+    return arr[np.isfinite(arr)]
+
+
+def _auc_pos_vs_neg(pos: np.ndarray, neg: np.ndarray) -> float | None:
+    pos = _finite(pos)
+    neg = _finite(neg)
+    if pos.size == 0 or neg.size == 0:
+        return None
+    neg_sorted = np.sort(neg)
+    less = np.searchsorted(neg_sorted, pos, side="left")
+    right = np.searchsorted(neg_sorted, pos, side="right")
+    equal = right - less
+    return float((float(np.sum(less)) + 0.5 * float(np.sum(equal))) / float(pos.size * neg.size))
+
+
+def _threshold_from_neg(neg: np.ndarray, fpr: float) -> tuple[float | None, float | None]:
+    neg = _finite(neg)
+    if neg.size == 0:
+        return None, None
+    q = float(np.clip(1.0 - float(fpr), 0.0, 1.0))
+    thr = float(np.quantile(neg, q))
+    fpr_emp = float(np.mean(neg >= thr))
+    return thr, fpr_emp
+
+
+def _threshold_from_pos(pos: np.ndarray, tpr: float) -> tuple[float | None, float | None]:
+    pos = _finite(pos)
+    if pos.size == 0:
+        return None, None
+    q = float(np.clip(1.0 - float(tpr), 0.0, 1.0))
+    thr = float(np.quantile(pos, q))
+    tpr_emp = float(np.mean(pos >= thr))
+    return thr, tpr_emp
+
+
+def _rate_tag(rate: float) -> str:
+    return f"{float(rate):.3f}".rstrip("0").rstrip(".").replace(".", "p")
+
+
+def evaluate_structural_metrics(
+    *,
+    score: np.ndarray,
+    mask_h1_pf_main: np.ndarray,
+    mask_h0_bg: np.ndarray,
+    mask_h0_nuisance_pa: np.ndarray | None,
+    mask_h1_alias_qc: np.ndarray | None,
+    fprs: list[float],
+    match_tprs: list[float] | None = None,
+) -> dict[str, Any]:
+    score = np.asarray(score, dtype=np.float64)
+    pos_main = score[np.asarray(mask_h1_pf_main, dtype=bool)]
+    neg_bg = score[np.asarray(mask_h0_bg, dtype=bool)]
+    neg_nuisance = (
+        score[np.asarray(mask_h0_nuisance_pa, dtype=bool)] if mask_h0_nuisance_pa is not None else np.asarray([], dtype=np.float64)
+    )
+    pos_alias = (
+        score[np.asarray(mask_h1_alias_qc, dtype=bool)] if mask_h1_alias_qc is not None else np.asarray([], dtype=np.float64)
+    )
+    out: dict[str, Any] = {
+        "n_h1_pf_main": int(np.asarray(mask_h1_pf_main, dtype=bool).sum()),
+        "n_h0_bg": int(np.asarray(mask_h0_bg, dtype=bool).sum()),
+        "n_h0_nuisance_pa": int(np.asarray(mask_h0_nuisance_pa, dtype=bool).sum()) if mask_h0_nuisance_pa is not None else 0,
+        "n_h1_alias_qc": int(np.asarray(mask_h1_alias_qc, dtype=bool).sum()) if mask_h1_alias_qc is not None else 0,
+        "auc_main_vs_bg": _auc_pos_vs_neg(pos_main, neg_bg),
+        "auc_main_vs_nuisance": _auc_pos_vs_neg(pos_main, neg_nuisance) if neg_nuisance.size else None,
+        "fpr_floor_bg": (1.0 / float(max(1, neg_bg.size))) if neg_bg.size else None,
+        "fpr_floor_nuisance": (1.0 / float(max(1, neg_nuisance.size))) if neg_nuisance.size else None,
+    }
+    for fpr in fprs:
+        tag = f"{float(fpr):.0e}"
+        thr, bg_emp = _threshold_from_neg(neg_bg, fpr)
+        if thr is None:
+            out[f"thr@{tag}"] = None
+            out[f"tpr_main@{tag}"] = None
+            out[f"fpr_bg@{tag}"] = None
+            out[f"fpr_nuisance@{tag}"] = None
+            out[f"tpr_alias_qc@{tag}"] = None
+            continue
+        out[f"thr@{tag}"] = thr
+        out[f"tpr_main@{tag}"] = float(np.mean(pos_main >= thr)) if pos_main.size else None
+        out[f"fpr_bg@{tag}"] = bg_emp
+        out[f"fpr_nuisance@{tag}"] = float(np.mean(neg_nuisance >= thr)) if neg_nuisance.size else None
+        out[f"tpr_alias_qc@{tag}"] = float(np.mean(pos_alias >= thr)) if pos_alias.size else None
+    for tpr in match_tprs or []:
+        tag = _rate_tag(tpr)
+        thr, tpr_emp = _threshold_from_pos(pos_main, tpr)
+        if thr is None:
+            out[f"thr_match_tpr@{tag}"] = None
+            out[f"tpr_main_match@{tag}"] = None
+            out[f"fpr_bg_match@{tag}"] = None
+            out[f"fpr_nuisance_match@{tag}"] = None
+            out[f"tpr_alias_qc_match@{tag}"] = None
+            continue
+        out[f"thr_match_tpr@{tag}"] = thr
+        out[f"tpr_main_match@{tag}"] = tpr_emp
+        out[f"fpr_bg_match@{tag}"] = float(np.mean(neg_bg >= thr)) if neg_bg.size else None
+        out[f"fpr_nuisance_match@{tag}"] = float(np.mean(neg_nuisance >= thr)) if neg_nuisance.size else None
+        out[f"tpr_alias_qc_match@{tag}"] = float(np.mean(pos_alias >= thr)) if pos_alias.size else None
+    return out
+
+
+def _bundle_dir(out_root: Path, run_dir: Path, key: str) -> Path:
+    return Path(out_root) / _dataset_name(run_dir, key)
+
+
+def _load_array(path: Path) -> np.ndarray:
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    return np.load(path).astype(np.float32, copy=False)
+
+
+def _load_json(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _adaptive_score_from_cached_bundles(
+    *,
+    advanced_bundle_dir: Path,
+    rescue_bundle_dir: Path,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    advanced_score = _load_array(advanced_bundle_dir / "score_stap_preka.npy")
+    rescue_score = _load_array(rescue_bundle_dir / "score_stap_preka.npy")
+    feature_map = _load_array(advanced_bundle_dir / f"{ADAPTIVE_GUARD_RULE['feature']}.npy")
+    meta = _load_json(advanced_bundle_dir / "meta.json")
+    tile_hw = tuple(int(x) for x in meta["tile_hw"])
+    stride = int(meta["tile_stride"])
+    choose_advanced, promote_tiles = _hybrid_choose_advanced_tile_mask(
+        feature_map,
+        tile_hw=tile_hw,
+        stride=stride,
+        direction=str(ADAPTIVE_GUARD_RULE["direction"]),
+        threshold=float(ADAPTIVE_GUARD_RULE["threshold"]),
+        reduction=str(ADAPTIVE_GUARD_RULE["aggregation"]),
+        prefer_advanced_on_invalid=bool(ADAPTIVE_GUARD_RULE["prefer_advanced_on_invalid"]),
+    )
+    adaptive_score = np.where(choose_advanced, advanced_score, rescue_score).astype(np.float32, copy=False)
+    stats = {
+        "tile_hw": list(tile_hw),
+        "tile_stride": stride,
+        "advanced_fraction": float(np.mean(choose_advanced)) if choose_advanced.size else None,
+        "advanced_pixels": int(np.count_nonzero(choose_advanced)),
+        "advanced_tile_fraction": float(np.mean(promote_tiles)) if promote_tiles.size else None,
+        "advanced_tiles": int(np.count_nonzero(promote_tiles)),
+        "rule": dict(ADAPTIVE_GUARD_RULE),
+    }
+    return adaptive_score, stats
 
 
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -57,20 +289,21 @@ def _format3(x: float | None) -> str:
 
 def _build_table(summary_rows: list[dict[str, Any]]) -> str:
     order = [
-        "PD on MC--SVD residual",
-        "Unwhitened ratio",
-        "Whitened power",
-        "Fully whitened matched-subspace detector",
+        "Baseline (power Doppler)",
+        "Baseline (Kasai lag-1 magnitude)",
+        "Fixed matched-subspace detector",
+        "Adaptive detector",
+        "Fully whitened detector",
     ]
     settings = ["Mobile", "Intra-operative parenchymal"]
     keyed = {(r["method_label"], r["setting"]): r for r in summary_rows}
 
     lines: list[str] = []
     lines.append("% AUTO-GENERATED by scripts/simus_detector_family_ablation_table.py; DO NOT EDIT BY HAND.")
-    lines.append("\\begin{table}[t]")
-    lines.append("\\centering")
-    lines.append("\\small")
-    lines.append("\\setlength{\\tabcolsep}{4pt}")
+    lines.append("\\begin{center}")
+    lines.append("\\captionsetup{type=table}")
+    lines.append("\\scriptsize")
+    lines.append("\\setlength{\\tabcolsep}{3pt}")
     lines.append("\\resizebox{\\linewidth}{!}{%")
     lines.append("\\begin{tabular}{@{}lccc ccc@{}}")
     lines.append("\\hline")
@@ -104,13 +337,13 @@ def _build_table(summary_rows: list[dict[str, Any]]) -> str:
         "\\caption{Same-residual detector-family ablation on the held-out use-case-motivated SIMUS/PyMUST "
         "structural benchmark using a common MC--SVD residual and the current detector profile "
         "(Brain-SIMUS-Clin-MotionRobust-v0). Rows differ only in the downstream score head: "
-        "baseline PD, the same flow-band matched-subspace ratio without whitening ($R=I$), total "
-        "whitened slow-time power without Doppler band partition, and the fully whitened matched-"
-        "subspace detector. Values are means over the two held-out evaluation seeds for each "
-        "setting. Lower nuisance FPR at matched TPR is better.}"
+        "power Doppler, Kasai lag-1 magnitude, the fixed flow-band matched-subspace detector "
+        "without whitening ($R=I$), the adaptive detector that promotes clutter-heavy tiles onto "
+        "a whitened branch, and the fully whitened detector. Values are means over the two "
+        "held-out evaluation seeds for each setting. Lower nuisance FPR at matched TPR is better.}"
     )
     lines.append("\\label{tab:simus_detector_family_ablation}")
-    lines.append("\\end{table}")
+    lines.append("\\end{center}")
     lines.append("")
     return "\n".join(lines)
 
@@ -146,7 +379,11 @@ def parse_args() -> argparse.Namespace:
     )
     ap.add_argument("--stap-profile", type=str, default="Brain-SIMUS-Clin-MotionRobust-v0")
     ap.add_argument("--stap-device", type=str, default="cuda")
-    ap.add_argument("--reuse-bundles", action="store_true")
+    ap.add_argument(
+        "--reuse-bundles",
+        action="store_true",
+        help="Retained for CLI compatibility. This script now reads cached bundles directly.",
+    )
     return ap.parse_args()
 
 
@@ -162,30 +399,31 @@ def main() -> None:
     methods = [
         {
             "key": "pd",
-            "method_label": "PD on MC--SVD residual",
-            "run_stap": False,
-            "bundle_overrides": {},
+            "method_label": "Baseline (power Doppler)",
+            "bundle_key": "pd",
             "score_name": "score_pd_base.npy",
         },
         {
-            "key": "unwhitened_ratio",
-            "method_label": "Unwhitened ratio",
-            "run_stap": True,
-            "bundle_overrides": {"stap_detector_variant": "unwhitened_ratio"},
+            "key": "kasai",
+            "method_label": "Baseline (Kasai lag-1 magnitude)",
+            "bundle_key": "pd",
+            "score_name": "score_base_kasai.npy",
+        },
+        {
+            "key": "fixed",
+            "method_label": "Fixed matched-subspace detector",
+            "bundle_key": "unwhitened_ratio",
             "score_name": "score_stap_preka.npy",
         },
         {
-            "key": "whitened_power",
-            "method_label": "Whitened power",
-            "run_stap": True,
-            "bundle_overrides": {"stap_detector_variant": "whitened_power"},
+            "key": "adaptive",
+            "method_label": "Adaptive detector",
             "score_name": "score_stap_preka.npy",
         },
         {
-            "key": "stap",
-            "method_label": "Fully whitened matched-subspace detector",
-            "run_stap": True,
-            "bundle_overrides": {"stap_detector_variant": "msd_ratio"},
+            "key": "fully_whitened",
+            "method_label": "Fully whitened detector",
+            "bundle_key": "stap",
             "score_name": "score_stap_preka.npy",
         },
     ]
@@ -202,24 +440,26 @@ def main() -> None:
         setting = _setting_label(run_dir)
 
         for method in methods:
-            dataset_name = _dataset_name(run_dir, method["key"])
-            bundle_dir = Path(args.out_root) / dataset_name
-            if not args.reuse_bundles or not (bundle_dir / "meta.json").is_file():
-                bundle_dir = derive_bundle_from_run(
-                    run_dir=run_dir,
-                    out_root=Path(args.out_root),
-                    dataset_name=dataset_name,
-                    stap_profile=str(args.stap_profile),
-                    baseline_type="mc_svd",
-                    run_stap=bool(method["run_stap"]),
-                    stap_device=str(args.stap_device),
-                    bundle_overrides=dict(method["bundle_overrides"]),
-                    meta_extra={
-                        "simus_detector_family_ablation": True,
-                        "method_key": str(method["key"]),
-                    },
+            extra_row: dict[str, Any] = {}
+            if str(method["key"]) == "adaptive":
+                fully_whitened_bundle_dir = _bundle_dir(Path(args.out_root), run_dir, "stap")
+                rescue_bundle_dir = _bundle_dir(Path(args.out_root), run_dir, "unwhitened_ratio")
+                score, adaptive_stats = _adaptive_score_from_cached_bundles(
+                    advanced_bundle_dir=fully_whitened_bundle_dir,
+                    rescue_bundle_dir=rescue_bundle_dir,
                 )
-            score = np.load(Path(bundle_dir) / str(method["score_name"])).astype(np.float32, copy=False)
+                bundle_dir = fully_whitened_bundle_dir
+                extra_row = {
+                    "bundle_dir": f"{fully_whitened_bundle_dir} :: rescue={rescue_bundle_dir}",
+                    "adaptive_guard_rule": adaptive_stats["rule"],
+                    "adaptive_guard_advanced_fraction": adaptive_stats["advanced_fraction"],
+                    "adaptive_guard_advanced_pixels": adaptive_stats["advanced_pixels"],
+                    "adaptive_guard_advanced_tile_fraction": adaptive_stats["advanced_tile_fraction"],
+                    "adaptive_guard_advanced_tiles": adaptive_stats["advanced_tiles"],
+                }
+            else:
+                bundle_dir = _bundle_dir(Path(args.out_root), run_dir, str(method["bundle_key"]))
+                score = _load_array(Path(bundle_dir) / str(method["score_name"]))
             metrics = evaluate_structural_metrics(
                 score=score,
                 mask_h1_pf_main=mask_h1_pf_main,
@@ -243,6 +483,7 @@ def main() -> None:
                 "fpr_nuisance_match@0p5": metrics.get("fpr_nuisance_match@0p5"),
                 "fpr_bg_match@0p5": metrics.get("fpr_bg_match@0p5"),
             }
+            row.update(extra_row)
             rows.append(row)
             grouped[(setting, method["method_label"])].append(row)
 

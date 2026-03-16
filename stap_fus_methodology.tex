@@ -650,7 +650,7 @@ Table~\ref{tab:result_table_score_map} maps each main result table to the exact 
 \hline
 Main result table(s) & Detector head actually reported there & Covariance estimator and loading when whitening is active & Training support used for whitening & Notes / exact profile \\
 \hline
-Tables~\ref{tab:simus_stress_frontier_headline}, \ref{tab:accepted_v2_structural_main} & Fixed / adaptive / fully whitened rows on the named residualizer; conventional rows use PD or Kasai on that same residual cube & Fixed: none. Adaptive / fully whitened: Huber covariance, $c=5$, $\lambda=0.10$, target $\kappa=200$, ridge $0.25$ & Pooled tile-local Hankel snapshots from the prespecified window; trim $q=0.08$ on whitened rows; adaptive head whitens only promoted tiles & Canonical SIMUS recipe \\
+Tables~\ref{tab:simus_stress_frontier_headline}, \ref{tab:accepted_v2_structural_main}, \ref{tab:simus_detector_family_ablation} & Fixed / adaptive / fully whitened rows on the named residualizer; conventional rows use PD or Kasai on that same residual cube & Fixed: none. Adaptive / fully whitened: Huber covariance, $c=5$, $\lambda=0.10$, target $\kappa=200$, ridge $0.25$ & Pooled tile-local Hankel snapshots from the prespecified window; trim $q=0.08$ on whitened rows; adaptive head whitens only promoted tiles & Canonical SIMUS recipe. Table~\ref{tab:simus_detector_family_ablation} holds the residual fixed at MC--SVD and changes only the downstream head. \\
 Table~\ref{tab:accepted_v2_functional_main} & Same detector-family mapping, but passed through the common functional readout & Same Huber recipe as structural SIMUS rows: $c=5$, $\lambda=0.10$, $\kappa=200$, ridge $0.25$ & Same pooled Hankel support; trim $q=0.08$ on whitened rows & No separate functional covariance profile \\
 Tables~\ref{tab:brain_detector_ablation}, \ref{tab:brain_detector_swap}, \ref{tab:brain_huber_trim_stability} & Fixed ratio, whitened power, or fully whitened ratio, depending on the row/table & Default whitened brain rows: Tyler-type, $\lambda=0.07$. Stability table: Huber, $c=5$, $\lambda=0.10$, $\kappa=200$, ridge $0.25$ & 64-frame windows with $L_t=8$; pooled tile-local Hankel snapshots. Stability table varies trim $q\in\{0.05,0.08,0.10\}$ & Separates earlier Tyler-style whitening from finalized Huber audit \\
 Table~\ref{tab:twinkling_gammex_structural_roc} & Whitened power, fixed ratio, and fully whitened ratio on the same short-ensemble residual cube; PD/Kasai are conventional rows & Tyler-type, $\lambda=0.07$ for whitened rows; fixed ratio uses $R_i=I$ & Short-ensemble pooled support with $N=17$, $L_t=16$: two overlapping temporal snapshots per pixel within each tile; no trim & Short-support Tyler recipe, not the SIMUS Huber recipe \\
@@ -699,8 +699,8 @@ Because the cleaner held-out checkpoint can otherwise look deceptively easy, we 
 
 \noindent Table~\ref{tab:simus_stress_frontier_headline} is the harder headline structural result. On every held-out stressed row, the strongest detector-family stack outperforms the strongest public comparator evaluated on that same stressed row. The public reference on these rows is not a cleaner operating point but the best conventional stack under the same perturbation, which keeps the comparison honest. The row-wise winner is not uniform, and that is scientifically useful: the simpler matched-subspace default already wins the cardiac reference row and the shortest-ensemble row, whereas the fully whitened specialist takes the more aggressive pulsation rows and the intermediate short-ensemble row. This is the clearest evidence in the paper for why a detector family is needed at all rather than a single universal score.
 
-\begin{table}[t]
-\centering
+\begin{center}
+\captionsetup{type=table}
 \small
 \setlength{\tabcolsep}{4pt}
 \resizebox{\linewidth}{!}{%
@@ -717,9 +717,24 @@ RPCA $\rightarrow$ matched-subspace default & 2.407 & 0.994 & 1.000 & 0.000 \\
 }
 \caption{Cleaner prespecified held-out SIMUS/PyMUST structural checkpoint on held-out evaluation seeds under the prespecified evaluation setting. We highlight two conventional references and the two strongest fixed-head detector-family chains. \emph{AUC$_{\mathrm{main/bg}}$} is the area under the ROC curve for separating main signal from background. \emph{AUC$_{\mathrm{main/nuis}}$} is the area under the ROC curve for separating main signal from nuisance-labeled pixels. \emph{FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$} is the nuisance false-positive rate at the threshold where main-signal true-positive rate equals 0.5. The two rows sharing the same downstream matched-subspace head both drive \emph{FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$} to 0.000 despite using different upstream residualizers. This checkpoint identifies the simpler band-limited matched-subspace detector as the fixed structural default; the harder nuisance-pressure rows in Table~\ref{tab:simus_stress_frontier_headline} show where the adaptive and fully whitened extensions add value.}
 \label{tab:accepted_v2_structural_main}
-\end{table}
+\end{center}
 
 \noindent Table~\ref{tab:accepted_v2_structural_main} should therefore be read as the cleaner default-selection checkpoint rather than as the only headline structural result. The first two metric columns still measure separability, while the last metric column directly measures nuisance leakage at a matched main-signal sensitivity operating point. The most important pattern in this checkpoint is that both ``Adaptive Global SVD $\rightarrow$ matched-subspace default'' and ``RPCA $\rightarrow$ matched-subspace default'' drive the nuisance-leakage column to 0.000, even though the upstream residualizers are different. That common result is why we interpret the matched-subspace head itself, rather than only the choice of residualizer, as the main driver of the nuisance-tail gain on this benchmark. The checkpoint is scientifically useful because it identifies the simpler band-limited matched-subspace head as the strongest fixed default on held-out structural data, while the harder rows in Table~\ref{tab:simus_stress_frontier_headline} show where the adaptive and fully whitened variants add value in clutter-heavier regimes.
+
+To isolate that detector-head claim directly on the main benchmark, Table~\ref{tab:simus_detector_family_ablation} fixes one held-out MC--SVD residual stream and swaps only the downstream score head. This removes residualizer choice from the comparison. On that fixed residual, PD and Kasai still rank nuisance highly, the fixed matched-subspace head is the strongest same-residual detector, and the fully whitened detector is worse on both held-out settings. The adaptive detector is numerically identical to the fixed head here because its frozen guard-promotion rule does not activate on these cleaner MC--SVD residuals. That behavior is useful rather than accidental: on this benchmark, the adaptive extension preserves the fixed default when the clutter evidence is weak instead of forcing whitening where it does not help.
+
+\newpage
+\IfFileExists{reports/simus_detector_family_ablation_table.tex}{%
+  \input{reports/simus_detector_family_ablation_table.tex}%
+}{%
+  \begin{center}
+  \refstepcounter{table}\label{tab:simus_detector_family_ablation}%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/simus_detector_family_ablation_table.tex}.\\
+    Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/simus_detector_family_ablation_table.py --reuse-bundles}.
+  \end{minipage}}
+  \end{center}
+}
 
 For translational readers, the key question is not whether the method makes vessels look better on average, but whether fewer nuisance detections survive when the detector is tuned to preserve clinically relevant parenchymal flow. That is the practical meaning of \emph{FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$}: it asks how much structured false signal remains at a matched target-flow sensitivity operating point. Because fUS is already being used in intra-operative, bedside, cranial-window, and emerging mobile settings \cite{Imbault2017,DemeneHumanNewborn2017,BarangerNeonates2021,Rabut2024,MobileFUS2025}, that nuisance-leakage tradeoff is tied directly to usability and reader trust rather than to image aesthetics alone.
 
