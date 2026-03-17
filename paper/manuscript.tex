@@ -222,6 +222,9 @@ where $s$ is flow-consistent signal, $c$ is structured clutter/motion, and $n$ i
 We use band operators $(\Po,\Pf,\Pg,\Pa)$ for clutter/DC, flow, guard, and alias regions, respectively. For short ensembles, these are exact orthogonal DFT-bin projectors; for longer apertures they are leakage-controlled analysis operators and are treated as band-energy statistics with explicit sanity sentinels (\SuppOrApp{app:alg-details}).
 
 \subsection{Related context}
+\ifPAPERONLY
+Spatiotemporal SVD, RPCA, HOSVD, and local adaptive clutter filtering are established in ultrafast Doppler and fUS, and learned residualizers are relevant prior work on the residual-formation side of the pipeline \cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018,CandesRPCA,SolomonDeepUnfoldedRPCA2020,HuangAdaptiveHOSVD2024}. The question here is narrower: once a residual slow-time cube has been fixed, can the downstream score head reduce nuisance leakage more effectively than PD- or Kasai-style readouts? That separates this paper from Yu-, Baranger-, and Song-style local clutter filtering, which adapts the clutter filter itself before a conventional Doppler score is applied \cite{YuLovstakkenEigenReview2010,SongBlockwiseLocal2017,CheeGPUEigen2017}. ULM motion correction, twinkling-phantom structure audits, and hemodynamic fUS readouts therefore enter here as evaluation context and downstream audits rather than as the primary algorithmic contribution; the fuller literature context is kept in the methods companion.
+\else
 \textbf{Ultrasound clutter suppression.} Spatiotemporal SVD clutter filters are a standard tool in ultrafast Doppler and fUS \cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018,Mace2013,Rabut2020,ICDFUS2021}. Real-time feasibility has been studied via randomized/approximate decompositions and GPU implementations \cite{LokRandomizedSVD2020,CheeGPUEigen2017}. Robust PCA and tensor/HOSVD variants have also been studied for clutter suppression and motion robustness \cite{CandesRPCA,SolomonDeepUnfoldedRPCA2020,HuangAdaptiveHOSVD2024}. We benchmark against representative ultrasound-native clutter-filter families, including adaptive-global SVD, local block-wise SVD, adaptive-local SVD, RPCA, HOSVD, and conventional Doppler score heads.
 
 \textbf{Learned residualizers and deep-unfolded baselines.} Learned clutter filters and deep-unfolded RPCA variants are relevant prior work \cite{SolomonDeepUnfoldedRPCA2020}, but they operate on a different axis of the pipeline from the one studied here. Our question is whether the downstream score head can improve nuisance control once a residual slow-time cube has already been fixed. A fair learned baseline study for that question would require regime-specific training data, supervision, and retraining protocols for the exact post-beamformed slow-time detection task studied here, and no public trained model exists for that task across the labeled simulation, phantom, and real-IQ regimes used in this paper. We therefore treat learned residualization as related prior work rather than as a main comparator family in this detector-head study.
@@ -235,6 +238,7 @@ We use band operators $(\Po,\Pf,\Pg,\Pa)$ for clutter/DC, flow, guard, and alias
 \textbf{Twinkling artifact and Doppler phantoms.} The Doppler ``twinkling artifact'' has been documented as a persistent color-flow phenomenon on calcifications and other strong reflectors, and is widely used as a diagnostic benchmark for Doppler processing chains. Leonov \emph{et al.}\ provide an open-access database of raw beamformer signals with phantoms including a flow-through Gammex phantom and calculi/metal/plastic objects \cite{LeonovTwinklingDD2021}. We use these data to (i) obtain a structurally labeled phantom ROC via B-mode-only tube segmentation and (ii) construct an artifact-heavy regularizer-hygiene regime where the optional penalty layer is expected to be conservative and auditable.
 
 \textbf{fUS detection and hemodynamic analysis.} GLM-based detection and atlas-driven ROI analysis are common in hemodynamic fUS \cite{Demeneglmband2016,UrbanWholeBrain2015}. Here we use those analyses as downstream readouts and translation audits; a dedicated hemodynamic scoring variant is left for future work.
+\fi
 
 \subsection{Baseline clutter suppression and score conventions}
 \paragraph{Beamformed slow-time data.}
@@ -446,8 +450,11 @@ Unless otherwise stated, $\tau_\alpha$ is calibrated per window (or per cine seq
 The numerical settings in this pipeline do not all play the same role, and they were not selected in the same way. Band edges are tied to acquisition physics: PRF fixes the discrete Doppler grid and Nyquist limit, while the flow/guard/alias partitions are chosen to separate slow parenchymal microvascular content from transition-band and aliased high-velocity nuisance on that grid. Tile geometry and $L_t$ are locality/support choices: they are chosen once per regime to preserve spatial adaptation while retaining enough slow-time support for stable covariance estimation, then held fixed. Conditioning parameters (for the fully whitened mode) are chosen to keep the robust covariance well behaved on development audits rather than to maximize held-out task scores. The adaptive threshold $\tau_g$ is a single frozen guard-energy cutoff chosen to preserve the fixed head in cleaner regimes while turning on whitening only when guard-band clutter evidence is clearly non-negligible. The optional regularizer thresholds are coarse safety sentinels rather than tuned performance knobs, and their perturbation audit is reported only in the Supplementary Material (\SuppOrApp{app:param-threshold-sensitivity}).
 
 \subsection{Integrity checks and deterministic sentinels}
-
+\ifPAPERONLY
+This work uses deterministic, label-free integrity checks for acquisition metadata, short-ensemble band discretization, proxy construction, and compute gating. Those checks either record provenance and proceed conservatively or disable the optional shrink-only layer with an explicit reason label. The compact checklist and logged failure modes are kept in the methods companion.
+\else
 This work is a reproducible processing pipeline (decode $\rightarrow$ baseline $\rightarrow$ detector score $\rightarrow$ optional shrink-only penalty layer). Several practical pathologies can invalidate tail-rate reporting or spuriously activate the penalty layer (e.g.\ missing acquisition metadata, coarse short-ensemble band discretization, proxy-mask circularity, or compute-gating leakage). We therefore enforce deterministic, label-free integrity checks that either (i) record provenance and proceed conservatively or (ii) disable the penalty layer ($w\equiv 1$) with an explicit reason label. A concise checklist (and where each safeguard is logged) is provided in \SuppOrApp{app:failure-modes}.
+\fi
 
 \subsection{Regimes and scope}
 \label{sec:results-overview}
@@ -463,6 +470,9 @@ The evidence is stratified by regime so that quantitative detection results rema
   \item \textbf{Supplementary analyses.} Additional label-free audits (e.g.\ PD-only whole-brain fUS) and diagnostic panels are provided in \SuppOrApp{app:supp-results}.
 \end{itemize}
 
+\ifPAPERONLY
+Each regime uses one frozen operating profile for baseline, detector support, and Doppler-band geometry. The main paper keeps the regime-level whitening recipe card in Table~\ref{tab:result_table_score_map}; the fuller profile table is kept in the methods companion.
+\else
 \begin{table}[t]
 \centering
 \small
@@ -483,6 +493,7 @@ ULM Zenodo 7883227 motion and same-residual audits (PRF 1000; 128-frame blocks) 
 \caption{Prespecified operating settings for the main regimes. All settings are fixed per regime prior to reporting results; exact commands and exported metadata are provided in \SuppOrApp{app:repro}. The ULM structural audit uses a separate prespecified 64-frame no-registration fully whitened configuration described explicitly in Section~\ref{sec:ulm7883227}.}
 \label{tab:fixed_profiles}
 \end{table}
+\fi
 
 Table~\ref{tab:result_table_score_map} condenses the whitening and conditioning recipe into one row per regime. The result tables themselves identify which detector head is being reported; the regime-level covariance estimator, loading, and training-support policy are fixed and summarized here, with short notes only for the few exceptions. Equation~\eqref{eq:sbase} defines the baseline ROC score, Equation~\eqref{eq:s0} the fixed detector, Equation~\eqref{eq:sadapt} the adaptive detector, and Equation~\eqref{eq:sw} the fully whitened detector.
 
