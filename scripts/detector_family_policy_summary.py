@@ -62,7 +62,7 @@ def main() -> None:
     rows: list[dict[str, Any]] = []
     rows.append(
         {
-            "regime_tex": "SIMUS mobile / intra-op -- simulated labels -- nuisance-control ROC",
+            "regime_tex": "SIMUS-Struct",
             "head_tex": "Fixed matched-subspace detector",
             "why_tex": "Best fixed downstream head on the prespecified held-out structural benchmark and on the same-residual MC--SVD ablation.",
             "evidence_tex": "Tables~\\ref{tab:accepted_v2_structural_main} and \\ref{tab:simus_detector_family_ablation}.",
@@ -78,7 +78,7 @@ def main() -> None:
     )
     rows.append(
         {
-            "regime_tex": "SIMUS held-out stress regime -- cardiac pulsation and short ensembles",
+            "regime_tex": "SIMUS-Struct stress rows",
             "head_tex": "Fully whitened specialist",
             "why_tex": "Strongest on the cardiac rows and on the 64-frame and 48-frame short-ensemble rows; fixed remains strongest only on the hardest 32-frame row.",
             "evidence_tex": "Tables~\\ref{tab:simus_stress_frontier_headline} and \\ref{tab:simus_stress_frontier_rpca_heads}.",
@@ -86,7 +86,7 @@ def main() -> None:
     )
     rows.append(
         {
-            "regime_tex": "ULM 7883227 -- localization-derived structure labels -- vessel-core ROC",
+            "regime_tex": "ULM-CoreShell",
             "head_tex": "Fully whitened specialist",
             "why_tex": "Only head that improves pooled AUC, strict-tail sensitivity, and shell suppression together on the same residual cube.",
             "evidence_tex": "Tables~\\ref{tab:ulm7883227_structural_roc} and \\ref{tab:ulm_fixed_calibration_transfer}.",
