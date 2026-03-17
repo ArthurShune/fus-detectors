@@ -2178,11 +2178,11 @@ def _default_artifacts() -> list[ArtifactInfo]:
         ArtifactInfo(
             name="Paper build modes (paper vs supplement vs full)",
             paper_refs=["Build packaging (Phase 7)"],
-            outputs=["paper/stap_fus_paper.pdf", "paper/stap_fus_supplement.pdf", "paper/stap_fus_methodology.pdf"],
+            outputs=["paper/preprint.pdf", "paper/supplement.pdf", "paper/methods_companion.pdf"],
             commands=[
-                "pdflatex paper/stap_fus_methodology.tex   # full (default)",
-                "pdflatex paper/stap_fus_paper.tex         # paper-only (no appendices)",
-                "pdflatex paper/stap_fus_supplement.tex    # supplement-only (appendices only)",
+                "pdflatex paper/manuscript.tex   # full (default)",
+                "pdflatex paper/preprint.tex     # paper-only (no appendices)",
+                "pdflatex paper/supplement.tex   # supplement-only (appendices only)",
             ],
         ),
     ]
