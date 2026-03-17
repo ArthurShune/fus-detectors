@@ -715,18 +715,6 @@ Figure~\ref{fig:strict_tail_collapse_concept} shows the general mechanism: a bas
 \label{fig:brain_kwave_roc_curves}
 \end{figure}
 
-\paragraph{Latency and conditional execution.}
-We also report representative runtimes for the final detector family evaluated in this manuscript rather than for an older whitening-heavy research configuration. In this evaluation, the labeled-brain stress tests use the simple unwhitened matched-subspace default with conditional execution, the Shin real-IQ evaluation uses the adaptive variant, and Gammex uses the short-ensemble raw-baseline plus unwhitened matched-subspace head. Conditional execution still changes the decision rule by deciding which tiles receive the adaptive detector, so it is part of the reported detector configuration rather than a cost-free acceleration of the same method. Unless otherwise stated, any conditional-execution reporting uses the same leakage-controlled, disjoint-window proxy discipline as the detection results.
-
-\noindent Latency is measured by replaying multiple windows or frames in a single GPU process and reporting \emph{steady-state} means over windows/frames 2..N. The first replay window/frame is excluded because it includes one-time startup overheads. We time the baseline and detector stages separately (excluding disk I/O), and ``Total'' reports baseline+detector wall time. ``Budget'' denotes the acquired slow-time duration of the corresponding ensemble: $64/1500\approx 42.7$~ms for the brain windows, $128/1000=128$~ms for Shin, and $17/2500=6.8$~ms for the Gammex cines. The reported real-time factor (RTF) is therefore $\text{Total}/\text{Budget}$.
-
-\input{reports/latency_named_preset_rtx4080_prf_product_v1_table.tex}
-
-\paragraph{Workstation replay latency.}
-A common critique of covariance-adaptive fUS scoring is that local covariance conditioning and the associated matrix factorizations are prohibitively expensive when applied densely across an image grid. Table~\ref{tab:latency_summary_4080super_product} shows that, once the detector family is timed in the final reported configuration rather than in a whitening-heavy research setup, the replay picture is substantially better on an RTX~4080~SUPER. All three labeled-brain stress tests run below the full acquisition-PRF budget (RTF $\approx 0.86$--$0.88$), the Shin rat-brain real-IQ evaluation also remains below budget (RTF $\approx 0.84$), and both Gammex views now run below the 17-shot cine-frame budget (RTF $\approx 0.88$ along-view and $\approx 0.64$ across-view).\footnote{Latency is reported from steady-state replay (windows/frames 2..N) and excludes startup overhead and disk I/O. Table~\ref{tab:latency_summary_4080super_product} reports the final detector family used in the manuscript rather than a single worst-case fully whitened configuration applied everywhere.} These results establish workstation replay feasibility for the reported configurations. They do not establish scanner-integrated, OR-ready, or cross-session deployment.
-
-\noindent A leakage ablation confirms that conditional execution can inflate apparent performance under same-window proxy gating, while leakage-controlled gating yields a small TPR decrease (order $10^{-3}$) at the target FPRs. Conditional execution is therefore reported as a separate decision rule rather than as a free speedup; the full open-skull leakage table with bootstrap intervals is provided in the \SuppOrApp{app:supp-results}.
-
 \subsection{Gammex phantom: structural ROC and within-ensemble motion ladders}
 \label{sec:twinkling}
 
@@ -908,6 +896,19 @@ A separate fixed-threshold check on Shin asks a different question. Using the sa
 }
 
 The real-data results span four roles: Gammex-Struct provides structurally labeled phantom evidence, ULM-CoreShell adds a same-acquisition structural check using a localization-derived vascular reference plus block-split threshold transfer, ULM-Motion provides open real-IQ robustness evidence, and Shin-ProxyMotion provides a second open real-IQ corroboration under controlled residual-motion stress plus a negative cross-clip proxy-transfer check. A compact same-cube score audit across those real-IQ bundles is kept in the Supplementary Material, together with additional label-free audits such as whole-brain PD-only retrospectives, Shin contract summaries, and extended motion variants.
+
+\subsection{Computational cost and replay feasibility}
+\label{sec:latency}
+
+We also report representative runtimes for the final detector family evaluated in this manuscript rather than for a whitening-heavy research configuration. In this evaluation, the labeled-brain stress tests use the fixed matched-subspace default with conditional execution, the Shin real-IQ evaluation uses the adaptive variant, and Gammex uses the short-ensemble raw-baseline plus fixed matched-subspace head. Conditional execution changes the decision rule by deciding which tiles receive the adaptive detector, so it is reported as part of the detector configuration rather than as a free acceleration of the same method. Unless otherwise stated, conditional-execution reporting uses the same leakage-controlled, disjoint-window proxy discipline as the detection results.
+
+Latency is measured by replaying multiple windows or frames in a single GPU process and reporting \emph{steady-state} means over windows/frames 2..N. The first replay window/frame is excluded because it includes one-time startup overheads. We time the baseline and detector stages separately, excluding disk I/O, and ``Total'' reports baseline plus detector wall time. ``Budget'' denotes the acquired slow-time duration of the corresponding ensemble: $64/1500\approx 42.7$~ms for the brain windows, $128/1000=128$~ms for Shin, and $17/2500=6.8$~ms for the Gammex cines. The reported real-time factor (RTF) is therefore $\text{Total}/\text{Budget}$.
+
+\input{reports/latency_named_preset_rtx4080_prf_product_v1_table.tex}
+
+Table~\ref{tab:latency_summary_4080super_product} shows that the replay picture is substantially better in the final reported configurations than in a dense fully whitened setup. All three labeled-brain stress tests run below the full acquisition-PRF budget (RTF $\approx 0.86$--$0.88$), the Shin rat-brain real-IQ evaluation also remains below budget (RTF $\approx 0.84$), and both Gammex views run below the 17-shot cine-frame budget (RTF $\approx 0.88$ along-view and $\approx 0.64$ across-view).\footnote{Latency is reported from steady-state replay (windows/frames 2..N) and excludes startup overhead and disk I/O. Table~\ref{tab:latency_summary_4080super_product} reports the final detector family used in the manuscript rather than a single worst-case fully whitened configuration applied everywhere.} These results support workstation replay feasibility for the reported configurations. They do not establish scanner-integrated, OR-ready, or cross-session deployment.
+
+A leakage ablation confirms that conditional execution can inflate apparent performance under same-window proxy gating, while leakage-controlled gating yields a small TPR decrease (order $10^{-3}$) at the target FPRs. The full open-skull leakage table with bootstrap intervals is provided in the \SuppOrApp{app:supp-results}.
 
 \FloatBarrier
 \section{Discussion}
