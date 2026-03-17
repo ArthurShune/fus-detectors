@@ -558,6 +558,23 @@ The held-out reference regime comes first because it determines the default down
 
 To isolate that detector-head claim directly on the main benchmark, Table~\ref{tab:simus_detector_family_ablation} fixes one held-out MC--SVD residual stream and swaps only the downstream score head. This removes residualizer choice from the comparison. On that fixed residual, PD and Kasai still rank nuisance highly, the fixed matched-subspace head is the strongest same-residual detector, and the fully whitened detector is worse on both held-out settings. The adaptive detector is numerically identical to the fixed head here because its frozen guard-promotion rule does not activate on these cleaner MC--SVD residuals. On this benchmark, the adaptive extension therefore preserves the fixed default when the clutter evidence is weak instead of forcing whitening where it does not help.
 
+\begin{figure}[H]
+\centering
+\IfFileExists{figs/paper/simus_detector_family_headline.pdf}{%
+  \includegraphics[width=\linewidth]{figs/paper/simus_detector_family_headline.pdf}%
+}{%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    \centering
+    \vspace{0.5em}
+    Missing figure \path{figs/paper/simus_detector_family_headline.pdf}.\\
+    Reproduce it with \path{PYTHONPATH=. python scripts/fig_simus_detector_family_headline.py}.
+    \vspace{0.5em}
+  \end{minipage}}%
+}
+\caption{Headline same-residual downstream-head comparison on the held-out SIMUS reference benchmark using the common MC--SVD residual from Table~\ref{tab:simus_detector_family_ablation}. Bars show nuisance false-positive rate at matched main-response recall 0.5, the clearest operating-point summary of the benchmark. Insets show AUC$_{\mathrm{main/nuis}}$ on the same held-out seeds 127 and 128. Lower bars are better, and the fixed matched-subspace head, matched by the adaptive variant under this frozen guard rule, is the strongest same-residual downstream choice in both settings.}
+\label{fig:simus_detector_family_headline}
+\end{figure}
+
 \newpage
 \IfFileExists{reports/simus_detector_family_ablation_table.tex}{%
   \input{reports/simus_detector_family_ablation_table.tex}%
