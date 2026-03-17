@@ -41,12 +41,4 @@ This regenerates:
 - `reports/` paper-facing generated tables and selected audit artifacts
 - `tests/` focused regression and unit tests
 
-## Public release hygiene
-
-Tracked files cannot be hidden from GitHub with `.gitignore`. For a clean public mirror that excludes private drafting material such as `patent/`, use:
-
-```bash
-bash scripts/prepare_public_mirror.sh ../fus-detectors-public
-```
-
-That script exports the current tree using `.gitattributes export-ignore` rules and initializes a clean mirror repo in the target directory. For local-only untracked clutter, use `.git/info/exclude`; a sample is provided at [`docs/git-info-exclude.sample`](docs/git-info-exclude.sample).
+Local-only private work and drafting material are intentionally excluded from this public repo. For untracked local clutter, use `.git/info/exclude`; a sample is provided at [`docs/git-info-exclude.sample`](docs/git-info-exclude.sample).

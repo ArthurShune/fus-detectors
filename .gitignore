@@ -1,5 +1,6 @@
 # Shared ignore rules for the public repo.
 # For local-only untracked clutter, use .git/info/exclude (sample: docs/git-info-exclude.sample).
+.github/workflows/refactor_quick_gate.yml
 **/__pycache__/
 *.pyc
 *.pyo
@@ -23,6 +24,17 @@ data/
 figs/paper/
 mace_bridge/
 tmp/
+patent/
+provisional_patent_draft_specification.md
+provisional_patent_outline.md
+LATENCY_OPTIMIZATION_SPEC.md
+build_context.sh
+docs/refactor/
+docs/pymust_simus_clin_plan.md
+docs/simulation_spec_plan.md
+docs/simus_clinutility_v2_plan.md
+notebooks/colab_play.ipynb
+pymust_spec.txt
 *.aux
 *.fdb_latexmk
 *.fls
@@ -37,13 +49,6 @@ runs/motion/r4c/mcsvd_k8_reg4_stride2_seed*/
 # Curated, paper-critical reproducibility artifacts (keep the rest of reports/ ignored).
 !reports/
 reports/**
-!reports/hw/
-!reports/hw/4080super_env.txt
-!reports/hw/4080super_nvidia_smi.txt
-!reports/refactor/
-!reports/refactor/4080super_refactor_quick.log
-!reports/refactor/4080super_refactor_phase.log
-!reports/refactor/4080super_refactor_full.log
 !reports/latency/
 !reports/latency/4080super_latency_summary.csv
 !reports/latency/4080super_latency_summary.json
@@ -51,10 +56,6 @@ reports/**
 # Physical Doppler sanity-link (SIMUS/PyMUST) Phase 3 artifacts.
 !reports/physdoppler_sanity_link/
 !reports/physdoppler_sanity_link/simus_*.json
-
-# SIMUS bundle/contract check logs (small, paper-critical reproducibility artifacts).
-!reports/simus_contract/
-!reports/simus_contract/*.txt
 
 # SIMUS baseline vs STAP comparisons (paper-style baselines on SIMUS Icube).
 !reports/simus_baseline_compare/
