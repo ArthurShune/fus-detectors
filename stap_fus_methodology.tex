@@ -111,7 +111,7 @@ Functional ultrasound and ultrafast Doppler maps can remain vulnerable to nuisan
 \setlength{\fboxsep}{7pt}
 \fbox{\begin{minipage}{0.97\linewidth}
 \textbf{Evidence at a glance.}
-The evidence spans four tiers, from controlled labeled detection to more limited real-IQ corroboration. The validation ladder below appears before the method section to show that scope before the technical details.
+The evidence spans four tiers, from controlled labeled detection to more limited real-IQ corroboration. The validation ladder below summarizes that hierarchy before the technical details.
 
 \captionsetup{type=table}
 \centering
@@ -130,7 +130,7 @@ ULM 7883227 / Shin rat brain -- no labels -- motion robustness & no independent 
 \hline
 \end{tabular}
 \endgroup
-\captionof{table}{Compact validation ladder. Each regime is named as dataset -- label type -- endpoint. The evidence progresses from labeled simulation and structurally labeled phantom data to a held-out use-case-motivated synthetic benchmark and one same-acquisition structural audit on open real in-vivo IQ. The fuller claim-to-evidence matrix appears later in Table~\ref{tab:claims_discipline}.}
+\captionof{table}{Compact validation ladder. Each regime is named as dataset -- label type -- endpoint. The evidence progresses from labeled simulation and structurally labeled phantom data to a held-out use-case-motivated synthetic benchmark and one same-acquisition structural audit on open real in-vivo IQ. Table~\ref{tab:claims_discipline} gives the corresponding claim-to-evidence matrix.}
 \label{tab:validation_ladder_intro}
 \end{minipage}}
 \end{center}
@@ -147,7 +147,7 @@ ULM 7883227 / Shin rat brain -- no labels -- motion robustness & no independent 
     \vspace{0.5em}
   \end{minipage}}%
 }
-\captionof{figure}{Localization-derived structural-label result on ULM Zenodo 7883227 using the published PALA rat-brain localization rendering as an external vascular reference. Left: the PALA-derived vessel-core and perivascular-shell masks after registration back to the IQ grid. Middle and right: the same audited 64-frame MC--SVD residual window (block 001, frames 128:192), thresholded at matched 70\% vessel-core recall for baseline power Doppler and the prespecified no-registration whitened matched-subspace specialist. This figure is intentionally visual; the formal same-residual head comparison is reported in Table~\ref{tab:ulm7883227_structural_roc} immediately below.}
+\captionof{figure}{Localization-derived structural-label result on ULM Zenodo 7883227 using the published PALA rat-brain localization rendering as an external vascular reference. Left: the PALA-derived vessel-core and perivascular-shell masks after registration back to the IQ grid. Middle and right: the same audited 64-frame MC--SVD residual window (block 001, frames 128:192), thresholded at matched 70\% vessel-core recall for baseline power Doppler and the prespecified no-registration whitened matched-subspace specialist. Table~\ref{tab:ulm7883227_structural_roc} reports the formal same-residual head comparison.}
 \label{fig:ulm_pala_headline_hero}
 \end{center}
 
@@ -191,7 +191,7 @@ Throughout the abstract, introduction, results, figures, and tables, we refer to
 \label{fig:leading_structural_fidelity}
 \end{figure}
 
-This is not only an extreme-tail effect. On the representative Gammex frame in Figure~\ref{fig:leading_structural_fidelity}, matching the background FPR at $10^{-2}$ yields zero lumen recovery for the baseline score, whereas both detector-family score maps recover lumen-consistent structure at the same matched background allowance. The later Gammex structural ROC tables show that whitened power is the stronger phantom score overall in this short-ensemble regime. We therefore use the stricter $10^{-3}$--$10^{-4}$ operating points mainly as a stress test that exposes nuisance sensitivity cleanly, not because the practical relevance begins only there.
+The effect is not confined to the extreme tail. On the representative Gammex frame in Figure~\ref{fig:leading_structural_fidelity}, matching the background FPR at $10^{-2}$ yields zero lumen recovery for the baseline score, whereas both detector-family score maps recover lumen-consistent structure at the same matched background allowance. The later Gammex structural ROC tables show that whitened power is the stronger phantom score overall in this short-ensemble regime. We use the stricter $10^{-3}$--$10^{-4}$ operating points mainly as a stress test that exposes nuisance sensitivity cleanly, not because the practical relevance begins only there.
 
 We also study a conservative shrink-only regularization layer, but only as an optional add-on: it can compress extreme-tail artifacts without score inflation, and the primary quantitative results do not rely on it (details in the Supplementary Material). This problem matters now because fUS is no longer only a preclinical proof-of-concept modality. It is already used in intra-operative, neonatal, cranial-window, and emerging mobile settings \cite{Imbault2017,DemeneHumanNewborn2017,BarangerNeonates2021,Rabut2024,MobileFUS2025,Deffieux2021}, where rare nuisance-driven false positives can matter more than average image quality.
 
