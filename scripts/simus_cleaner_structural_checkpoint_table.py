@@ -127,7 +127,7 @@ def _build_table(public_rows: list[dict[str, str]], fixed_rows: list[dict[str, s
             lines.append(r"\medskip")
 
     lines.append(
-        r"\caption{Held-out SIMUS-Struct reference regimes with explicit held-out seed rows. For each evaluated structural setting, we report the best conventional baseline from the development-split baseline sweep and the strongest fixed detector chain chosen on development seeds 125--126, then evaluated unchanged on held-out seeds 127--128. Seed-specific held-out values are shown directly rather than pooled summaries. Here, 0.000 indicates zero observed nuisance detections on the frozen held-out nuisance masks for that seed; the supported floor is set by the corresponding nuisance-mask size.}"
+        r"\caption{Held-out SIMUS-Struct reference regimes with explicit held-out seed rows. For each evaluated structural setting, we report the best conventional baseline from the development-split baseline sweep and the strongest fixed detector chain chosen on development seeds 125--126, then evaluated unchanged on held-out seeds 127--128. Seed-specific held-out values are shown directly rather than pooled summaries. Here, 0.000 means exactly zero observed nuisance detections on the frozen held-out nuisance masks for that seed, not a rounded small value; the supported floor is set by the corresponding nuisance-mask size.}"
     )
     lines.append(r"\label{tab:accepted_v2_structural_main}")
     lines.append(r"\end{center}")
