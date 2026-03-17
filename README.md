@@ -1,52 +1,52 @@
 # STAP-for-fUS
 
-Knowledge-aided space-time adaptive processing (STAP) for functional ultrasound (fUS), with reproducible simulation/phantom evaluation and latency profiling workflows.
+Code and manuscript artifacts for a preprint on localized matched-subspace detector heads for beamformed functional ultrasound (fUS) slow-time data after conventional clutter suppression.
 
-This repository contains:
-- STAP core implementations and baselines (MC-SVD, RPCA, HOSVD, adaptive/local SVD variants).
-- Reproduction scripts for manuscript tables/figures.
-- Refactor verification gates (`quick`, `phase`, `full`) used to control regressions.
+The paper studies three downstream detector variants on the same residual cubes:
+- a fixed matched-subspace detector, which is the default configuration
+- an adaptive variant that selectively invokes whitening
+- a fully whitened variant for regimes where additional covariance adaptation helps
 
-## Quick Start
+Across the held-out SIMUS structural benchmark, the fixed variant is the strongest default downstream head on the same residual stream. In clutter-heavy stress tests, whitening helps in selected regimes. On one open real-IQ rat-brain dataset, the fully whitened variant shows a modest same-acquisition structural concentration advantage on a localization-derived vessel-core versus shell audit.
+
+**Manuscript artifacts**
+- Main preprint: [`stap_fus_paper.pdf`](stap_fus_paper.pdf)
+- Extended methods and supplement companion: [`stap_fus_methodology.pdf`](stap_fus_methodology.pdf)
+
+## Quick start
 
 ```bash
 conda env create -f environment.yml
 conda activate stap-fus
-pre-commit install
 python scripts/verify_gpu.py
 ```
 
-## Reproducibility Entry Points
+## One-command manuscript reproduction entry point
 
-- **Smoke gate (data-safe):**
-  - `make refactor-quick-ci`
-- **Local quick regression gate:**
-  - `make refactor-quick`
-- **Phase boundary gate:**
-  - `make refactor-phase`
-- **Release boundary gate:**
-  - `make refactor-full`
-- **Example manuscript reproduction command:**
-  - `bash scripts/reproduce_table5_brain_kwave.sh`
+To regenerate the current headline same-residual SIMUS figure and table used in the main paper:
 
-## Repository Map
+```bash
+bash scripts/reproduce_figure8_table7.sh
+```
 
-- `pipeline/` — STAP and covariance/detector core code.
-- `sim/` — simulation and STAP integration runtime.
-- `scripts/` — experiment/reproduction/orchestration scripts.
-- `tests/` — focused unit/regression tests for core paths.
-- `docs/refactor/` — phased refactor plans, checklists, and phase reports.
-- `configs/` — reproducibility and sweep configurations.
+This regenerates:
+- Figure 8: `figs/paper/simus_detector_family_headline.pdf`
+- Table 7: `reports/simus_detector_family_ablation_table.tex`
 
-## Public-Repo Policies
+## Repository map
 
-- Contribution guide: `CONTRIBUTING.md`
-- Code of conduct: `CODE_OF_CONDUCT.md`
-- Security policy: `SECURITY.md`
-- Citation metadata: `CITATION.cff`
+- `pipeline/` detector and residualization code
+- `sim/` simulation backends and ultrasound-specific runtime code
+- `scripts/` experiment, figure, and table reproduction entry points
+- `reports/` paper-facing generated tables and selected audit artifacts
+- `tests/` focused regression and unit tests
 
-## Notes
+## Public release hygiene
 
-- `k-Wave-python` downloads required binaries on first use.
-- `environment.yml` targets CUDA-capable PyTorch; ensure NVIDIA driver compatibility.
-- Large datasets and run artifacts are intentionally ignored by git (`runs/`, `reports/`, `data/`).
+Tracked files cannot be hidden from GitHub with `.gitignore`. For a clean public mirror that excludes private drafting material such as `patent/`, use:
+
+```bash
+bash scripts/prepare_public_mirror.sh ../stap-for-fus-public
+```
+
+That script exports the current tree using `.gitattributes export-ignore` rules and initializes a clean mirror repo in the target directory. For local-only untracked clutter, use `.git/info/exclude`; a sample is provided at [`docs/git-info-exclude.sample`](docs/git-info-exclude.sample).

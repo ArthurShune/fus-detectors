@@ -1,2 +1,12 @@
 runs/motion/r4c/mcsvd_k8_reg4_stride2_seed*/** filter=lfs diff=lfs merge=lfs -text
 runs_motion_r4c_stride2.tar.gz filter=lfs diff=lfs merge=lfs -text
+patent export-ignore
+provisional_patent_draft_specification.md export-ignore
+provisional_patent_outline.md export-ignore
+pymust_spec.txt export-ignore
+pymust_specv2.md export-ignore
+simulation_spec.txt export-ignore
+LATENCY_OPTIMIZATION_SPEC.md export-ignore
+tmp export-ignore
+data export-ignore
+runs export-ignore
