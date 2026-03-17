@@ -1,10 +1,10 @@
 # PyMUST/SIMUS Clin Plan
 
-This plan is derived from [pymust_specv2.md](/home/arthu/stap-for-fus/pymust_specv2.md), but it is grounded in the code that already exists in this repo.
+This plan is derived from [pymust_specv2.md](/home/arthu/fus-detectors/pymust_specv2.md), but it is grounded in the code that already exists in this repo.
 
 For the next clinically anchored realism track beyond this corrected frozen
 benchmark, see
-[simus_clinutility_v2_plan.md](/home/arthu/stap-for-fus/docs/simus_clinutility_v2_plan.md).
+[simus_clinutility_v2_plan.md](/home/arthu/fus-detectors/docs/simus_clinutility_v2_plan.md).
 
 ## Repo reality
 
@@ -28,8 +28,8 @@ Already implemented:
   - `scripts/physical_doppler_sanity_link.py`
   - `scripts/icube_baseline_compare.py`
   - `scripts/hab_contract_check.py`
-- smoke coverage already exists in [tests/test_pymust_simus_smoke.py](/home/arthu/stap-for-fus/tests/test_pymust_simus_smoke.py)
-- structural-eval smoke coverage exists in [tests/test_simus_eval_structural_smoke.py](/home/arthu/stap-for-fus/tests/test_simus_eval_structural_smoke.py)
+- smoke coverage already exists in [tests/test_pymust_simus_smoke.py](/home/arthu/fus-detectors/tests/test_pymust_simus_smoke.py)
+- structural-eval smoke coverage exists in [tests/test_simus_eval_structural_smoke.py](/home/arthu/fus-detectors/tests/test_simus_eval_structural_smoke.py)
 
 Not implemented yet:
 

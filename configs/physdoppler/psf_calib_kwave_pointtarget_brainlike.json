@@ -141,7 +141,7 @@
   "provenance": {
     "command": "scripts/psf_calib_point_target_kwave.py --out configs/physdoppler/psf_calib_kwave_pointtarget_brainlike.json",
     "cuda_is_available": true,
-    "cwd": "/home/arthu/stap-for-fus",
+    "cwd": "/home/arthu/fus-detectors",
     "device0": "NVIDIA GeForce RTX 4080 SUPER",
     "git": {
       "commit": "ad27545ad2710b6f799accf2ee5c7b7fe73805d2",

@@ -4,45 +4,24 @@
     "release_tag": "preprint-2026-03-17"
   },
   "git": {
-    "commit": "620ced2ace1dbe80bd9182c974a34412e68433b3",
-    "commit_short": "620ced2",
+    "commit": "0e00bce051e84530a590d504b3d97e6193488907",
+    "commit_short": "0e00bce",
     "branch": "main",
     "dirty": true,
-    "dirty_paths_count": 32,
-    "dirty_ignored_paths_count": 10,
+    "dirty_paths_count": 11,
+    "dirty_ignored_paths_count": 8,
     "dirty_paths": [
-      "M CITATION.cff",
-      "M CONTRIBUTING.md",
-      "M Dockerfile",
-      "M LATENCY_OPTIMIZATION_SPEC.md",
-      "M Makefile",
-      "M README.md",
-      "M appendix_supp_results.tex",
-      "M docs/physical_doppler_sim.md",
-      "M docs/refactor/PHASE0_BASELINE_FREEZE.md",
-      "M docs/refactor/phase_reports/phase4_chunk1_hotspot_baseline.md",
-      "M docs/refactor/phase_reports/phase4_chunk2_launch_overhead.md",
-      "M environment.yml",
+      "M configs/physdoppler/psf_calib_kwave_pointtarget_brainlike.json",
+      "M docs/pymust_simus_clin_plan.md",
+      "M docs/simus_clinutility_v2_plan.md",
       "M patent/generate_patent_figures.py",
       "M patent/provisional_application_package.tex",
       "M patent/provisional_drawings.tex",
       "M pipeline/realdata/ulm_zenodo_7883227.py",
       "M provisional_patent_draft_specification.md",
-      "M scripts/analyze_stap_debug.py",
-      "M scripts/brain_detector_swap_table.py",
-      "M scripts/brain_tile_statistic_check.py",
-      "M scripts/generate_repro_manifest.py",
-      "M scripts/latency_rerun_check.py",
-      "M scripts/r4c_phase2_sweep.py",
-      "M scripts/refactor/verify_gate.py",
-      "M scripts/replay_stap_from_run.py",
-      "M scripts/reproduce_figure8_table7.sh",
-      "M scripts/reproduce_table5_brain_kwave.sh",
-      "M scripts/run_ka_ablation.py",
-      "M scripts/run_pilots.py",
-      "M sim/kwave/common.py",
-      "M sim/simus/pymust_smoke.py",
-      "M stap_fus_methodology.tex"
+      "M scripts/simus_v2_latency_frontier.py",
+      "M scripts/simus_v2_latency_summary.py",
+      "M sim/kwave/common.py"
     ],
     "dirty_ignored_paths": [
       "M patent/figs/figure_01_overview.pdf",
@@ -52,9 +31,7 @@
       "M patent/figs/figure_05_threshold_transfer.pdf",
       "M patent/figs/figure_06_realtime_architecture.pdf",
       "M patent/provisional_application_package.pdf",
-      "M patent/provisional_drawings.pdf",
-      "M stap_fus_methodology.pdf",
-      "M stap_fus_paper.pdf"
+      "M patent/provisional_drawings.pdf"
     ]
   },
   "env": {
@@ -96,7 +73,7 @@
         "device_count": 1,
         "device0_name": "NVIDIA GeForce RTX 4080 SUPER"
       },
-      "cwd": "/home/arthu/stap-for-fus"
+      "cwd": "/home/arthu/fus-detectors"
     },
     "environment_yml": {
       "path": "environment.yml",

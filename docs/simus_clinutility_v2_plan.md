@@ -2,7 +2,7 @@
 
 This document is the follow-on plan after the corrected SIMUS/PyMUST `v1`
 benchmark was frozen. It does not replace
-[pymust_simus_clin_plan.md](/home/arthu/stap-for-fus/docs/pymust_simus_clin_plan.md);
+[pymust_simus_clin_plan.md](/home/arthu/fus-detectors/docs/pymust_simus_clin_plan.md);
 it defines the next realism track.
 
 ## Goal

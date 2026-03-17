@@ -8,7 +8,7 @@ from pathlib import Path
 from statistics import mean
 from typing import Any
 
-ROOT = Path('/home/arthu/stap-for-fus')
+ROOT = Path('/home/arthu/fus-detectors')
 REPORTS = ROOT / 'reports' / 'simus_v2'
 
 
