@@ -317,7 +317,7 @@ def main() -> None:
         ax.axis("off")
         ax.text(0.0, 1.0, "Offline panel unavailable\n(missing offline_* columns)", va="top", ha="left")
 
-    suptitle = "Macé PD-only KA prior summary panel"
+    suptitle = "Macé PD-only shrink-only regularizer summary panel"
     if args.show_source:
         suptitle = f"{suptitle} ({in_csv.as_posix()})"
     fig.suptitle(suptitle, y=0.98)

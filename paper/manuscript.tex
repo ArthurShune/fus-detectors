@@ -58,26 +58,26 @@
 % - Full document (default): compile this file directly.
 % - Paper-only: compile `preprint.tex` (skips appendices).
 % - Supplement-only: compile `supplement.tex` (skips main text).
-\newif\ifSTAPPAPERONLY
-\newif\ifSTAPSUPPLEMENTONLY
-\ifdefined\STAPPAPERONLYFLAG
-\STAPPAPERONLYtrue
+\newif\ifPAPERONLY
+\newif\ifSUPPLEMENTONLY
+\ifdefined\PAPERONLYFLAG
+\PAPERONLYtrue
 \else
-\STAPPAPERONLYfalse
+\PAPERONLYfalse
 \fi
-\ifdefined\STAPSUPPLEMENTONLYFLAG
-\STAPSUPPLEMENTONLYtrue
+\ifdefined\SUPPLEMENTONLYFLAG
+\SUPPLEMENTONLYtrue
 \else
-\STAPSUPPLEMENTONLYfalse
+\SUPPLEMENTONLYfalse
 \fi
-\newcommand{\SuppOrApp}[1]{\ifSTAPPAPERONLY Supplementary Material\else Appendix~\ref{#1}\fi}
+\newcommand{\SuppOrApp}[1]{\ifPAPERONLY Supplementary Material\else Appendix~\ref{#1}\fi}
 
 \begin{document}
 \setlength{\emergencystretch}{1em}
 
-\ifSTAPSUPPLEMENTONLY
+\ifSUPPLEMENTONLY
 \title{Supplementary Material: Localized Matched-Subspace Detection for Functional Ultrasound and Ultrafast Doppler Imaging}
-\else\ifSTAPPAPERONLY
+\else\ifPAPERONLY
 \title{Localized Matched-Subspace Detection for Functional Ultrasound and Ultrafast Doppler Imaging}
 \else
 \title{Extended Methods, Supplementary Results, and Reproducibility Companion for: Localized Matched-Subspace Detection for Functional Ultrasound and Ultrafast Doppler Imaging}
@@ -87,7 +87,7 @@
 \date{}
 \maketitle
 
-\ifSTAPSUPPLEMENTONLY
+\ifSUPPLEMENTONLY
 \begin{center}
 \fbox{\begin{minipage}{0.95\linewidth}
 \textbf{Supplementary material.}
@@ -95,7 +95,7 @@ This document contains appendices for the main paper (derivations, diagnostic pa
 \end{minipage}}
 \end{center}
 \else
-\ifSTAPPAPERONLY\else
+\ifPAPERONLY\else
 \begin{center}
 \fbox{\begin{minipage}{0.95\linewidth}
 \textbf{Extended companion document.}
@@ -164,7 +164,7 @@ ULM-Motion / Shin-ProxyMotion & no independent task labels & robustness evidence
 }
 \fi
 
-\ifSTAPSUPPLEMENTONLY\else
+\ifSUPPLEMENTONLY\else
 \section{Introduction}
 
 Functional ultrasound (fUS) is now used for vascular and functional mapping in settings ranging from preclinical neuroscience to awake surgery and cranial-window human imaging. In these settings, the practical problem is often not average sensitivity alone. A small number of nuisance-driven false detections can distort vascular readouts, contaminate functional maps, and undermine confidence in interpretation. Tissue motion, phase instability, and aliased high-velocity flow therefore matter most when they survive ordinary clutter suppression and populate the extreme right tail of the detector output.
@@ -172,7 +172,7 @@ Functional ultrasound (fUS) is now used for vascular and functional mapping in s
 We address that problem with a localized matched-subspace detector framework for post-residual fUS. After ordinary clutter suppression, the method asks a local question: within a small neighborhood, is the remaining slow-time signal concentrated in a prespecified flow band, or is it more consistent with structured nuisance? The contribution is a detector-head family: the fixed matched-subspace head is the core and default method, the adaptive variant selectively invokes whitening, the fully whitened variant applies whitening throughout, and the shrink-only regularizer is optional and secondary. Among the downstream heads tested on the held-out SIMUS-Struct benchmark, a band-limited matched-subspace score without local whitening is the strongest fixed choice. Figure~\ref{fig:ulm_pala_headline_hero} previews the clearest real-data result, and the same-residual table below shows the regime dependence directly.
 
 \paragraph{Terminology.}
-Throughout the abstract, introduction, results, figures, and tables, we refer to the three detector modes as the fixed matched-subspace detector, the adaptive detector, and the fully whitened detector. In Methods only, we retain the compact abbreviations STAP, CFAR, and KA for local slow-time whitening, empirical negative-tail calibration, and the optional shrink-only regularizer.
+Throughout the paper, we refer to the three detector modes as the fixed matched-subspace detector, the adaptive detector, and the fully whitened detector. We use the full descriptive terms local slow-time whitening, empirical tail calibration, and shrink-only regularizer rather than shorter signal-processing abbreviations.
 
 \begin{figure}[t]
 \centering
@@ -228,7 +228,7 @@ We use band operators $(\Po,\Pf,\Pg,\Pa)$ for clutter/DC, flow, guard, and alias
 
 \textbf{What is new relative to Yu, Baranger, and Song.} Eigen-based clutter filter design for ultrasound color flow imaging and block-wise/local adaptive clutter filters are closely related ultrasound-native approaches to covariance/eigenspace adaptation \cite{YuLovstakkenEigenReview2010,SongBlockwiseLocal2017,CheeGPUEigen2017}. Song \emph{et al.}\ demonstrate local clutter filtering in \emph{in vivo} settings (e.g., kidney imaging), while Baranger \emph{et al.}\ provide an adaptive singular-vector-similarity rank rule for ultrafast Doppler \cite{BarangerAdaptiveSVD2018}. Our benchmark set includes both literature families directly and a tile-local hybrid that combines Song-style overlap-add localization with a Baranger-style adaptive rank rule. Many open fUS releases do not preserve raw high-PRF complex IQ suitable for labeled Doppler-side detector evaluation, so we use labeled k-Wave scenarios and structurally labeled phantoms for quantitative ROC claims and use \emph{in vivo} data for robustness and translation audits. Our contribution differs in where the adaptation enters and in the discipline used to test it: Yu-, Baranger-, and Song-style methods adapt the \emph{clutter filter} itself and then typically read out power Doppler or a closely related conventional score, whereas we keep the residual cube fixed and change the \emph{detector head}. Specifically, we evaluate a small family of downstream heads on identical residuals, including deliberately simple ablations such as whitened total power without Doppler band partition and a fixed band-limited ratio without whitening. This lets us test whether the gain comes from matched-subspace geometry, whitening alone, or their combination. The result is a downstream detector-head framework for post-residual fUS, together with a strict-tail evaluation discipline, rather than another local SVD clutter filter.
 
-\textbf{Covariance-aware detection precedent.} Classical MVDR/LCMV/STAP and related radar work provide the broad precedent for covariance-aware detection under structured interference \cite{Capon1969Beamformer,FrostBeamformer,WardSTAPTutorial,GuerciSTAPBook2003,WicksKASTAP2006,MelvinGuerciKAParadigm2006,GurramGoodmanKASTAP2006}. Here that connection is limited: local covariance whitening appears only as an optional post-residual variant, and side information enters only through a shrink-only regularizer.
+\textbf{Covariance-aware detection precedent.} Classical covariance-aware beamforming and detection work provide the broad precedent for handling structured interference \cite{Capon1969Beamformer,FrostBeamformer,WardSTAPTutorial,GuerciSTAPBook2003,WicksKASTAP2006,MelvinGuerciKAParadigm2006,GurramGoodmanKASTAP2006}. Here that connection is limited: local slow-time whitening appears only as an optional post-residual variant, and side information enters only through a shrink-only regularizer.
 
 \textbf{ULM pipelines and motion correction.} Ultrafast ultrasound localization microscopy (ULM) achieves deep super-resolution vascular imaging by localizing sparse microbubble echoes over high-PRF ensembles \cite{ErricoULM2015}. Robust clutter suppression and motion correction are central to ULM pipelines, including subwavelength motion correction tailored to ultrafast acquisitions \cite{HingotULMMotion2017}. Here we use a public kHz IQ ULM benchmark dataset to report label-free stability and motion robustness of Doppler-side score maps under controlled motion corruption, illustrating how a tail-stable detector can complement upstream motion correction and downstream localization stages.
 
@@ -267,7 +267,7 @@ $S_{\mathrm{base}}$ denotes the baseline ROC score map on $X_{\mathrm{base}}$, $
 Relative to a conventional ultrafast Doppler pipeline, the proposed detector family changes the final scoring stage rather than replacing upstream clutter suppression. After forming a residual slow-time signal, we score its energy inside a prespecified flow subspace rather than using only aggregate Doppler power. The simplest fixed head uses that score without local whitening, a prespecified adaptive variant promotes clutter-heavy pixels onto a whitened branch only when guard-band evidence warrants it, and a fully whitened variant is retained for regimes where stronger local adaptation is beneficial. The goal is not simply to increase vessel conspicuity, but to reduce nuisance-driven high scores in operating regions where false positives matter.
 
 \paragraph{Plain-language interpretation.}
-The fixed head is a local band-limited flow detector applied after ordinary residualization. The adaptive branch adds tile-local whitening only where guard-band energy indicates localized clutter, and the optional penalty layer acts as a conservative vessel-proxy masking rule that can only shrink scores. In Methods we retain the compact abbreviations ``STAP,'' ``CFAR,'' and ``KA'' for local slow-time whitening, empirical negative-tail calibration, and the optional shrink-only regularizer.
+The fixed head is a local band-limited flow detector applied after ordinary residualization. The adaptive branch adds tile-local whitening only where guard-band energy indicates localized clutter, and the optional penalty layer acts as a conservative vessel-proxy masking rule that can only shrink scores.
 
 \paragraph{Pipeline overview.}
 \begin{enumerate}[nosep,leftmargin=1.6em,label=\arabic*.]
@@ -686,7 +686,7 @@ To isolate detector effects from the clutter-suppression stage, we also compute 
 
 \paragraph{Robust-whitening stability audit (labeled brain simulations).}
 Because the fully whitened variant relies on tile-local covariance estimation, Table~\ref{tab:brain_huber_trim_stability} tests sensitivity to contaminated training support and threshold calibration by varying only the high-energy covariance-training trim over $q\in\{0.05,0.08,0.10\}$. The labeled-brain operating-point results are numerically unchanged across those trim settings, and open-skull realized FPR remains close to target under both pairwise cross-window transfer and a fixed calibration bank. In these stress tests, contamination-robust covariance training behaves as a stable recipe choice rather than as a dominant source of result variance.
-We further report a 1D sensitivity sweep over covariance diagonal loading $\lambda$, tile geometry, and slow-time aperture $L_t$ on the canonical open-skull pilot (\ifSTAPPAPERONLY Supplementary Material\else Figure~\ref{fig:brain_openskull_profile_sensitivity}\fi).
+We further report a 1D sensitivity sweep over covariance diagonal loading $\lambda$, tile geometry, and slow-time aperture $L_t$ on the canonical open-skull pilot (\ifPAPERONLY Supplementary Material\else Figure~\ref{fig:brain_openskull_profile_sensitivity}\fi).
 \IfFileExists{reports/brain_huber_trim_stability_table.tex}{%
   \input{reports/brain_huber_trim_stability_table.tex}%
 }{%
@@ -791,7 +791,7 @@ The view asymmetry still matters: the across view provides the clearest structur
 
 \noindent Additional Gammex sanity checks are provided in the \SuppOrApp{app:supp-results}.
 
-\ifSTAPPAPERONLY
+\ifPAPERONLY
 \paragraph{Within-ensemble motion ladders.}
 A labeled within-ensemble motion ladder on the along-view Gammex cine is included in the methods companion. It is directionally consistent with the main phantom result and is useful as a robustness check, but the central phantom claim in the main preprint is the same-residual structural ROC comparison above.
 \else
@@ -854,7 +854,7 @@ A second transfer analysis uses the same structural endpoint but removes per-win
 }
 
 \subsubsection{Motion robustness audit}
-\ifSTAPPAPERONLY
+\ifPAPERONLY
 \paragraph{Companion motion audit.}
 A companion-only motion-injection audit on ULM-CoreShell and Shin-ProxyMotion provides secondary robustness evidence under controlled residual-motion stress. In those audits, matched-subspace score maps are more stable than the baseline maps, but these results are robustness corroboration rather than the structural efficacy claim that anchors the main real-IQ section.
 \else
@@ -967,7 +967,7 @@ On one open real-IQ rat-brain dataset, the same-acquisition ULM structural audit
 All datasets used in this work are either publicly available (as cited) or derived deterministically from those sources. All code used to generate the reported tables and figures is versioned; the exact commit hash and release information are recorded in the reproducibility manifest (\SuppOrApp{app:repro}). A minimal CUDA-enabled software environment and container recipe are provided in the repository. End-to-end regeneration commands for the reported figures and tables are collected in the repository and summarized in the reproducibility appendix.
 
 \paragraph{Code repository.}
-The reference implementation and reproduction scripts are available at \path{https://github.com/ArthurShune/stap-for-fus}. The canonical commit hash and release information are recorded in the reproducibility manifest (\SuppOrApp{app:repro}).
+The reference implementation and reproduction scripts are available at \path{https://github.com/ArthurShune/fus-detectors}. The canonical commit hash and release information are recorded in the reproducibility manifest (\SuppOrApp{app:repro}).
 
 \fi % end main-text block (skipped in supplement-only build)
 \FloatBarrier
@@ -1261,18 +1261,15 @@ Percival, D. B., and Walden, A. T.
 
 \bibitem{GuerciSTAPBook2003}
 Guerci, J. R.
-\newblock \emph{Space-Time Adaptive Processing for Radar}.
-\newblock Artech House (2003).
+\newblock Artech House monograph (2003).
 
 \bibitem{WicksKASTAP2006}
 Wicks, M. C., Rangaswamy, M., Adve, R., and Hale, T. B.
-\newblock Space-time adaptive processing: a knowledge-based perspective for airborne radar.
 \newblock \emph{IEEE Signal Processing Magazine} 23(1), 51--65 (2006).
 \newblock DOI: \url{https://doi.org/10.1109/MSP.2006.1593337}.
 
 \bibitem{MelvinGuerciKAParadigm2006}
 Melvin, W. L., and Guerci, J. R.
-\newblock Knowledge-aided signal processing: a new paradigm for radar and other advanced sensors.
 \newblock \emph{IEEE Transactions on Aerospace and Electronic Systems} 42(3), 983--996 (2006).
 \newblock DOI: \url{https://doi.org/10.1109/TAES.2006.248215}.
 
@@ -1327,12 +1324,11 @@ Scharf, L. L., and Friedlander, B.
 
 \bibitem{WardSTAPTutorial}
 Ward, J.
-\newblock Space-time adaptive processing for airborne radar.
 \newblock MIT Lincoln Laboratory, Tech. Rep. 1015 (1994).
 
 \end{thebibliography}
 
-\ifSTAPPAPERONLY\else
+\ifPAPERONLY\else
 \appendix
 
 \section{Appendix guide and terminology translation}
@@ -1350,7 +1346,7 @@ Term in the paper & Plain-language meaning in ultrasound terms & Where it is dev
 \hline
 Fully whitened detector & Tile-local slow-time covariance whitening applied before matched-subspace scoring. & Appendix~\ref{app:ka-contract-theory} \\
 Adaptive guard rule & A conservative switch that keeps the simple detector by default and turns on whitening only where guard-band clutter evidence is strong. & Main text Section~\ref{sec:method}; Supplementary Material \\
-KA / shrink-only penalty layer & A conservative score penalty map driven by band-energy cues and vessel-proxy protection masks; it can reduce scores but never increase them. & Appendix~\ref{app:ka-contract-theory}; Supplementary Material \\
+Shrink-only regularizer & A conservative score penalty map driven by band-energy cues and vessel-proxy protection masks; it can reduce scores but never increase them. & Appendix~\ref{app:ka-contract-theory}; Supplementary Material \\
 Empirically tail-calibrated thresholds & Background-tail threshold setting based on empirical negative-score distributions rather than analytic scanner-time formulas. & Main text Section~\ref{sec:eval}; Supplementary Material \\
 Safeguards & Automatic checks that disable the optional penalty layer or force conservative behavior when metadata, band geometry, or proxy information are unreliable. & Appendix~\ref{app:failure-modes} \\
 \hline
@@ -1399,7 +1395,7 @@ Pitfall (what can go wrong) & Why it matters & Mitigation / where it is logged \
 \hline
 Vendor raw-container decode ambiguity (header sizing, line ordering, beam/shot layout) & A mis-decode can silently invalidate structural masks and invalidate Doppler scores and band-energy statistics. & Decoder sanity checks reconstruct B-mode and compare to dataset screenshots; ordering/coherence checks validate CFM layout. Summaries are provided in \SuppOrApp{app:twinkling_prf_decode}. \\
 Missing or incorrect Doppler PRF (Twinkling metadata does not reliably store PRF) & PRF determines discrete band binning and peak-occupancy statistics; wrong PRF can make Pf/Pa empty or overlapping under short ensembles, creating misleading ``actionability''. & PRF is fixed once per sequence family, using the source-paper value where it is explicitly documented and a recorded sequence-level override otherwise (\SuppOrApp{app:twinkling_prf_decode}). If binned Pf/Pa are empty/overlap, we force $\phi_i\in\mathcal{R}_0$ with an explicit reason. \\
-Short-ensemble band discretization (coarse $\Delta f = \mathrm{PRF}/N$) & Hz-narrow bands can collapse to DC-only or become indistinguishable with $N\in\{5,9,17\}$. & Band operators for short ensembles are constructed as exact orthogonal DFT-bin projectors with non-overlapping bin partitions; bin membership and overlap counts are exported per run and audited by the band-sanity sentinel (\ifSTAPSUPPLEMENTONLY the main paper\else Section~\ref{sec:ka-contract-v2}\fi). \\
+Short-ensemble band discretization (coarse $\Delta f = \mathrm{PRF}/N$) & Hz-narrow bands can collapse to DC-only or become indistinguishable with $N\in\{5,9,17\}$. & Band operators for short ensembles are constructed as exact orthogonal DFT-bin projectors with non-overlapping bin partitions; bin membership and overlap counts are exported per run and audited by the band-sanity sentinel (\ifSUPPLEMENTONLY the main paper\else Section~\ref{sec:ka-contract-v2}\fi). \\
 Tail sample insufficiency ($n_{\mathrm{tail}}<n_{\mathrm{tail,min}}$) & Tail association metrics (e.g.\ $\Delta_{\mathrm{tail}}$) become undefined or noisy if the background tail is too small, which can spuriously toggle $\mathcal{R}_2$ eligibility. & Tail sizing is made explicit: we record tail sizes and use a size-aware tail fraction so that $\Delta_{\mathrm{tail}}$ is only computed when supported; otherwise we remain conservative ($\mathcal{R}_0/\mathcal{R}_1$ with an explicit reason). \\
 Proxy masks misread as ground truth (real data) & Proxy-derived labels can create circular evaluation or leakage. & We restrict quantitative ROC to regimes with explicit labels: simulator-truth masks from the labeled brain simulations and B-mode structural masks from the Gammex flow phantom sequences. Proxy masks are used only for band-energy statistics/protected sets and for conditional execution, never for detection efficacy claims. \\
 Conditional execution (compute gating) changes the decision rule & Same-window proxy gating can measurably change operating characteristics (including improving them), so it cannot be presented as a cost-free speedup. & Conditional execution is treated as a separate algorithm variant; any performance reporting is accompanied by leakage controls (same-window vs disjoint-window vs random-mask). Reproducibility details are provided in \SuppOrApp{app:repro}. \\
@@ -1503,10 +1499,10 @@ or unreadable locally. Reproducibility details are provided in \SuppOrApp{app:re
 \label{fig:mace_atlas_overlay}
 \end{figure}
 
-\section{PD-only KA-prior summary panel (hemodynamic): band-energy statistics and aggregation}
+\section{PD-only shrink-only prior summary panel (hemodynamic): band-energy statistics and aggregation}
 \label{app:pdonly-dashboard}
 
-This appendix specifies a PD-only instantiation of the KA spatial-spectral prior and the associated summary-panel aggregation used for systematic plane sweeps (e.g.\ Mac{\'e}/Urban whole-brain mouse fUS). The key discipline is unchanged: \emph{runtime} prior selection is label-free (proxy sets), while atlas-defined $H_1/H_0$ labels are used only \emph{offline} for descriptive reporting and are never used as prior inputs.
+This appendix specifies a PD-only instantiation of the shrink-only prior and the associated summary-panel aggregation used for systematic plane sweeps (e.g.\ Mac{\'e}/Urban whole-brain mouse fUS). The key discipline is unchanged: \emph{runtime} prior selection is label-free (proxy sets), while atlas-defined $H_1/H_0$ labels are used only \emph{offline} for descriptive reporting and are never used as prior inputs.
 
 \subsection*{A) PD-only band-energy feature definitions (math)}
 \paragraph{PD movie and tiling.}
@@ -1562,7 +1558,7 @@ E_o(i) := z_i\Hh \Po z_i,
 and $E_{\mathrm{tot}}(i) := E_f+E_g+E_a+E_o+\epsilon$.
 
 \paragraph{Risk metrics and Pf-peak statistics.}
-We use the same KA feature primitives as in the Doppler regime:
+We use the same band-energy feature primitives as in the Doppler regime:
 \[
 m_{\mathrm{alias}}(i) := \log\frac{E_a(i)+\epsilon}{E_f(i)+\epsilon},\qquad
 m_{\mathrm{guard}}(i) := \log\frac{E_g(i)+\epsilon}{E_f(i)+\epsilon},\qquad
@@ -1643,12 +1639,12 @@ g(i)=\mathbf{1}\{i\in\mathcal{T}_{\mathrm{cand}},\ m_{\mathrm{risk}}(i)\ge\tau_{
 \]
 \emph{Hard suppression (Mac{\'e} sweep):} apply the binary indicator $g$ as a hard suppression on positive activations,
 \[
-s_{\mathrm{KA}}(i)=s_{\mathrm{base}}(i) - g(i)\max(s_{\mathrm{base}}(i),0),
+s_{\mathrm{shrink}}(i)=s_{\mathrm{base}}(i) - g(i)\max(s_{\mathrm{base}}(i),0),
 \]
-which is equivalent to setting positive penalized tiles to zero while leaving negative scores unchanged. \emph{Soft shrink (summary-panel parity):} set $w(i)=\max(w_{\min},\exp(-k\,u(i)))$ with a robust normalized exceedance $u(i)\ge 0$ and apply $s_{\mathrm{KA}}(i)=s_{\mathrm{base}}(i)-(1-w(i))\max(s_{\mathrm{base}}(i),0)$. In both cases, $g(i)=0$ (and $w(i)=1$) on $\mathcal{T}_{\mathrm{prot}}$ enforces the do-not-penalize constraint (protected-set scores unchanged) and $s_{\mathrm{KA}}(i)\le s_{\mathrm{base}}(i)$ enforces shrink-only behavior.
+which is equivalent to setting positive penalized tiles to zero while leaving negative scores unchanged. \emph{Soft shrink (summary-panel parity):} set $w(i)=\max(w_{\min},\exp(-k\,u(i)))$ with a robust normalized exceedance $u(i)\ge 0$ and apply $s_{\mathrm{shrink}}(i)=s_{\mathrm{base}}(i)-(1-w(i))\max(s_{\mathrm{base}}(i),0)$. In both cases, $g(i)=0$ (and $w(i)=1$) on $\mathcal{T}_{\mathrm{prot}}$ enforces the do-not-penalize constraint (protected-set scores unchanged) and $s_{\mathrm{shrink}}(i)\le s_{\mathrm{base}}(i)$ enforces shrink-only behavior.
 
 \subsection*{E) Summary-panel schema and aggregation (PD-only)}
-For PD-only datasets the summary panel is computed per plane (configuration) and written as a CSV with one row per (scan, plane). Each row records: (i) identifiers and frozen settings (scan/plane, $T$, $f_s$, $L_t$, tile geometry, band edges), (ii) proxy support counts ($|\mathcal{T}_{\mathrm{bg}}|$, $|\mathcal{T}_{\mathrm{flow}}|$), (iii) prior outputs (region $\in\{\mathcal{R}_0,\mathcal{R}_1,\mathcal{R}_2\}$, reason label, risk\_mode; exported in code as \texttt{state}/\texttt{reason}), (iv) key band-energy statistics ($\mathrm{PfPeakFrac}(\mathcal{T}_{\mathrm{flow}})$, $Q_{0.90}(r_g\mid\mathcal{T}_{\mathrm{bg}})$, $\mathrm{IQR}(m_{\mathrm{risk}}\mid\mathcal{T}_{\mathrm{bg}})$, $\Delta_{bf}$, $\Delta_{\mathrm{tail}}$), and (v) KA coverage/strength when active ($p_{\mathrm{shrink}}$ and scale/shrink quantiles). Atlas-labeled descriptive fields are prefixed \texttt{offline\_} (e.g.\ \texttt{offline\_pf\_peak\_frac\_H1}, \texttt{offline\_pf\_peak\_frac\_H0}, \texttt{offline\_hits\_pre/post}) to make clear that they are not prior inputs.
+For PD-only datasets the summary panel is computed per plane (configuration) and written as a CSV with one row per (scan, plane). Each row records: (i) identifiers and frozen settings (scan/plane, $T$, $f_s$, $L_t$, tile geometry, band edges), (ii) proxy support counts ($|\mathcal{T}_{\mathrm{bg}}|$, $|\mathcal{T}_{\mathrm{flow}}|$), (iii) prior outputs (region $\in\{\mathcal{R}_0,\mathcal{R}_1,\mathcal{R}_2\}$, reason label, risk\_mode; exported in code as \texttt{state}/\texttt{reason}), (iv) key band-energy statistics ($\mathrm{PfPeakFrac}(\mathcal{T}_{\mathrm{flow}})$, $Q_{0.90}(r_g\mid\mathcal{T}_{\mathrm{bg}})$, $\mathrm{IQR}(m_{\mathrm{risk}}\mid\mathcal{T}_{\mathrm{bg}})$, $\Delta_{bf}$, $\Delta_{\mathrm{tail}}$), and (v) regularizer coverage/strength when active ($p_{\mathrm{shrink}}$ and scale/shrink quantiles). Atlas-labeled descriptive fields are prefixed \texttt{offline\_} (e.g.\ \texttt{offline\_pf\_peak\_frac\_H1}, \texttt{offline\_pf\_peak\_frac\_H0}, \texttt{offline\_hits\_pre/post}) to make clear that they are not prior inputs.
 
 Summary-panel aggregation mirrors the Doppler-IQ diagnostic panel: histograms of prior regions and (region, reason) pairs, a risk-mode histogram, distributions of key band-energy statistics (Pf peak fraction, guard q90, risk IQR), and (for active planes) shrink coverage/strength summaries. Any atlas-stratified Mac{\'e} plots (e.g.\ PfPeak(VIS/SC/LGd) vs PfPeak(CP/CA/DG), alias separation) are presented as a separate, explicitly offline/descriptive panel.
 
@@ -1664,15 +1660,15 @@ When reporting a PD-only prior summary panel, we use the following posture in ca
 \section{Algorithmic details (supplementary)}
 \label{app:alg-details}
 
-\subsection{Knowledge-Aided prior regime selection (frozen defaults)}
-The KA prior consumes per-tile arrays
+\subsection{Shrink-only prior regime selection (frozen defaults)}
+The shrink-only prior consumes per-tile arrays
 $S_{\mathrm{base}}$, $m_{\mathrm{alias}}$, $r_g$, $c_f$, and $\mathrm{PfPeak}$ and returns a compact regime report (region label, a disablement reason when inert, and diagnostic metrics). The reference implementation is provided with the accompanying code. The frozen default thresholds used throughout this repository are:
   \begin{itemize}[nosep]
 	  \item \textbf{Proxy thresholds:} $c_{\mathrm{bg}}=0.05$, $c_{\mathrm{flow}}=0.20$.
 	  \item \textbf{Candidate/protected score quantiles:} candidate window $q_{\mathrm{lo}}=0.30$, $q_{\mathrm{hi,cand}}=1.0$; optional high-score protection $q_{\mathrm{hi,prot}}=0.99999$ when the protected set includes extreme-score tiles.
 	  \item \textbf{Risk threshold:} $q_{\mathrm{risk}}=0.90$ applied to $m_{\mathrm{alias}}$ on $\mathcal{T}_{\mathrm{bg}}$.
   \item \textbf{Feature integrity (flatness + guard):} $\mathrm{IQR}(m_{\mathrm{alias}}\mid\mathcal{T}_{\mathrm{bg}})\ge 0.25$; actionable eligibility disabled if $Q_{0.90}(r_g)>0.25$; ``guard safety'' lane allowed up to $Q_{0.90}(r_g)\le 0.70$ if guard is actionable, requiring $\mathrm{IQR}(r_g\mid\mathcal{T}_{\mathrm{bg}})\ge 0.03$ and $\Delta_{\mathrm{tail,guard}}\ge 0.01$.
-  \item \textbf{C2 actionability thresholds:} $\Delta_{bf}\ge 0.30$ and $\Delta_{\mathrm{tail}}\ge 0.20$ (computed on $\mathcal{T}_{\mathrm{bg}}/\mathcal{T}_{\mathrm{flow}}$ proxies as in \ifSTAPSUPPLEMENTONLY the main paper\else Section~\ref{sec:ka-contract-v2}\fi).
+  \item \textbf{C2 actionability thresholds:} $\Delta_{bf}\ge 0.30$ and $\Delta_{\mathrm{tail}}\ge 0.20$ (computed on $\mathcal{T}_{\mathrm{bg}}/\mathcal{T}_{\mathrm{flow}}$ proxies as in \ifSUPPLEMENTONLY the main paper\else Section~\ref{sec:ka-contract-v2}\fi).
   \item \textbf{C2 Pf-realization eligibility:} $\mathrm{PfPeakFrac}(\mathcal{T}_{\mathrm{flow}})\ge 0.05$ with $|\mathcal{T}_{\mathrm{flow}}|\ge 50$.
   \item \textbf{Coverage bounds:} safety lane $p_{\mathrm{shrink}}\in[0.02,0.25]$ (guard lane $[0.02,0.15]$), actionable lane $p_{\mathrm{shrink}}\in[0.05,0.40]$.
 	  \item \textbf{Invariance sentinel:} if $\mathrm{IQR}(\log w\mid \text{penalized}) < 0.02$ then return the off state with an invariance/no-effect sentinel.
@@ -1681,15 +1677,15 @@ $S_{\mathrm{base}}$, $m_{\mathrm{alias}}$, $r_g$, $c_f$, and $\mathrm{PfPeak}$ a
 The report exports one of three states (off / safety / actionable), corresponding to feature-space regimes $\mathcal{R}_0/\mathcal{R}_1/\mathcal{R}_2$ in the main text. When the prior is forced inert, the report includes an explicit reason category (e.g.\ missing inputs, insufficient proxy support, feature flatness, invariance/no-effect sentinels, or invalid band discretization in short ensembles). Reason labels are enumerated in the code and logged in the exported metadata.
 
 \subsection{Score-space shrink mapping and exported maps}
-When score-space KA is enabled, per-tile shrink factors $w(i)\in(0,1]$ are derived deterministically from the regime report and applied in score space as
+When the score-space shrink-only regularizer is enabled, per-tile shrink factors $w(i)\in(0,1]$ are derived deterministically from the regime report and applied in score space as
 \[
 S_{\mathrm{post}}(i)=w(i)\,S_{\mathrm{pre}}(i),\qquad w(i)\in(0,1].
 \]
-For convenience (and compatibility with legacy \path{pd} arrays), bundles store an equivalent per-pixel \emph{scale} map $\gamma(i)=1/w(i)\ge 1$ as \path{ka_scale_map.npy}, averaged over overlapping tiles and applied only on the union of penalized tiles as
+For convenience (and compatibility with legacy \path{pd} arrays), bundles store an equivalent per-pixel \emph{scale} map $\gamma(i)=1/w(i)\ge 1$, averaged over overlapping tiles and applied only on the union of penalized tiles as
 \[
 \mathrm{PD}_{\mathrm{post}}(i)=\mathrm{PD}_{\mathrm{pre}}(i)/\gamma(i).
 \]
-A binary \path{ka_gate_map.npy} stores the penalized region. Protected pixels are enforced by setting $\gamma=1$ on the protected set (flow mask and extreme-score pixels as in \ifSTAPSUPPLEMENTONLY the main paper\else Section~\ref{sec:ka-contract-v2}\fi).
+A binary gate map stores the penalized region. Protected pixels are enforced by setting $\gamma=1$ on the protected set (flow mask and extreme-score pixels as in \ifSUPPLEMENTONLY the main paper\else Section~\ref{sec:ka-contract-v2}\fi).
 
 \paragraph{Implementation score conventions.}
 Throughout the manuscript, quantitative low-FPR operating points are reported using flow-evidence score maps under a right-tail convention (higher = more flow-like; thresholds calibrated on the high-score tail) intended for labeled ROC and robustness reporting (Table~\ref{tab:score_taxonomy}). Exported bundles include the baseline score and the matched-subspace score before the optional shrink-only penalty, along with optional conventional baseline comparators (e.g.\ log-PD and Kasai) and diagnostic/proxy maps used for gating and audits. Proxy maps are not used as the primary detector scores for labeled ROC reporting. When the shrink-only penalty is enabled, the exported maps enforce a shrink-only mapping on the chosen detector score: in this right-tail score space, $S_{\mathrm{post}}=w\,S_{\mathrm{pre}}$ with $w\in(0,1]$; for convenience, bundles also store the equivalent per-pixel scale map $\gamma=1/w\ge 1$ applied on the penalized region.
@@ -1714,17 +1710,17 @@ To make Doppler/alias structure explicit and reproducible, the pilots apply dete
 The shallow-pial variant (internal profile \texttt{Brain-Pial128}) uses 4 ensembles with 32 pulses each ($T=128$ compounded frames) and concentrates shallow alias in depth $[0.15,0.30]$ with a stronger alias fraction and a vibration tone. The alias-dominant and structured-clutter variants (internal profiles \texttt{Brain-AliasContract} and \texttt{Brain-SkullOR}) use additional alias/vibration settings and skull/aberration tagging; all simulation parameters are fixed per profile and are specified in the reproducibility manifest (\SuppOrApp{app:repro}).
 
 \subsection{Replay/analysis pipeline used for ROC and latency}
-Downstream processing is run on the saved pilot angle data using \path{scripts/replay_stap_from_run.py}, which loads angle directories (or ensembles of angle directories), forms the slow-time cube, applies the chosen baseline, runs STAP, and writes a standard output bundle (\path{sim/kwave/common.py:write_acceptance_bundle}). Low-FPR ROC points and feasibility telemetry are extracted using \path{scripts/hab_contract_check.py}.
+Downstream processing is run on the saved pilot angle data using the standard replay script, which loads angle directories (or ensembles of angle directories), forms the slow-time cube, applies the chosen baseline, runs the matched-subspace detector, and writes a standard output bundle (\path{sim/kwave/common.py:write_acceptance_bundle}). Low-FPR ROC points and feasibility telemetry are extracted using \path{scripts/hab_contract_check.py}.
 
-For the conservative-profile STAP PD runs (\texttt{--stap-profile clinical}) used in the latency suite and robustness sweeps, we additionally use \path{scripts/run_brain_replay_sweep.py}, which:
+For the conservative-profile matched-subspace detector runs used in the latency suite and robustness sweeps, we additionally use \path{scripts/run_brain_replay_sweep.py}, which:
 \begin{itemize}[nosep]
-  \item Reuses a fixed pilot per (regime, PRF) and replays baseline+STAP under a frozen profile on 64-frame windows (\texttt{--time-window-length 64}).
+  \item Reuses a fixed pilot per (regime, PRF) and replays the baseline plus matched-subspace detector under a frozen profile on 64-frame windows (\texttt{--time-window-length 64}).
   \item Evaluates the detector variants used in the latency suite, including conditional execution and a reduced-support mode that caps effective training support by subsampling training snapshots. Exact runtime settings are recorded in bundle metadata and listed in the reproducibility manifest (\SuppOrApp{app:repro}).
   \item Uses a frozen MC--SVD baseline and simulator-truth evaluation masks. Conditional execution is driven by a deterministic, label-free proxy flow mask derived from baseline PD brightness.
 \end{itemize}
 
 \paragraph{Latency reporting protocol (steady-state, CUDA graphs).}
-When GPU acceleration is enabled (e.g.\ \path{stap_device=cuda}), the first replay window can include one-time overheads such as CUDA context initialization, kernel compilation, and optional CUDA-graph capture. For any GPU latency numbers reported from this codebase, we therefore use a steady-state replay protocol: \path{scripts/latency_rerun_check.py} replays $N$ windows in a single process (\texttt{--steady-windows $N$} or \texttt{--window-offsets}) and reports per-window timing, with the publishable latency taken as the mean over windows 2..$N$ (window 1 treated as cold-start overhead).
+When GPU acceleration is enabled, the first replay window can include one-time overheads such as CUDA context initialization, kernel compilation, and optional CUDA-graph capture. For any GPU latency numbers reported from this codebase, we therefore use a steady-state replay protocol: \path{scripts/latency_rerun_check.py} replays $N$ windows in a single process (\texttt{--steady-windows $N$} or \texttt{--window-offsets}) and reports per-window timing, with the publishable latency taken as the mean over windows 2..$N$ (window 1 treated as cold-start overhead).
 
 \section{Implementation details (supplementary)}
 \label{app:impl-details}
@@ -1775,17 +1771,17 @@ smooth $\{s_{i,k}\}$ with the same short median filter used in the global adapti
 \]
 with $r_i$ clamped to a frozen range $[r_{\min}, r_{\max}]$. The local residual remains $C_{i,\mathrm{res}}=(I-U_{i,r_i}U_{i,r_i}\Hh)C_i$, followed by overlap-add reconstruction and PD scoring on the residual cube. This baseline is implemented as \path{sim/kwave/common.py:_baseline_pd_adaptive_local_svd}. In the benchmark tables we report the three SVD-family baselines separately as \emph{Adaptive Global SVD}, \emph{Local SVD (Fixed Energy)}, and \emph{Adaptive Local SVD}.
 
-\subsection{STAP temporal core (full)}
-For k-Wave pilots and replay bundles, the reference temporal STAP implementation follows the same conceptual decomposition as the main text: tile extraction and optional sliding-window temporal embedding (Hankel construction) in slow time; per-tile covariance estimation with a robust estimator (Tyler-type or Huber); diagonal loading to enforce conditioning targets; whitening; and band-energy scoring on a fixed Doppler tone grid. Deployment-oriented variants can (i) cap effective training support by subsampling training snapshots and (ii) reduce computation by skipping the STAP stage on tiles with negligible proxy flow support, reverting to the baseline score there. Exact run settings and exported metadata used for the experiments in this manuscript are listed in the reproducibility manifest (\SuppOrApp{app:repro}).
+\subsection{Matched-subspace detector temporal core (full)}
+For k-Wave pilots and replay bundles, the reference temporal matched-subspace detector implementation follows the same conceptual decomposition as the main text: tile extraction and optional sliding-window temporal embedding (Hankel construction) in slow time; per-tile covariance estimation with a robust estimator (Tyler-type or Huber); diagonal loading to enforce conditioning targets; whitening; and band-energy scoring on a fixed Doppler tone grid. Deployment-oriented variants can (i) cap effective training support by subsampling training snapshots and (ii) reduce computation by skipping the matched-subspace stage on tiles with negligible proxy flow support, reverting to the baseline score there. Exact run settings and exported metadata used for the experiments in this manuscript are listed in the reproducibility manifest (\SuppOrApp{app:repro}).
 
 \paragraph{CUDA acceleration strategy (batched GPU implementation).}
-For the latency results reported here we implement the STAP PD stage as a GPU-batched pipeline: tiles are extracted on device using tensor \emph{unfold} operators, processed in batches to amortize per-tile overhead, and stitched back to full-resolution maps by overlap-add. This hardware-aware formulation aligns with prior work on GPU eigen-based clutter filtering and randomized/approximate SVD acceleration for real-time Doppler processing \cite{CheeGPUEigen2017,LokRandomizedSVD2020}. Within each batch, the temporal core is expressed as batched linear algebra (sliding-window temporal embedding; Hankel matrix construction; robust covariance estimation; whitening; and band-energy scoring), with rearrangements that favor GEMM-dominated workloads on GPUs. For fixed input shapes, the batched core can optionally be captured as a CUDA graph and replayed to reduce kernel-launch overhead; the first processed window/frame therefore includes one-time GPU overheads and is excluded from reported steady-state means.
+For the latency results reported here we implement the matched-subspace stage as a GPU-batched pipeline: tiles are extracted on device using tensor \emph{unfold} operators, processed in batches to amortize per-tile overhead, and stitched back to full-resolution maps by overlap-add. This hardware-aware formulation aligns with prior work on GPU eigen-based clutter filtering and randomized/approximate SVD acceleration for real-time Doppler processing \cite{CheeGPUEigen2017,LokRandomizedSVD2020}. Within each batch, the temporal core is expressed as batched linear algebra (sliding-window temporal embedding; Hankel matrix construction; robust covariance estimation; whitening; and band-energy scoring), with rearrangements that favor GEMM-dominated workloads on GPUs. For fixed input shapes, the batched core can optionally be captured as a CUDA graph and replayed to reduce kernel-launch overhead; the first processed window/frame therefore includes one-time GPU overheads and is excluded from reported steady-state means.
 
 \noindent The final latency configuration reported in the main paper uses only exact-output-preserving implementation optimizations. In particular, the implementation reuses cached geometry-only overlap counts, defers redundant raw-baseline PD generation in the short-ensemble phantom path, omits nonessential per-tile diagnostics after extracting the quantities required by the reported detector hierarchy, and applies an exact zero-shift registration bypass when the replayed window has no estimated motion. These changes reduce bookkeeping and launch overhead without changing exported detector scores, routing masks, or baseline maps. Exact commands and runtime settings used for the CUDA latency tables are listed in the reproducibility manifest (\SuppOrApp{app:repro}).
 
-\subsection{Covariance blending constraints and KA modes}
+\subsection{Covariance blending constraints and shrink-only regularizer modes}
 
-We permit anisotropic shrinkage, but only \emph{within} bands. In practice we consider two KA paths:
+We permit anisotropic shrinkage, but only \emph{within} bands. In practice we consider two shrink-only regularizer paths:
 \begin{itemize}[nosep]
   \item \textbf{Updated (commuting band--scalar).} $Q\Hh Q$ is forced to be bandwise scalar with target gains $(s_f,s_a,s_o)$ (typical targets: $s_f=s_o\approx 1$, $s_a\approx 1.5$), small mixing, and no off--block priors; the content of $R_0$ beyond $(\Pf,\Pa)$ is ignored.
   \item \textbf{Blend.} A trace--normalized blend $R_\beta = (1-\beta) R_t^{(n)} + \beta R_0^{(n)}$ with a small diagonal lift. In practice $R_0$ is overridden to a band--scalar form (Pf weight 1, Pa weight $\gamma_a>1$, Po weight 1) so the geometry is explicit; $\beta$ is treated as a fixed hyperparameter per regime.
@@ -1819,10 +1815,10 @@ We constrain bandwise conditioning:
 \]
 avoid an incompatibility between conditioning and preserving flow Rayleigh quotients.
 
-\subsection{Localization (restricting KA in score space)}
+\subsection{Localization (restricting shrink-only regularizer in score space)}
 \label{app:gating}
 
-A global band--constant transform with $Q$ cannot improve ROC if applied everywhere (it is close to a scalar reweighting of BR/GLRT). To create re--ranking, KA must be \emph{localized} to tiles where:
+A global band--constant transform with $Q$ cannot improve ROC if applied everywhere (it is close to a scalar reweighting of BR/GLRT). To create re--ranking, the shrink-only regularizer must be \emph{localized} to tiles where:
 \begin{itemize}[nosep]
   \item scores are dominated by alias/undesired components,
   \item positives are unlikely to lie.
@@ -1887,7 +1883,7 @@ c_f \le c_{f,\max},\qquad c_{f,\max}\in[0.1,0.2],
 \]
 and optionally $c_f \ge c_{f,\min}$ to avoid pure background noise tiles (typical $c_{f,\min}\approx 0$).
 
-Interpretation: we prefer penalization on tiles with \emph{low to moderate} flow coverage. This is the regime where alias/motion dominates and where down--scaling scores is most beneficial. Dense flow tiles are either left to STAP alone or are protected via the flow coherence check. (In the current implementation, coverage is treated as an \emph{upper} bound; missing coverage defaults to ``pass'' in this test.)
+Interpretation: we prefer penalization on tiles with \emph{low to moderate} flow coverage. This is the regime where alias/motion dominates and where down--scaling scores is most beneficial. Dense flow tiles are either left to the matched-subspace detector alone or are protected via the flow coherence check. (In the current implementation, coverage is treated as an \emph{upper} bound; missing coverage defaults to ``pass'' in this test.)
 
 \subsection{G--3: Baseline score quantile window}
 
@@ -1896,7 +1892,7 @@ Let $S_{\text{base}}(z)$ be the baseline BR/GLRT score. Within a given depth str
 S_{\text{base}}(z)\in [q_{0.3},q_{0.95}].
 \]
 
-Interpretation: avoid penalization on the noise floor (very low scores) and on already high--confidence positives (very high scores). This focuses KA on the part of the negative tail that matters near the target FPR.
+Interpretation: avoid penalization on the noise floor (very low scores) and on already high--confidence positives (very high scores). This focuses the shrink-only regularizer on the part of the negative tail that matters near the target FPR.
 
 \subsection{G--4: Registration quality (optional)}
 
@@ -1922,7 +1918,7 @@ Interpretation: a nontrivial fraction of negatives are gated (but not too many),
 
 \subsection{Summary: Compact Feasibility Checklist (Updated)}
 
-KA--STAP can be expected to outperform MC--SVD (or STAP--only) in the low-FPR regime if and only if:
+The combination of matched-subspace scoring and the shrink-only regularizer can be expected to outperform MC--SVD (or matched-subspace-only scoring) in the low-FPR regime if and only if:
 
 \begin{enumerate}[label=\arabic*.,nosep]
   \item \textbf{Regime preconditions.} Band occupancy R--1, alias separation R--2, and baseline headroom R--3 are satisfied on a held--out validation set.
@@ -1930,17 +1926,17 @@ KA--STAP can be expected to outperform MC--SVD (or STAP--only) in the low-FPR re
   \item \textbf{Operator geometry.} OC--1 with $\varepsilon_{\text{mix}}\le 0.05$ and OC--2 with $\Lambda = s_a/s_f \ge 1.25$ and $\delta_\bullet\le 0.1$.
   \item \textbf{Blending realizable.} CB--1/CB--2/CB--3 satisfied with chosen $(\beta,\delta)$.
   \item \textbf{Gating conservative and class--differential.} G--1/G--2/G--2'/G--3/G--4 implemented; offline, $p_-\in[0.2,0.5]$ and $p_+\le 0.1p_-$.
-  \item \textbf{Regime sentinel.} RS--1 does not trigger (KA not out of regime).
-  \item \textbf{Invariance sentinel.} $\wh s_a/\wh s_f \notin[1-\epsilon,1+\epsilon]$ with $\epsilon\le 0.02$; otherwise KA is effectively scalar and can be skipped.
+  \item \textbf{Regime sentinel.} RS--1 does not trigger (the shrink-only regularizer is not out of regime).
+  \item \textbf{Invariance sentinel.} $\wh s_a/\wh s_f \notin[1-\epsilon,1+\epsilon]$ with $\epsilon\le 0.02$; otherwise shrink-only regularizer is effectively scalar and can be skipped.
   \item \textbf{Safety guard.} Safety--1 (monotonicity on gated flow tiles) passes.
-  \item \textbf{Evaluation discipline.} GLRT controls and tail CI practices (see \ifSTAPSUPPLEMENTONLY the main paper\else Section~\ref{sec:eval}\fi) in place for fair low--FPR comparison.
+  \item \textbf{Evaluation discipline.} GLRT controls and tail CI practices (see \ifSUPPLEMENTONLY the main paper\else Section~\ref{sec:eval}\fi) in place for fair low--FPR comparison.
 \end{enumerate}
 
-When all of the above hold, KA applies a non--mixing, alias--inflating band transform chiefly to alias--dominant tiles, pushing negative scores down while largely leaving positives unchanged. This lowers the negative $\alpha$--quantile and increases TPR at fixed small FPR in a manner consistent with the SL--2 quantile shift analysis.
+When all of the above hold, the shrink-only regularizer applies a non--mixing, alias--inflating band transform chiefly to alias--dominant tiles, pushing negative scores down while largely leaving positives unchanged. This lowers the negative $\alpha$--quantile and increases TPR at fixed small FPR in a manner consistent with the SL--2 quantile shift analysis.
 
 \input{paper/appendix_bundle_schema.tex}
 
-\ifSTAPSUPPLEMENTONLY
+\ifSUPPLEMENTONLY
 \input{paper/appendix_repro_manifest.tex}
 \else
 \section{Reproducibility Resources}

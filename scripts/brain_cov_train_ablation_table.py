@@ -3,8 +3,8 @@
 Brain-* covariance-training ablation: trim high-energy snapshots during R_i estimation.
 
 This script compares the within-window strict-tail operating points for:
-  - STAP default covariance training (use all Hankel snapshots in each tile)
-  - STAP with covariance-training trim (exclude top-q highest-energy snapshots)
+  - default matched-subspace covariance training (use all Hankel snapshots in each tile)
+  - trimmed matched-subspace covariance training (exclude top-q highest-energy snapshots)
 
 It is intended to address reviewer concerns about self-training / covariance
 contamination. The trim ablation is enabled via replay_stap_from_run.py
@@ -207,7 +207,7 @@ def _render_table_tex(
     lines.append("}")
     lines.append(
         "\\caption{Covariance-training trim ablation on the earlier Tyler-whitened labeled-brain stress-test profile. "
-        "We compare the default STAP covariance training (all Hankel snapshots) "
+        "We compare the default matched-subspace covariance training (all Hankel snapshots) "
         "to a trimmed variant that excludes the top-q highest-energy snapshots "
         "from the tile-local covariance estimator (q=0.05). "
         "The two column groups correspond to an open-skull surface-artifact stress test and a structured-clutter leakage stress test. "
@@ -229,15 +229,15 @@ def main() -> None:
         ("open", "\\shortstack{Open-skull surface-\\\\artifact stress test}"),
         ("skullor", "\\shortstack{Structured-clutter\\\\leakage stress test}"),
     ]
-    methods = ["STAP (default)", "STAP (cov-trim q=0.05)"]
+    methods = ["matched-subspace (default)", "matched-subspace (cov-trim q=0.05)"]
     method_display = {
-        "STAP (default)": "STAP (default covariance training)",
-        "STAP (cov-trim q=0.05)": "STAP (cov-trim $q=0.05$)",
+        "matched-subspace (default)": "Matched-subspace (default covariance training)",
+        "matched-subspace (cov-trim q=0.05)": "Matched-subspace (cov-trim $q=0.05$)",
     }
 
     run_dir_for_method = {
-        "STAP (default)": "mcsvd_full",
-        "STAP (cov-trim q=0.05)": "mcsvd_covtrim_q05",
+        "matched-subspace (default)": "mcsvd_full",
+        "matched-subspace (cov-trim q=0.05)": "mcsvd_covtrim_q05",
     }
 
     rows: list[dict[str, object]] = []

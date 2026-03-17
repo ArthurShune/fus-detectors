@@ -358,10 +358,10 @@ def _render_appendix_tex(manifest: dict[str, Any], *, out_path: Path) -> None:
     lines.append("\\label{app:repro}")
     lines.append("")
     lines.append(
-        "This appendix is repository-facing archival material rather than part of the main scientific reading path. It records a minimal reproduction recipe: exact commands, data locations, and a pinned repository state."
+        "This appendix is repository-facing archival material rather than part of the main scientific reading path. It records a minimal reproduction recipe: data locations, artifact outputs, and a pinned repository state."
     )
     lines.append(
-        "The manifest lists the minimal set of commands/outputs needed to reproduce the main claims; additional exploratory reports referenced in the text are not required unless explicitly listed here."
+        "The machine-readable manifest \\path{repro_manifest.json} stores the exact command blocks; this PDF appendix lists the corresponding artifacts and entry points."
     )
     preferred_env = None
     if isinstance(env, dict):
@@ -389,12 +389,12 @@ def _render_appendix_tex(manifest: dict[str, Any], *, out_path: Path) -> None:
             lines.append(f"Public repository: \\path{{{public_url}}}.")
         else:
             lines.append(
-                "Public repository: (not recorded; set \\texttt{STAP\\_FUS\\_PUBLIC\\_REPO\\_URL} or add a git remote such as \\texttt{origin})."
+                "Public repository: (not recorded; set \\texttt{FUS\\_DETECTORS\\_PUBLIC\\_REPO\\_URL} or add a git remote such as \\texttt{origin})."
             )
         if release_tag:
             lines.append(f"Release tag: \\texttt{{{_tex_escape(release_tag)}}}.")
         else:
-            lines.append("Release tag: (not recorded; set \\texttt{STAP\\_FUS\\_RELEASE\\_TAG} or create a git tag).")
+            lines.append("Release tag: (not recorded; set \\texttt{FUS\\_DETECTORS\\_RELEASE\\_TAG} or create a git tag).")
         commit_short = str(git.get("commit_short") or "").strip()
         commit_full = str(git.get("commit") or "").strip()
         commit_full_tex = _render_breakable_digest(commit_full, chunk=10)
@@ -525,15 +525,15 @@ def _render_appendix_tex(manifest: dict[str, Any], *, out_path: Path) -> None:
     lines.append(
         "\\noindent\\textit{ULM structural endpoint note.} The only paper-facing ULM structural benchmark in this "
         "appendix is the 64-frame same-acquisition structural audit that uses the published PALA localization-derived "
-        "vascular reference and the no-registration whitened matched-subspace specialist. Earlier 128-frame "
+        "vascular reference and the no-registration fully whitened matched-subspace variant. Earlier 128-frame "
         "local-density surrogate runs were exploratory, are superseded, and do not support any manuscript claim."
     )
     lines.append("")
 
     lines.append("\\paragraph{Artifact commands.}")
     lines.append(
-        "Each entry below lists the command(s) used to regenerate the referenced paper artifact(s). "
-        "Most scripts write a JSON summary containing the full parameterization and are safe to rerun."
+        "Each entry below lists the paper-facing artifact outputs and their repository entry points. "
+        "The exact machine-readable command blocks are stored in \\path{repro_manifest.json}."
     )
     lines.append("\\begin{enumerate}[label=(R\\arabic*),nosep]")
     for art in artifacts:
@@ -589,7 +589,7 @@ def _render_appendix_tex(manifest: dict[str, Any], *, out_path: Path) -> None:
         if notes:
             lines.append("    Notes: " + _tex_escape(_sentence(str(notes))))
         if cmds:
-            lines.append(_render_verbatim_block([str(c) for c in cmds]))
+            lines.append("    Exact command block: \\path{repro_manifest.json}.")
     lines.append("\\end{enumerate}")
     lines.append("")
 
@@ -618,7 +618,7 @@ def _default_datasets() -> list[DatasetInfo]:
         ),
         DatasetInfo(
             name="Twinkling artifact dataset (RawBCF phantoms)",
-            purpose="Structurally labeled phantom ROC (Gammex) + within-ensemble motion ladders + KA hygiene (calculi).",
+            purpose="Structurally labeled phantom ROC (Gammex) + within-ensemble motion ladders + shrink-only regularizer hygiene (calculi).",
             local_path="data/twinkling_artifact/",
             doi_or_url="https://doi.org/10.17816/DD76511",
         ),
@@ -647,13 +647,13 @@ def _default_selections() -> dict[str, str]:
         "Gammex flow phantom structural ROC (along-linear17)": "frames 0:85 (n=85), PRF=2500 Hz, N=17 shots.",
         "Gammex flow phantom structural ROC (across-linear17)": "frames 0:200 (n=200), PRF=2500 Hz, N=17 shots.",
         "Gammex flow phantom within-ensemble motion ladder": "along-linear17, frames 0:85, amps 0..2 px, kinds {rw,step}.",
-        "Twinkling calculi KA hygiene": "calcifications sequence, frames 0:50 (n=50), PRF approx 500 Hz, N=9 shots.",
+        "Twinkling calculi shrink-only regularizer hygiene": "calcifications sequence, frames 0:50 (n=50), PRF approx 500 Hz, N=9 shots.",
         "ULM 7883227 baseline sweep": "blocks 1-3, frames 0:128, MC-SVD energy-frac sweep (label-free).",
         "ULM 7883227 motion sweeps": "blocks 1-3, frames 0:128, frozen baseline e=0.975, motion kinds {brainlike,elastic}.",
         "ULM 7883227 localization-derived structural audit (published PALA reference)": (
             "reference/eval blocks 1-10, 64-frame windows at offsets {0,128}, max 2 windows/block, "
             "published PALA localization-derived vessel-core versus perivascular-shell reference, "
-            "no-registration whitened matched-subspace specialist. This supersedes the earlier "
+            "no-registration fully whitened matched-subspace variant. This supersedes the earlier "
             "128-frame local-density surrogate and is the only paper-facing ULM structural endpoint."
         ),
     }
@@ -709,8 +709,8 @@ def _default_artifacts() -> list[ArtifactInfo]:
             notes="Run on any generated acceptance bundle root containing pw_* directories.",
         ),
         ArtifactInfo(
-            name="Conditional STAP leakage ablation (full vs conditional masks)",
-            paper_refs=["Results (Brain-k-Wave): conditional STAP ablation"],
+            name="Conditional matched-subspace leakage ablation (full vs conditional masks)",
+            paper_refs=["Results (Brain-k-Wave): conditional matched-subspace ablation"],
             outputs=["reports/condstap_leakage.csv", "reports/condstap_leakage.json"],
             commands=[
                 "PYTHONPATH=. python scripts/conditional_stap_leakage_ablation.py \\",
@@ -960,7 +960,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
             notes=(
                 "The replay scripts print cold(win1) and steady(avg win2..N); the paper tables report steady-state means. "
                 "For Brain k-Wave, scripts/latency_rerun_check.py forces legacy vs optimized CUDA-graph settings internally "
-                "(legacy: STAP_FAST_CUDA_GRAPH=0; optimized: STAP_FAST_CUDA_GRAPH=1)."
+                "(legacy graph capture off; optimized graph capture on)."
             ),
         ),
         ArtifactInfo(
@@ -1092,7 +1092,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  gammex --frames-along 0:6 --frames-across 0:6",
             ],
             notes=(
-                "These are 'latency-only' replay settings (e.g., STAP_TYLER_MAX_ITER=1, STAP_SNAPSHOT_STRIDE=4) "
+                "These are latency-only replay settings with one Tyler iteration and snapshot stride 4 "
                 "to isolate compute throughput; see per-bundle meta.json for exact telemetry."
             ),
         ),
@@ -1172,7 +1172,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
             notes="Reads per-window score/mask arrays under the Brain-* pilot run root.",
         ),
         ArtifactInfo(
-            name="Brain-* cross-window threshold-transfer audit (STAP)",
+            name="Brain-* cross-window threshold-transfer audit (matched-subspace detector)",
             paper_refs=["Appendix: cross-window threshold calibration audit (Brain-*)"],
             outputs=[
                 "reports/brain_crosswindow_calibration.csv",
@@ -1273,8 +1273,8 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --out-tex reports/brain_detector_swap_table.tex",
             ],
             notes=(
-                "Paired-residual comparison: each run generates both PD (score_base.npy) and STAP "
-                "(score_stap_preka.npy) scores on the same RPCA/HOSVD residual for each window."
+                "Paired-residual comparison: each run generates both PD (score_base.npy) and matched-subspace detector "
+                "scores (score_stap_preka.npy) on the same RPCA/HOSVD residual for each window."
             ),
         ),
         ArtifactInfo(
@@ -1337,7 +1337,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
             ),
         ),
         ArtifactInfo(
-            name="Brain-* strict-tail collapse visual (representative window; baseline vs STAP)",
+            name="Brain-* strict-tail collapse visual (representative window; baseline versus matched-subspace detector)",
             paper_refs=["Appendix: baseline sanity checks at relaxed operating points (Brain-*)"],
             outputs=["figs/paper/brain_tail_collapse_visual.pdf"],
             commands=[
@@ -1348,11 +1348,11 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --alphas 0.1,0.01,1e-3 \\",
                 "  --out figs/paper/brain_tail_collapse_visual.pdf",
             ],
-            notes="Uses one representative Brain-OpenSkull window to visualize background-tail dominance (baseline PD) and tail reshaping (STAP).",
+            notes="Uses one representative Brain-OpenSkull window to visualize background-tail dominance (baseline PD) and tail reshaping under matched-subspace scoring.",
         ),
         ArtifactInfo(
-            name="Knowledge-aided prior falsifiability ablation (STAP-only vs contract vs forced)",
-            paper_refs=["KA evaluation discipline"],
+            name="Shrink-only regularizer falsifiability ablation (matched-subspace-only vs contract vs forced)",
+            paper_refs=["Shrink-only regularizer evaluation discipline"],
             outputs=["reports/ka_v2_ablation.csv", "reports/ka_v2_ablation.json"],
             commands=[
                 "PYTHONPATH=. python scripts/ka_contract_v2_ablation.py \\",
@@ -1367,8 +1367,8 @@ def _default_artifacts() -> list[ArtifactInfo]:
             ],
         ),
         ArtifactInfo(
-            name="Knowledge-aided prior positive-control ablation (OpenSkull shallow-alias + high-rank ghosts)",
-            paper_refs=["KA evaluation discipline (positive control)"],
+            name="Shrink-only regularizer positive-control ablation (OpenSkull shallow-alias + high-rank ghosts)",
+            paper_refs=["Shrink-only regularizer evaluation discipline (positive control)"],
             outputs=[
                 "reports/ka_v2_ablation_openskull_shallowalias_e50.csv",
                 "reports/ka_v2_ablation_openskull_shallowalias_e50.json",
@@ -1402,7 +1402,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "    --bg-alias-highrank-pf-leak-eta 0.0 \\",
                 "    --ka-score-contract-v2-mode auto",
             ],
-            notes="Synthetic, replay-only KA-positive regime used as a contract-mechanics positive control; not a realism benchmark.",
+            notes="Synthetic, replay-only positive-control regime used as a contract-mechanics check; not a realism benchmark.",
         ),
         ArtifactInfo(
             name="Mace PD-only holdout alias-gate evaluation (label-free thresholds)",
@@ -1684,7 +1684,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
             notes="Across-linear uses stride 4; this matches the fixed geometry-only stride policy (largest stride with >=500 tiles).",
         ),
         ArtifactInfo(
-            name="Gammex same-residual detector-component sweep (along/across; no KA)",
+            name="Gammex same-residual detector-component sweep (along/across; no shrink-only regularizer)",
             paper_refs=["Twinkling section: Table (structural ROC)"],
             outputs=[
                 "runs/real/twinkling_gammex_alonglinear17_prf2500_str6_msd_ratio_fast/",
@@ -1771,7 +1771,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
             ],
             notes=(
                 "Same-residual fairness audit for the main Gammex table. Detector-variant ablations require the "
-                "batched fast STAP core (set STAP_FAST_PATH=1); only the detector head changes across rows."
+                "batched fast matched-subspace core; only the detector head changes across rows."
             ),
         ),
         ArtifactInfo(
@@ -1858,8 +1858,8 @@ def _default_artifacts() -> list[ArtifactInfo]:
             ],
         ),
         ArtifactInfo(
-            name="Twinkling calculi KA hygiene + contract telemetry (calcifications; PRF approx 500)",
-            paper_refs=["Twinkling section: KA hygiene on calculi", "Figure: twinkling_calculi_tail_example.png"],
+            name="Twinkling calculi shrink-only regularizer hygiene + contract telemetry (calcifications; PRF approx 500)",
+            paper_refs=["Twinkling section: shrink-only regularizer hygiene on calculi", "Figure: twinkling_calculi_tail_example.png"],
             outputs=[
                 "runs/real/twinkling_calculi_calcifications_prf500_str4_Lt8_msd_ka_scm_dl015_f050/",
                 "reports/twinkling_calculi_calcifications_prf500_str4_Lt8_msd_ka_scm_dl015_f050_roc.csv",
@@ -1993,7 +1993,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "ULM section: localization-derived structural audit on the same dataset",
                 "ULM section: Table (ulm7883227_pala_structural_roc_table.tex)",
                 "Supplement: Figure (ulm7883227_pala_structural_roc_curves.pdf)",
-                "Discussion: RTX 4080 latency note for the same 64-frame no-registration specialist",
+                "Discussion: RTX 4080 latency note for the same 64-frame no-registration fully whitened variant",
             ],
             outputs=[
                 "reports/ulm7883227_pala_structural_roc.csv",
@@ -2171,7 +2171,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
             notes=(
                 "SIMUS/PyMUST runs are used as a moving-scatterer credibility anchor. "
                 "Sanity-link summaries compare PSD-band / coherence / low-rank proxies against open real IQ; "
-                "contract checks verify bundle integrity and KA-friendly regime telemetry. "
+                "contract checks verify bundle integrity and regularizer-friendly regime telemetry. "
                 "No performance claims are made from these comparisons."
             ),
         ),

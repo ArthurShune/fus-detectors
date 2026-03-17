@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Plot proxy-based baseline/STAP comparison on Shin RatBrain Fig3.
+Plot proxy-based baseline/matched-subspace comparison on Shin RatBrain Fig3.
 
 Consumes the scenario-matrix CSV produced by:
   PYTHONPATH=. python -m scripts.shin_ratbrain_baseline_matrix ...
@@ -81,8 +81,8 @@ def main() -> None:
         ("mc_svd", r"MC--SVD"),
         ("rpca", r"RPCA"),
         ("hosvd", r"HOSVD"),
-        ("stap", r"STAP"),
-        ("stap_raw", r"STAP-only"),
+        ("stap", r"Matched-subspace detector"),
+        ("stap_raw", r"Matched-subspace-only"),
     ]
 
     # Alpha grid is encoded in the CSV columns as hit_flow_{tag} where tag is 1e-03, 3e-04, etc.
@@ -232,7 +232,7 @@ def main() -> None:
             patch.set_alpha(0.55)
         ax2.set_yscale("log")
         ax2.set_ylabel("Runtime per scenario (s)")
-        ax2.set_title("Runtime (CPU; baseline + STAP)")
+        ax2.set_title("Runtime (CPU; baseline + matched-subspace)")
         ax2.grid(True, axis="y", alpha=0.3)
 
     # Small note: finite-sample tail quantization at strict alphas.
