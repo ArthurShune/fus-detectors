@@ -934,7 +934,19 @@ One remaining fairness concern is that the held-out structural checkpoint may st
 
 \input{reports/simus_clinical_stress_frontier_provenance_table.tex}
 
-The resulting pattern is stronger than the earlier generic stress audit. On every held-out row in main-text Table~\ref{tab:simus_stress_frontier_headline}, the strongest detector-family stack outperforms the strongest public comparator evaluated on that same stressed row. The row-wise detector winner is not uniform, and that is scientifically useful. Under cardiac-like pulsation, the reference row is already won by the simpler matched-subspace default on an RPCA residual, while the moderate and hard rows favor the fully whitened specialist on adaptive-global SVD residuals. Under shortened ensembles, the fixed matched-subspace default is strongest at 64 and 32 frames, the fully whitened specialist is strongest at 48 frames, and the aggregate held-out summary favors the adaptive detector-family variant. The main scientific use of this table is therefore not to replace the primary translational benchmark, but to show that once the nuisance is made more clinically realistic, the detector family does not merely avoid collapse; it keeps a substantial nuisance-control advantage over the strongest public stacks that were evaluated under the same stress conditions.
+\IfFileExists{reports/simus_clinical_stress_frontier_headline_table.tex}{%
+  \input{reports/simus_clinical_stress_frontier_headline_table.tex}%
+}{%
+  \begin{center}
+  \refstepcounter{table}\label{tab:simus_stress_frontier_headline}%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/simus_clinical_stress_frontier_headline_table.tex}.\\
+    Reproduce it with \path{PYTHONPATH=. python scripts/simus_clinical_stress_frontier_tables.py}.
+  \end{minipage}}
+  \end{center}
+}
+
+The resulting pattern is stronger than the earlier generic stress audit. On every held-out row in supplementary Table~\ref{tab:simus_stress_frontier_headline}, the strongest detector-family stack outperforms the strongest conventional baseline evaluated on that same stressed row. The row-wise winner is not uniform: the fully whitened variant takes all three cardiac-pulsation rows and the reference and intermediate short-ensemble rows, while the fixed matched-subspace head remains strongest only on the hardest 32-frame short-ensemble row. The main scientific use of this table is not to replace the direct per-head stress table in the main paper, but to show that once the nuisance is made more clinically realistic, the detector family still keeps a substantial nuisance-control advantage over the strongest conventional stacks evaluated under the same stress conditions.
 
 \paragraph{Detector-family ablation on a fixed use-case-motivated synthetic residual.}
 The held-out same-residual SIMUS detector-family ablation now appears in the main text as Table~\ref{tab:simus_detector_family_ablation}. We do not repeat it here. Its role is to hold the MC--SVD residual fixed and change only the downstream head, which sharpens the detector-head claim independently of the end-to-end stack comparisons in Table~\ref{tab:simus_v2_structural_latency}.

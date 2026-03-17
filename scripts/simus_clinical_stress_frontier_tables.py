@@ -400,7 +400,7 @@ def _frozen_rpca_heads_table(rows: list[dict[str, str]]) -> str:
             lines.append(r"\medskip")
     lines.extend(
         [
-            r"\caption{Concrete detector-head view of the held-out SIMUS mobile stress regime on the same rows as Table~\ref{tab:simus_stress_frontier_headline}, now fixing the residualizer to RPCA on every row. Entries report AUC$_{\mathrm{main/nuis}}$ (top) and FPR$_{\mathrm{nuis}}$@$0.5$ (bottom), with point estimates shown as $x_{\mathrm{lo}}^{\mathrm{hi}}$ using 95\% nonparametric bootstrap intervals over the held-out masked score samples. RPCA is used because RPCA $\rightarrow$ PD is the best conventional baseline among evaluated methods on every stress row in Table~\ref{tab:simus_stress_frontier_headline}. This table separates the fixed, adaptive, and fully whitened heads directly instead of reporting only the best family member on each row.}",
+            r"\caption{Concrete detector-head view of the held-out SIMUS mobile stress regime, fixing the residualizer to RPCA on every row. Entries report AUC$_{\mathrm{main/nuis}}$ (top) and FPR$_{\mathrm{nuis}}$@$0.5$ (bottom), with point estimates shown as $x_{\mathrm{lo}}^{\mathrm{hi}}$ using 95\% nonparametric bootstrap intervals over the held-out masked score samples. RPCA is used because RPCA $\rightarrow$ PD is the strongest conventional baseline among evaluated methods on every reported stress row. This table separates the fixed, adaptive, and fully whitened heads directly instead of reporting only the best family member on each row.}",
             r"\label{tab:simus_stress_frontier_rpca_heads}",
             r"\end{center}",
             "",
