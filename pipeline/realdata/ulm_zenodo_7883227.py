@@ -161,8 +161,16 @@ def load_ulm_block_iq(
         if d.ndim != 4 or int(d.shape[0]) != 2:
             raise ValueError(f"Unexpected iq shape {tuple(d.shape)} in {h5_path}")
         frame_sel = slice(None) if frames is None else frames
-        I = np.asarray(d[0, :, :, frame_sel], dtype=np.float32)
-        Q = np.asarray(d[1, :, :, frame_sel], dtype=np.float32)
+        try:
+            I = np.asarray(d[0, :, :, frame_sel], dtype=np.float32)
+            Q = np.asarray(d[1, :, :, frame_sel], dtype=np.float32)
+        except ValueError as exc:
+            if "Insufficient precision in available types" not in str(exc):
+                raise
+            raw = np.empty(tuple(int(s) for s in d.shape), dtype=np.float32)
+            d.id.read(h5py.h5s.ALL, h5py.h5s.ALL, raw, mtype=h5py.h5t.IEEE_F32LE)
+            I = np.asarray(raw[0, :, :, frame_sel], dtype=np.float32)
+            Q = np.asarray(raw[1, :, :, frame_sel], dtype=np.float32)
     iq_hw_t = I + 1j * Q
     iq_t_hw = np.transpose(iq_hw_t, (2, 0, 1))
     return iq_t_hw.astype(dtype, copy=False)

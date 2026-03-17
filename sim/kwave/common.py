@@ -102,6 +102,39 @@ else:
 
 _HAS_TORCH = torch is not None
 
+
+def _torch_from_numpy_compat(arr: np.ndarray) -> "torch.Tensor":
+    """Torch/NumPy bridge that survives envs where from_numpy rejects ndarrays."""
+    if torch is None:  # pragma: no cover - torch optional
+        raise RuntimeError("Torch is required for this code path.")
+    arr_np = np.asarray(arr)
+    try:
+        return torch.from_numpy(arr_np)
+    except TypeError:
+        if np.iscomplexobj(arr_np):
+            real = torch.tensor(np.asarray(arr_np.real, dtype=np.float32), dtype=torch.float32)
+            imag = torch.tensor(np.asarray(arr_np.imag, dtype=np.float32), dtype=torch.float32)
+            return torch.complex(real, imag)
+        return torch.tensor(arr_np)
+
+
+def _torch_real_to_numpy_compat(t: "torch.Tensor") -> np.ndarray:
+    """Convert a real torch tensor to a float32 NumPy array without relying on .numpy()."""
+    if torch is None:  # pragma: no cover - torch optional
+        raise RuntimeError("Torch is required for this code path.")
+    tc = t.detach().to(dtype=torch.float32).cpu().contiguous()
+    return np.frombuffer(bytes(tc.untyped_storage()), dtype=np.float32).reshape(tuple(tc.shape))
+
+
+def _torch_complex_to_numpy_compat(t: "torch.Tensor") -> np.ndarray:
+    """Convert a complex torch tensor to a complex64 NumPy array without relying on .numpy()."""
+    if torch is None:  # pragma: no cover - torch optional
+        raise RuntimeError("Torch is required for this code path.")
+    tc = t.detach().to(dtype=torch.complex64).cpu().contiguous()
+    parts = torch.view_as_real(tc).to(dtype=torch.float32).contiguous()
+    parts_np = np.frombuffer(bytes(parts.untyped_storage()), dtype=np.float32).reshape(tuple(parts.shape))
+    return (parts_np[..., 0] + 1j * parts_np[..., 1]).astype(np.complex64, copy=False)
+
 FeasibilityMode = Literal["legacy", "updated", "blend"]
 _FEASIBILITY_MODES: set[str] = {"legacy", "updated", "blend"}
 _DEFAULT_MOTION_HALF_SPAN_REL = 0.1
@@ -2943,7 +2976,7 @@ def _svd_temporal_project(
     )
     t0 = time.perf_counter()
     if use_cuda:
-        At = torch.from_numpy(A)
+        At = _torch_from_numpy_compat(A)
         if not At.is_cuda:
             At = At.to("cuda")
         C = At @ At.conj().T
@@ -2957,8 +2990,8 @@ def _svd_temporal_project(
         rank = rank or 3
         rank = int(max(1, min(rank, T)))
         U_k = U[:, :rank]
-        Af = (At - U_k @ (U_k.conj().T @ At)).detach().cpu().numpy().astype(np.complex64)
-        s2_vals = s2.detach().cpu().numpy()
+        Af = _torch_complex_to_numpy_compat(At - U_k @ (U_k.conj().T @ At))
+        s2_vals = _torch_real_to_numpy_compat(s2)
         s_top = np.sqrt(s2_vals[: min(5, s2_vals.size)])
     else:
         C = A @ A.conj().T
@@ -3016,7 +3049,7 @@ def _svd_temporal_project_torch(
     idx = torch.argsort(evals, descending=True)
     s2 = torch.clamp(evals[idx].real, min=0.0)
     U = U[:, idx]
-    s2_vals = s2.detach().cpu().numpy()
+    s2_vals = _torch_real_to_numpy_compat(s2)
 
     rank_removed = rank
     if rank_removed is None and energy_frac is not None:
@@ -3068,7 +3101,7 @@ def _svd_temporal_keep_range(
     )
     t0 = time.perf_counter()
     if use_cuda:
-        At = torch.from_numpy(A)
+        At = _torch_from_numpy_compat(A)
         if not At.is_cuda:
             At = At.to("cuda")
         C = At @ At.conj().T
@@ -3081,8 +3114,8 @@ def _svd_temporal_keep_range(
             Af = torch.zeros_like(At)
         else:
             Af = (U_k @ (U_k.conj().T @ At)).detach()
-        Af = Af.cpu().numpy().astype(np.complex64)
-        s2_vals = s2.detach().cpu().numpy()
+        Af = _torch_complex_to_numpy_compat(Af)
+        s2_vals = _torch_real_to_numpy_compat(s2)
         s_top = np.sqrt(s2_vals[: min(5, s2_vals.size)])
     else:
         C = A @ A.conj().T
@@ -3349,7 +3382,7 @@ def _baseline_pd_svd_similarity(
 
         if cube_f.is_cuda:
             torch.cuda.synchronize()
-        s2_vals = s2.detach().cpu().numpy()
+        s2_vals = _torch_real_to_numpy_compat(s2)
         s_top = np.sqrt(np.clip(s2_vals[: min(5, s2_vals.size)], 0.0, None))
         telemetry = {
             "baseline_type": "svd_similarity",
