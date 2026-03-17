@@ -511,8 +511,7 @@ Table~\ref{tab:shin_fixed_calibration_transfer} & Fixed matched-subspace detecto
 \label{sec:results}
 
 \paragraph{Results roadmap.}
-We begin with SIMUS-Struct and lead with the held-out reference regime before the held-out stress regime. That sequence establishes the default fixed head on the main benchmark first, then shows where whitening helps under clinically grounded pulsation and short-ensemble pressure. We then report kWave-Stress, Gammex-Struct, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion. Additional dataset evaluations and diagnostic panels are provided in \SuppOrApp{app:supp-results}.
-The main benchmark result is that the fixed head is the strongest default choice on the held-out SIMUS structural benchmark. The stress result is that the fully whitened variant helps in harsher nuisance regimes. The phantom result is that whitening is decisive in the short-ensemble Gammex setting, where whitened power can outperform the full matched-subspace ratio. The real-IQ result is narrower: fixed and adaptive give only modest gains on the limited ULM structural audit, while the fully whitened variant is the only head that clearly improves the vessel-core versus shell endpoint.
+We first report the held-out SIMUS benchmark that determines the default detector configuration. We then show clutter-heavy stress tests that define when whitening helps. Next, we report mechanism ablations on labeled brain simulations and structurally labeled phantom data. Finally, we report bounded real-IQ structural and motion-robustness audits together with replay feasibility.
 
 \subsection{SIMUS-Struct benchmark}
 \label{sec:accepted-v2-main}
