@@ -624,7 +624,19 @@ We then turn to harsher nuisance settings on the same benchmark family. These he
 The stress rows complement the reference regime. Together, the stress rows show nontrivial difficulty and the reference rows identify which fixed head should be deployed by default.
 
 \paragraph{Functional same-cube detector-head comparison.}
-A secondary held-out functional same-cube audit is reported in the Supplementary Material. On that audit, the fully whitened detector remains directionally positive across most residual families under a common activation-versus-nuisance readout, but the structural nuisance-control results remain primary.
+The structural nuisance-control results remain primary, but the paper also reports one held-out functional same-cube audit because it answers the same downstream-head question under a common activation-versus-nuisance readout. Table~\ref{tab:accepted_v2_functional_main} fixes the residual stream and compares the detector heads under the same functional readout. The fully whitened detector is directionally positive across most residual families in both settings, but the effect size is smaller and less decisive than in the structural benchmark, so we treat it as secondary supporting evidence rather than as a headline result.
+
+\IfFileExists{reports/simus_functional_numeric_summary_table.tex}{%
+  \input{reports/simus_functional_numeric_summary_table.tex}%
+}{%
+  \begin{center}
+  \refstepcounter{table}\label{tab:accepted_v2_functional_main}%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/simus_functional_numeric_summary_table.tex}.\\
+    Reproduce it with \path{PYTHONPATH=. python3 scripts/simus_functional_numeric_table.py}.
+  \end{minipage}}
+  \end{center}
+}
 
 \paragraph{Scope and low-FPR operating protocol.}
 Quantitative detection performance is reported on kWave-Stress, Gammex-Struct, and SIMUS-Struct using the strict low-FPR operating protocol of Section~\ref{sec:eval}. The ULM and Shin sections add structural, robustness, and transfer audits on open real-IQ data. Conditional execution is a decision-rule variant that uses a flow-proxy mask; leakage ablations and additional diagnostics are reported in \SuppOrApp{app:supp-results}.
@@ -779,6 +791,10 @@ The view asymmetry still matters: the across view provides the clearest structur
 
 \noindent Additional Gammex sanity checks are provided in the \SuppOrApp{app:supp-results}.
 
+\ifSTAPPAPERONLY
+\paragraph{Within-ensemble motion ladders.}
+A labeled within-ensemble motion ladder on the along-view Gammex cine is included in the methods companion. It is directionally consistent with the main phantom result and is useful as a robustness check, but the central phantom claim in the main preprint is the same-residual structural ROC comparison above.
+\else
 \paragraph{Within-ensemble motion ladders (labeled, real acquisition).}
 To obtain a labeled motion-robustness curve on a real acquisition without external motion ground truth, we inject synthetic \emph{within-ensemble} motion directly into the CFM cube: for each cine frame we apply a per-shot rigid translation $(\Delta y_t,\Delta x_t)$ to the $N$ CFM shots prior to baseline and matched-subspace scoring, with motion kinds \texttt{rw} (random walk) and \texttt{step}. Because the structural tube masks are derived from B-mode and fixed per frame, this produces a labeled ``motion ladder'' where the only change is within-ensemble corruption. We generate motion-corrupted ensembles (85 cine frames; amplitudes $0$--$2$ px) and aggregate using frame-level bootstraps for CIs together with an explicit amp=0 equivalence check against the non-motion reference. Figure~\ref{fig:twinkling_within_ensemble_motion} shows the resulting curves; reproducibility details are provided in \SuppOrApp{app:repro}.
 
@@ -790,6 +806,7 @@ To obtain a labeled motion-robustness curve on a real acquisition without extern
 \caption{Gammex flow phantom within-ensemble motion ladder on the along-linear PRF=2500 sequence (85 frames). Left: random-walk per-shot translation; right: step translation. Each subpanel reports TPR vs motion amplitude at a fixed FPR target using B-mode structural masks, with the y-axis zoomed to the observed TPR range so that small changes remain visible. Shaded bands are 25--75\% bootstrap intervals over cine frames. Reproducibility details are provided in \SuppOrApp{app:repro}.}
 \label{fig:twinkling_within_ensemble_motion}
 \end{figure}
+\fi
 
 \subsection{ULM real-IQ audits}
 \label{sec:ulm7883227}
@@ -837,6 +854,10 @@ A second transfer analysis uses the same structural endpoint but removes per-win
 }
 
 \subsubsection{Motion robustness audit}
+\ifSTAPPAPERONLY
+\paragraph{Companion motion audit.}
+A companion-only motion-injection audit on ULM-CoreShell and Shin-ProxyMotion provides secondary robustness evidence under controlled residual-motion stress. In those audits, matched-subspace score maps are more stable than the baseline maps, but these results are robustness corroboration rather than the structural efficacy claim that anchors the main real-IQ section.
+\else
 \paragraph{Nonrigid motion injection and fairness alignment ablation.}
 We evaluate motion robustness by injecting controlled motion directly into the beamformed IQ cube and re-running the baseline plus matched-subspace detector under a frozen ULM profile (PRF $=1000$ Hz; $L_t=64$; tiles $8\times 8$; stride 3; SCM covariance; diagonal loading $\lambda=0.07$; baseline MC--SVD with frozen $e=0.975$). Because motion is injected at the beamformed IQ stage, this test stresses post-beamforming robustness to residual motion mismatch; it does not model channel-domain decorrelation or skull-induced phase-aberration physics. Motion ladders span two nonrigid families: \texttt{brainlike} (rigid random-walk translation plus a smooth, depth-decaying elastic warp with temporally correlated coefficients and micro-jitter) and \texttt{elastic} (nonrigid-only; rigid and micro-jitter disabled). For each amplitude we compute label-free robustness endpoints on the baseline score $S_{\mathrm{base}}$ and the matched-subspace detector score $S_{\mathrm{det,pre}}$ relative to the no-motion reference under three \emph{common} alignment modes (none / common B-mode / injected GT proxy) plus a diagnostic per-method ``self'' alignment. We additionally report degeneracy checks (std ratios, top-$k$ overlap, and tail quantile ratios) to rule out ``stability by collapse.'' Figure~\ref{fig:ulm_brainlike_e975} shows the main \texttt{brainlike} sweep; additional motion variants are provided in \SuppOrApp{app:supp-results}.
 
@@ -864,6 +885,7 @@ not present locally. Reproducibility details are provided in \SuppOrApp{app:repr
 At a 3~px motion amplitude under the injected GT alignment proxy, the median correlation on the baseline score $S_{\mathrm{base}}$ drops to $\approx 0.20$ (\texttt{brainlike}), while the matched-subspace detector score $S_{\mathrm{det,pre}}$ remains $\approx 0.75$ (medians over blocks 1--3; full tabular summaries and additional motion variants are provided in \SuppOrApp{app:supp-results}). Degeneracy checks confirm that this stability is not explained by map collapse: the median std ratio and 0.999-quantile ratio of $S_{\mathrm{det,pre}}$ remain nontrivial across amplitudes, and top-$k$ overlap decays gradually rather than saturating to trivial values.
 
 These motion-injection experiments do not replace upstream motion correction or registration. Motion correction remains central in ULM and Doppler pipelines because residual motion and clutter leakage can dominate downstream vascular estimates \cite{HingotULMMotion2017,HeilesULMBenchmark2021,InsanaRegistration2022}. A local nuisance-aware detector head can still make the exported score map less brittle to residual motion mismatch after ordinary residualization, which matters because many acquisitions fail by producing unstable hot spots and threshold drift rather than by complete loss of flow signal.
+\fi
 
 \paragraph{Shin-ProxyMotion.}
 To avoid making the motion-robustness story depend on a single open dataset, we also summarize the strongest existing Shin rat-brain motion-stress result from the supplement \cite{ShinLOCAULM2024,ShinZenodo10711806}. Under a prespecified low-frequency operating setting and a controlled residual-motion stress test, the matched-subspace score map is more stable than the MC--SVD baseline map across all three audited windows, and the matched background-tail operating point yields a nonzero flow-proxy hit rate only for the matched-subspace detector.
