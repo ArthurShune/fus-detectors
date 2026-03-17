@@ -321,7 +321,7 @@ def _headline_table(rows: list[dict[str, str]]) -> str:
                 rf"\par\medskip\noindent\textbf{{{meta['label']}}}\par\medskip",
                 r"\begin{tabular}{@{}P{4.4cm} P{3.7cm} P{5.1cm}@{}}",
                 r"\hline",
-                r"Level / perturbation & Best detector-family stack & Metrics (Baseline $\rightarrow$ Detector) \\",
+                r"Level / perturbation & Best detector-variant pipeline & Metrics (Baseline $\rightarrow$ Detector) \\",
                 r"\hline",
             ]
         )
