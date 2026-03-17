@@ -484,28 +484,28 @@ ULM Zenodo 7883227 motion and same-residual audits (PRF 1000; 128-frame blocks) 
 \label{tab:fixed_profiles}
 \end{table}
 
-Table~\ref{tab:result_table_score_map} maps each main result table to the exact reported head, whitening recipe, loading, and training-support policy used there. Equation~\eqref{eq:sbase} defines the baseline ROC score, Equation~\eqref{eq:s0} the fixed detector, Equation~\eqref{eq:sadapt} the adaptive detector, and Equation~\eqref{eq:sw} the fully whitened detector.
+Table~\ref{tab:result_table_score_map} condenses the whitening and conditioning recipe into one row per regime. The result tables themselves identify which detector head is being reported; the regime-level covariance estimator, loading, and training-support policy are fixed and summarized here, with short notes only for the few exceptions. Equation~\eqref{eq:sbase} defines the baseline ROC score, Equation~\eqref{eq:s0} the fixed detector, Equation~\eqref{eq:sadapt} the adaptive detector, and Equation~\eqref{eq:sw} the fully whitened detector.
 
 \begin{center}
 \captionsetup{type=table}
-\scriptsize
+\footnotesize
 \begingroup
-\setlength{\tabcolsep}{3pt}
-\begin{tabular}{@{}P{3.2cm} P{2.8cm} P{4.2cm} P{4.3cm} P{2.9cm}@{}}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}P{3.1cm} P{4.0cm} P{4.5cm} P{5.2cm}@{}}
 \hline
-Main result table(s) & Detector head actually reported there & Covariance estimator and loading when whitening is active & Training support used for whitening & Notes / exact profile \\
+Regime & Covariance estimator when whitening is active & Loading / conditioning & Training support for whitening \\
 \hline
-Tables~\ref{tab:simus_stress_frontier_rpca_heads}, \ref{tab:accepted_v2_structural_main}, \ref{tab:simus_detector_family_ablation} & Fixed / adaptive / fully whitened rows on the named residualizer; conventional rows use PD or Kasai on that same residual cube & Fixed: none. Adaptive / fully whitened: Huber covariance, $c=5$, $\lambda=0.10$, target $\kappa=200$, ridge $0.25$ & Pooled tile-local Hankel snapshots from the prespecified window; trim $q=0.08$ on whitened rows; adaptive head whitens only promoted tiles & Canonical SIMUS recipe. Table~\ref{tab:simus_stress_frontier_rpca_heads} freezes the stress rows to RPCA; Table~\ref{tab:simus_detector_family_ablation} freezes the cleaner benchmark to MC--SVD and changes only the downstream head. \\
-Supplementary functional same-cube detector-head audit & Same detector-family mapping, but passed through the common functional readout & Same Huber recipe as structural SIMUS rows: $c=5$, $\lambda=0.10$, $\kappa=200$, ridge $0.25$ & Same pooled Hankel support; trim $q=0.08$ on whitened rows & Kept supplementary because the main paper is structural-first \\
-Tables~\ref{tab:brain_detector_ablation}, \ref{tab:brain_detector_swap}, \ref{tab:brain_huber_trim_stability} & Fixed ratio, whitened power, or fully whitened ratio, depending on the row/table & Default whitened brain rows: Tyler-type, $\lambda=0.07$. Stability table: Huber, $c=5$, $\lambda=0.10$, $\kappa=200$, ridge $0.25$ & 64-frame windows with $L_t=8$; pooled tile-local Hankel snapshots. Stability table varies trim $q\in\{0.05,0.08,0.10\}$ & Separates earlier Tyler-style whitening from finalized Huber audit \\
-Table~\ref{tab:twinkling_gammex_structural_roc} & Whitened power, fixed ratio, and fully whitened ratio on the same short-ensemble residual cube; PD/Kasai are conventional rows & Tyler-type, $\lambda=0.07$ for whitened rows; fixed ratio uses $R_i=I$ & Short-ensemble pooled support with $N=17$, $L_t=16$: two overlapping temporal snapshots per pixel within each tile; no trim & Short-support Tyler recipe, not the SIMUS Huber recipe \\
-Tables~\ref{tab:ulm7883227_structural_roc}, \ref{tab:ulm_fixed_calibration_transfer} & Table~\ref{tab:ulm7883227_structural_roc}: PD/Kasai plus fixed, adaptive, and fully whitened heads on the same frozen 64-frame ULM residual profile. Table~\ref{tab:ulm_fixed_calibration_transfer}: strongest fully whitened variant only & SCM, $\lambda=0.07$ when whitening is active; fixed head uses $R_i=I$ & 64-frame windows with $L_t=64$; whitening trained from pooled tile snapshots of that single short window; no trim & Same-residual PALA-backed structural-audit recipe, with the separate fixed-threshold transfer check restricted to the strongest fully whitened variant \\
-Table~\ref{tab:shin_motion_endpoints_main} & Adaptive detector with shrink-only penalty disabled; baseline row is PD on the same residual stream & Promoted tiles: Tyler-type, $\lambda=0.07$, target $\kappa=200$; non-promoted tiles use $R_i=I$ & Snapshot stride $=4$, max post-stride snapshots $=64$; whitening only on promoted tiles & Frozen Shin adaptive real-IQ corroboration profile \\
-Table~\ref{tab:shin_fixed_calibration_transfer} & Fixed matched-subspace detector on the frozen Shin baseline-matrix proxy audit; PD and Kasai are conventional rows & None; fixed detector uses $R_i=I$ & No whitening. Threshold is learned from pooled background-proxy negatives across 5 calibration clips and transferred unchanged to the complementary 5 clips across all three windows & Secondary proxy-based cross-clip transfer check only \\
+SIMUS-Struct & Huber covariance for adaptive and fully whitened rows; fixed rows use $R_i=I$ & $c=5$, $\lambda=0.10$, target $\kappa=200$, ridge $0.25$ & Pooled tile-local Hankel snapshots from the prespecified window; trim $q=0.08$ on whitened rows; adaptive whitening only on promoted tiles \\
+kWave-Stress & Tyler-type for the main detector-ablation rows; fixed rows use $R_i=I$ & Main rows: $\lambda=0.07$ & 64-frame windows with $L_t=8$ and pooled tile-local Hankel snapshots \\
+Gammex-Struct & Tyler-type for whitened rows; fixed ratio uses $R_i=I$ & $\lambda=0.07$ & Short-ensemble pooled support with $N=17$, $L_t=16$: two overlapping temporal snapshots per pixel within each tile; no trim \\
+ULM-CoreShell & SCM when whitening is active; fixed head uses $R_i=I$ & $\lambda=0.07$ & 64-frame windows with $L_t=64$; whitening trained from pooled tile snapshots of that single short window; no trim \\
+Shin-ProxyMotion & Tyler-type on promoted tiles; non-promoted tiles use $R_i=I$ & $\lambda=0.07$, target $\kappa=200$ on promoted tiles & Snapshot stride $=4$, max post-stride snapshots $=64$; whitening only on promoted tiles \\
 \hline
 \end{tabular}
 \endgroup
-\caption{Main-text recipe table for the reported results. Each row states which detector head is actually reported, whether whitening is fixed, adaptive, or absent, the exact covariance estimator and loading used when whitening is active, and the training-support policy behind that whitening step.}
+\par\smallskip
+\parbox{0.98\linewidth}{\footnotesize\textit{Exceptions.} The supplementary SIMUS functional same-cube audit uses the same SIMUS-Struct recipe. The kWave stability audit swaps the main Tyler-type whitening for a Huber recipe with $c=5$, $\lambda=0.10$, target $\kappa=200$, ridge $0.25$, and trim $q\in\{0.05,0.08,0.10\}$. In all regimes, fixed rows use $R_i=I$ and therefore do not estimate a whitening covariance.}
+\caption{Regime-level recipe card for the reported results. Each row summarizes the covariance estimator, loading, and whitening-support policy used in that regime when whitening is active. Detector heads are identified directly in the result tables themselves.}
 \label{tab:result_table_score_map}
 \end{center}
 
