@@ -195,7 +195,7 @@ The effect is not confined to the extreme tail. On the representative Gammex fra
 
 We also study a conservative shrink-only regularization layer, but only as an optional add-on: it can compress extreme-tail artifacts without score inflation, and the primary quantitative results do not rely on it (details in the Supplementary Material). This problem matters now because fUS is no longer only a preclinical proof-of-concept modality. It is already used in intra-operative, neonatal, cranial-window, and emerging mobile settings \cite{Imbault2017,DemeneHumanNewborn2017,BarangerNeonates2021,Rabut2024,MobileFUS2025,Deffieux2021}, where rare nuisance-driven false positives can matter more than average image quality.
 
-After conventional clutter suppression, localized matched-subspace-family scoring can reduce nuisance leakage relative to PD/Kasai-based scoring in several evaluated regimes. The results then show where the simpler fixed score is already sufficient, where an adaptive whitening switch is useful, and where a fully whitened specialist mode earns its extra complexity. The validation ladder in Table~\ref{tab:validation_ladder_intro} summarizes the evidence order before the notation and benchmark detail.
+This paper is about downstream detector-head design after fixed residualization. The fixed non-whitened matched-subspace head is the default on our held-out synthetic structural benchmark; the fully whitened specialist helps in selected clutter-heavy or structure-concentration regimes; and the real-IQ evidence is bounded to structural and robustness audits. The validation ladder in Table~\ref{tab:validation_ladder_intro} summarizes the evidence order before the notation and benchmark detail.
 
 \paragraph{Contributions.}
 \begin{itemize}[nosep]
