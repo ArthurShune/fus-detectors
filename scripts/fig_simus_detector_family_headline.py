@@ -8,7 +8,6 @@ from pathlib import Path
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 
 METHODS = [
@@ -74,16 +73,13 @@ def main() -> int:
         }
     )
 
-    fig, axes = plt.subplots(1, 2, figsize=(8.8, 3.6), constrained_layout=True, sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(8.8, 3.3), constrained_layout=True, sharey=True)
     x = np.arange(len(METHODS))
 
     for ax, (setting_key, panel_title) in zip(axes, SETTINGS, strict=True):
         means = []
         lo_err = []
         hi_err = []
-        auc_means = []
-        auc_lo = []
-        auc_hi = []
         labels = []
         colors = []
         for method_label, short in METHODS:
@@ -91,15 +87,9 @@ def main() -> int:
             mean = float(row["fpr_nuisance_match_0p5_mean"])
             lo = float(row["fpr_nuisance_match_0p5_min"])
             hi = float(row["fpr_nuisance_match_0p5_max"])
-            auc_mean = float(row["auc_main_vs_nuisance_mean"])
-            auc_min = float(row["auc_main_vs_nuisance_min"])
-            auc_max = float(row["auc_main_vs_nuisance_max"])
             means.append(mean)
             lo_err.append(max(0.0, mean - lo))
             hi_err.append(max(0.0, hi - mean))
-            auc_means.append(auc_mean)
-            auc_lo.append(max(0.0, auc_mean - auc_min))
-            auc_hi.append(max(0.0, auc_max - auc_mean))
             labels.append(short)
             colors.append(COLORS[short])
 
@@ -122,24 +112,6 @@ def main() -> int:
         ax.set_axisbelow(True)
         for xi, mean in zip(x, means, strict=True):
             ax.text(xi, mean + 0.03, f"{mean:.3f}", ha="center", va="bottom", fontsize=7)
-
-        axins = inset_axes(ax, width="45%", height="42%", loc="upper right", borderpad=1.0)
-        axins.plot(x, auc_means, "o-", color="#222222", linewidth=1.0, markersize=3.6)
-        axins.errorbar(
-            x,
-            auc_means,
-            yerr=np.vstack([auc_lo, auc_hi]),
-            fmt="none",
-            ecolor="#222222",
-            elinewidth=0.8,
-            capsize=2.0,
-        )
-        axins.set_xticks(x, labels, rotation=35, ha="right")
-        axins.set_ylim(0.0, 1.02)
-        axins.set_title(r"AUC$_{\mathrm{main/nuis}}$", fontsize=7.5, pad=2)
-        axins.tick_params(axis="both", labelsize=6, length=2)
-        axins.grid(axis="y", color="#e5e5e5", linewidth=0.5)
-        axins.set_axisbelow(True)
 
     axes[1].set_ylabel("")
     fig.savefig(args.out, bbox_inches="tight")
