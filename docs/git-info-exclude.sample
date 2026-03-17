@@ -1,0 +1,9 @@
+# Copy lines from this sample into .git/info/exclude for local-only untracked files.
+# Do not put tracked private material here; tracked files require a separate public
+# branch or a clean export path such as scripts/prepare_public_mirror.sh.
+
+.rgignore
+*.swp
+*.swo
+notes/
+scratch/
