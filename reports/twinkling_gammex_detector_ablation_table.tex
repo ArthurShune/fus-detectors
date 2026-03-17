@@ -3,19 +3,19 @@
 \centering
 \small
 \resizebox{\linewidth}{!}{%
-\begin{tabular}{l ccc ccc}
+\begin{tabular}{l cccc cccc}
 \hline
- & \multicolumn{3}{c}{Along (linear17 @ PRF 2500)} & \multicolumn{3}{c}{Across (linear17 @ PRF 2500)} \\
-Method / score & TPR@$\alpha=10^{-4}$ & TPR@$\alpha=3\!\times\!10^{-4}$ & TPR@$\alpha=10^{-3}$ & TPR@$\alpha=10^{-4}$ & TPR@$\alpha=3\!\times\!10^{-4}$ & TPR@$\alpha=10^{-3}$ \\
+ & \multicolumn{4}{c}{Along (linear17 @ PRF 2500)} & \multicolumn{4}{c}{Across (linear17 @ PRF 2500)} \\
+Method / score & TPR@$\alpha=10^{-2}$ & TPR@$\alpha=10^{-4}$ & TPR@$\alpha=3\!\times\!10^{-4}$ & TPR@$\alpha=10^{-3}$ & TPR@$\alpha=10^{-2}$ & TPR@$\alpha=10^{-4}$ & TPR@$\alpha=3\!\times\!10^{-4}$ & TPR@$\alpha=10^{-3}$ \\
 \hline
-Baseline (power Doppler) & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] \\
-Baseline (Kasai lag-1 power) & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] \\
-Detector ablation (whitened power) & 0.0012 [0.0011,0.0014] & 0.0119 [0.0114,0.0124] & 0.0532 [0.0521,0.0543] & 0.4820 [0.4776,0.4863] & 0.5155 [0.5120,0.5191] & 0.5813 [0.5784,0.5842] \\
-Detector ablation (unwhitened ratio) & 0.00000 [0.00000,0.00001] & 0.00000 [0.00000,0.00001] & 0.00001 [0.00000,0.00002] & 0.0574 [0.0534,0.0616] & 0.0602 [0.0564,0.0645] & 0.0653 [0.0612,0.0693] \\
-Fully whitened matched-subspace detector & 0.00000 [0.00000,0.00000] & 0.00003 [0.00000,0.00007] & 0.00031 [0.00020,0.00042] & 0.0491 [0.0470,0.0514] & 0.0998 [0.0970,0.1026] & 0.2237 [0.2197,0.2280] \\
+Baseline (power Doppler) & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] \\
+Baseline (Kasai lag-1 power) & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] & 0.00000 [0.00000,0.00000] \\
+Detector ablation (whitened power) & 0.4116 [0.4078,0.4155] & 0.0012 [0.0011,0.0014] & 0.0119 [0.0114,0.0124] & 0.0532 [0.0521,0.0543] & 0.7234 [0.7206,0.7262] & 0.4820 [0.4780,0.4863] & 0.5155 [0.5115,0.5191] & 0.5813 [0.5783,0.5843] \\
+Detector ablation (unwhitened ratio) & 0.00031 [0.00022,0.00041] & 0.00000 [0.00000,0.00001] & 0.00000 [0.00000,0.00001] & 0.00001 [0.00000,0.00002] & 0.1095 [0.1040,0.1148] & 0.0574 [0.0533,0.0611] & 0.0602 [0.0562,0.0643] & 0.0653 [0.0610,0.0695] \\
+Fully whitened matched-subspace detector & 0.0942 [0.0926,0.0958] & 0.00000 [0.00000,0.00000] & 0.00003 [0.00000,0.00007] & 0.00031 [0.00020,0.00043] & 0.6891 [0.6846,0.6939] & 0.0491 [0.0469,0.0513] & 0.0998 [0.0970,0.1027] & 0.2237 [0.2197,0.2276] \\
 \hline
 \end{tabular}%
 }
-\caption{Gammex flow phantom structural-label operating points using B-mode-derived structural masks. All scores are right-tail (higher indicates more flow evidence). This is a same-residual detector-head comparison: every row is evaluated on the identical baseline SVD band-pass residual cube, changing only the detector head. The baseline rows are power Doppler and Kasai lag-1 power on that residual; the detector ablations replace the fully whitened matched-subspace detector with either total whitened slow-time power (no Doppler band partition) or the same flow-band matched-subspace ratio without covariance whitening ($R=I$). Thresholds are chosen per method on pooled background pixels to match each target FPR and evaluated on pooled lumen pixels. Brackets show 95\% frame-bootstrap CIs ($n=2000$ resamples over cine frames) at the fixed pooled threshold. Pooled background counts are $n_{\mathrm{bg}}=3.85\times 10^{6}$ for the along view ($fpr_{\min}\approx 2.6\times 10^{-7}$) and $n_{\mathrm{bg}}=1.97\times 10^{6}$ for the across view ($fpr_{\min}\approx 5.1\times 10^{-7}$). Reproducibility details are provided in \SuppOrApp{app:repro}.}
+\caption{Gammex flow phantom structural-label operating points using B-mode-derived structural masks. All scores are right-tail (higher indicates more flow evidence). This is a same-residual detector-head comparison: every row is evaluated on the identical baseline SVD band-pass residual cube, changing only the detector head. The baseline rows are power Doppler and Kasai lag-1 power on that residual; the detector ablations replace the fully whitened matched-subspace detector with either total whitened slow-time power (no Doppler band partition) or the same flow-band matched-subspace ratio without covariance whitening ($R=I$). The table includes $\alpha=10^{-2}$ as a practitioner-facing relaxed operating point together with the stricter $\alpha\le 10^{-3}$ tail regime used for stress testing. Thresholds are chosen per method on pooled background pixels to match each target FPR and evaluated on pooled lumen pixels. Brackets show 95\% frame-bootstrap CIs ($n=2000$ resamples over cine frames) at the fixed pooled threshold. Pooled background counts are $n_{\mathrm{bg}}=3.85\times 10^{6}$ for the along view ($fpr_{\min}\approx 2.6\times 10^{-7}$) and $n_{\mathrm{bg}}=1.97\times 10^{6}$ for the across view ($fpr_{\min}\approx 5.1\times 10^{-7}$). Reproducibility details are provided in \SuppOrApp{app:repro}.}
 \label{tab:twinkling_gammex_structural_roc}
 \end{table}

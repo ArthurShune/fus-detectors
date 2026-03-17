@@ -159,7 +159,7 @@ def main() -> None:
         "--fprs",
         type=float,
         nargs="+",
-        default=[1e-4, 3e-4, 1e-3],
+        default=[1e-2, 1e-4, 3e-4, 1e-3],
         help="FPR targets for ROC points (default: %(default)s).",
     )
     parser.add_argument(
