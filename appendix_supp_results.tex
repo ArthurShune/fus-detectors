@@ -369,6 +369,20 @@ To reduce overlap between localization-derived label construction and scored win
   \end{center}
 }
 
+As a separate falsification check, we keep the detector outputs fixed and alter only the localization-derived structural masks. A large cyclic translation serves as a misregistration stress test, while a support-matched permutation redraws vessel-core and shell labels at random inside the same anatomical support. The permutation control is the cleaner chance-like test because a translated vascular mask can still land on other vessel-rich anatomy within the same acquisition.
+
+\IfFileExists{reports/ulm7883227_pala_mask_falsification_table.tex}{%
+  \input{reports/ulm7883227_pala_mask_falsification_table.tex}%
+}{%
+  \begin{center}
+  \refstepcounter{table}\label{tab:ulm7883227_mask_falsification_supp}%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/ulm7883227_pala_mask_falsification_table.tex}.\\
+    Reproduce it with \path{python3 scripts/ulm7883227_pala_mask_falsification_table.py}.
+  \end{minipage}}
+  \end{center}
+}
+
 \begin{figure}[t]
 \centering
 \IfFileExists{figs/paper/ulm7883227_pala_structural_roc_curves.pdf}{%
