@@ -952,19 +952,7 @@ The resulting pattern is stronger than the earlier generic stress audit. On ever
 The held-out same-residual SIMUS detector-family ablation now appears in the main text as Table~\ref{tab:simus_detector_family_ablation}. We do not repeat it here. Its role is to hold the MC--SVD residual fixed and change only the downstream head, which sharpens the detector-head claim independently of the end-to-end stack comparisons in Table~\ref{tab:simus_v2_structural_latency}.
 
 \paragraph{Held-out functional same-cube detector-head audit.}
-The main paper is structural-first, so the held-out functional same-cube audit is kept here. It fixes the residual stream and asks a narrower question: under a common functional readout, does the fully whitened detector improve activation-versus-nuisance separation relative to conventional Doppler-style score heads on the same held-out data? The answer is directionally positive but secondary. In the strict held-out audit, the fully whitened detector is positive in 5 of 6 residual families in both settings, with median held-out selection-score gains of +0.065 [0.032, 0.091] for the intra-operative parenchymal regime and +0.111 [0.032, 0.142] for the mobile regime. The corresponding median gains in activation-versus-nuisance AUC are +0.026 [0.014, 0.052] and +0.059 [0.011, 0.066]. Those effects are not large enough to carry the paper by themselves, but they remain consistent across the prespecified same-cube comparison.
-
-\IfFileExists{reports/simus_functional_numeric_summary_table.tex}{%
-  \input{reports/simus_functional_numeric_summary_table.tex}%
-}{%
-  \begin{center}
-  \refstepcounter{table}\label{tab:accepted_v2_functional_main}%
-  \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/simus_functional_numeric_summary_table.tex}.\\
-    Reproduce it with \path{python3 scripts/simus_functional_numeric_table.py}.
-  \end{minipage}}
-  \end{center}
-}
+The held-out functional same-cube audit now appears in the main text as Table~\ref{tab:accepted_v2_functional_main}. We do not repeat it here. Its role is narrower than the structural SIMUS benchmark: it fixes the residual stream and asks whether the detector head remains directionally positive under a common activation-versus-nuisance readout.
 
 \subsection*{Functional and Translation-Support Audits}
 This block collects compact real-data score audits and PD-only whole-brain retrospective summaries that support the translational interpretation without serving as primary labeled efficacy benchmarks.
