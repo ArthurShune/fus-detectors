@@ -248,6 +248,53 @@ def _derive_structural_masks(
     return vessel.astype(bool), bg.astype(bool), qc
 
 
+def _transform_structural_masks(
+    mask_flow: np.ndarray,
+    mask_bg: np.ndarray,
+    *,
+    support_mask: np.ndarray,
+    mode: str,
+    shift_y: int,
+    shift_x: int,
+    seed: int,
+) -> tuple[np.ndarray, np.ndarray, dict[str, Any]]:
+    mode_norm = str(mode or "none").strip().lower()
+    flow = np.asarray(mask_flow, dtype=bool)
+    bg = np.asarray(mask_bg, dtype=bool)
+    support = np.asarray(support_mask, dtype=bool)
+    if mode_norm in {"", "none", "identity"}:
+        return flow, bg, {"mask_transform": "none"}
+    if mode_norm in {"translate", "shift", "roll"}:
+        flow_t = np.roll(flow, shift=(int(shift_y), int(shift_x)), axis=(0, 1))
+        bg_t = np.roll(bg, shift=(int(shift_y), int(shift_x)), axis=(0, 1))
+        return flow_t, bg_t, {
+            "mask_transform": "translate",
+            "shift_y_px": int(shift_y),
+            "shift_x_px": int(shift_x),
+        }
+    if mode_norm in {"permute", "shuffle", "random"}:
+        idx = np.flatnonzero(support)
+        n_flow = int(flow.sum())
+        n_bg = int(bg.sum())
+        need = n_flow + n_bg
+        if idx.size < need:
+            raise ValueError(
+                f"support mask too small for permuted control: support={idx.size}, need={need}"
+            )
+        rng = np.random.default_rng(int(seed))
+        choice = rng.choice(idx, size=need, replace=False)
+        flow_t = np.zeros_like(flow, dtype=bool)
+        bg_t = np.zeros_like(bg, dtype=bool)
+        flow_t[np.unravel_index(choice[:n_flow], flow.shape)] = True
+        bg_t[np.unravel_index(choice[n_flow:], bg.shape)] = True
+        return flow_t, bg_t, {
+            "mask_transform": "permute",
+            "seed": int(seed),
+            "support_pixels": int(idx.size),
+        }
+    raise ValueError(f"unsupported mask transform {mode!r}")
+
+
 def _derive_powdop_support_mask(powdop_crop: np.ndarray) -> np.ndarray:
     img = _to_gray_unit(np.asarray(powdop_crop, dtype=np.float32))
     vals = img[np.isfinite(img)]
@@ -438,7 +485,7 @@ def _to_gray_unit(arr: np.ndarray) -> np.ndarray:
 
 
 def _pala_svd_filter(cube_t_hw: np.ndarray, *, cutoff_start: int) -> np.ndarray:
-    cube = np.asarray(cube_t_hw, dtype=np.complex64, copy=False)
+    cube = np.asarray(cube_t_hw, dtype=np.complex64)
     if cube.ndim != 3:
         raise ValueError(f"expected (T,H,W) cube, got {cube.shape}")
     T, H, W = cube.shape
@@ -528,7 +575,7 @@ def _mask_pala_scalebar(matout_gray: np.ndarray) -> tuple[np.ndarray, dict[str, 
 
 
 def _candidate_oriented_maps(raw_pd: np.ndarray) -> dict[str, np.ndarray]:
-    raw = np.asarray(raw_pd, dtype=np.float32, copy=False)
+    raw = np.asarray(raw_pd, dtype=np.float32)
     return {
         "transpose": raw.T,
         "transpose_fliplr": np.fliplr(raw.T),
@@ -582,7 +629,7 @@ def _register_pala_example_crop(
 
 
 def _oriented_to_raw(oriented: np.ndarray, orientation: str) -> np.ndarray:
-    arr = np.asarray(oriented, dtype=np.float32, copy=False)
+    arr = np.asarray(oriented, dtype=np.float32)
     if orientation == "transpose":
         return arr.T
     if orientation == "transpose_fliplr":
@@ -601,7 +648,7 @@ def _oriented_to_raw(oriented: np.ndarray, orientation: str) -> np.ndarray:
 
 
 def _pool_sr_to_coarse(mat_sr: np.ndarray, *, trim_border: int) -> np.ndarray:
-    img = np.asarray(mat_sr, dtype=np.float32, copy=False)
+    img = np.asarray(mat_sr, dtype=np.float32)
     trim = max(0, int(trim_border))
     if trim > 0:
         img = img[:-trim, :-trim]
@@ -778,8 +825,8 @@ def _apply_motion_to_cube(
     kind = str(motion_kind or "none").strip().lower()
     amp_px = float(max(0.0, motion_amp_px))
     if amp_px <= 0.0 or kind in {"none", "off"}:
-        return np.asarray(cube, dtype=np.complex64, copy=False), None
-    cube0 = np.asarray(cube, dtype=np.complex64, copy=False)
+        return np.asarray(cube, dtype=np.complex64), None
+    cube0 = np.asarray(cube, dtype=np.complex64)
     T, H, W = cube0.shape
     if kind in {"sine", "sin", "drift_sine", "step", "burst", "rw", "randomwalk"}:
         dy, dx = _motion_shifts(
@@ -1109,6 +1156,13 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--alias-center-hz", type=float, default=350.0)
     ap.add_argument("--alias-width-hz", type=float, default=150.0)
     ap.add_argument(
+        "--fd-span-mode",
+        type=str,
+        default="psd",
+        choices=["psd", "fixed"],
+    )
+    ap.add_argument("--fd-fixed-span-hz", type=float, default=None)
+    ap.add_argument(
         "--reference-mode",
         type=str,
         default="local_density",
@@ -1158,6 +1212,15 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--background-mask-mode", type=str, default="global_low", choices=["global_low", "shell"])
     ap.add_argument("--shell-inner-dilate-iters", type=int, default=4)
     ap.add_argument("--shell-outer-dilate-iters", type=int, default=10)
+    ap.add_argument(
+        "--mask-transform",
+        type=str,
+        default="none",
+        choices=["none", "translate", "permute"],
+    )
+    ap.add_argument("--mask-shift-y", type=int, default=32)
+    ap.add_argument("--mask-shift-x", type=int, default=24)
+    ap.add_argument("--mask-transform-seed", type=int, default=2026)
     ap.add_argument("--fprs", type=float, nargs="+", default=[1e-1, 1e-2, 1e-3])
     ap.add_argument("--tpr-targets", type=float, nargs="+", default=[0.5])
     ap.add_argument(
@@ -1291,12 +1354,22 @@ def main() -> None:
             shell_inner_dilate_iters=int(args.shell_inner_dilate_iters),
             shell_outer_dilate_iters=int(args.shell_outer_dilate_iters),
         )
+        mask_flow, mask_bg, transform_tele = _transform_structural_masks(
+            mask_flow,
+            mask_bg,
+            support_mask=support_mask,
+            mode=str(args.mask_transform),
+            shift_y=int(args.mask_shift_y),
+            shift_x=int(args.mask_shift_x),
+            seed=int(args.mask_transform_seed) + int(block_id),
+        )
         if int(mask_bg.sum()) < 1000:
             raise RuntimeError(f"block {block_id}: background mask too small for 1e-3 tail ({int(mask_bg.sum())} pixels)")
         mask_qc[int(block_id)] = qc
         reference_manifest[int(block_id)] = {
             "reference_blocks": [int(b) for b in loo_ids],
             "mask_qc": qc,
+            "mask_transform": transform_tele,
             "support_pixels": int(support_mask.sum()),
         }
         if int(block_id) == representative_block:
@@ -1357,6 +1430,10 @@ def main() -> None:
                 band_ratio_flow_high_hz=float(args.flow_high_hz),
                 band_ratio_alias_center_hz=float(args.alias_center_hz),
                 band_ratio_alias_width_hz=float(args.alias_width_hz),
+                fd_span_mode=str(args.fd_span_mode),
+                fd_fixed_span_hz=(
+                    None if args.fd_fixed_span_hz is None else float(args.fd_fixed_span_hz)
+                ),
                 meta_extra={
                     "ulm_structural_roc": {
                         "evaluation_block_id": int(block_id),
@@ -1467,6 +1544,12 @@ def main() -> None:
             "motion_amp_px": float(args.motion_amp_px),
             "vessel_mask_mode": str(args.vessel_mask_mode),
             "background_mask_mode": str(args.background_mask_mode),
+            "mask_transform": {
+                "mode": str(args.mask_transform),
+                "shift_y_px": int(args.mask_shift_y),
+                "shift_x_px": int(args.mask_shift_x),
+                "seed": int(args.mask_transform_seed),
+            },
         },
         "frozen_profile": {
             "baseline": "MC-SVD",
@@ -1481,6 +1564,10 @@ def main() -> None:
             "cov_estimator": str(args.cov_estimator),
             "diag_load": float(args.diag_load),
             "score_ka_v2_enable": bool(args.score_ka_v2_enable),
+            "fd_span_mode": str(args.fd_span_mode),
+            "fd_fixed_span_hz": (
+                None if args.fd_fixed_span_hz is None else float(args.fd_fixed_span_hz)
+            ),
             "bands_hz": {
                 "flow": [float(args.flow_low_hz), float(args.flow_high_hz)],
                 "guard": [float(args.flow_high_hz), float(args.alias_center_hz) - float(args.alias_width_hz)],
