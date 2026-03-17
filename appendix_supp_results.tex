@@ -355,6 +355,20 @@ Reproduce it with \texttt{scripts/ulm7883227\_structural\_roc.py}; the exact com
   \end{center}
 }
 
+To reduce overlap between localization-derived label construction and scored windows, we also ran a stricter disjoint-source variant in which odd blocks were used only for localization-derived reference construction and even blocks were used only for scored-window evaluation under the same frozen 64-frame no-registration profile.
+
+\IfFileExists{reports/ulm7883227_pala_disjoint_source_table.tex}{%
+  \input{reports/ulm7883227_pala_disjoint_source_table.tex}%
+}{%
+  \begin{center}
+  \refstepcounter{table}\label{tab:ulm7883227_structural_roc_disjoint_supp}%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/ulm7883227_pala_disjoint_source_table.tex}.\\
+    Reproduce it with \path{python3 scripts/ulm7883227_pala_disjoint_support_table.py}.
+  \end{minipage}}
+  \end{center}
+}
+
 \begin{figure}[t]
 \centering
 \IfFileExists{figs/paper/ulm7883227_pala_structural_roc_curves.pdf}{%
