@@ -6,7 +6,7 @@ Runs a small set of STAP replays over k-Wave brain seeds with different
 algorithmic settings (tile stride, Doppler grid) and records
 latency + PD ratios, without exploding runtime.
 
-Usage (from repo root, inside stap-fus env):
+Usage (from repo root, inside fus-detectors env):
 
     PYTHONPATH=. python scripts/r4c_phase2_sweep.py \
         --seeds 1 3 7 \

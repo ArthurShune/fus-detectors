@@ -1,4 +1,4 @@
-name: stap-fus
+name: fus-detectors
 channels:
   - pytorch
   - nvidia

@@ -5,7 +5,7 @@
 - Identify highest-return optimization targets after existing GPU/runtime improvements.
 
 ## Profiling Runs
-- Environment: `conda run -n stap-fus`, `PYTHONPATH=.`
+- Environment: `conda run -n fus-detectors`, `PYTHONPATH=.`
 - Script: `scripts/profile_stap_hotspots.py`
 - Commands:
   - `--mode core_pd --device cuda --event-timing --iters 3 --warmup 2`

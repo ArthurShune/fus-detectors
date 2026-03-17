@@ -23,7 +23,7 @@ Create a stable, auditable baseline before broad refactor work so we can disting
 ## Commands
 ```bash
 # 1) Refresh central manifest
-PYTHONPATH=. conda run -n stap-fus python scripts/generate_repro_manifest.py
+PYTHONPATH=. conda run -n fus-detectors python scripts/generate_repro_manifest.py
 
 # 2) Generate phase-0 inventory map
 PYTHONPATH=. python scripts/refactor_inventory.py

@@ -11,8 +11,8 @@ RUN mkdir -p ${MAMBA_ROOT_PREFIX} && \
     tar -xvj -C /usr/local/bin/ --strip-components=1 bin/micromamba
 WORKDIR /app
 COPY environment.yml /app/environment.yml
-RUN micromamba create -y -n stap-fus -f environment.yml && micromamba clean -a -y
+RUN micromamba create -y -n fus-detectors -f environment.yml && micromamba clean -a -y
 COPY . /app
 ENV PYTHONPATH=/app
 SHELL ["/bin/bash", "-lc"]
-CMD ["micromamba", "run", "-n", "stap-fus", "bash"]
+CMD ["micromamba", "run", "-n", "fus-detectors", "bash"]

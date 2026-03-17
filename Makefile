@@ -1,7 +1,7 @@
 .ONESHELL:
 SHELL := /bin/bash
 
-ENV_NAME := stap-fus
+ENV_NAME := fus-detectors
 
 # Monte-Carlo sweep defaults (override via `make mc_sweep MC_SEEDS=8 ...`)
 MC_METHOD ?= stap

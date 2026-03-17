@@ -18,7 +18,7 @@ work (e.g., Tyler covariance changes):
     (score_stap_preka.npy), plus CUDA/telemetry latency fields when present.
 
 Example:
-  PYTHONPATH=. conda run -n stap-fus python scripts/brain_tile_statistic_check.py \
+  PYTHONPATH=. conda run -n fus-detectors python scripts/brain_tile_statistic_check.py \
     --profile Brain-AliasContract --device cuda --synthetic \
     --out-root runs/_tile_stat_check_alias
 """

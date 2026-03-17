@@ -3,7 +3,7 @@
 Replay the STAP/acceptance stage using pre-generated angle data from an existing pilot run.
 
 Usage:
-    PYTHONPATH=. conda run -n stap-fus python scripts/replay_stap_from_run.py \
+    PYTHONPATH=. conda run -n fus-detectors python scripts/replay_stap_from_run.py \
         --src runs/pilot/r1_real_psd_bg_guard095_inspect \
         --out runs/pilot/r1_real_psd_bg_guard095_coords \
         --stap-debug-coord 126,120 --stap-debug-coord 132,108 ...

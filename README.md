@@ -1,4 +1,4 @@
-# STAP-for-fUS
+# fus-detectors
 
 Code and manuscript artifacts for a preprint on localized matched-subspace detector heads for beamformed functional ultrasound (fUS) slow-time data after conventional clutter suppression.
 
@@ -17,7 +17,7 @@ Across the held-out SIMUS structural benchmark, the fixed variant is the stronge
 
 ```bash
 conda env create -f environment.yml
-conda activate stap-fus
+conda activate fus-detectors
 python scripts/verify_gpu.py
 ```
 
@@ -46,7 +46,7 @@ This regenerates:
 Tracked files cannot be hidden from GitHub with `.gitignore`. For a clean public mirror that excludes private drafting material such as `patent/`, use:
 
 ```bash
-bash scripts/prepare_public_mirror.sh ../stap-for-fus-public
+bash scripts/prepare_public_mirror.sh ../fus-detectors-public
 ```
 
 That script exports the current tree using `.gitattributes export-ignore` rules and initializes a clean mirror repo in the target directory. For local-only untracked clutter, use `.git/info/exclude`; a sample is provided at [`docs/git-info-exclude.sample`](docs/git-info-exclude.sample).

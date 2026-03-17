@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this repository, please cite the associated methodology preprint and this software."
-title: "STAP-for-fUS: Knowledge-Aided Space-Time Adaptive Processing for Functional Ultrasound"
+title: "fus-detectors: Localized matched-subspace detectors for functional ultrasound"
 type: software
 license: MIT
 version: 0.1.0-dev

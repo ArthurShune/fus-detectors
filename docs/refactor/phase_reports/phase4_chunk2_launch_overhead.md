@@ -22,9 +22,9 @@
 
 ## Profiling Commands
 - Off baseline:
-  - `PYTHONPATH=. conda run -n stap-fus python scripts/profile_stap_hotspots.py --mode stap_pd --device cuda --event-timing --iters 2 --warmup 1 --tile-batch 512 --cuda-graph off --row-limit 50`
+  - `PYTHONPATH=. conda run -n fus-detectors python scripts/profile_stap_hotspots.py --mode stap_pd --device cuda --event-timing --iters 2 --warmup 1 --tile-batch 512 --cuda-graph off --row-limit 50`
 - Auto graph (min batch 512):
-  - `PYTHONPATH=. conda run -n stap-fus python scripts/profile_stap_hotspots.py --mode stap_pd --device cuda --event-timing --iters 2 --warmup 1 --tile-batch 512 --cuda-graph auto --cuda-graph-min-batch 512 --row-limit 50`
+  - `PYTHONPATH=. conda run -n fus-detectors python scripts/profile_stap_hotspots.py --mode stap_pd --device cuda --event-timing --iters 2 --warmup 1 --tile-batch 512 --cuda-graph auto --cuda-graph-min-batch 512 --row-limit 50`
 
 Artifacts:
 - `reports/refactor/phase4_chunk2/profile_stap_pd_tb512_graph_off_args.txt`

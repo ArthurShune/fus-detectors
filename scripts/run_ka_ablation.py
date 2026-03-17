@@ -4,7 +4,7 @@ Run KA-STAP ablations (Pf off, alias PSD off, Pf-trace off, guards off) and
 produce a compact report with multi-FPR ROC metrics plus amplitude telemetry.
 
 Example:
-    PYTHONPATH=. conda run -n stap-fus python scripts/run_ka_ablation.py \
+    PYTHONPATH=. conda run -n fus-detectors python scripts/run_ka_ablation.py \
         --src runs/pilot/r3_kwave \
         --dataset pw_7.5MHz_5ang_3ens_192T_seed1 \
         --out-root runs/motion/ka_ablation \

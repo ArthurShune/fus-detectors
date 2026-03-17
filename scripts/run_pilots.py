@@ -6,7 +6,7 @@ Edit ``DEFAULT_R1_ARGS`` / ``DEFAULT_R2_ARGS`` below if you need to tune
 the configuration later; the CLI just exposes a few convenience toggles.
 Run via:
 
-    conda run -n stap-fus python scripts/run_pilots.py
+    conda run -n fus-detectors python scripts/run_pilots.py
 """
 
 from __future__ import annotations
