@@ -201,8 +201,8 @@ The focus is downstream detector-head design after fixed residualization. The fi
 \begin{itemize}[nosep]
   \item A post-residual localized matched-subspace detector family for beamformed fUS slow-time data, centered on a fixed band-limited head and extended by an adaptive whitening switch, a fully whitened variant, and an optional shrink-only penalty layer.
   \item Held-out evidence that the fixed non-whitened matched-subspace score is the best-performing fixed head among the evaluated downstream heads on the held-out SIMUS-Struct benchmark, together with clutter-heavy stress tests showing where the adaptive and fully whitened extensions help in selected regimes.
-  \item A cross-regime downstream detector-head evaluation discipline that separates residualization from downstream scoring, uses strong ultrasound-native baseline families, includes deliberately simple same-cube mechanism comparators (whitened total power and the unwhitened band-limited ratio), and emphasizes strict-tail nuisance control rather than image appearance alone.
-  \item Limited transfer and replay-feasibility analyses, including fixed-calibration threshold-transfer checks on held-out synthetic and real-IQ audits, reproducible replay-latency measurements, and a localization-derived structural-label audit on real in-vivo rat-brain IQ.
+  \item Same-residual and same-cube comparisons that separate detector-head effects from residualization, using PD/Kasai, whitened power, and the unwhitened ratio as direct comparators.
+  \item Limited transfer and replay-feasibility analyses, including fixed-threshold transfer on held-out synthetic and real-IQ audits and workstation replay latency.
 \end{itemize}
 
 \paragraph{Scope.}
