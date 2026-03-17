@@ -69,7 +69,7 @@ def _cube_faces(front: tuple[float, float, float, float], dt: tuple[float, float
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Generate conceptual Hankelization + local STAP diagram (vector PDF).")
+    parser = argparse.ArgumentParser(description="Generate conceptual Hankelization + local detector-head diagram (vector PDF).")
     parser.add_argument(
         "--out",
         default="figs/paper/hankelization_local_stap.pdf",
@@ -164,7 +164,7 @@ def main() -> int:
     _add_text(ax, 0.9, 1.25, "MC–SVD (global)", size=8.2, ha="left", va="bottom")
     _add_text(ax, 0.85 + 1.22, 0.25 + 0.48, r"$X\in\mathbb{C}^{T\times(HW)}$", size=8.2, ha="center")
 
-    # --- Right: Local STAP branch boxes
+    # --- Right: Local detector-head branch boxes
     def box(x: float, y: float, w: float, h: float, title: str, body: str) -> Rectangle:
         r = Rectangle((x, y), w, h, facecolor="#f6f6f6", edgecolor="black", linewidth=1.0)
         ax.add_patch(r)
@@ -199,10 +199,10 @@ def main() -> int:
     _arrow(ax, x0 + bw / 2, 2.95, x0 + bw / 2, 1.75 + bh)
     _arrow(ax, x0 + bw / 2, 1.75, x0 + bw / 2, 0.55 + bh)
 
-    # Arrow from tile to extract (local STAP)
+    # Arrow from tile to extract (local detector head)
     tile_anchor = (u2[0] + 0.05, u2[1] - 0.1)
     extract_anchor = (x0 - 0.15, 2.95 + bh / 2)
-    _arrow(ax, tile_anchor[0], tile_anchor[1], extract_anchor[0], extract_anchor[1], text="local STAP", text_offset=(-0.05, 0.34))
+    _arrow(ax, tile_anchor[0], tile_anchor[1], extract_anchor[0], extract_anchor[1], text="local detector head", text_offset=(-0.05, 0.34))
 
     fig.savefig(out_path, bbox_inches="tight", format="pdf")
     plt.close(fig)

@@ -2,23 +2,35 @@
 from __future__ import annotations
 
 import argparse
+import csv
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 
-def _summarize_by_amp(df: pd.DataFrame, col: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[float]]:
-    if col not in df.columns:
+def _read_rows(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+def _summarize_by_amp(rows: list[dict[str, str]], col: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[float]]:
+    if not rows or col not in rows[0]:
         raise KeyError(f"Missing column {col!r}")
-    amps = sorted({float(x) for x in pd.to_numeric(df["amp_px"], errors="coerce").dropna().tolist()})
+    amps = sorted({float(r["amp_px"]) for r in rows if r.get("amp_px", "").strip()})
     if not amps:
         raise ValueError("No finite amp_px values.")
     med: list[float] = []
     q25: list[float] = []
     q75: list[float] = []
     for a in amps:
-        vals = pd.to_numeric(df.loc[df["amp_px"] == a, col], errors="coerce").to_numpy(dtype=np.float64, copy=False)
+        vals = np.asarray(
+            [
+                float(r[col])
+                for r in rows
+                if r.get("amp_px", "").strip() and float(r["amp_px"]) == a and r.get(col, "").strip()
+            ],
+            dtype=np.float64,
+        )
         vals = vals[np.isfinite(vals)]
         if vals.size == 0:
             med.append(float("nan"))
@@ -38,10 +50,10 @@ def main() -> None:
     ap.add_argument("--also-pdf", action="store_true", help="Also write a matching PDF next to the PNG")
     args = ap.parse_args()
 
-    df = pd.read_csv(args.in_csv)
-    if df.empty:
+    rows = _read_rows(args.in_csv)
+    if not rows:
         raise SystemExit(f"Empty CSV: {args.in_csv}")
-    if "amp_px" not in df.columns:
+    if "amp_px" not in rows[0]:
         raise SystemExit(f"Missing required column 'amp_px' in {args.in_csv}")
 
     try:
@@ -73,13 +85,13 @@ def main() -> None:
     for ax, (mode, title) in zip(axes, modes, strict=True):
         base_col = f"corr_score_base_align_{mode}"
         stap_col = f"corr_score_stap_align_{mode}"
-        base_med, base_q25, base_q75, amps = _summarize_by_amp(df, base_col)
-        stap_med, stap_q25, stap_q75, _ = _summarize_by_amp(df, stap_col)
+        base_med, base_q25, base_q75, amps = _summarize_by_amp(rows, base_col)
+        stap_med, stap_q25, stap_q75, _ = _summarize_by_amp(rows, stap_col)
 
         ax.plot(amps, base_med, "o-", color="#666666", label=r"Baseline $S_{\mathrm{base}}$")
         ax.fill_between(amps, base_q25, base_q75, color="#666666", alpha=0.18, linewidth=0)
 
-        ax.plot(amps, stap_med, "o-", color="#1f77b4", label=r"STAP $S_{\mathrm{stap,pre}}$")
+        ax.plot(amps, stap_med, "o-", color="#1f77b4", label=r"Matched-subspace detector $S_{\mathrm{det,pre}}$")
         ax.fill_between(amps, stap_q25, stap_q75, color="#1f77b4", alpha=0.18, linewidth=0)
 
         ax.set_title(title)
@@ -100,4 +112,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -1099,7 +1099,7 @@ def main() -> None:
                 corr_stap, corr_stap_q25, corr_stap_q75 = _summarize(f"corr_score_stap_align_{mode}")
                 ax.plot(amps_unique, corr_base, "o-", color="#666666", label=r"Baseline $S_{\mathrm{base}}$")
                 ax.fill_between(amps_unique, corr_base_q25, corr_base_q75, alpha=0.18, color="#666666", linewidth=0)
-                ax.plot(amps_unique, corr_stap, "o-", color="#1f77b4", label=r"STAP $S_{\mathrm{stap,pre}}$")
+                ax.plot(amps_unique, corr_stap, "o-", color="#1f77b4", label=r"Matched-subspace detector $S_{\mathrm{det,pre}}$")
                 ax.fill_between(amps_unique, corr_stap_q25, corr_stap_q75, alpha=0.18, color="#1f77b4", linewidth=0)
                 ax.set_xlabel("motion amplitude (px)")
                 ax.set_ylabel("corr vs no-motion")
