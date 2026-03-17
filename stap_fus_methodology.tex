@@ -538,7 +538,7 @@ Figure~\ref{fig:simus_reference_benchmark_geometry} makes the benchmark contract
 
 For the functional task, we use the same prespecified settings and a common background-controlled GLM-style readout on simulated task/null runs. We refer to that experiment as the SIMUS functional audit. Two comparisons are reported because they answer different questions: end-to-end pipeline ranking asks which full processing chain performs best after all residualizer-setting interactions, whereas the same-cube downstream-head comparison asks whether the matched-subspace detector improves the \emph{same} residual cube under the same downstream readout.
 
-The held-out reference regime comes first because it determines the default downstream head on the benchmark that anchors the paper.
+We begin with the held-out reference regime that defines the default downstream head.
 
 \newpage
 \IfFileExists{reports/accepted_v2_structural_main_table.tex}{%
@@ -775,7 +775,7 @@ The view asymmetry still matters: the across view provides the clearest structur
 \label{fig:twinkling_gammex_structural_roc_curves}
 \end{figure}
 
-\noindent A compact matched-subspace-only ablation and PRF-override sensitivity check for Gammex are provided in the \SuppOrApp{app:supp-results}. We keep them supplementary because they are profile-sanity diagnostics rather than the primary structural-label result.
+\noindent Additional Gammex sanity checks are provided in the \SuppOrApp{app:supp-results}.
 
 \paragraph{Within-ensemble motion ladders (labeled, real acquisition).}
 To obtain a labeled motion-robustness curve on a real acquisition without external motion ground truth, we inject synthetic \emph{within-ensemble} motion directly into the CFM cube: for each cine frame we apply a per-shot rigid translation $(\Delta y_t,\Delta x_t)$ to the $N$ CFM shots prior to baseline and matched-subspace scoring, with motion kinds \texttt{rw} (random walk) and \texttt{step}. Because the structural tube masks are derived from B-mode and fixed per frame, this produces a labeled ``motion ladder'' where the only change is within-ensemble corruption. We generate motion-corrupted ensembles (85 cine frames; amplitudes $0$--$2$ px) and aggregate using frame-level bootstraps for CIs together with an explicit amp=0 equivalence check against the non-motion reference. Figure~\ref{fig:twinkling_within_ensemble_motion} shows the resulting curves; reproducibility details are provided in \SuppOrApp{app:repro}.
@@ -908,7 +908,7 @@ Latency is measured by replaying multiple windows or frames in a single GPU proc
 
 \input{reports/latency_named_preset_rtx4080_prf_product_v1_table.tex}
 
-Table~\ref{tab:latency_summary_4080super_product} shows that the replay picture is substantially better in the final reported configurations than in a dense fully whitened setup. All three labeled-brain stress tests run below the full acquisition-PRF budget (RTF $\approx 0.86$--$0.88$), the Shin rat-brain real-IQ evaluation also remains below budget (RTF $\approx 0.84$), and both Gammex views run below the 17-shot cine-frame budget (RTF $\approx 0.88$ along-view and $\approx 0.64$ across-view).\footnote{Latency is reported from steady-state replay (windows/frames 2..N) and excludes startup overhead and disk I/O. Table~\ref{tab:latency_summary_4080super_product} reports the final detector family used in the manuscript rather than a single worst-case fully whitened configuration applied everywhere.} These results support workstation replay feasibility for the reported configurations. They do not establish scanner-integrated, OR-ready, or cross-session deployment.
+Table~\ref{tab:latency_summary_4080super_product} shows that the replay picture is substantially better in the final reported configurations than in a dense fully whitened setup. All three labeled-brain stress tests run below the full acquisition-PRF budget (RTF $\approx 0.86$--$0.88$), the Shin rat-brain real-IQ evaluation also remains below budget (RTF $\approx 0.84$), and both Gammex views run below the 17-shot cine-frame budget (RTF $\approx 0.88$ along-view and $\approx 0.64$ across-view).\footnote{Latency is reported from steady-state replay (windows/frames 2..N) and excludes startup overhead and disk I/O. Table~\ref{tab:latency_summary_4080super_product} reports the final detector family used in the manuscript rather than a single worst-case fully whitened configuration applied everywhere.} These timings support workstation replay feasibility for the reported configurations, but not scanner-integrated or cross-session deployment.
 
 A leakage ablation confirms that conditional execution can inflate apparent performance under same-window proxy gating, while leakage-controlled gating yields a small TPR decrease (order $10^{-3}$) at the target FPRs. The full open-skull leakage table with bootstrap intervals is provided in the \SuppOrApp{app:supp-results}.
 
