@@ -550,7 +550,7 @@ Table~\ref{tab:shin_fixed_calibration_transfer} & Fixed matched-subspace detecto
 \label{sec:results}
 
 \paragraph{Results roadmap.}
-We begin with SIMUS-Struct and lead with the held-out stress regime before the held-out reference regime. That sequence shows the detector family first under clinically grounded pulsation and short-ensemble pressure, then on the reference regime that determines the default fixed head. We then report kWave-Stress, Gammex-Struct, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion. Additional dataset evaluations and diagnostic panels are provided in \SuppOrApp{app:supp-results}.
+We begin with SIMUS-Struct and lead with the held-out reference regime before the held-out stress regime. That sequence establishes the default fixed head on the main benchmark first, then shows where whitening helps under clinically grounded pulsation and short-ensemble pressure. We then report kWave-Stress, Gammex-Struct, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion. Additional dataset evaluations and diagnostic panels are provided in \SuppOrApp{app:supp-results}.
 The main benchmark result is that the fixed head is the strongest default choice on the held-out SIMUS structural benchmark. The stress result is that the fully whitened specialist helps in harsher nuisance regimes. The phantom result is that whitening is decisive in the short-ensemble Gammex setting, where whitened power can outperform the full matched-subspace ratio. The real-IQ result is narrower: fixed and adaptive give only modest gains on the bounded ULM structural audit, while the fully whitened specialist is the only head that clearly improves the vessel-core versus shell endpoint.
 
 \subsection{SIMUS-Struct benchmark}
@@ -578,35 +578,7 @@ Figure~\ref{fig:simus_reference_benchmark_geometry} makes the benchmark contract
 
 For the functional task, we use the same prespecified settings and a common background-controlled GLM-style readout on simulated task/null runs. We refer to that experiment as the SIMUS functional audit. Two comparisons are reported because they answer different questions: end-to-end pipeline ranking asks which full processing chain performs best after all residualizer-setting interactions, whereas the same-cube downstream-head comparison asks whether the matched-subspace detector improves the \emph{same} residual cube under the same downstream readout.
 
-We lead the SIMUS-Struct results with the held-out stress regime on the same mobile scene family. These rows use the same benchmark infrastructure but push it toward two clinically grounded nuisance regimes: cardiac-like low-frequency tissue pulsation and progressively shorter slow-time support. The pulsation rows use a fixed 1.30~Hz cardiac-like nuisance term whose amplitude is increased over reference, moderate, and hard settings; this probes the same low-frequency tissue-motion regime emphasized by Demen\'e \emph{et al.} as critical for SVD clutter filtering and by Baranger \emph{et al.} in neonatal/open-skull Doppler settings \cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018}. The short-ensemble rows reduce the support from 64 frames to 48 and 32 frames to mimic clinically constrained acquisitions in which shorter windows are used to limit motion corruption or workflow burden \cite{Imbault2017,Soloukey2020FUSAwake,MobileFUS2025}. This analysis focuses on the residualizer families that dominated the preliminary reduced-grid search (RPCA and adaptive-global SVD) and then reruns the held-out evaluation at the full reporting tier.
-
-\IfFileExists{reports/simus_clinical_stress_frontier_headline_table.tex}{%
-  \input{reports/simus_clinical_stress_frontier_headline_table.tex}%
-}{%
-  \begin{center}
-  \refstepcounter{table}\label{tab:simus_stress_frontier_headline}%
-  \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/simus_clinical_stress_frontier_headline_table.tex}.\\
-    Reproduce it with \path{PYTHONPATH=. python scripts/simus_clinical_stress_frontier_tables.py}.
-  \end{minipage}}
-  \end{center}
-}
-
-\noindent Table~\ref{tab:simus_stress_frontier_headline} is the main held-out stress result. On every held-out stress row, the strongest detector-family stack outperforms the best conventional baseline among evaluated methods on that same row. The row-wise winner is not uniform, and that is scientifically useful: the fully whitened specialist takes all three cardiac-pulsation rows and the reference and intermediate short-ensemble rows, while the fixed matched-subspace head remains strongest only on the hardest 32-frame short-ensemble row. Together with Table~\ref{tab:simus_stress_frontier_rpca_heads}, these rows show why the method is best understood as a detector family rather than a single universal score. Because this stress regime uses one held-out evaluation seed per axis, the uncertainty notation in Tables~\ref{tab:simus_stress_frontier_headline} and \ref{tab:simus_stress_frontier_rpca_heads} is a within-seed bootstrap interval over the held-out masked scores rather than a between-seed interval.
-
-\IfFileExists{reports/simus_clinical_stress_frontier_rpca_heads_table.tex}{%
-  \input{reports/simus_clinical_stress_frontier_rpca_heads_table.tex}%
-}{%
-  \begin{center}
-  \refstepcounter{table}\label{tab:simus_stress_frontier_rpca_heads}%
-  \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/simus_clinical_stress_frontier_rpca_heads_table.tex}.\\
-    Reproduce it with \path{PYTHONPATH=. python scripts/simus_clinical_stress_frontier_tables.py}.
-  \end{minipage}}
-  \end{center}
-}
-
-\noindent Table~\ref{tab:simus_stress_frontier_rpca_heads} makes that story less dependent on row-wise family selection. It repeats the same held-out stress rows, but now fixes the residualizer to RPCA and reports the fixed, adaptive, and fully whitened heads separately. The pattern remains coherent without any family-level winner-take-all summary: the fully whitened head is strongest on the cardiac-pulsation rows and on the 64-frame and 48-frame short-ensemble rows, while the fixed head remains strongest only on the hardest 32-frame row. On these reduced stress rows the adaptive head is numerically identical to the fixed head, so the family-level advantage is not coming from freely switching among all three modes on every row.
+The held-out reference regime comes first because it determines the default downstream head on the benchmark that anchors the paper.
 
 \newpage
 \IfFileExists{reports/accepted_v2_structural_main_table.tex}{%
@@ -654,7 +626,37 @@ That per-window operating-point protocol is still an evaluation protocol, not a 
   \end{center}
 }
 
-The held-out stress regime complements the reference regime. Once the same scene family is pushed toward pulsatile tissue leakage and shorter support, the nuisance-control task becomes visibly harder and the detector-family hierarchy becomes easier to interpret. Together, the stress rows show nontrivial difficulty and the reference rows identify which fixed head should be deployed by default.
+We then turn to harsher nuisance settings on the same benchmark family. These held-out stress rows use the same benchmark infrastructure but push it toward two clinically grounded nuisance regimes: cardiac-like low-frequency tissue pulsation and progressively shorter slow-time support. The pulsation rows use a fixed 1.30~Hz cardiac-like nuisance term whose amplitude is increased over reference, moderate, and hard settings; this probes the same low-frequency tissue-motion regime emphasized by Demen\'e \emph{et al.} as critical for SVD clutter filtering and by Baranger \emph{et al.} in neonatal/open-skull Doppler settings \cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018}. The short-ensemble rows reduce the support from 64 frames to 48 and 32 frames to mimic clinically constrained acquisitions in which shorter windows are used to limit motion corruption or workflow burden \cite{Imbault2017,Soloukey2020FUSAwake,MobileFUS2025}. This analysis focuses on the residualizer families that dominated the preliminary reduced-grid search (RPCA and adaptive-global SVD) and then reruns the held-out evaluation at the full reporting tier.
+
+\IfFileExists{reports/simus_clinical_stress_frontier_headline_table.tex}{%
+  \input{reports/simus_clinical_stress_frontier_headline_table.tex}%
+}{%
+  \begin{center}
+  \refstepcounter{table}\label{tab:simus_stress_frontier_headline}%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/simus_clinical_stress_frontier_headline_table.tex}.\\
+    Reproduce it with \path{PYTHONPATH=. python scripts/simus_clinical_stress_frontier_tables.py}.
+  \end{minipage}}
+  \end{center}
+}
+
+\noindent Table~\ref{tab:simus_stress_frontier_headline} is the main held-out stress result. On every held-out stress row, the strongest detector-family stack outperforms the best conventional baseline among evaluated methods on that same row. The row-wise winner is not uniform, and that is scientifically useful: the fully whitened specialist takes all three cardiac-pulsation rows and the reference and intermediate short-ensemble rows, while the fixed matched-subspace head remains strongest only on the hardest 32-frame short-ensemble row. Together with Table~\ref{tab:simus_stress_frontier_rpca_heads}, these rows show why the method is best understood as a detector family rather than a single universal score. Because this stress regime uses one held-out evaluation seed per axis, the uncertainty notation in Tables~\ref{tab:simus_stress_frontier_headline} and \ref{tab:simus_stress_frontier_rpca_heads} is a within-seed bootstrap interval over the held-out masked scores rather than a between-seed interval.
+
+\IfFileExists{reports/simus_clinical_stress_frontier_rpca_heads_table.tex}{%
+  \input{reports/simus_clinical_stress_frontier_rpca_heads_table.tex}%
+}{%
+  \begin{center}
+  \refstepcounter{table}\label{tab:simus_stress_frontier_rpca_heads}%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/simus_clinical_stress_frontier_rpca_heads_table.tex}.\\
+    Reproduce it with \path{PYTHONPATH=. python scripts/simus_clinical_stress_frontier_tables.py}.
+  \end{minipage}}
+  \end{center}
+}
+
+\noindent Table~\ref{tab:simus_stress_frontier_rpca_heads} makes that story less dependent on row-wise family selection. It repeats the same held-out stress rows, but now fixes the residualizer to RPCA and reports the fixed, adaptive, and fully whitened heads separately. The pattern remains coherent without any family-level winner-take-all summary: the fully whitened head is strongest on the cardiac-pulsation rows and on the 64-frame and 48-frame short-ensemble rows, while the fixed head remains strongest only on the hardest 32-frame row. On these reduced stress rows the adaptive head is numerically identical to the fixed head, so the family-level advantage is not coming from freely switching among all three modes on every row.
+
+The stress rows complement the reference regime. Together, the stress rows show nontrivial difficulty and the reference rows identify which fixed head should be deployed by default.
 
 \paragraph{Functional same-cube detector-head comparison.}
 A secondary held-out functional same-cube audit is reported in the Supplementary Material. On that audit, the fully whitened detector remains directionally positive across most residual families under a common activation-versus-nuisance readout, but the structural nuisance-control results remain primary.
