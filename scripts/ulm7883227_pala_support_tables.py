@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import itertools
 import json
 import math
 import statistics
@@ -135,6 +136,44 @@ def _block_win_count(
         if (s_mean > c_mean) if higher_is_better else (s_mean < c_mean):
             wins += 1
     return wins, len(set(spec_by_block) & set(comp_by_block))
+
+
+def _block_means(
+    specialist_rows: list[dict[str, str]],
+    comp_rows: list[dict[str, str]],
+    metric: str,
+) -> tuple[list[float], list[float]]:
+    pairs = _pair_rows(specialist_rows, comp_rows)
+    spec_by_block: dict[int, list[float]] = {}
+    comp_by_block: dict[int, list[float]] = {}
+    for spec, comp in pairs:
+        block = int(spec["block_id"])
+        spec_by_block.setdefault(block, []).append(float(spec[metric]))
+        comp_by_block.setdefault(block, []).append(float(comp[metric]))
+    keys = sorted(set(spec_by_block) & set(comp_by_block))
+    spec_means = [statistics.mean(spec_by_block[k]) for k in keys]
+    comp_means = [statistics.mean(comp_by_block[k]) for k in keys]
+    return spec_means, comp_means
+
+
+def _paired_block_signflip_pvalue(
+    specialist_rows: list[dict[str, str]],
+    comp_rows: list[dict[str, str]],
+    metric: str,
+) -> float | None:
+    spec_means, comp_means = _block_means(specialist_rows, comp_rows, metric)
+    deltas = [float(a - b) for a, b in zip(spec_means, comp_means) if math.isfinite(a - b) and a != b]
+    if not deltas:
+        return None
+    obs = abs(statistics.mean(deltas))
+    total = 0
+    exceed = 0
+    for signs in itertools.product((-1.0, 1.0), repeat=len(deltas)):
+        total += 1
+        stat = abs(statistics.mean(s * d for s, d in zip(signs, deltas)))
+        if stat >= obs - 1e-15:
+            exceed += 1
+    return float(exceed) / float(total)
 
 
 def _transfer_nonzero_counts(rows: list[dict[str, str]]) -> dict[str, Any]:
@@ -282,12 +321,31 @@ def main() -> None:
     payload = {
         "fixed_threshold_transfer": _transfer_nonzero_counts(transfer_rows),
     }
+    pd_consistency = _consistency_summary(specialist_rows, pd_rows)
+    pd_consistency["auc_block_wins"], pd_consistency["n_blocks"] = _block_win_count(
+        specialist_rows, pd_rows, "auc", higher_is_better=True
+    )
+    pd_consistency["fpr70_block_wins"], _ = _block_win_count(
+        specialist_rows, pd_rows, "fpr_at_tpr70", higher_is_better=False
+    )
+    pd_consistency["auc_block_signflip_pvalue"] = _paired_block_signflip_pvalue(
+        specialist_rows, pd_rows, "auc"
+    )
+    pd_consistency["fpr70_block_signflip_pvalue"] = _paired_block_signflip_pvalue(
+        specialist_rows, pd_rows, "fpr_at_tpr70"
+    )
     fixed_consistency = _consistency_summary(specialist_rows, _score_rows(fixed_rows, "matched_subspace"))
     fixed_consistency["auc_block_wins"], fixed_consistency["n_blocks"] = _block_win_count(
         specialist_rows, _score_rows(fixed_rows, "matched_subspace"), "auc", higher_is_better=True
     )
     fixed_consistency["fpr70_block_wins"], _ = _block_win_count(
         specialist_rows, _score_rows(fixed_rows, "matched_subspace"), "fpr_at_tpr70", higher_is_better=False
+    )
+    fixed_consistency["auc_block_signflip_pvalue"] = _paired_block_signflip_pvalue(
+        specialist_rows, _score_rows(fixed_rows, "matched_subspace"), "auc"
+    )
+    fixed_consistency["fpr70_block_signflip_pvalue"] = _paired_block_signflip_pvalue(
+        specialist_rows, _score_rows(fixed_rows, "matched_subspace"), "fpr_at_tpr70"
     )
     adaptive_consistency = _consistency_summary(
         specialist_rows, _score_rows(adaptive_rows, "matched_subspace")
@@ -298,6 +356,13 @@ def main() -> None:
     adaptive_consistency["fpr70_block_wins"], _ = _block_win_count(
         specialist_rows, _score_rows(adaptive_rows, "matched_subspace"), "fpr_at_tpr70", higher_is_better=False
     )
+    adaptive_consistency["auc_block_signflip_pvalue"] = _paired_block_signflip_pvalue(
+        specialist_rows, _score_rows(adaptive_rows, "matched_subspace"), "auc"
+    )
+    adaptive_consistency["fpr70_block_signflip_pvalue"] = _paired_block_signflip_pvalue(
+        specialist_rows, _score_rows(adaptive_rows, "matched_subspace"), "fpr_at_tpr70"
+    )
+    payload["specialist_vs_pd"] = pd_consistency
     payload["specialist_vs_fixed"] = fixed_consistency
     payload["specialist_vs_adaptive"] = adaptive_consistency
     fixed_head_rows = _score_rows(fixed_rows, "matched_subspace")
