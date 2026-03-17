@@ -43,6 +43,12 @@ pymust_spec.txt
 *.log
 *.out
 *.synctex.gz
+preprint.pdf
+manuscript.pdf
+supplement.pdf
+stap_fus_paper.pdf
+stap_fus_methodology.pdf
+stap_fus_supplement.pdf
 pymust_specv2.md
 
 # Large run outputs (tracked via LFS or archived)
