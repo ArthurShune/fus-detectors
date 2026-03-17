@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from statistics import mean
 
-ROOT = Path('/home/arthu/stap-for-fus')
+ROOT = Path('/home/arthu/fus-detectors')
 REPORTS = ROOT / 'reports' / 'simus_v2'
 RUNS = ROOT / 'runs' / 'sim_eval'
 
