@@ -19,9 +19,9 @@ Use this checklist before creating a public release tag.
 - [ ] Paper-critical commands in docs map to existing scripts/targets.
 
 ## 4) Validation Gates
-- [ ] `make refactor-quick` passes.
-- [ ] `make refactor-phase` passes.
-- [ ] `make refactor-full` passes (or documented exception accepted).
+- [ ] `pytest -q` passes.
+- [ ] `bash scripts/reproduce_figure8_table7.sh` runs successfully.
+- [ ] Any additional paper-critical commands referenced in `README.md` still work.
 
 ## 5) Release Artifact Prep
 - [ ] Version tag selected (e.g., `v0.1.0`).
