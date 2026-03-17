@@ -10,8 +10,9 @@ The paper studies three downstream detector variants on the same residual cubes:
 Across the held-out SIMUS structural benchmark, the fixed variant is the strongest default downstream head on the same residual stream. In clutter-heavy stress tests, whitening helps in selected regimes. On one open real-IQ rat-brain dataset, the fully whitened variant shows a modest same-acquisition structural concentration advantage on a localization-derived vessel-core versus shell audit.
 
 **Manuscript artifacts**
-- Main preprint: [`stap_fus_paper.pdf`](stap_fus_paper.pdf)
-- Extended methods and supplement companion: [`stap_fus_methodology.pdf`](stap_fus_methodology.pdf)
+- Main preprint: [`paper/stap_fus_paper.pdf`](paper/stap_fus_paper.pdf)
+- Extended methods and supplement companion: [`paper/stap_fus_methodology.pdf`](paper/stap_fus_methodology.pdf)
+- Supplement-only build: [`paper/stap_fus_supplement.pdf`](paper/stap_fus_supplement.pdf)
 
 ## Quick start
 
@@ -35,6 +36,7 @@ This regenerates:
 
 ## Repository map
 
+- `paper/` manuscript sources and built PDFs
 - `pipeline/` detector and residualization code
 - `sim/` simulation backends and ultrasound-specific runtime code
 - `scripts/` experiment, figure, and table reproduction entry points

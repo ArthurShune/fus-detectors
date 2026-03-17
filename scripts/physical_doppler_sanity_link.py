@@ -4,7 +4,7 @@ Physical Doppler "sanity link" telemetry.
 
 Purpose
 -------
-simulation_spec.txt calls for a defensible bridge between simulation and real IQ
+docs/legacy/simulation_spec.txt calls for a defensible bridge between simulation and real IQ
 without in-vivo labels: compare summary slow-time statistics (PSD bands, peak
 frequency occupancy, coherence, and simple low-rank structure proxies).
 
@@ -682,4 +682,3 @@ def dataclass_to_dict(obj: Any) -> dict[str, Any]:
 
 if __name__ == "__main__":
     main()
-

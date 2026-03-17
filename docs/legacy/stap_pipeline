@@ -1,0 +1,35 @@
+digraph STAPPipeline {
+	nodesep=0.6 rankdir=LR ranksep=0.8 splines=ortho
+	node [fillcolor=white fontsize=10 shape=box style="rounded,filled"]
+	sim [label="k-Wave / acquisition
+RF → beamforming → compounded frames"]
+	mcsvd [label="MC–SVD clutter filter
+(spatiotemporal SVD)"]
+	pd_base [label="Baseline PD map
+MC–SVD residual power"]
+	flowmask [label="Flow / background masks
+(geometry + PD thresholding)"]
+	hankel [label="Hankelization per tile
+slow-time stacks (Lt × N)"]
+	cov [label="Robust covariance per tile
++ shrinkage / diagonal loading"]
+	band [label="Batched band-energy core
+(flow-band fraction, PD fast path)"]
+	gate [label="Conditional STAP gating
+(skip zero-flow tiles)"]
+	pd_stap [label="Clinical STAP PD map
+(baseline PD + STAP on flow tiles)"]
+	roc [label="ROC / metrics
+(score S = −PD)"]
+	sim -> mcsvd [label="" fontsize=8]
+	mcsvd -> pd_base [label="" fontsize=8]
+	pd_base -> flowmask [label="" fontsize=8]
+	sim -> hankel [label="" fontsize=8]
+	hankel -> cov [label="" fontsize=8]
+	cov -> band [label="" fontsize=8]
+	band -> gate [label="" fontsize=8]
+	pd_base -> gate [label="baseline PD" fontsize=8]
+	flowmask -> gate [label="flow mask" fontsize=8]
+	gate -> pd_stap [label="" fontsize=8]
+	pd_stap -> roc [label="" fontsize=8]
+}

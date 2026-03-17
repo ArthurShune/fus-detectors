@@ -30,9 +30,9 @@ This index points to the final artifacts used for the accepted `SIMUS-ClinUtilit
 - Accepted-v2 latency summary: `reports/simus_v2/simus_v2_latency_summary.csv`
 
 ## Manuscript outputs
-- Main methodology/paper text: `stap_fus_methodology.tex`
-- Supplement results appendix: `appendix_supp_results.tex`
-- Built supplement PDF: `stap_fus_supplement.pdf`
+- Main methodology/paper text: `paper/stap_fus_methodology.tex`
+- Supplement results appendix: `paper/appendix_supp_results.tex`
+- Built supplement PDF: `paper/stap_fus_supplement.pdf`
 
 ## Notes
 - The reproducibility manifest is regenerated locally to describe the current commit truthfully and is intentionally not committed again, because committing the regenerated manifest would immediately stale its recorded commit hash.

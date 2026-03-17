@@ -11,7 +11,7 @@ Instead it produces a pinned manifest capturing:
 
 Outputs (tracked):
   - repro_manifest.json
-  - appendix_repro_manifest.tex
+  - paper/appendix_repro_manifest.tex
 
 Usage:
   # Preferred (captures the same CUDA-enabled conda environment used in experiments)
@@ -81,7 +81,7 @@ def _git_info() -> dict[str, Any]:
     )
     ignore_exact_paths = {
         "repro_manifest.json",
-        "appendix_repro_manifest.tex",
+        "paper/appendix_repro_manifest.tex",
     }
 
     def _status_paths(line: str) -> list[str]:
@@ -2178,11 +2178,11 @@ def _default_artifacts() -> list[ArtifactInfo]:
         ArtifactInfo(
             name="Paper build modes (paper vs supplement vs full)",
             paper_refs=["Build packaging (Phase 7)"],
-            outputs=["stap_fus_paper.pdf", "stap_fus_supplement.pdf", "stap_fus_methodology.pdf"],
+            outputs=["paper/stap_fus_paper.pdf", "paper/stap_fus_supplement.pdf", "paper/stap_fus_methodology.pdf"],
             commands=[
-                "pdflatex stap_fus_methodology.tex   # full (default)",
-                "pdflatex stap_fus_paper.tex         # paper-only (no appendices)",
-                "pdflatex stap_fus_supplement.tex    # supplement-only (appendices only)",
+                "pdflatex paper/stap_fus_methodology.tex   # full (default)",
+                "pdflatex paper/stap_fus_paper.tex         # paper-only (no appendices)",
+                "pdflatex paper/stap_fus_supplement.tex    # supplement-only (appendices only)",
             ],
         ),
     ]
@@ -2237,7 +2237,7 @@ def build_manifest(*, conda_env: str | None, public_repo_url: str | None, releas
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="Generate reproducibility manifest (JSON + LaTeX appendix).")
     ap.add_argument("--out-json", type=Path, default=Path("repro_manifest.json"))
-    ap.add_argument("--out-tex", type=Path, default=Path("appendix_repro_manifest.tex"))
+    ap.add_argument("--out-tex", type=Path, default=Path("paper/appendix_repro_manifest.tex"))
     ap.add_argument(
         "--conda-env",
         type=str,

@@ -3,7 +3,7 @@
 Import an externally generated IQ cube (e.g., Field II) into the repo's
 canonical dataset layout, then derive a standard acceptance bundle.
 
-This is the "plumbing" needed for the simulation_spec.txt Phase 4/Field II
+This is the "plumbing" needed for the docs/legacy/simulation_spec.txt Phase 4/Field II
 backend without requiring MATLAB/Field II inside this repo.
 
 Inputs
@@ -307,4 +307,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
