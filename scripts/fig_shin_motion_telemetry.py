@@ -6,7 +6,8 @@ phase-correlation registration used in baseline preprocessing.
 This is a small "measured motion" audit that complements the synthetic motion
 injection ladders elsewhere: it reports the distribution of estimated rigid
 shifts (in pixels) across the Shin baseline-matrix scenarios, and relates it
-to the proxy-separation uplift (e.g., ΔAUC for STAP vs MC--SVD).
+to proxy-separation uplift (e.g., ΔAUC for the matched-subspace detector
+versus MC--SVD).
 """
 
 from __future__ import annotations
@@ -93,7 +94,7 @@ def main() -> None:
         row["reg_failed_fraction"] = failure
         row["reg_psr_median"] = psr
 
-    # Proxy-separation uplift: ΔAUC (STAP - MC--SVD) per scenario.
+    # Proxy-separation uplift: ΔAUC (matched-subspace detector - MC--SVD) per scenario.
     auc_by_scenario: dict[tuple[str, str], dict[str, float]] = {}
     for row in rows:
         method_key = str(row["method_key"])
@@ -169,7 +170,7 @@ def main() -> None:
         ax1.scatter(x_all[m], y[m], s=22, color="#1f77b4", alpha=0.85, edgecolor="none")
         ax1.axhline(float(np.median(y[m])), color="#1f77b4", alpha=0.35, linewidth=1.2)
     ax1.set_xlabel("Estimated rigid shift RMS (px)")
-    ax1.set_ylabel(r"$\Delta$AUC (STAP $-$ MC--SVD)")
+    ax1.set_ylabel(r"$\Delta$AUC (matched-subspace detector $-$ MC--SVD)")
     ax1.set_title("Proxy-separation uplift vs measured motion")
     ax1.grid(True, alpha=0.25)
 

@@ -306,10 +306,10 @@ def main() -> None:
     fig, axes = plt.subplots(1, 2, figsize=(12.0, 3.6), constrained_layout=True)
     axA, axB = axes
 
-    # Panel A: STAP-only ablation (along + across).
+    # Panel A: matched-subspace-only ablation (along + across).
     views = ["along", "across"]
     variants = ["svd_bandpass+stap", "stap_only_raw"]
-    labels = ["SVD band-pass + STAP", "STAP-only (raw IQ)"]
+    labels = ["SVD band-pass + matched-subspace detector", "Matched-subspace-only (raw IQ)"]
     colors = ["#1f77b4", "#ff7f0e"]
     x = np.arange(len(views), dtype=float)
     width = 0.33
@@ -342,7 +342,7 @@ def main() -> None:
     axA.set_xticklabels(["Along view", "Across view"])
     axA.set_ylim(0.0, 1.0)
     axA.set_ylabel(r"TPR at FPR $=10^{-3}$")
-    axA.set_title("STAP-only ablation (Gammex; 20 frames)")
+    axA.set_title("Matched-subspace-only ablation (Gammex; 20 frames)")
     axA.grid(True, axis="y", alpha=0.25)
     axA.legend(loc="lower right", frameon=False)
 
@@ -395,4 +395,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -1,17 +1,26 @@
 {
   "repo": {
-    "public_url": "https://github.com/ArthurShune/fus-detectors",
-    "release_tag": "preprint-2026-03-17"
+    "public_url": "git@github.com:ArthurShune/fus-detectors.git",
+    "release_tag": null
   },
   "git": {
-    "commit": "ebcee6c746206ac17c004d79d72ce72576c41d6a",
-    "commit_short": "ebcee6c",
+    "commit": "53d827ccb6bb6f0f1998d0d84c88c179090a0730",
+    "commit_short": "53d827c",
     "branch": "main",
-    "dirty": false,
-    "dirty_paths_count": 0,
-    "dirty_ignored_paths_count": 0,
-    "dirty_paths": [],
-    "dirty_ignored_paths": []
+    "dirty": true,
+    "dirty_paths_count": 5,
+    "dirty_ignored_paths_count": 2,
+    "dirty_paths": [
+      "M paper/appendix_bundle_schema.tex",
+      "M paper/appendix_ka_contract_theory.tex",
+      "M paper/appendix_supp_results.tex",
+      "M paper/manuscript.tex",
+      "M scripts/generate_repro_manifest.py"
+    ],
+    "dirty_ignored_paths": [
+      "M paper/methods_companion.pdf",
+      "M paper/preprint.pdf"
+    ]
   },
   "env": {
     "preferred_conda_env": "fus-detectors",
@@ -84,7 +93,7 @@
     },
     {
       "name": "Twinkling artifact dataset (RawBCF phantoms)",
-      "purpose": "Structurally labeled phantom ROC (Gammex) + within-ensemble motion ladders + KA hygiene (calculi).",
+      "purpose": "Structurally labeled phantom ROC (Gammex) + within-ensemble motion ladders + shrink-only regularizer hygiene (calculi).",
       "local_path": "data/twinkling_artifact/",
       "doi_or_url": "https://doi.org/10.17816/DD76511"
     },
@@ -103,10 +112,10 @@
     "Gammex flow phantom structural ROC (along-linear17)": "frames 0:85 (n=85), PRF=2500 Hz, N=17 shots.",
     "Gammex flow phantom structural ROC (across-linear17)": "frames 0:200 (n=200), PRF=2500 Hz, N=17 shots.",
     "Gammex flow phantom within-ensemble motion ladder": "along-linear17, frames 0:85, amps 0..2 px, kinds {rw,step}.",
-    "Twinkling calculi KA hygiene": "calcifications sequence, frames 0:50 (n=50), PRF approx 500 Hz, N=9 shots.",
+    "Twinkling calculi shrink-only regularizer hygiene": "calcifications sequence, frames 0:50 (n=50), PRF approx 500 Hz, N=9 shots.",
     "ULM 7883227 baseline sweep": "blocks 1-3, frames 0:128, MC-SVD energy-frac sweep (label-free).",
     "ULM 7883227 motion sweeps": "blocks 1-3, frames 0:128, frozen baseline e=0.975, motion kinds {brainlike,elastic}.",
-    "ULM 7883227 localization-derived structural audit (published PALA reference)": "reference/eval blocks 1-10, 64-frame windows at offsets {0,128}, max 2 windows/block, published PALA localization-derived vessel-core versus perivascular-shell reference, no-registration whitened matched-subspace specialist. This supersedes the earlier 128-frame local-density surrogate and is the only paper-facing ULM structural endpoint."
+    "ULM 7883227 localization-derived structural audit (published PALA reference)": "reference/eval blocks 1-10, 64-frame windows at offsets {0,128}, max 2 windows/block, published PALA localization-derived vessel-core versus perivascular-shell reference, no-registration fully whitened matched-subspace variant. This supersedes the earlier 128-frame local-density surrogate and is the only paper-facing ULM structural endpoint."
   },
   "artifacts": [
     {
@@ -158,9 +167,9 @@
       "notes": "Run on any generated acceptance bundle root containing pw_* directories."
     },
     {
-      "name": "Conditional STAP leakage ablation (full vs conditional masks)",
+      "name": "Conditional matched-subspace leakage ablation (full vs conditional masks)",
       "paper_refs": [
-        "Results (Brain-k-Wave): conditional STAP ablation"
+        "Results (Brain-k-Wave): conditional matched-subspace ablation"
       ],
       "outputs": [
         "reports/condstap_leakage.csv",
@@ -402,7 +411,7 @@
         "# Collect consolidated CSV/JSON (steady windows/frames 2..N; includes parity checks):",
         "PYTHONPATH=. conda run -n fus-detectors python scripts/collect_latency_summary.py"
       ],
-      "notes": "The replay scripts print cold(win1) and steady(avg win2..N); the paper tables report steady-state means. For Brain k-Wave, scripts/latency_rerun_check.py forces legacy vs optimized CUDA-graph settings internally (legacy: STAP_FAST_CUDA_GRAPH=0; optimized: STAP_FAST_CUDA_GRAPH=1)."
+      "notes": "The replay scripts print cold(win1) and steady(avg win2..N); the paper tables report steady-state means. For Brain k-Wave, scripts/latency_rerun_check.py forces legacy vs optimized CUDA-graph settings internally (legacy graph capture off; optimized graph capture on)."
     },
     {
       "name": "RTX 4080 SUPER CUDA latency replay (Brain-* k-Wave; legacy vs optimized; steady-state windows 2..5)",
@@ -526,7 +535,7 @@
         "  --out-root runs/latency_4080super_gammex_linear17_f0_6_tb512/optimized \\",
         "  gammex --frames-along 0:6 --frames-across 0:6"
       ],
-      "notes": "These are 'latency-only' replay settings (e.g., STAP_TYLER_MAX_ITER=1, STAP_SNAPSHOT_STRIDE=4) to isolate compute throughput; see per-bundle meta.json for exact telemetry."
+      "notes": "These are latency-only replay settings with one Tyler iteration and snapshot stride 4 to isolate compute throughput; see per-bundle meta.json for exact telemetry."
     },
     {
       "name": "RTX 4080 SUPER latency summary aggregation (CSV/JSON)",
@@ -615,7 +624,7 @@
       "notes": "Reads per-window score/mask arrays under the Brain-* pilot run root."
     },
     {
-      "name": "Brain-* cross-window threshold-transfer audit (STAP)",
+      "name": "Brain-* cross-window threshold-transfer audit (matched-subspace detector)",
       "paper_refs": [
         "Appendix: cross-window threshold calibration audit (Brain-*)"
       ],
@@ -720,7 +729,7 @@
         "  --out-json reports/brain_detector_swap.json \\",
         "  --out-tex reports/brain_detector_swap_table.tex"
       ],
-      "notes": "Paired-residual comparison: each run generates both PD (score_base.npy) and STAP (score_stap_preka.npy) scores on the same RPCA/HOSVD residual for each window."
+      "notes": "Paired-residual comparison: each run generates both PD (score_base.npy) and matched-subspace detector scores (score_stap_preka.npy) on the same RPCA/HOSVD residual for each window."
     },
     {
       "name": "Brain-* covariance-training trim ablation (self-training sensitivity)",
@@ -776,7 +785,7 @@
       "notes": "Runs 1D sweeps (vary one parameter at a time) around the frozen Brain-OpenSkull operating profile, reporting within-window strict-tail TPR medians/IQR over five disjoint windows. Sweep ranges are configurable via --diag-loads/--tile-sizes/--lts."
     },
     {
-      "name": "Brain-* strict-tail collapse visual (representative window; baseline vs STAP)",
+      "name": "Brain-* strict-tail collapse visual (representative window; baseline versus matched-subspace detector)",
       "paper_refs": [
         "Appendix: baseline sanity checks at relaxed operating points (Brain-*)"
       ],
@@ -791,12 +800,12 @@
         "  --alphas 0.1,0.01,1e-3 \\",
         "  --out figs/paper/brain_tail_collapse_visual.pdf"
       ],
-      "notes": "Uses one representative Brain-OpenSkull window to visualize background-tail dominance (baseline PD) and tail reshaping (STAP)."
+      "notes": "Uses one representative Brain-OpenSkull window to visualize background-tail dominance (baseline PD) and tail reshaping under matched-subspace scoring."
     },
     {
-      "name": "Knowledge-aided prior falsifiability ablation (STAP-only vs contract vs forced)",
+      "name": "Shrink-only regularizer falsifiability ablation (matched-subspace-only vs contract vs forced)",
       "paper_refs": [
-        "KA evaluation discipline"
+        "Shrink-only regularizer evaluation discipline"
       ],
       "outputs": [
         "reports/ka_v2_ablation.csv",
@@ -816,9 +825,9 @@
       "notes": null
     },
     {
-      "name": "Knowledge-aided prior positive-control ablation (OpenSkull shallow-alias + high-rank ghosts)",
+      "name": "Shrink-only regularizer positive-control ablation (OpenSkull shallow-alias + high-rank ghosts)",
       "paper_refs": [
-        "KA evaluation discipline (positive control)"
+        "Shrink-only regularizer evaluation discipline (positive control)"
       ],
       "outputs": [
         "reports/ka_v2_ablation_openskull_shallowalias_e50.csv",
@@ -853,7 +862,7 @@
         "    --bg-alias-highrank-pf-leak-eta 0.0 \\",
         "    --ka-score-contract-v2-mode auto"
       ],
-      "notes": "Synthetic, replay-only KA-positive regime used as a contract-mechanics positive control; not a realism benchmark."
+      "notes": "Synthetic, replay-only positive-control regime used as a contract-mechanics check; not a realism benchmark."
     },
     {
       "name": "Mace PD-only holdout alias-gate evaluation (label-free thresholds)",
@@ -1178,7 +1187,7 @@
       "notes": "Across-linear uses stride 4; this matches the fixed geometry-only stride policy (largest stride with >=500 tiles)."
     },
     {
-      "name": "Gammex same-residual detector-component sweep (along/across; no KA)",
+      "name": "Gammex same-residual detector-component sweep (along/across; no shrink-only regularizer)",
       "paper_refs": [
         "Twinkling section: Table (structural ROC)"
       ],
@@ -1265,7 +1274,7 @@
         "  --out-json reports/twinkling_gammex_detector_ablation.json \\",
         "  --out-tex reports/twinkling_gammex_detector_ablation_table.tex"
       ],
-      "notes": "Same-residual fairness audit for the main Gammex table. Detector-variant ablations require the batched fast STAP core (set STAP_FAST_PATH=1); only the detector head changes across rows."
+      "notes": "Same-residual fairness audit for the main Gammex table. Detector-variant ablations require the batched fast matched-subspace core; only the detector head changes across rows."
     },
     {
       "name": "Gammex within-ensemble motion ladder (along-linear17; PRF=2500)",
@@ -1352,9 +1361,9 @@
       "notes": null
     },
     {
-      "name": "Twinkling calculi KA hygiene + contract telemetry (calcifications; PRF approx 500)",
+      "name": "Twinkling calculi shrink-only regularizer hygiene + contract telemetry (calcifications; PRF approx 500)",
       "paper_refs": [
-        "Twinkling section: KA hygiene on calculi",
+        "Twinkling section: shrink-only regularizer hygiene on calculi",
         "Figure: twinkling_calculi_tail_example.png"
       ],
       "outputs": [
@@ -1495,7 +1504,7 @@
         "ULM section: localization-derived structural audit on the same dataset",
         "ULM section: Table (ulm7883227_pala_structural_roc_table.tex)",
         "Supplement: Figure (ulm7883227_pala_structural_roc_curves.pdf)",
-        "Discussion: RTX 4080 latency note for the same 64-frame no-registration specialist"
+        "Discussion: RTX 4080 latency note for the same 64-frame no-registration fully whitened variant"
       ],
       "outputs": [
         "reports/ulm7883227_pala_structural_roc.csv",
@@ -1644,7 +1653,7 @@
         "  --out-json reports/simus_baseline_compare/simus_pymust_paper_seed0_compare.json \\",
         "  --tag clinical_like --stap-device cpu"
       ],
-      "notes": "SIMUS/PyMUST runs are used as a moving-scatterer credibility anchor. Sanity-link summaries compare PSD-band / coherence / low-rank proxies against open real IQ; contract checks verify bundle integrity and KA-friendly regime telemetry. No performance claims are made from these comparisons."
+      "notes": "SIMUS/PyMUST runs are used as a moving-scatterer credibility anchor. Sanity-link summaries compare PSD-band / coherence / low-rank proxies against open real IQ; contract checks verify bundle integrity and regularizer-friendly regime telemetry. No performance claims are made from these comparisons."
     },
     {
       "name": "Paper build modes (paper vs supplement vs full)",

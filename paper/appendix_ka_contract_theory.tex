@@ -1,10 +1,10 @@
-\section{KA Prior (Modality--Agnostic)}
+\section{Shrink-Only Regularizer (Modality--Agnostic)}
 \label{app:ka-contract-theory}
 
-In this part we describe regime conditions and operator-level sufficient structure for a knowledge-aided (KA) temporal covariance transform layered on top of a baseline slow-time detector. The analysis is formulated in terms of abstract band projectors $(\Po,\Pf,\Pg,\Pa)$, alias features, and score distributions, and does not depend on any particular imaging modality. Only in later sections do we instantiate these conditions for functional ultrasound (fUS) brain imaging with concrete band choices, acquisition parameters, and baselines.
+In this part we describe regime conditions and operator-level sufficient structure for a deterministic shrink-only score-space transform layered on top of a baseline slow-time detector. The analysis is formulated in terms of abstract band projectors $(\Po,\Pf,\Pg,\Pa)$, alias features, and score distributions, and does not depend on any particular imaging modality. Only in later sections do we instantiate these conditions for functional ultrasound (fUS) brain imaging with concrete band choices, acquisition parameters, and baselines.
 
 \subsection*{How to read this appendix}
-A plain-language glossary for the appendix labels appears first in Appendix~\ref{app:appendix-guide}, and the main-text method overview is shown in Figure~\ref{fig:stap_pipeline}. This appendix then states the formal preconditions under which the optional shrink-only penalty layer is allowed to modify scores; if any precondition fails, the layer is disabled ($w\equiv 1$).
+A plain-language glossary for the appendix labels appears first in Appendix~\ref{app:appendix-guide}, and the main-text method overview is shown in Figure~\ref{fig:stap_pipeline}. This appendix then states the formal preconditions under which the optional shrink-only regularizer is allowed to modify scores; if any precondition fails, the layer is disabled ($w\equiv 1$).
 
 \subsection{Shrink-only score mapping used in the main manuscript}
 The main paper keeps the optional shrink-only regularizer to a brief summary because the primary efficacy claims do not depend on it. For completeness, we collect the core manuscript-level definitions here. The regularizer is driven by deterministic side-information features computed from the same tile-local slow-time vector $z_i$ and Doppler-band projectors $(\Po,\Pf,\Pg,\Pa)$ used by the detector:
@@ -30,31 +30,31 @@ These features are used only to decide whether shrinkage is warranted and where 
 
 The score-space mapping itself is bounded and monotone:
 \[
-  S_{\mathrm{stap,post}}(i)=w(i)\,S_{\mathrm{stap,pre}}(i),\qquad w(i)\in(0,1].
+  S_{\mathrm{det,post}}(i)=w(i)\,S_{\mathrm{det,pre}}(i),\qquad w(i)\in(0,1].
 \]
 The full construction of $w(i)$, including protected sets, regime logic, deterministic sentinels, and the reciprocal scale-map convention used in some exported audit files, is given by the appendix sections below.
 
 \begin{lemma}[Shrink-only monotonicity]
 \label{lem:shrink_only_monotonicity}
-Let $w(i)\in(0,1]$ and define $S_{\mathrm{stap,post}}(i)=w(i)\,S_{\mathrm{stap,pre}}(i)$. For any threshold $\tau$,
+Let $w(i)\in(0,1]$ and define $S_{\mathrm{det,post}}(i)=w(i)\,S_{\mathrm{det,pre}}(i)$. For any threshold $\tau$,
 \[
-  \{S_{\mathrm{stap,post}}\ge\tau\}\subseteq \{S_{\mathrm{stap,pre}}\ge\tau\}.
+  \{S_{\mathrm{det,post}}\ge\tau\}\subseteq \{S_{\mathrm{det,pre}}\ge\tau\}.
 \]
 Consequently, on any subset $A$ (e.g.\ $H_0$), the tail probability cannot increase at fixed $\tau$:
 \[
-  \mathbb{P}\{S_{\mathrm{stap,post}}\ge\tau\mid A\}\le \mathbb{P}\{S_{\mathrm{stap,pre}}\ge\tau\mid A\}.
+  \mathbb{P}\{S_{\mathrm{det,post}}\ge\tau\mid A\}\le \mathbb{P}\{S_{\mathrm{det,pre}}\ge\tau\mid A\}.
 \]
 \end{lemma}
 \begin{proof}
-If $S_{\mathrm{stap,post}}(i)\ge\tau$, then $S_{\mathrm{stap,pre}}(i)=S_{\mathrm{stap,post}}(i)/w(i)\ge\tau$ since $w(i)\le 1$.
+If $S_{\mathrm{det,post}}(i)\ge\tau$, then $S_{\mathrm{det,pre}}(i)=S_{\mathrm{det,post}}(i)/w(i)\ge\tau$ since $w(i)\le 1$.
 \end{proof}
 
-When reporting strict low-FPR operating points where $\tau$ is reselected after regularization to satisfy $\mathbb{P}\{S_{\mathrm{stap,post}}\ge\tau\mid H_0\}=\alpha$, any TPR change reflects background-tail compression despite scores never increasing.
+When reporting strict low-FPR operating points where $\tau$ is reselected after regularization to satisfy $\mathbb{P}\{S_{\mathrm{det,post}}\ge\tau\mid H_0\}=\alpha$, any TPR change reflects background-tail compression despite scores never increasing.
 
 \subsection{Regime Preconditions (Data--Level, Non--Negotiable)}
 \label{sec:regime}
 
-The most important empirical lesson is: even if the KA operator $Q$ and band design $(\Pf,\Pa)$ are perfect in an abstract sense, \emph{uplift requires the data themselves to be in a compatible regime}. This section codifies that.
+The most important empirical lesson is: even if the shrink-only operator $Q$ and band design $(\Pf,\Pa)$ are perfect in an abstract sense, \emph{uplift requires the data themselves to be in a compatible regime}. This section codifies that.
 
 We write $S(f)$ for the (multi--taper) PSD of a baseline--whitened tile, and define
 \[
@@ -78,7 +78,7 @@ where $f_{\mathrm{peak}}$ is the frequency at which $S(f)$ attains its maximum a
 Interpretation: a majority of flow tiles have their dominant PSD peak \emph{inside} the flow band, and a nontrivial fraction of background tiles have their dominant peak in the alias band. This ensures that the band projectors $(\Pf,\Pa)$ actually correspond to distinct physical processes.
 
 \paragraph{Implementation in labeled brain simulation profiles.}
-For the main labeled brain simulation regimes, the raw k-Wave RF tensor $x(t,a,e)$ (angle index $a$, element index $e$) lives on an angle and element grid that does not align pixelwise with the STAP PD masks $(N_y\times N_x)$. We therefore implement R--1 using the whitened multi--taper PSD and band-ratio feature statistics computed on the \emph{same} spatial grid as the exported PD scoring maps (the right-tail score $S_{\mathrm{PD}}$ stored as \texttt{score\_pd\_*.npy}). We take $f_{\mathrm{peak}}$ from the whitened PSD peaks used in the band-ratio recorder and report the fraction of $H_1$ tiles whose peak lies in $\Cf$ and the fraction of $H_0$ tiles whose peak lies in $\Ca$ from those tilewise peak statistics. When the RF tensor is spatially aligned with the masks (e.g.\ 1D pilots), we instead use a direct FFT on $x(t,\cdot,\cdot)$ as in the definition above.
+For the main labeled brain simulation regimes, the raw k-Wave RF tensor $x(t,a,e)$ (angle index $a$, element index $e$) lives on an angle and element grid that does not align pixelwise with the exported detector masks $(N_y\times N_x)$. We therefore implement R--1 using the whitened multi--taper PSD and band-ratio feature statistics computed on the \emph{same} spatial grid as the exported PD scoring maps (the right-tail score $S_{\mathrm{PD}}$ stored as \texttt{score\_pd\_*.npy}). We take $f_{\mathrm{peak}}$ from the whitened PSD peaks used in the band-ratio recorder and report the fraction of $H_1$ tiles whose peak lies in $\Cf$ and the fraction of $H_0$ tiles whose peak lies in $\Ca$ from those tilewise peak statistics. When the RF tensor is spatially aligned with the masks (e.g.\ 1D pilots), we instead use a direct FFT on $x(t,\cdot,\cdot)$ as in the definition above.
 
 \subsection{R--2: Alias Score Class Separation}
 
@@ -97,14 +97,14 @@ Examples (not exhaustive):
   \item Peak--location based scores (peak in Pa, high tone prominence).
 \end{itemize}
 
-For KA to be meaningfully guided by alias evidence, we require \emph{class--differential separation} of $m_{\text{alias}}$:
+For the shrink-only regularizer to be meaningfully guided by alias evidence, we require \emph{class--differential separation} of $m_{\text{alias}}$:
 \begin{equation}
 \label{eq:R2}
 \operatorname{median}\!\left(m_{\text{alias}}\mid H_0\right) - \operatorname{median}\!\left(m_{\text{alias}}\mid H_1\right) \;\ge\; \Delta_{\min},
 \end{equation}
 with $\Delta_{\min}$ set so that alias dominance differs by at least a factor $\approx e^{\Delta_{\min}}$ in expectation (for log ratio, $\Delta_{\min}\approx 0.3$ corresponds to a $\approx 35\%$ relative difference in $E_a/E_f$ medians).
 
-If \eqref{eq:R2} fails (alias score almost identical on $H_0$ and $H_1$), the alias-localization rule (Appendix~\ref{app:gating}) has no reliable signal and KA uplift cannot be expected.
+If \eqref{eq:R2} fails (alias score almost identical on $H_0$ and $H_1$), the alias-localization rule (Appendix~\ref{app:gating}) has no reliable signal and regularizer uplift cannot be expected.
 
 \subsection{R--3: Baseline Headroom}
 
@@ -120,12 +120,12 @@ We require:
   where $\text{pAUC}_{\max}$ is the ideal partial AUC under perfect separation.
 \end{itemize}
 
-If the baseline already achieves near--maximal pAUC at the FPR of interest, even a perfect KA transform cannot provide significant gains; in this regime KA can serve as a regularizer or safety mechanism, but not as a source of measurable uplift.
+If the baseline already achieves near--maximal pAUC at the FPR of interest, even a perfect shrink-only transform cannot provide significant gains; in this regime the regularizer can serve as a safety mechanism, but not as a source of measurable uplift.
 
 \subsection{Operator--Level Sufficient Structure (Non--Negotiable Core)}
 \label{sec:operator}
 
-This section is unchanged at the core: it describes conditions on $Q$ alone under which KA behaves like a band--wise scalar rescaling of scores, up to small perturbations.
+This section describes conditions on $Q$ alone under which the shrink-only regularizer behaves like a band--wise scalar rescaling of scores, up to small perturbations.
 
 \subsection{OC--1: Approximate Band Commutation}
 
@@ -136,10 +136,10 @@ We require $Q$ to be nearly block--diagonal with respect to $(\Po,\Pf,\Pg,\Pa)$:
 \]
 for some small $\varepsilon_{\text{mix}}\in[0,1)$ (typical target $\le 0.05$).
 
-Interpretation: $Q$ preserves band subspaces up to small mixing; it does not rotate energy from Pf into Pa or vice versa in any substantial way. This rules out the failure mode where KA accidentally feeds alias into the flow numerator.
+Interpretation: $Q$ preserves band subspaces up to small mixing; it does not rotate energy from Pf into Pa or vice versa in any substantial way. This rules out the failure mode where the regularizer accidentally feeds alias into the flow numerator.
 
 \paragraph{Runtime label--free check.}
-Let $\wh Q := R_\beta^{-1/2}\wh R^{1/2}$ be the realized KA transform. Estimate
+Let $\wh Q := R_\beta^{-1/2}\wh R^{1/2}$ be the realized shrink-only transform. Estimate
 \[
 \wh\varepsilon_{\text{mix}} :=
 \max\left\{ 
@@ -228,7 +228,7 @@ Interpretation: this makes it feasible to construct $R_\beta$ that achieves OC--
 \subsection{Covariance blending and localization (summary)}
 \label{sec:cov-blending}
 
-KA reshapes covariances only within bands. We use either a commuting band-scalar transform with target gains $(s_f,s_a,s_o)$ or a trace-normalized blend $R_\beta$ with small diagonal lift; both enforce bandwise structure (no off-block priors). Localization restricts KA to alias-dominated, low-coverage tiles using alias scores, guard ratios, optional flow coherence/coverage checks, baseline score windows, depth/PD/registration cues, and is validated via coverage rates $p_-,p_+$. Full localization definitions are provided in Appendix~\ref{app:gating} (PD-only instantiation in Appendix~\ref{app:pdonly-dashboard}).
+The shrink-only regularizer reshapes covariances only within bands. We use either a commuting band-scalar transform with target gains $(s_f,s_a,s_o)$ or a trace-normalized blend $R_\beta$ with small diagonal lift; both enforce bandwise structure (no off-block priors). Localization restricts the regularizer to alias-dominated, low-coverage tiles using alias scores, guard ratios, optional flow coherence/coverage checks, baseline score windows, depth/PD/registration cues, and is validated via coverage rates $p_-,p_+$. Full localization definitions are provided in Appendix~\ref{app:gating} (PD-only instantiation in Appendix~\ref{app:pdonly-dashboard}).
 
 \subsection{Score--Level Guarantees}
 \label{sec:score-level}
@@ -239,13 +239,13 @@ This section is unchanged in structure; we only make the dependence on $p_-,p_+$
 
 Under OC--1--OC--2, for any $z$,
 \[
-\mathrm{BR}_{\text{KA}}(z) = \mathrm{BR}(Qz) 
+\mathrm{BR}_{\text{reg}}(z) = \mathrm{BR}(Qz) 
   \approx \frac{s_f^2}{s_a^2} \cdot \mathrm{BR}_{\text{base}}(z) \cdot (1 + O(\delta_\bullet+\varepsilon_{\text{mix}})).
 \]
 
 Similarly,
 \[
-\mathrm{GLRT}_{\rho,\text{KA}}(z) \approx 
+\mathrm{GLRT}_{\rho,\text{reg}}(z) \approx 
   \frac{s_f^2}{\alpha_a(z)\,s_a^2 + \alpha_o(z)\,s_o^2}\cdot \mathrm{GLRT}_{\rho,\text{base}}(z),
 \]
 where
@@ -258,7 +258,7 @@ On alias--dominant tiles (large $\alpha_a(z)$), both BR and GLRT are approximate
 
 \subsection{SL--2: Tail Threshold Improvement at Fixed FPR}
 
-Let $S^-_{\text{base}}$ be the baseline negative score distribution, with CDF $F_-$. Let $t_\alpha$ be the $\alpha$--quantile: $F_-(t_\alpha) = 1-\alpha$. After KA with gating, the negative CDF becomes a mixture:
+Let $S^-_{\text{base}}$ be the baseline negative score distribution, with CDF $F_-$. Let $t_\alpha$ be the $\alpha$--quantile: $F_-(t_\alpha) = 1-\alpha$. After shrink-only regularization with gating, the negative CDF becomes a mixture:
 \[
 F'_-(t) = (1-p_-) F_-(t) + p_- F_-(t/\mu),
 \]
@@ -270,7 +270,7 @@ so that $t'_\alpha < t_\alpha$ whenever $p_->0$ and $\mu<1$.
 In the PD-mode experiments in this paper we report operating points using the exported PD flow-evidence score map $S_{\mathrm{PD}}$ (stored as \texttt{score\_pd\_*.npy}; higher = more flow-like): choose $\tau$ so that $\mathbb{P}\{S_{\mathrm{PD}}\ge\tau\mid \mathrm{bg}\}=\alpha$ and evaluate $\mathbb{P}\{S_{\mathrm{PD}}\ge\tau\mid \mathrm{flow}\}$. For compatibility, acceptance bundles may also include \texttt{pd\_*.npy}, which we denote $\mathrm{PD}^{\downarrow}$ and relate deterministically by $S_{\mathrm{PD}}=-\mathrm{PD}^{\downarrow}$.
 
 \paragraph{Interpretation (plain language).}
-KA is designed to shrink scores only on a subset of artifact-dominated background tiles. This selectively compresses the extreme right tail of $H_0$ scores, which lowers the background threshold needed to hit a target FPR. Lowering that threshold can reveal additional true flow pixels without increasing the false-positive rate, because scores never increase on penalized pixels. Equivalently, scaling down a fraction $p_-$ of top--tail negatives removes mass from the negative tail and shifts $t_\alpha$ left; uplift is only plausible when $p_+$ (positive gating rate) is small.
+The shrink-only regularizer is designed to shrink scores only on a subset of artifact-dominated background tiles. This selectively compresses the extreme right tail of $H_0$ scores, which lowers the background threshold needed to hit a target FPR. Lowering that threshold can reveal additional true flow pixels without increasing the false-positive rate, because scores never increase on penalized pixels. Equivalently, scaling down a fraction $p_-$ of top--tail negatives removes mass from the negative tail and shifts $t_\alpha$ left; uplift is only plausible when $p_+$ (positive gating rate) is small.
 
 We emphasize that the SL--2 guarantee is conditioned on:
 \begin{itemize}[nosep]
@@ -280,9 +280,9 @@ We emphasize that the SL--2 guarantee is conditioned on:
 
 \subsection{SL--3: Positive Collateral Bound}
 
-Let $p_+$ be the positive gating rate and assume gated positives suffer at most a multiplicative drop $\nu := s_f^2/s_a^2\cdot(1+O(\delta_\bullet+\varepsilon_{\text{mix}}))$. For any threshold $t'_\alpha$ satisfying $F'_-(t'_\alpha)=1-\alpha$, the TPR under KA satisfies
+Let $p_+$ be the positive gating rate and assume gated positives suffer at most a multiplicative drop $\nu := s_f^2/s_a^2\cdot(1+O(\delta_\bullet+\varepsilon_{\text{mix}}))$. For any threshold $t'_\alpha$ satisfying $F'_-(t'_\alpha)=1-\alpha$, the TPR under regularization satisfies
 \[
-\mathrm{TPR}_{\text{KA}}(t'_\alpha) \ge \mathrm{TPR}_{\text{base}}(t_\alpha) - \eta\,\Phi(\nu),
+\mathrm{TPR}_{\text{reg}}(t'_\alpha) \ge \mathrm{TPR}_{\text{base}}(t_\alpha) - \eta\,\Phi(\nu),
 \]
 where $0\le \eta\lesssim \frac{p_+}{p_-}$ (up to geometry) and $\Phi(\nu)$ is the fraction of positives near $t'_\alpha$ that are moved below the threshold. For $p_+\ll p_-$ and $\nu$ close to $1$, the loss term is dominated by the gain from SL--2.
 
@@ -298,26 +298,26 @@ At runtime, label--free feature statistics must support the following checks:
 
 \begin{enumerate}[label=(\roman*),nosep]
   \item Band design: BG--1/BG--2/BG--3 satisfied for current DPSS/PRF/$T$.
-  \item KA operator: $\wh\varepsilon_{\text{mix}}\le\varepsilon_{\text{mix}}$ (OC--1); $\wh s_a/\wh s_f\ge\Lambda$ and $\wh\delta_\bullet\le 0.1$ (OC--2).
+  \item Regularizer operator: $\wh\varepsilon_{\text{mix}}\le\varepsilon_{\text{mix}}$ (OC--1); $\wh s_a/\wh s_f\ge\Lambda$ and $\wh\delta_\bullet\le 0.1$ (OC--2).
   \item Localization primitives: risk scores $m_{\text{alias}}$ and $m_{\text{guard}}$, guard ratios, flow coverage, FPC, depth, PD, registration; localization indicator $g$ constructed via G--1/G--2/G--2'/G--3/G--4.
-  \item Invariance sentinel: if $\wh s_a/\wh s_f\in[1-\epsilon,1+\epsilon]$ with $\epsilon\le 0.02$, KA is effectively a scalar; disable it (see Section~\ref{sec:regime-sentinel}).
+  \item Invariance sentinel: if $\wh s_a/\wh s_f\in[1-\epsilon,1+\epsilon]$ with $\epsilon\le 0.02$, the regularizer is effectively a scalar; disable it (see Section~\ref{sec:regime-sentinel}).
 \end{enumerate}
 
-\subsection{Knowledge-Aided Prior: shrink-only score-space penalty}
+\subsection{Shrink-only regularizer: score-space penalty}
 \label{app:ka-contract-v2-full}
 
-To keep KA conservative under heterogeneity, we implement a deterministic, feature-conditioned \emph{prior} that acts in score space as a shrink-only penalty. Concretely, the post-KA score is defined as
+To keep the shrink-only regularizer conservative under heterogeneity, we implement a deterministic, feature-conditioned prior that acts in score space as a shrink-only penalty. Concretely, the post-regularizer score is defined as
 \[
 S_{\mathrm{post}}(i)=w(i)\,S_{\mathrm{pre}}(i),\qquad w(i)\in(0,1],
 \]
-equivalently $T_{\mathrm{post}}=T_{\mathrm{pre}}+\log w$ when working with log-likelihood scores (MAP log-odds decomposition). By construction, $w\equiv 1$ (no KA effect) is an explicit, expected outcome whenever the feature statistics are uninformative or fail integrity checks.
+equivalently $T_{\mathrm{post}}=T_{\mathrm{pre}}+\log w$ when working with log-likelihood scores (MAP log-odds decomposition). By construction, $w\equiv 1$ (no regularizer effect) is an explicit, expected outcome whenever the feature statistics are uninformative or fail integrity checks.
 
 \subsubsection{Feature-space regimes (R0/R1/R2)}
 We partition the feature space into three regimes per volume (or per slice/plane in PD-only mode):
 \begin{itemize}[nosep]
-  \item \textbf{$\mathcal{R}_0$ (uninformative).} The prior is uninformative and $w\equiv 1$; output equals the baseline detector (STAP on IQ; PD-only detector on PD-only). Feature statistics are still recorded.
+  \item \textbf{$\mathcal{R}_0$ (uninformative).} The prior is uninformative and $w\equiv 1$; output equals the baseline detector (matched-subspace detector on IQ; PD-only detector on PD-only). Feature statistics are still recorded.
   \item \textbf{$\mathcal{R}_1$ (guarded shrink).} A bounded, shrink-only penalty may be applied on a localized set of high-risk tiles while strictly protecting a high-confidence set. No uplift claim is implied.
-  \item \textbf{$\mathcal{R}_2$ (alias-dominant; experimental).} Features strongly indicate alias contamination and additional label-free actionability evidence suggests that shrink preferentially targets false activations. This regime is used only as a conservative tail-hygiene mode to gate reporting of KA deltas; it is not a default deployment mode or the basis for primary performance claims.
+  \item \textbf{$\mathcal{R}_2$ (alias-dominant; experimental).} Features strongly indicate alias contamination and additional label-free actionability evidence suggests that shrink preferentially targets false activations. This regime is used only as a conservative tail-hygiene mode to gate reporting of regularizer deltas; it is not a default deployment mode or the basis for primary performance claims.
 \end{itemize}
 For auditability, the implementation also logs a reason label (why $w\equiv 1$) and a \emph{risk mode} (alias vs guard) so that $\mathcal{R}_0$ behavior is interpretable. (For backward compatibility, exported metadata may also include legacy string labels such as \texttt{C0\_OFF}/\texttt{C1\_SAFETY}/\texttt{C2\_UPLIFT} mapped to $\mathcal{R}_0/\mathcal{R}_1/\mathcal{R}_2$.)
 
@@ -336,7 +336,7 @@ m_{\mathrm{alias}}(i)=\log\frac{E_a(i)+\epsilon}{E_f(i)+\epsilon},\quad
 r_g(i)=\frac{E_g(i)}{E_{\mathrm{tot}}(i)},\quad
 r_f(i)=\frac{E_f(i)}{E_{\mathrm{tot}}(i)}.
 \]
-We also use a flow-coverage proxy $c_f(i)\in[0,1]$ (fraction of tile pixels in the flow mask), a depth proxy $d(i)\in[0,1]$ when available, and a baseline detector score $S_{\mathrm{base}}(i)$ on which KA operates (defined in a flow-evidence convention so that higher means ``more flow-like''; in PD-mode this is $S_{\mathrm{base}}=S_{\mathrm{PD}}=\texttt{score\_pd}$).
+We also use a flow-coverage proxy $c_f(i)\in[0,1]$ (fraction of tile pixels in the flow mask), a depth proxy $d(i)\in[0,1]$ when available, and a baseline detector score $S_{\mathrm{base}}(i)$ on which the regularizer operates (defined in a flow-evidence convention so that higher means ``more flow-like''; in PD-mode this is $S_{\mathrm{base}}=S_{\mathrm{PD}}=\texttt{score\_pd}$).
 
 \subsubsection{Proxy sets and actionability tests}
 Because class labels are unavailable at runtime, the regime selector uses two proxy sets:
@@ -352,7 +352,7 @@ with frozen design values (typical $c_{\mathrm{bg}}\approx 0.05$, $c_{\mathrm{fl
 When guard fractions dominate, the actionable regime $\mathcal{R}_2$ is disallowed but guarded shrink $\mathcal{R}_1$ may still be permitted. In this case we switch to a guard-risk mode using $m_{\mathrm{guard}}(i)=\log\frac{E_g(i)+\epsilon}{E_f(i)+\epsilon}$ (or equivalently $r_g(i)$) and apply the same tail association check using $m_{\mathrm{guard}}$.
 
 \subsubsection{Protected set, candidate window, and shrink mapping}
-KA must not disturb high-confidence flow tiles. We define a protected set
+The shrink-only regularizer must not disturb high-confidence flow tiles. We define a protected set
 \[
 \mathcal{T}_{\mathrm{prot}}:=\{i:\,c_f(i)\ge c_{\mathrm{flow}}\}\ \cup\ \{i:\,S_{\mathrm{base}}(i)\ge Q_{q_{\mathrm{hi}}}(S_{\mathrm{base}})\}\ \cup\ \{i:\,r_f(i)\ge r_{f,\mathrm{prot}}\},
 \]
@@ -372,7 +372,7 @@ with $w_{\min}\in(0,1]$ so the corresponding scale $\gamma(i)=1/w(i)$ is finite,
 which inflates the legacy PD-mode map $\mathrm{PD}^{\downarrow}$ on penalized regions. Since $S_{\mathrm{PD}}=-\mathrm{PD}^{\downarrow}$, this is equivalent to $S_{\mathrm{post}}=w\,S_{\mathrm{pre}}$ and therefore is non-increasing in score space. For PD-only detectors such as PD-z that take both signs, we use hard-suppression/soft-shrink variants (Appendix~\ref{app:pdonly-dashboard}) so that shrink-only is literal for signed scores.
 
 \subsubsection{Sentinels, reason codes, and auditability}
-The regime selector defaults to $\mathcal{R}_0$ ($w\equiv 1$) when any of the following hold: insufficient background proxy support, flat risk statistics (e.g.\ $\mathrm{IQR}(m_{\mathrm{risk}}\mid\mathcal{T}_{\mathrm{bg}})$ too small), guard domination that is not actionable, coverage outside bounds (localization inert or global), invariance (penalized $w$ nearly constant), or a monotonicity guard failure on near-protected tiles. When $w\not\equiv 1$, we record coverage and strength summaries (e.g.\ $p_{\mathrm{shrink}}=\mathbb{P}\{g=1\mid \mathcal{T}_{\mathrm{cand}}\}$ and quantiles of $w$) along with a short reason label (e.g.\ \texttt{alias\_metric\_flat}, \texttt{guard\_dominates\_not\_actionable}, \texttt{coverage\_out\_of\_bounds}, \texttt{monotonicity\_guard\_failed}). This makes KA behavior reviewable and supports the intended posture: $\mathcal{R}_0$ is an expected success regime, $\mathcal{R}_1$ is a conservative safety regime, and $\mathcal{R}_2$ is a research-only regime used to gate uplift reporting.
+The regime selector defaults to $\mathcal{R}_0$ ($w\equiv 1$) when any of the following hold: insufficient background proxy support, flat risk statistics (e.g.\ $\mathrm{IQR}(m_{\mathrm{risk}}\mid\mathcal{T}_{\mathrm{bg}})$ too small), guard domination that is not actionable, coverage outside bounds (localization inert or global), invariance (penalized $w$ nearly constant), or a monotonicity guard failure on near-protected tiles. When $w\not\equiv 1$, we record coverage and strength summaries (e.g.\ $p_{\mathrm{shrink}}=\mathbb{P}\{g=1\mid \mathcal{T}_{\mathrm{cand}}\}$ and quantiles of $w$) along with a short reason label (e.g.\ \texttt{alias\_metric\_flat}, \texttt{guard\_dominates\_not\_actionable}, \texttt{coverage\_out\_of\_bounds}, \texttt{monotonicity\_guard\_failed}). This makes regularizer behavior reviewable and supports the intended posture: $\mathcal{R}_0$ is an expected success regime, $\mathcal{R}_1$ is a conservative safety regime, and $\mathcal{R}_2$ is a research-only regime used to gate uplift reporting.
 
 \subsubsection{PD-only instantiation}
 On PD-only datasets (Mac{\'e}/Urban, fUS-BMI, cranial-window PD), the same regime selection is applied after replacing Doppler bands with hemodynamic bands and treating tile-averaged PD time series as the slow-time signal. The feature primitives $(E_f,E_a,E_g)$ and the shrink-only map $w(i)$ are defined identically, and the regime label is produced per plane. This yields a uniform export schema across Doppler IQ and hemodynamic PD regimes.
@@ -382,33 +382,33 @@ Figure~\ref{fig:ka_v2_dashboard} shows a compact prior/regime summary panel over
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{figs/paper/ka_v2_sweep_T64_dashboard.pdf}
-\caption{KA prior summary panel on a representative sweep. Left: regime counts. Middle: top (regime, reason) labels. Right: summary of shrink coverage and strength on runs where $w\not\equiv 1$.}
+\caption{Shrink-only regularizer summary panel on a representative sweep. Left: regime counts. Middle: top (regime, reason) labels. Right: summary of shrink coverage and strength on runs where $w\not\equiv 1$.}
 \label{fig:ka_v2_dashboard}
 \end{figure}
 
 \subsection{Regime Sentinel and Safety Guard}
 \label{sec:regime-sentinel}
 
-Experience shows that even when OC/BG/CB/G conditions are roughly satisfied, there can exist regimes where KA is either inert or harmful (e.g.\ risk feature flat, localization never triggers or triggers everywhere, baseline ROC saturated). This section formalizes when KA should be \emph{explicitly disabled}.
+Experience shows that even when OC/BG/CB/G conditions are roughly satisfied, there can exist regimes where the shrink-only regularizer is either inert or harmful (e.g.\ risk feature flat, localization never triggers or triggers everywhere, baseline ROC saturated). This section formalizes when the regularizer should be \emph{explicitly disabled}.
 
 \subsection{RS--1: Regime Sentinel (Design--Time)}
 
 On a held--out labeled configuration, check:
 
 \begin{itemize}[nosep]
-  \item \textbf{RS--1a: Band occupancy.} If R--1 fails (e.g.\ most flow peaks near DC instead of Pf, or alias peaks rarely in Pa), the band design is not physically realized; do not deploy KA.
-  \item \textbf{RS--1b: Alias separation.} If R--2 fails (alias scores $m_{\text{alias}}$ show negligible difference between classes), alias localization has no reliable signal; do not deploy KA.
+  \item \textbf{RS--1a: Band occupancy.} If R--1 fails (e.g.\ most flow peaks near DC instead of Pf, or alias peaks rarely in Pa), the band design is not physically realized; do not deploy the regularizer.
+  \item \textbf{RS--1b: Alias separation.} If R--2 fails (alias scores $m_{\text{alias}}$ show negligible difference between classes), alias localization has no reliable signal; do not deploy the regularizer.
   \item \textbf{RS--1c: Localization coverage.} If, after choosing $q_{\text{alias}},c_{f,\max},c_{\text{pc}}$, the empirical localization rates satisfy $p_-\approx 0$ or $p_-\approx 1$, or $p_+ \approx p_-$, then localization is either inert, global, or non--differential; do not expect uplift and default to $\mathcal{R}_0$.
-  \item \textbf{RS--1d: Baseline saturation.} If $\text{pAUC}_\text{base}$ in the target FPR range is already at or near maximum and the score ratio distribution under KA has median close to 1 with tiny spread, you are in a ROC--invariant regime; KA can be left off.
+  \item \textbf{RS--1d: Baseline saturation.} If $\text{pAUC}_\text{base}$ in the target FPR range is already at or near maximum and the score ratio distribution under regularization has median close to 1 with tiny spread, you are in a ROC--invariant regime; the regularizer can be left off.
 \end{itemize}
 
 \subsection{Safety--1: Score Monotonicity Guard (Runtime)}
 
-Even when regime preconditions and localization coverage hold, we require that KA does not produce grossly pathological score transformations on \emph{penalized flow tiles}. Let $S_{\text{base}},S_{\text{KA}}$ denote baseline and KA scores on the chosen metric (BR or GLRT).
+Even when regime preconditions and localization coverage hold, we require that the regularizer does not produce grossly pathological score transformations on \emph{penalized flow tiles}. Let $S_{\text{base}},S_{\text{reg}}$ denote baseline and regularized scores on the chosen metric (BR or GLRT).
 
 For the set of penalized flow tiles, define
 \[
-r_i := \frac{S_{\text{KA}}(i)}{\max(S_{\text{base}}(i),\varepsilon)},\quad
+r_i := \frac{S_{\text{reg}}(i)}{\max(S_{\text{base}}(i),\varepsilon)},\quad
 u_i := \log r_i,
 \]
 with a small $\varepsilon>0$.
@@ -418,41 +418,41 @@ Let
 \mathrm{median}_f := \operatorname{median}(u_i),\quad
 \mathrm{IQR}_f := Q_{0.75}(u_i) - Q_{0.25}(u_i),
 \]
-and $\tau_f$ the Kendall $\tau$ rank correlation between $S_{\text{KA}}$ and $S_{\text{base}}$ on these pixels.
+and $\tau_f$ the Kendall $\tau$ rank correlation between $S_{\text{reg}}$ and $S_{\text{base}}$ on these pixels.
 
 We require:
 \begin{itemize}[nosep]
-  \item \textbf{Sample size.} Apply the guard only if the number of gated flow pixels exceeds a threshold $N_{\min}$ (e.g.\ $N_{\min}=200$). If not, mark KA as ``too sparse to evaluate'' but do not disable it solely on this basis.
-  \item \textbf{Flow monotonicity.} KA is marked unsafe if either
+  \item \textbf{Sample size.} Apply the guard only if the number of gated flow pixels exceeds a threshold $N_{\min}$ (e.g.\ $N_{\min}=200$). If not, mark the regularizer as ``too sparse to evaluate'' but do not disable it solely on this basis.
+  \item \textbf{Flow monotonicity.} The regularizer is marked unsafe if either
   \begin{align*}
     &\mathrm{IQR}_f > \log 10\quad\text{(heterogeneity }>\times10\text{)},\quad\text{or}\\
     &\mathrm{median}_f > \log 10\quad\text{and}\quad |\tau_f| < 0.1,
   \end{align*}
-  i.e.\ if KA systematically boosts flow scores by more than an order of magnitude while destroying rank consistency, or applies extremely heterogeneous multiplicative effects.
+  i.e.\ if the regularizer systematically boosts flow scores by more than an order of magnitude while destroying rank consistency, or applies extremely heterogeneous multiplicative effects.
 \end{itemize}
 
-If Safety--1 fails, KA is disabled at runtime for that configuration and the system falls back to pure STAP.
+If Safety--1 fails, the regularizer is disabled at runtime for that configuration and the system falls back to the unregularized matched-subspace detector.
 
 \subsection{What the Regime Does Not Promise (Updated)}
 
-KA--STAP may \emph{fail to provide uplift} or may be disabled by the regime sentinel / safety guard in the following cases:
+The shrink-only regularizer may \emph{fail to provide uplift} or may be disabled by the regime sentinel / safety guard in the following cases:
 
 \begin{itemize}[nosep]
   \item If $\Lambda\approx 1$ (band--constant scaling, invariance sentinel) or $\varepsilon_{\text{mix}}$ is large, global band--wise transforms are nearly ROC--invariant or harmful; expect parity or degradation.
-  \item If R--2 alias separation fails, i.e.\ $m_{\text{alias}}$ shows no class--differential behavior, alias localization cannot preferentially capture alias--dominated negatives; KA is out of regime.
-  \item If localization is not class--differential (offline $p_+\approx p_-$) or $p_-$ is either tiny or nearly one, KA is either inert or global; SL--2 no longer applies.
-  \item If baseline ROC is already saturated in the target FPR range, even an ideal KA transform cannot move the operating point significantly.
-  \item If Safety--1 indicates that KA acts in a grossly non--monotone way on penalized flow tiles (e.g.\ large heterogeneous boosts), KA is disabled for that configuration.
+  \item If R--2 alias separation fails, i.e.\ $m_{\text{alias}}$ shows no class--differential behavior, alias localization cannot preferentially capture alias--dominated negatives; the regularizer is out of regime.
+  \item If localization is not class--differential (offline $p_+\approx p_-$) or $p_-$ is either tiny or nearly one, the regularizer is either inert or global; SL--2 no longer applies.
+  \item If baseline ROC is already saturated in the target FPR range, even an ideal shrink-only transform cannot move the operating point significantly.
+  \item If Safety--1 indicates that the regularizer acts in a grossly non--monotone way on penalized flow tiles (e.g.\ large heterogeneous boosts), it is disabled for that configuration.
 \end{itemize}
 
-In all these regimes, MC--SVD or STAP--only should be preferred; KA can be viewed as an optional regularizer but not a source of guaranteed uplift.
+In all these regimes, MC--SVD or matched-subspace-only scoring should be preferred; the shrink-only regularizer can be viewed as an optional add-on rather than a source of guaranteed uplift.
 
 \subsection{Safety and Regime Sentinel Summary}
 
-For deployed use it is helpful to summarize, in plain language, when KA is allowed to act and when it is automatically turned off.
+For deployed use it is helpful to summarize, in plain language, when the shrink-only regularizer is allowed to act and when it is automatically turned off.
 
 \begin{itemize}[nosep]
-  \item \emph{When KA is allowed to act.} KA is enabled only in regimes that satisfy the structural preconditions (R--1/R--2/R--3), have useful but not global localization coverage (roughly $0.2\le p_-\le 0.5$ with $p_+\ll p_-$), and pass the invariance and Safety--1 checks. In this case KA behaves as a controlled, band--aware regularizer on top of STAP: it is permitted to shrink scores on alias--dominated negatives but must remain monotone and mild on flow tiles.
-  \item \emph{When KA is turned off.} KA defaults to $\mathcal{R}_0$ by design when band occupancy or alias separation fail (R--1/R--2), when localization becomes inert or non--differential, when the baseline ROC is already saturated in the target low--FPR band (R--3), or when Safety--1 detects non--monotone, highly heterogeneous score changes on penalized flow tiles. The invariance sentinel also forces $\mathcal{R}_0$ when the realized gains satisfy $\wh s_a/\wh s_f\approx 1$ so that KA is effectively a scalar rescaling.
-  \item \emph{Behavior in skull/OR--like regimes.} In skull/OR realism regimes such as the structured-clutter simulation pilot (internal profile ID \texttt{Brain-SkullOR}), alias power deliberately leaks into $H_1$ and R--2 fails by construction. In these regimes KA is expected to be off or ROC--neutral; the primary detector is the fixed STAP PD profile, with MC--SVD/\allowbreak RPCA/\allowbreak HOSVD as reference baselines. This is a safety feature, not a failure of the method: whenever the regime preconditions are not met, the system falls back to STAP alone rather than forcing KA to act.
+  \item \emph{When the regularizer is allowed to act.} The regularizer is enabled only in regimes that satisfy the structural preconditions (R--1/R--2/R--3), have useful but not global localization coverage (roughly $0.2\le p_-\le 0.5$ with $p_+\ll p_-$), and pass the invariance and Safety--1 checks. In this case it behaves as a controlled, band--aware add-on on top of the matched-subspace detector: it is permitted to shrink scores on alias--dominated negatives but must remain monotone and mild on flow tiles.
+  \item \emph{When the regularizer is turned off.} The regularizer defaults to $\mathcal{R}_0$ by design when band occupancy or alias separation fail (R--1/R--2), when localization becomes inert or non--differential, when the baseline ROC is already saturated in the target low--FPR band (R--3), or when Safety--1 detects non--monotone, highly heterogeneous score changes on penalized flow tiles. The invariance sentinel also forces $\mathcal{R}_0$ when the realized gains satisfy $\wh s_a/\wh s_f\approx 1$ so that the regularizer is effectively a scalar rescaling.
+  \item \emph{Behavior in skull/OR--like regimes.} In skull/OR realism regimes such as the structured-clutter simulation pilot (internal profile ID \texttt{Brain-SkullOR}), alias power deliberately leaks into $H_1$ and R--2 fails by construction. In these regimes the regularizer is expected to be off or ROC--neutral; the primary detector is the fixed matched-subspace profile, with MC--SVD/\allowbreak RPCA/\allowbreak HOSVD as reference baselines. This is a safety feature, not a failure of the method: whenever the regime preconditions are not met, the system falls back to matched-subspace-only scoring rather than forcing the regularizer to act.
 \end{itemize}

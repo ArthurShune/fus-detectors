@@ -348,7 +348,7 @@ def main() -> int:
             color="#666666",
             lw=1.6,
             linestyle="--",
-            label=r"Pre-KA $S_{\mathrm{pre}}$",
+            label=r"Pre-regularizer $S_{\mathrm{pre}}$",
         )
         ax.plot(
             centers,
@@ -356,7 +356,7 @@ def main() -> int:
             color="#1f77b4",
             lw=1.7,
             linestyle="-",
-            label=r"Post-KA $S_{\mathrm{post}}$",
+            label=r"Post-regularizer $S_{\mathrm{post}}$",
         )
 
         ax.axvline(x_tau, color="#444444", lw=1.0, alpha=0.8)

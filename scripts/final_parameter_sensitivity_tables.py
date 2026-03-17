@@ -424,7 +424,7 @@ def _ka_cflow_sensitivity() -> tuple[dict[str, Any], list[dict[str, Any]], str]:
         [
             "\\hline",
             "\\end{tabular}",
-            "\\caption{Sensitivity of the shrink-only KA layer to a $\\pm 10\\%$ perturbation of the flow-support proxy threshold $c_{\\mathrm{flow}}$ on the artifact-heavy Twinkling calculi audit. Tail-rate and cluster columns are normalized to the default frozen-bundle audit so that the table emphasizes robustness to threshold perturbation rather than re-reporting the headline calculi numbers. Activation, shrink coverage, and background-tail compression vary modestly rather than collapsing under these perturbations, while the protected-set invariance remains exact to numerical precision.}",
+            "\\caption{Sensitivity of the shrink-only regularizer to a $\\pm 10\\%$ perturbation of the flow-support proxy threshold $c_{\\mathrm{flow}}$ on the artifact-heavy Twinkling calculi audit. Tail-rate and cluster columns are normalized to the default frozen-bundle audit so that the table emphasizes robustness to threshold perturbation rather than re-reporting the headline calculi numbers. Activation, shrink coverage, and background-tail compression vary modestly rather than collapsing under these perturbations, while the protected-set invariance remains exact to numerical precision.}",
             "\\label{tab:ka_cflow_sensitivity}",
             "\\end{table}",
             "",

@@ -181,14 +181,14 @@ def main() -> None:
 
     fig, axes = plt.subplots(1, 3, figsize=(12, 3.6), gridspec_kw={"width_ratios": [1.0, 1.2, 1.1]})
 
-    # Panel A: prior regime histogram.
+    # Panel A: regularizer regime histogram.
     ax = axes[0]
     xs_state = list(state_counts.keys())
     xs = [state_short.get(x, x) for x in xs_state]
     ys = [state_counts[x] for x in xs_state]
     colors = [state_colors.get(x, "#cccccc") for x in xs_state]
     bars = ax.bar(xs, ys, color=colors)
-    ax.set_title("KA prior regime")
+    ax.set_title("Shrink-only regularizer regime")
     ax.set_ylabel("Bundle count")
     ax.set_ylim(0, max(ys) + 1)
     ax.tick_params(axis="x", rotation=30)
@@ -230,7 +230,7 @@ def main() -> None:
 
     lines = [
         f"Bundles: {n_bundles}",
-        f"KA applied: {n_applied}",
+        f"Regularizer applied: {n_applied}",
         f"Regimes: R0={c0}, R1={c1}, R2={c2}",
     ]
     if n_applied > 0:
