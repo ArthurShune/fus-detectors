@@ -23,9 +23,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _variant_display_name(variant: str) -> str:
     mapping = {
-        "msd_ratio": "Whitened matched-subspace specialist",
-        "whitened_power": "Whitened-power specialist",
-        "adaptive_guard": "Adaptive guard specialist",
+        "msd_ratio": "Whitened matched-subspace variant",
+        "whitened_power": "Whitened-power variant",
+        "adaptive_guard": "Adaptive guard variant",
         "unwhitened_ratio": "Fixed matched-subspace head",
     }
     return mapping.get(str(variant), str(variant).replace("_", " ").title())

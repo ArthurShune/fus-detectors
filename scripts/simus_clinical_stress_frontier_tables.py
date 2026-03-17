@@ -44,10 +44,10 @@ PIPELINE_DISPLAY = {
     "RPCA -> PD": r"\shortstack[l]{RPCA\\$\rightarrow$ PD}",
     "RPCA -> Matched-subspace default": r"\shortstack[l]{RPCA\\$\rightarrow$ Fixed matched-subspace}",
     "RPCA -> Adaptive guard": r"\shortstack[l]{RPCA\\$\rightarrow$ Adaptive head}",
-    "RPCA -> Whitened specialist": r"\shortstack[l]{RPCA\\$\rightarrow$ Whitened specialist}",
+    "RPCA -> Whitened specialist": r"\shortstack[l]{RPCA\\$\rightarrow$ Fully whitened variant}",
     "Adaptive Global SVD -> Matched-subspace default": r"\shortstack[l]{Adaptive-global SVD\\$\rightarrow$ Fixed matched-subspace}",
     "Adaptive Global SVD -> Adaptive guard": r"\shortstack[l]{Adaptive-global SVD\\$\rightarrow$ Adaptive head}",
-    "Adaptive Global SVD -> Whitened specialist": r"\shortstack[l]{Adaptive-global SVD\\$\rightarrow$ Whitened specialist}",
+    "Adaptive Global SVD -> Whitened specialist": r"\shortstack[l]{Adaptive-global SVD\\$\rightarrow$ Fully whitened variant}",
 }
 DETECTOR_DISPLAY = {
     "unwhitened_ref": "Fixed head",

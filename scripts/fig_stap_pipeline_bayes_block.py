@@ -58,7 +58,7 @@ def detector_label() -> str:
           <TR>
             <TD BGCOLOR="#eef6ff" WIDTH="220" ALIGN="CENTER">
               <FONT POINT-SIZE="13"><B>Fully whitened detector</B></FONT><BR/>
-              <FONT POINT-SIZE="11">local covariance-adaptive specialist</FONT>
+              <FONT POINT-SIZE="11">local covariance-adaptive variant</FONT>
             </TD>
           </TR>
         </TABLE>

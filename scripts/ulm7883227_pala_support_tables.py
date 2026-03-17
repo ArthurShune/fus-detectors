@@ -177,13 +177,13 @@ def _build_consistency_table(payload: dict[str, Any]) -> str:
     lines.append("Comparison & AUC wins (windows / blocks) & shell-FPR wins @70\\% core recall (windows / blocks) & nonzero TPR@$10^{-3}$ windows \\\\")
     lines.append("\\hline")
     lines.append(
-        "Whitened specialist vs fixed head & "
+        "Fully whitened variant vs fixed head & "
         f"{fixed_sec['auc_wins']}/{fixed_sec['n_windows']} / {fixed_sec['auc_block_wins']}/{fixed_sec['n_blocks']} & "
         f"{fixed_sec['fpr70_wins']}/{fixed_sec['n_windows']} / {fixed_sec['fpr70_block_wins']}/{fixed_sec['n_blocks']} & "
         f"{fixed_sec['nonzero_tpr1e3_specialist']}/{fixed_sec['n_windows']} vs {fixed_sec['nonzero_tpr1e3_comp']}/{fixed_sec['n_windows']} \\\\"
     )
     lines.append(
-        "Whitened specialist vs adaptive head & "
+        "Fully whitened variant vs adaptive head & "
         f"{adaptive_sec['auc_wins']}/{adaptive_sec['n_windows']} / {adaptive_sec['auc_block_wins']}/{adaptive_sec['n_blocks']} & "
         f"{adaptive_sec['fpr70_wins']}/{adaptive_sec['n_windows']} / {adaptive_sec['fpr70_block_wins']}/{adaptive_sec['n_blocks']} & "
         f"{adaptive_sec['nonzero_tpr1e3_specialist']}/{adaptive_sec['n_windows']} vs {adaptive_sec['nonzero_tpr1e3_comp']}/{adaptive_sec['n_windows']} \\\\"
@@ -193,8 +193,8 @@ def _build_consistency_table(payload: dict[str, Any]) -> str:
     lines.append("}")
     lines.append(
         "\\caption{Window-level consistency summary for the PALA-backed ULM structural audit. "
-        "Each row compares the prespecified fully whitened specialist against another detector head on the same frozen 64-frame MC--SVD residual cube and the same localization-derived vessel-core versus shell labels. "
-        "The window/block entries report how often the specialist has higher vessel-core AUC or lower shell false-positive rate at matched 70\\% vessel-core recall.}"
+        "Each row compares the prespecified fully whitened variant against another detector head on the same frozen 64-frame MC--SVD residual cube and the same localization-derived vessel-core versus shell labels. "
+        "The window/block entries report how often the fully whitened variant has higher vessel-core AUC or lower shell false-positive rate at matched 70\\% vessel-core recall.}"
     )
     lines.append("\\label{tab:ulm_pala_window_consistency}")
     lines.append("\\end{table}")
@@ -309,7 +309,7 @@ def main() -> None:
             _family_row_from_summary("Fixed matched-subspace head", fixed_summary["scores"]["matched_subspace"]),
             _family_row_from_summary("Adaptive head", adaptive_summary["scores"]["matched_subspace"]),
             _family_row_from_summary(
-                "Fully whitened specialist", main_summary["scores"]["matched_subspace"]
+                "Fully whitened variant", main_summary["scores"]["matched_subspace"]
             ),
         ]
 

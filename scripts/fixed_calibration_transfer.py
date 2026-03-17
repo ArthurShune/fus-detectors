@@ -297,7 +297,7 @@ def _ulm_score_display(score_key: str) -> str:
     return {
         "pd": "Baseline (power Doppler)",
         "kasai": "Baseline (Kasai lag-1 magnitude)",
-        "matched_subspace": "Whitened matched-subspace specialist",
+        "matched_subspace": "Whitened matched-subspace variant",
     }[score_key]
 
 
