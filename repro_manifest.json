@@ -4,14 +4,18 @@
     "release_tag": "preprint-2026-03-17"
   },
   "git": {
-    "commit": "950977c5c191b45a5bc01841ce3cf87fd0666e75",
-    "commit_short": "950977c",
+    "commit": "e46bcd974a116be27100ec2f805f29393f848d9e",
+    "commit_short": "e46bcd9",
     "branch": "main",
     "dirty": false,
     "dirty_paths_count": 0,
-    "dirty_ignored_paths_count": 0,
+    "dirty_ignored_paths_count": 3,
     "dirty_paths": [],
-    "dirty_ignored_paths": []
+    "dirty_ignored_paths": [
+      "?? stap_fus_methodology.pdf",
+      "?? stap_fus_paper.pdf",
+      "?? stap_fus_supplement.pdf"
+    ]
   },
   "env": {
     "preferred_conda_env": "fus-detectors",
@@ -1652,14 +1656,14 @@
         "Build packaging (Phase 7)"
       ],
       "outputs": [
-        "stap_fus_paper.pdf",
-        "stap_fus_supplement.pdf",
-        "stap_fus_methodology.pdf"
+        "paper/stap_fus_paper.pdf",
+        "paper/stap_fus_supplement.pdf",
+        "paper/stap_fus_methodology.pdf"
       ],
       "commands": [
-        "pdflatex stap_fus_methodology.tex   # full (default)",
-        "pdflatex stap_fus_paper.tex         # paper-only (no appendices)",
-        "pdflatex stap_fus_supplement.tex    # supplement-only (appendices only)"
+        "pdflatex paper/stap_fus_methodology.tex   # full (default)",
+        "pdflatex paper/stap_fus_paper.tex         # paper-only (no appendices)",
+        "pdflatex paper/stap_fus_supplement.tex    # supplement-only (appendices only)"
       ],
       "notes": null
     }

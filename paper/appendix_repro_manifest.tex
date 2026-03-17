@@ -9,8 +9,8 @@ Run \path{PYTHONPATH=. conda run -n fus-detectors python scripts/generate_repro_
 \paragraph{Repository state.}
 Public repository: \path{https://github.com/ArthurShune/fus-detectors}.
 Release tag: \texttt{preprint-2026-03-17}.
-Commit: \texttt{950977c} (full: \texttt{950977c5c1}\allowbreak\texttt{91b45a5bc0}\allowbreak\texttt{1841ce3cf8}\allowbreak\texttt{7fd0666e75}); branch: \texttt{main}; dirty: \texttt{false}.
-Dirty details: non-ignored paths=0, ignored build products=0.
+Commit: \texttt{e46bcd9} (full: \texttt{e46bcd974a}\allowbreak\texttt{116be27100}\allowbreak\texttt{ec2f805f29}\allowbreak\texttt{393f848d9e}); branch: \texttt{main}; dirty: \texttt{false}.
+Dirty details: non-ignored paths=0, ignored build products=3.
 Note: dirty status ignores common LaTeX build products (e.g., \texttt{*.aux, *.log, *.out, *.fls, *.fdb\_latexmk, *.synctex.gz, *.pdf}).
 For archival reproducibility, generate this manifest from a clean, tagged release commit (\texttt{dirty=false}) and record the public repository URL and tag.
 
@@ -1722,16 +1722,16 @@ PYTHONPATH=. conda run -n fus-detectors python scripts/icube_baseline_compare.py
     Outputs:
     \begingroup\raggedright
     \begin{itemize}[nosep,leftmargin=0em,label={}]
-      \item \path{stap_fus_paper.pdf}
-      \item \path{stap_fus_supplement.pdf}
-      \item \path{stap_fus_methodology.pdf}
+      \item \path{paper/stap_fus_paper.pdf}
+      \item \path{paper/stap_fus_supplement.pdf}
+      \item \path{paper/stap_fus_methodology.pdf}
     \end{itemize}
     \endgroup
 {\footnotesize
 \begin{verbatim}
-pdflatex stap_fus_methodology.tex   # full (default)
-pdflatex stap_fus_paper.tex         # paper-only (no appendices)
-pdflatex stap_fus_supplement.tex    # supplement-only (appendices only)
+pdflatex paper/stap_fus_methodology.tex   # full (default)
+pdflatex paper/stap_fus_paper.tex         # paper-only (no appendices)
+pdflatex paper/stap_fus_supplement.tex    # supplement-only (appendices only)
 \end{verbatim}
 }
 
