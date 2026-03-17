@@ -130,7 +130,7 @@ ULM-Motion / Shin-ProxyMotion & no independent task labels & bounded robustness 
 \hline
 \end{tabular}
 \endgroup
-\captionof{table}{Compact validation ladder. For readability, the main text uses the short benchmark labels listed here: kWave-Stress, Gammex-Struct, SIMUS-Struct-Mobile, SIMUS-Struct-Intraop, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion. The evidence progresses from labeled simulation and structurally labeled phantom data to a held-out use-case-motivated synthetic benchmark and one same-acquisition structural audit on open real in-vivo IQ. Table~\ref{tab:claims_discipline} gives the corresponding claim-to-evidence matrix.}
+\captionof{table}{Compact validation ladder. For readability, the main text uses the short benchmark labels listed here: kWave-Stress, Gammex-Struct, SIMUS-Struct-Mobile, SIMUS-Struct-Intraop, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion. The evidence progresses from labeled simulation and structurally labeled phantom data to a held-out use-case-motivated synthetic benchmark and one same-acquisition structural audit on open real in-vivo IQ.}
 \label{tab:validation_ladder_intro}
 \end{minipage}}
 \end{center}
@@ -206,25 +206,7 @@ The focus is downstream detector-head design after fixed residualization. The fi
 \end{itemize}
 
 \paragraph{Scope.}
-The evidence is stratified by data regime and summarized first in Table~\ref{tab:validation_ladder_intro}, then in Table~\ref{tab:claims_discipline}. Quantitative efficacy results are limited to regimes with independent $H_1/H_0$ labels or an external structural reference. Open in-vivo IQ and PD-only datasets are used mainly for robustness and translation audits. After first definition, we use the short labels kWave-Stress, Gammex-Struct, SIMUS-Struct-Mobile, SIMUS-Struct-Intraop, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion; SIMUS-Struct denotes the paired mobile and intra-operative structural benchmark.
-
-\begin{table}[H]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}P{3.0cm} P{4.9cm} P{2.6cm} P{4.8cm}@{}}
-\hline
-Method component & What it does & Status in paper & Where it is used \\
-\hline
-Fixed matched-subspace detector & Band-limited matched-subspace score on each tile, with no local whitening. & Primary method and default fixed head & SIMUS-Struct, kWave-Stress, and the default detector discussion throughout the paper \\
-Adaptive detector & Uses the fixed detector by default and turns on local whitening only when guard-band clutter evidence exceeds a fixed threshold. & Practical extension & SIMUS-Struct-Mobile stress confirmation, selected deployment-oriented real-IQ analyses, and the adaptive routing discussion \\
-Fully whitened detector & Applies local covariance whitening before the same band-limited score on every tile. & Specialist mode & Gammex-Struct, ULM-CoreShell, and selected functional or clutter-heavy settings where full covariance adaptation helps \\
-Optional shrink-only penalty & Downweights scores on a candidate set while leaving protected locations unchanged; it cannot increase any score. & Secondary optional add-on & Calculi regularizer audit and supplementary hygiene analyses, not the main efficacy claim \\
-\hline
-\end{tabular}
-\caption{Detector-family overview. The core method is the fixed matched-subspace detector. The adaptive and fully whitened rows are alternate detector modes built on the same band geometry, and regime-specific whitening recipes are listed later in Table~\ref{tab:result_table_score_map}. The shrink-only penalty is a separate optional add-on analyzed mainly for bounded behavior.}
-\label{tab:method_family_summary}
-\end{table}
+The evidence is stratified by data regime. Quantitative efficacy results are limited to regimes with independent $H_1/H_0$ labels or an external structural reference, while open real-IQ and PD-only datasets are used for bounded structural, robustness, and translation audits. The detector family also has a fixed hierarchy throughout the paper: the fixed matched-subspace head is the default method, the adaptive head is the hedge, the fully whitened head is the specialist, and the shrink-only layer is optional and secondary. After first definition, we use the short labels kWave-Stress, Gammex-Struct, SIMUS-Struct-Mobile, SIMUS-Struct-Intraop, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion; SIMUS-Struct denotes the paired mobile and intra-operative structural benchmark.
 
 \section{Background and Problem Formulation}
 \label{sec:background-problem}
@@ -312,7 +294,7 @@ The fixed head is a local band-limited flow detector applied after ordinary resi
 \label{fig:stap_pipeline}
 \end{figure}
 
-Table~\ref{tab:method_family_summary} gives the hierarchy up front: fixed is the default method, adaptive is the hedge, fully whitened is the specialist, and the shrink-only layer remains optional and secondary. The derivations below only formalize those three detector modes.
+The hierarchy is simple: fixed is the default method, adaptive is the hedge, fully whitened is the specialist, and the shrink-only layer remains optional and secondary. The derivations below only formalize those three detector modes.
 
 \paragraph{Three detector variants.}
 On tile $i$, let $x_{i,k}$ denote the unwhitened slow-time snapshots and $y_{i,k}=R_i^{-1/2}x_{i,k}$ the whitened snapshots when whitening is active. The fixed detector is
@@ -465,10 +447,10 @@ The numerical settings in this pipeline do not all play the same role, and they 
 
 This work is a reproducible processing pipeline (decode $\rightarrow$ baseline $\rightarrow$ detector score $\rightarrow$ optional shrink-only penalty layer). Several practical pathologies can invalidate tail-rate reporting or spuriously activate the penalty layer (e.g.\ missing acquisition metadata, coarse short-ensemble band discretization, proxy-mask circularity, or compute-gating leakage). We therefore enforce deterministic, label-free integrity checks that either (i) record provenance and proceed conservatively or (ii) disable the penalty layer ($w\equiv 1$) with an explicit reason label. A concise checklist (and where each safeguard is logged) is provided in \SuppOrApp{app:failure-modes}.
 
-\subsection{Regimes and claim scope}
+\subsection{Regimes and scope}
 \label{sec:results-overview}
 
-Claims are stratified by regime so that quantitative detection results remain clearly separated from label-free robustness or translation audits. Table~\ref{tab:claims_discipline} now maps the main claims to their supporting evidence and stated limits.
+The evidence is stratified by regime so that quantitative detection results remain clearly separated from label-free robustness or translation audits. The main scope is straightforward: downstream detector-head design matters after fixed residualization; the fixed band-limited head is the default structural choice on the held-out SIMUS benchmark; adaptive and fully whitened variants help in narrower clutter-heavy or structure-concentration regimes; the real-IQ evidence is structural and robustness-oriented rather than task-activation validation; and fixed-threshold transfer is encouraging in selected settings but not solved.
 
 \begin{itemize}[nosep]
   \item \textbf{kWave-Stress.} These are controlled stress tests for strict-tail behavior. Across the open-skull, alias-dominant, and structured-clutter scenarios, the matched-subspace detector family retains measurable sensitivity at ultra-low FPR, with the strongest gains in the alias-dominant and structured-clutter settings.
@@ -478,27 +460,6 @@ Claims are stratified by regime so that quantitative detection results remain cl
   \item \textbf{Shin-ProxyMotion.} This open real-IQ dataset provides a second label-free motion-stress evaluation under a prespecified low-frequency operating setting. It is used as corroborating real-IQ evidence rather than as a task ROC benchmark.
   \item \textbf{Supplementary analyses.} Additional label-free audits (e.g.\ PD-only whole-brain fUS) and diagnostic panels are provided in \SuppOrApp{app:supp-results}.
 \end{itemize}
-
-\begin{table}[t]
-\centering
-\small
-\begingroup
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}P{4.2cm} P{4.4cm} P{4.4cm} P{3.5cm}@{}}
-\hline
-Main claim & Primary evidence in this paper & Supporting evidence & Boundary stated in the paper \\
-\hline
-Downstream detector-head design matters after ordinary residualization & Held-out SIMUS same-residual structural ablation on a fixed MC--SVD residual and labeled-brain same-residual ablations & Gammex same-residual phantom comparison on the identical residual cube & Family-level claim about downstream scoring, not a claim that one score wins everywhere \\
-The fixed band-limited matched-subspace detector is the default structural head & Held-out SIMUS structural checkpoint and held-out same-residual detector-head table & Labeled-brain strict-tail stress tests & Default on the evaluated structural benchmark only; not the strongest head on every phantom or real-IQ endpoint \\
-Adaptive and fully whitened variants help in harsher or more concentrated regimes & Held-out SIMUS nuisance-pressure confirmation & Gammex phantom structural ROC and the bounded ULM vessel-core audit & Specialist extensions, not universal replacements for the fixed head \\
-Real-IQ evidence is structural and robustness-oriented rather than task-activation validation & ULM vessel-core versus shell structural audit and ULM motion robustness audit & Shin residual-motion corroboration & Same-acquisition structural auditing and proxy robustness only; no biological or task-efficacy claim \\
-Fixed-threshold transfer is encouraging in selected settings but not solved & Held-out SIMUS fixed-calibration transfer and ULM block-split fixed-calibration transfer & Negative cross-clip Shin proxy transfer & No scanner-integrated or cross-session deployment claim yet \\
-\hline
-\end{tabular}
-\endgroup
-\caption{Claim-to-evidence matrix for the main paper. Table~\ref{tab:validation_ladder_intro} already gives the dataset-level validation ladder; this table instead states the main claims, the evidence that carries them, and the limits that are kept explicit in the text.}
-\label{tab:claims_discipline}
-\end{table}
 
 \begin{table}[t]
 \centering
@@ -965,24 +926,8 @@ A stricter disjoint-source odd/even block audit remained directionally consisten
 
 Public resources are now beginning to supply the right ingredients in separate places: simultaneous fUS--Neuropixels recordings in awake mice, raw fUS plus two-photon multimodal datasets, and translational human task-fUS studies with cranial windows or sonolucent implants \cite{LambertNeuropixels2025,COMBOWindow2024,ChenComa2025,Rabut2024,MobileFUS2025}. What is still missing is a standardized open benchmark that packages those ingredients in a detector-ready way for post-beamformed evaluation across repeated sessions and fixed-threshold transfer.
 
-\subsection*{Detector policy and next validation step}
-The detector policy follows the same hierarchy. The fixed head is the core and default method, the adaptive head is a hedge, the fully whitened head is a specialist, and the shrink-only regularizer remains optional and secondary. Table~\ref{tab:detector_family_policy} summarizes that operational policy.
-
-\IfFileExists{reports/detector_family_policy_table.tex}{%
-  \input{reports/detector_family_policy_table.tex}%
-}{%
-  \begin{table}[t]
-  \centering
-  \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/detector_family_policy_table.tex}.\\
-    Reproduce it with \path{python3 scripts/detector_family_policy_summary.py}.
-  \end{minipage}}
-  \caption{Operational detector-family policy implied by the main-text evidence.}
-  \label{tab:detector_family_policy}
-  \end{table}
-}
-
-The evidence does not support one universal winner. The fixed band-limited head remains the default structural choice on the held-out SIMUS benchmark, whereas the fully whitened specialist is the only head that clearly improves pooled AUC, strict-tail sensitivity, and shell suppression on the real-IQ ULM vessel-core endpoint. The adaptive head is therefore a hedge, not a guaranteed midpoint winner.
+\subsection*{Detector policy}
+The detector policy follows the same hierarchy. The fixed head is the core and default method, the adaptive head is a hedge, the fully whitened head is a specialist, and the shrink-only regularizer remains optional and secondary. The evidence does not support one universal winner. The fixed band-limited head remains the default structural choice on the held-out SIMUS benchmark, whereas the fully whitened specialist is the only head that clearly improves pooled AUC, strict-tail sensitivity, and shell suppression on the real-IQ ULM vessel-core endpoint. The adaptive head is therefore a hedge, not a guaranteed midpoint winner.
 
 \section{Conclusion and future work}
 We presented a localized matched-subspace detector framework for post-beamformed fUS and ultrafast Doppler data, centered on a band-limited fixed head and extended by an adaptive whitening switch plus a fully whitened specialist mode. Across the evaluated labeled simulations, SIMUS-Struct, and one structurally labeled phantom regime, this detector family often improved low-FPR nuisance control relative to PD/Kasai-style downstream scores, but the preferred downstream head was regime-dependent. Across those tiers, the fixed band-limited head remains the structural default, while the adaptive and fully whitened extensions help in selected clutter-heavy regimes rather than serving as universal replacements.
