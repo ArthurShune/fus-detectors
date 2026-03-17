@@ -4,7 +4,7 @@ Physical Doppler "sanity link" telemetry.
 
 Purpose
 -------
-docs/legacy/simulation_spec.txt calls for a defensible bridge between simulation and real IQ
+An older simulation-spec workflow called for a defensible bridge between simulation and real IQ
 without in-vivo labels: compare summary slow-time statistics (PSD bands, peak
 frequency occupancy, coherence, and simple low-rank structure proxies).
 
