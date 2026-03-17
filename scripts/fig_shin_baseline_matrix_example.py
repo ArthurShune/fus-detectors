@@ -81,8 +81,8 @@ def main() -> None:
     ims = []
     panels = [
         (view_base, r"MC--SVD (baseline PD)"),
-        (view_stap, r"STAP on MC--SVD residual"),
-        (view_raw, r"STAP-only (raw IQ)"),
+        (view_stap, r"Matched-subspace detector on MC--SVD residual"),
+        (view_raw, r"Matched-subspace detector on raw IQ"),
     ]
     for ax, (img, title) in zip(axes, panels, strict=True):
         im = ax.imshow(img, cmap="magma", vmin=vmin, vmax=vmax, interpolation="nearest")
@@ -103,4 +103,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

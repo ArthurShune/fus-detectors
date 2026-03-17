@@ -208,7 +208,7 @@ def main() -> None:
             st_med,
             color=colors["stap"],
             linewidth=1.8,
-            label="STAP on MC--SVD residual",
+            label="Matched-subspace detector on MC--SVD residual",
         )
         ax.fill_between(fpr_grid, st_q25, st_q75, color=colors["stap"], alpha=0.14, linewidth=0)
 
