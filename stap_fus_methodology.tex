@@ -208,6 +208,24 @@ After conventional clutter suppression, localized matched-subspace-family scorin
 \paragraph{Scope.}
 The evidence is stratified by data regime and summarized first in Table~\ref{tab:validation_ladder_intro}, then in Table~\ref{tab:claims_discipline}. Quantitative efficacy results are limited to regimes with independent $H_1/H_0$ labels or an external structural reference. Open in-vivo IQ and PD-only datasets are used mainly for robustness and translation audits. After first definition, we use the short labels kWave-Stress, Gammex-Struct, SIMUS-Struct-Mobile, SIMUS-Struct-Intraop, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion; SIMUS-Struct denotes the paired mobile and intra-operative structural benchmark.
 
+\begin{table}[H]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}P{3.0cm} P{4.9cm} P{2.6cm} P{4.8cm}@{}}
+\hline
+Method component & What it does & Status in paper & Where it is used \\
+\hline
+Fixed matched-subspace detector & Band-limited matched-subspace score on each tile, with no local whitening. & Primary method and default fixed head & SIMUS-Struct, kWave-Stress, and the default detector discussion throughout the paper \\
+Adaptive detector & Uses the fixed detector by default and turns on local whitening only when guard-band clutter evidence exceeds a fixed threshold. & Practical extension & SIMUS-Struct-Mobile stress confirmation, selected deployment-oriented real-IQ analyses, and the adaptive routing discussion \\
+Fully whitened detector & Applies local covariance whitening before the same band-limited score on every tile. & Specialist mode & Gammex-Struct, ULM-CoreShell, and selected functional or clutter-heavy settings where full covariance adaptation helps \\
+Optional shrink-only penalty & Downweights scores on a candidate set while leaving protected locations unchanged; it cannot increase any score. & Secondary optional add-on & Calculi regularizer audit and supplementary hygiene analyses, not the main efficacy claim \\
+\hline
+\end{tabular}
+\caption{Detector-family overview. The core method is the fixed matched-subspace detector. The adaptive and fully whitened rows are alternate detector modes built on the same band geometry, and regime-specific whitening recipes are listed later in Table~\ref{tab:result_table_score_map}. The shrink-only penalty is a separate optional add-on analyzed mainly for bounded behavior.}
+\label{tab:method_family_summary}
+\end{table}
+
 \section{Background and Problem Formulation}
 \label{sec:background-problem}
 
@@ -294,25 +312,7 @@ The fixed head is a local band-limited flow detector applied after ordinary resi
 \label{fig:stap_pipeline}
 \end{figure}
 
-Table~\ref{tab:method_family_summary} summarizes the method family before the derivations below. The fixed detector is the core method in the paper. The other rows are implementation variants or optional add-ons used only in the regimes named there.
-
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}P{3.0cm} P{4.9cm} P{2.6cm} P{4.8cm}@{}}
-\hline
-Method component & What it does & Status in paper & Where it is used \\
-\hline
-Fixed matched-subspace detector & Band-limited matched-subspace score on each tile, with no local whitening. & Primary method and default fixed head & SIMUS-Struct, kWave-Stress, and the default detector discussion throughout the paper \\
-Adaptive detector & Uses the fixed detector by default and turns on local whitening only when guard-band clutter evidence exceeds a fixed threshold. & Practical extension & SIMUS-Struct-Mobile stress confirmation, selected deployment-oriented real-IQ analyses, and the adaptive routing discussion \\
-Fully whitened detector & Applies local covariance whitening before the same band-limited score on every tile. & Specialist mode & Gammex-Struct, ULM-CoreShell, and selected functional or clutter-heavy settings where full covariance adaptation helps \\
-Optional shrink-only penalty & Downweights scores on a candidate set while leaving protected locations unchanged; it cannot increase any score. & Secondary optional add-on & Calculi regularizer audit and supplementary hygiene analyses, not the main efficacy claim \\
-\hline
-\end{tabular}
-\caption{Primary method, optional variants, and where each is used. The core method is the fixed matched-subspace detector. The adaptive and fully whitened rows are alternate detector modes built on the same band geometry, and regime-specific whitening recipes are listed later in Table~\ref{tab:result_table_score_map}. The shrink-only penalty is a separate optional add-on analyzed mainly for bounded behavior.}
-\label{tab:method_family_summary}
-\end{table}
+Table~\ref{tab:method_family_summary} gives the hierarchy up front: fixed is the default method, adaptive is the hedge, fully whitened is the specialist, and the shrink-only layer remains optional and secondary. The derivations below only formalize those three detector modes.
 
 \paragraph{Three detector variants.}
 On tile $i$, let $x_{i,k}$ denote the unwhitened slow-time snapshots and $y_{i,k}=R_i^{-1/2}x_{i,k}$ the whitened snapshots when whitening is active. The fixed detector is
