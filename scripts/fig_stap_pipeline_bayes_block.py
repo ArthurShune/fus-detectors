@@ -99,15 +99,6 @@ def build_graph() -> Digraph:
     )
     graph.node("detector", detector_label())
     graph.node(
-        "penalty",
-        boxed_label(
-            "Optional shrink-only penalty",
-            "Conservative score reduction in flagged artifact regions",
-            fill="#fff4e8",
-            body_width=22,
-        ),
-    )
-    graph.node(
         "output",
         boxed_label("Output map", "Detector score map", fill="#f7f7f7", body_width=18),
     )
@@ -115,8 +106,7 @@ def build_graph() -> Digraph:
     graph.edge("iq", "resid")
     graph.edge("resid", "tiles")
     graph.edge("tiles", "detector")
-    graph.edge("detector", "penalty")
-    graph.edge("penalty", "output")
+    graph.edge("detector", "output")
     return graph
 
 
