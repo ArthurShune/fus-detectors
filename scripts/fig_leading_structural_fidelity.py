@@ -23,7 +23,7 @@ def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(
         description=(
             "Generate the leading Gammex structural-fidelity figure from frozen audited bundle outputs. "
-            "The figure compares baseline, matched-subspace, and whitened-power score maps on the same "
+            "The figure compares baseline, whitened-power, and matched-subspace score maps on the same "
             "along-view phantom frame."
         )
     )
@@ -198,17 +198,17 @@ def main() -> int:
     ax00.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, edgecolor="white", linewidth=1.4))
     ax00.set_title("Baseline score", fontsize=10)
 
-    ax01.imshow(ratio_log, cmap="viridis", vmin=ratio_vmin, vmax=ratio_vmax, origin="upper", interpolation="nearest")
+    ax01.imshow(power_log, cmap="viridis", vmin=power_vmin, vmax=power_vmax, origin="upper", interpolation="nearest")
     ax01.contour(mask_flow.astype(float), levels=[0.5], colors=["black"], linewidths=[1.6], origin="upper")
-    ax01.contour(mask_flow.astype(float), levels=[0.5], colors=[c_ratio], linewidths=[1.1], origin="upper")
+    ax01.contour(mask_flow.astype(float), levels=[0.5], colors=[c_power], linewidths=[1.1], origin="upper")
     ax01.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, edgecolor="white", linewidth=1.4))
-    ax01.set_title("Matched-subspace score", fontsize=10)
+    ax01.set_title("Whitened-power score", fontsize=10)
 
-    ax02.imshow(power_log, cmap="viridis", vmin=power_vmin, vmax=power_vmax, origin="upper", interpolation="nearest")
+    ax02.imshow(ratio_log, cmap="viridis", vmin=ratio_vmin, vmax=ratio_vmax, origin="upper", interpolation="nearest")
     ax02.contour(mask_flow.astype(float), levels=[0.5], colors=["black"], linewidths=[1.6], origin="upper")
-    ax02.contour(mask_flow.astype(float), levels=[0.5], colors=[c_power], linewidths=[1.1], origin="upper")
+    ax02.contour(mask_flow.astype(float), levels=[0.5], colors=[c_ratio], linewidths=[1.1], origin="upper")
     ax02.add_patch(Rectangle((x0, y0), x1 - x0, y1 - y0, fill=False, edgecolor="white", linewidth=1.4))
-    ax02.set_title("Whitened-power score", fontsize=10)
+    ax02.set_title("Matched-subspace score", fontsize=10)
 
     if underlay_log is None:
         ax03.imshow(np.zeros_like(score_base), cmap="gray", vmin=0.0, vmax=1.0, origin="upper", interpolation="nearest")
@@ -240,15 +240,15 @@ def main() -> int:
     ax10.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=[c_ratio], linewidths=[1.1], origin="upper")
     ax10.set_title("Baseline (zoom)", fontsize=10)
 
-    ax11.imshow(ratio_log[y0:y1, x0:x1], cmap="viridis", vmin=ratio_vmin, vmax=ratio_vmax, origin="upper", interpolation="nearest")
+    ax11.imshow(power_log[y0:y1, x0:x1], cmap="viridis", vmin=power_vmin, vmax=power_vmax, origin="upper", interpolation="nearest")
     ax11.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=["black"], linewidths=[1.6], origin="upper")
-    ax11.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=[c_ratio], linewidths=[1.1], origin="upper")
-    ax11.set_title("Matched-subspace (zoom)", fontsize=10)
+    ax11.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=[c_power], linewidths=[1.1], origin="upper")
+    ax11.set_title("Whitened-power (zoom)", fontsize=10)
 
-    ax12.imshow(power_log[y0:y1, x0:x1], cmap="viridis", vmin=power_vmin, vmax=power_vmax, origin="upper", interpolation="nearest")
+    ax12.imshow(ratio_log[y0:y1, x0:x1], cmap="viridis", vmin=ratio_vmin, vmax=ratio_vmax, origin="upper", interpolation="nearest")
     ax12.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=["black"], linewidths=[1.6], origin="upper")
-    ax12.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=[c_power], linewidths=[1.1], origin="upper")
-    ax12.set_title("Whitened-power (zoom)", fontsize=10)
+    ax12.contour(mask_flow[y0:y1, x0:x1].astype(float), levels=[0.5], colors=[c_ratio], linewidths=[1.1], origin="upper")
+    ax12.set_title("Matched-subspace (zoom)", fontsize=10)
 
     if underlay_log is None:
         ax13.imshow(np.zeros_like(score_base[y0:y1, x0:x1]), cmap="gray", vmin=0.0, vmax=1.0, origin="upper", interpolation="nearest")
