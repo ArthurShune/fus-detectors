@@ -3,7 +3,7 @@
 Summarize STAP debug NPZ files for quick inspection of flow tiles, KA settings, and LCMV responses.
 
 Usage:
-    PYTHONPATH=. conda run -n stap-fus python scripts/analyze_stap_debug.py \
+    PYTHONPATH=. conda run -n fus-detectors python scripts/analyze_stap_debug.py \
         --bundle runs/pilot/r1_real_psd_bg_guard095_coords/pw_7.5MHz_3ang_64T_seed0
 """
 from __future__ import annotations

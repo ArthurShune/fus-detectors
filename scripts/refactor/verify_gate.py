@@ -260,7 +260,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Execute steps. Default is dry-run plan output.",
     )
-    ap.add_argument("--conda-env", default="stap-fus", help="Conda env name when conda is used.")
+    ap.add_argument("--conda-env", default="fus-detectors", help="Conda env name when conda is used.")
     ap.add_argument(
         "--python-runner",
         choices=["auto", "conda", "local"],

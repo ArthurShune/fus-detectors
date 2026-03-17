@@ -17,7 +17,7 @@ and may include one-time overheads (CUDA init, Triton JIT, CUDA-graph capture).
 
 Typical usage:
 
-  PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+  PYTHONPATH=. conda run -n fus-detectors python scripts/latency_rerun_check.py \
     --src runs/latency_pilot_open \
     --out-root runs/latency_s4_check \
     --profile Brain-OpenSkull \

@@ -44,7 +44,7 @@ Source: `stap_fus_methodology.tex`.
 ### Repro commands (canonical)
 Source: `appendix_repro_manifest.tex` (included by `stap_fus_methodology.tex`).
 
-Refresh via `PYTHONPATH=. conda run -n stap-fus python scripts/generate_repro_manifest.py` when needed.
+Refresh via `PYTHONPATH=. conda run -n fus-detectors python scripts/generate_repro_manifest.py` when needed.
 
 **Brain-* ROC curve figure (reads precomputed runs):**
 ```bash
@@ -55,7 +55,7 @@ PYTHONPATH=. python scripts/fig_brain_kwave_roc_curves.py \
 
 **Brain-* low-FPR baseline matrix report (writes the baseline table inputs):**
 ```bash
-PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py \
+PYTHONPATH=. conda run -n fus-detectors python scripts/fair_filter_comparison.py \
   --mode matrix --eval-score vnext \
   --matrix-regimes open,aliascontract,skullor \
   --matrix-seeds-open 1 --matrix-seeds-aliascontract 2 --matrix-seeds-skullor 2 \
@@ -342,7 +342,7 @@ Implementation toggles (regression-safe; default off):
 
 Quick latency+parity check (pilot harness):
 ```bash
-PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+PYTHONPATH=. conda run -n fus-detectors python scripts/latency_rerun_check.py \
   --src runs/latency_pilot_open \
   --out-root runs/latency_s4_check \
   --profile Brain-OpenSkull \
@@ -352,7 +352,7 @@ PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
 
 Steady-state GPU latency (includes torch/CUDA registration profiling; no parity check for that extra run):
 ```bash
-PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \
+PYTHONPATH=. conda run -n fus-detectors python scripts/latency_rerun_check.py \
   --src runs/latency_pilot_open \
   --out-root runs/latency_s4_check \
   --profile Brain-OpenSkull \

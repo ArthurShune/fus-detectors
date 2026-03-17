@@ -229,7 +229,7 @@ Script:
 Example (sim only):
 
 ```bash
-PYTHONPATH=. conda run -n stap-fus \
+PYTHONPATH=. conda run -n fus-detectors \
   python scripts/physical_doppler_sanity_link.py \
   --sim-run runs/sim/phys_smoke_bundle \
   --out-dir reports/physdoppler_sanity_link \
@@ -239,7 +239,7 @@ PYTHONPATH=. conda run -n stap-fus \
 Example (sim + Shin + Gammex):
 
 ```bash
-PYTHONPATH=. conda run -n stap-fus \
+PYTHONPATH=. conda run -n fus-detectors \
   python scripts/physical_doppler_sanity_link.py \
   --sim-run runs/sim/phys_smoke_bundle \
   --shin-root data/shin_zenodo_10711806/ratbrain_fig3_raw \
@@ -271,7 +271,7 @@ Planned follow-ups:
 - usage (generate calibration JSON):
 
 ```bash
-PYTHONPATH=. conda run -n stap-fus \
+PYTHONPATH=. conda run -n fus-detectors \
   python scripts/psf_calib_point_target_kwave.py \
   --out configs/physdoppler/psf_calib_kwave_pointtarget_brainlike.json
 ```
@@ -279,7 +279,7 @@ PYTHONPATH=. conda run -n stap-fus \
 - usage (apply calibration to a physical-doppler run; note that `pilot_physical_doppler.py` embeds + hashes the file into `dataset/debug/psf_calib.json`):
 
 ```bash
-PYTHONPATH=. conda run -n stap-fus \
+PYTHONPATH=. conda run -n fus-detectors \
   python sim/kwave/pilot_physical_doppler.py \
   --out runs/sim/phys_paper_micro_psfcal \
   --tier paper --preset microvascular_like --seed 1 \
@@ -301,7 +301,7 @@ Importer script:
 Example (import `.npy` Icube and write bundle):
 
 ```bash
-PYTHONPATH=. conda run -n stap-fus \
+PYTHONPATH=. conda run -n fus-detectors \
   python scripts/fieldii_import_icube.py \
   --out runs/sim/fieldii_import_example \
   --dataset-name fieldii_example \

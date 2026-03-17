@@ -1,10 +1,10 @@
 # Contributing
 
-Thanks for contributing to `stap-for-fus`.
+Thanks for contributing to `fus-detectors`.
 
 ## Development Setup
 - `conda env create -f environment.yml`
-- `conda activate stap-fus`
+- `conda activate fus-detectors`
 - `pre-commit install`
 
 ## Before Opening a PR

@@ -143,7 +143,7 @@ ULM-Motion / Shin-ProxyMotion & no independent task labels & robustness evidence
     \centering
     \vspace{0.5em}
     Missing figure \path{figs/paper/ulm7883227_pala_headline_hero.pdf}.\\
-    Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/fig_ulm_pala_headline_hero.py}.
+    Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/fig_ulm_pala_headline_hero.py}.
     \vspace{0.5em}
   \end{minipage}}%
 }
@@ -158,7 +158,7 @@ ULM-Motion / Shin-ProxyMotion & no independent task labels & robustness evidence
   \refstepcounter{table}\label{tab:ulm7883227_structural_roc}%
   \fbox{\begin{minipage}{0.95\linewidth}
     Missing table \path{reports/ulm7883227_pala_detector_heads_table.tex}.\\
-    Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/ulm7883227_pala_support_tables.py}.
+    Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/ulm7883227_pala_support_tables.py}.
   \end{minipage}}
   \end{center}
 }
@@ -183,7 +183,7 @@ Throughout the abstract, introduction, results, figures, and tables, we refer to
     \centering
     \vspace{0.5em}
     Missing figure \path{figs/paper/leading_structural_fidelity_gammex.pdf}.\\
-    Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/fig_leading_structural_fidelity.py}.
+    Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/fig_leading_structural_fidelity.py}.
     \vspace{0.5em}
   \end{minipage}}%
 }
@@ -527,7 +527,7 @@ For the structural task, the positive class is unaliased parenchymal Pf-band flo
 }{%
   \fbox{\begin{minipage}{0.95\linewidth}
     Missing figure \path{figs/paper/simus_reference_benchmark_geometry.pdf}.\\
-    Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/fig_simus_reference_benchmark_geometry.py}.
+    Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/fig_simus_reference_benchmark_geometry.py}.
   \end{minipage}}
 }
 \caption{Representative SIMUS-Struct geometry for the SIMUS-Struct-Mobile and SIMUS-Struct-Intraop reference regimes. The grayscale underlay is log beamformed power from the simulated IQ cube and is shown only to make the mask geometry visible. Green contours mark the parenchymal-flow positive set $H_1$, blue dashed contours mark the broad background pool $H_0^{\mathrm{bg}}$ used to set the score threshold, and red contours mark the nuisance-negative set $H_0^{\mathrm{nuis}}$ used to quantify structured false detections at that same operating point. Table~\ref{tab:accepted_v2_structural_main} reports the held-out seed results on these frozen mask types across seeds 127--128.}
@@ -582,7 +582,7 @@ To isolate that detector-head claim directly on the main benchmark, Table~\ref{t
   \refstepcounter{table}\label{tab:simus_detector_family_ablation}%
   \fbox{\begin{minipage}{0.95\linewidth}
     Missing table \path{reports/simus_detector_family_ablation_table.tex}.\\
-    Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/simus_detector_family_ablation_table.py --reuse-bundles}.
+    Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/simus_detector_family_ablation_table.py --reuse-bundles}.
   \end{minipage}}
   \end{center}
 }
@@ -598,7 +598,7 @@ That per-window operating-point protocol is still an evaluation protocol, not a 
   \refstepcounter{table}\label{tab:simus_fixed_calibration_transfer}%
   \fbox{\begin{minipage}{0.95\linewidth}
     Missing table \path{reports/simus_fixed_calibration_transfer_table.tex}.\\
-    Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/fixed_calibration_transfer.py}.
+    Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/fixed_calibration_transfer.py}.
   \end{minipage}}
   \end{center}
 }
@@ -829,7 +829,7 @@ A second transfer analysis uses the same structural endpoint but removes per-win
   \refstepcounter{table}\label{tab:ulm_fixed_calibration_transfer}%
   \fbox{\begin{minipage}{0.95\linewidth}
     Missing table \path{reports/ulm7883227_pala_fixed_calibration_transfer_table.tex}.\\
-    Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/fixed_calibration_transfer.py}.
+    Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/fixed_calibration_transfer.py}.
   \end{minipage}}
   \end{center}
 }
@@ -892,7 +892,7 @@ A separate fixed-threshold check on Shin asks a different question. Using the sa
   \refstepcounter{table}\label{tab:shin_fixed_calibration_transfer}%
   \fbox{\begin{minipage}{0.95\linewidth}
     Missing table \path{reports/shin_fixed_calibration_transfer_table.tex}.\\
-    Reproduce it with \path{PYTHONPATH=. conda run -n stap-fus python scripts/shin_fixed_calibration_transfer.py}.
+    Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/shin_fixed_calibration_transfer.py}.
   \end{minipage}}
   \end{center}
 }

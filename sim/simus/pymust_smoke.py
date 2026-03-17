@@ -38,8 +38,8 @@ SimusSmokeConfig = SimusConfig
 def _require_pymust() -> Any:
     if pymust is None:  # pragma: no cover - optional
         raise ImportError(
-            "PyMUST is not installed. Install into the stap-fus env via:\n"
-            "  conda run -n stap-fus pip install PyMUST==0.1.9\n"
+            "PyMUST is not installed. Install into the fus-detectors env via:\n"
+            "  conda run -n fus-detectors pip install PyMUST==0.1.9\n"
         )
     return pymust
 

@@ -15,7 +15,7 @@ Outputs (tracked):
 
 Usage:
   # Preferred (captures the same CUDA-enabled conda environment used in experiments)
-  PYTHONPATH=. conda run -n stap-fus python scripts/generate_repro_manifest.py
+  PYTHONPATH=. conda run -n fus-detectors python scripts/generate_repro_manifest.py
 
   # Fallback (may record a different interpreter than the one used for CUDA runs)
   PYTHONPATH=. python scripts/generate_repro_manifest.py
@@ -366,7 +366,12 @@ def _render_appendix_tex(manifest: dict[str, Any], *, out_path: Path) -> None:
     preferred_env = None
     if isinstance(env, dict):
         preferred_env = str(env.get("preferred_conda_env") or "").strip() or None
-    preferred_env = preferred_env or "stap-fus"
+    preferred_env = (
+        preferred_env
+        or os.environ.get("FUS_DETECTORS_CONDA_ENV")
+        or os.environ.get("STAP_FUS_CONDA_ENV")
+        or "fus-detectors"
+    )
     lines.append(
         "Run "
         f"\\path{{PYTHONPATH=. conda run -n {preferred_env} python scripts/generate_repro_manifest.py}} "
@@ -443,7 +448,7 @@ def _render_appendix_tex(manifest: dict[str, Any], *, out_path: Path) -> None:
             )
         else:
             lines.append(f"Docker: \\path{{{str(docker_spec.get('path'))}}}.")
-        lines.append("Build container: \\path{docker build -t stap-fus -f Dockerfile .}.")
+        lines.append("Build container: \\path{docker build -t fus-detectors -f Dockerfile .}.")
 
     if isinstance(env_conda, dict) and "error" in env_conda:
         lines.append(f"Conda query failed for env \\texttt{{{_tex_escape(preferred_env)}}}: {_tex_escape(str(env_conda.get('error')))}.")
@@ -657,7 +662,7 @@ def _default_selections() -> dict[str, str]:
 def _default_artifacts() -> list[ArtifactInfo]:
     return [
         ArtifactInfo(
-            name="RTX 4080 SUPER audit logs (nvidia-smi + stap-fus conda env versions)",
+            name="RTX 4080 SUPER audit logs (nvidia-smi + fus-detectors conda env versions)",
             paper_refs=["Table: latency_summary_4080super"],
             outputs=[
                 "reports/hw/4080super_nvidia_smi.txt",
@@ -666,7 +671,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
             commands=[
                 "nvidia-smi > reports/hw/4080super_nvidia_smi.txt",
                 "",
-                "conda run -n stap-fus python -c \"import platform,sys; import torch; "
+                "conda run -n fus-detectors python -c \"import platform,sys; import torch; "
                 "print('platform:', platform.platform()); "
                 "print('python:', sys.version.splitlines()[0]); "
                 "print('torch:', torch.__version__); "
@@ -686,9 +691,9 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "reports/refactor/4080super_refactor_full.log",
             ],
             commands=[
-                "conda run -n stap-fus make refactor-quick 2>&1 | tee reports/refactor/4080super_refactor_quick.log",
-                "conda run -n stap-fus make refactor-phase 2>&1 | tee reports/refactor/4080super_refactor_phase.log",
-                "conda run -n stap-fus make refactor-full  2>&1 | tee reports/refactor/4080super_refactor_full.log",
+                "conda run -n fus-detectors make refactor-quick 2>&1 | tee reports/refactor/4080super_refactor_quick.log",
+                "conda run -n fus-detectors make refactor-phase 2>&1 | tee reports/refactor/4080super_refactor_phase.log",
+                "conda run -n fus-detectors make refactor-full  2>&1 | tee reports/refactor/4080super_refactor_full.log",
             ],
             notes="The 'full' gate is optional on constrained machines; see Makefile targets.",
         ),
@@ -730,7 +735,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
             ],
             commands=[
                 # OpenSkull: full + conditional
-                "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \\",
+                "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n fus-detectors \\",
                 "  python scripts/latency_rerun_check.py \\",
                 "  --src runs/latency_pilot_open \\",
                 "  --out-root runs/latency_s12_publish_offsets \\",
@@ -740,7 +745,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --stap-device cuda --stap-debug-samples 0 \\",
                 "  --tile-batch 192 --cuda-warmup-heavy",
                 "",
-                "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \\",
+                "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n fus-detectors \\",
                 "  python scripts/latency_rerun_check.py \\",
                 "  --src runs/latency_pilot_open \\",
                 "  --out-root runs/latency_s13_publish_offsets_cond \\",
@@ -752,7 +757,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --stap-conditional on",
                 "",
                 # AliasContract: full + conditional
-                "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \\",
+                "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n fus-detectors \\",
                 "  python scripts/latency_rerun_check.py \\",
                 "  --src runs/latency_pilot_aliascontract \\",
                 "  --out-root runs/latency_s14_aliascontract_full \\",
@@ -762,7 +767,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --stap-device cuda --stap-debug-samples 0 \\",
                 "  --tile-batch 192 --cuda-warmup-heavy",
                 "",
-                "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \\",
+                "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n fus-detectors \\",
                 "  python scripts/latency_rerun_check.py \\",
                 "  --src runs/latency_pilot_aliascontract \\",
                 "  --out-root runs/latency_s14_aliascontract_cond \\",
@@ -774,7 +779,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --stap-conditional on",
                 "",
                 # SkullOR: full + conditional
-                "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \\",
+                "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n fus-detectors \\",
                 "  python scripts/latency_rerun_check.py \\",
                 "  --src runs/latency_pilot_skullor \\",
                 "  --out-root runs/latency_s15_skullor_full \\",
@@ -784,7 +789,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --stap-device cuda --stap-debug-samples 0 \\",
                 "  --tile-batch 192 --cuda-warmup-heavy",
                 "",
-                "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n stap-fus \\",
+                "PYTHONPATH=. STAP_FAST_CUDA_GRAPH=1 conda run -n fus-detectors \\",
                 "  python scripts/latency_rerun_check.py \\",
                 "  --src runs/latency_pilot_skullor \\",
                 "  --out-root runs/latency_s15_skullor_cond \\",
@@ -810,7 +815,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \\",
                 "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \\",
                 "STAP_TYLER_TRITON_CAPTURE=1 \\",
-                "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "conda run -n fus-detectors python scripts/latency_realdata_rerun_check.py \\",
                 "  --stap-device cuda --tile-batch 192 --clean \\",
                 "  --out-root runs/latency_s17_realdata_cuda_unfold \\",
                 "  shin --iq-file IQData001.dat \\",
@@ -822,7 +827,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \\",
                 "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \\",
                 "STAP_TYLER_TRITON_CAPTURE=1 \\",
-                "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "conda run -n fus-detectors python scripts/latency_realdata_rerun_check.py \\",
                 "  --stap-device cuda --tile-batch 512 --clean \\",
                 "  --out-root runs/latency_s17_realdata_cuda_unfold \\",
                 "  gammex --frames-along 0:6 --frames-across 0:6",
@@ -850,9 +855,9 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "reports/latency/4080super_latency_summary.json",
             ],
             commands=[
-                "# Hardware audit (record driver/GPU; record stap-fus env versions):",
+                "# Hardware audit (record driver/GPU; record fus-detectors env versions):",
                 "nvidia-smi > reports/hw/4080super_nvidia_smi.txt",
-                "conda run -n stap-fus python -c 'import platform, sys; import torch; "
+                "conda run -n fus-detectors python -c 'import platform, sys; import torch; "
                 "print(\"python\", sys.version.splitlines()[0]); "
                 "print(\"platform\", platform.platform()); "
                 "print(\"torch\", torch.__version__); "
@@ -862,7 +867,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "> reports/hw/4080super_env.txt",
                 "",
                 "# Brain k-Wave latency reruns (offsets 0/64/128/192/256; tile_batch=192):",
-                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/latency_rerun_check.py \\",
                 "  --src runs/pilot/r4c_kwave_seed1 \\",
                 "  --out-root runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256 \\",
                 "  --profile Brain-OpenSkull \\",
@@ -870,7 +875,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --stap-device cuda --tile-batch 192 \\",
                 "  --cuda-warmup-heavy --stap-debug-samples 0",
                 "",
-                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/latency_rerun_check.py \\",
                 "  --src runs/pilot/r4c_kwave_seed1 \\",
                 "  --out-root runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256_cond \\",
                 "  --profile Brain-OpenSkull \\",
@@ -879,7 +884,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --cuda-warmup-heavy --stap-debug-samples 0 \\",
                 "  --stap-conditional on",
                 "",
-                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/latency_rerun_check.py \\",
                 "  --src runs/pilot/r4c_kwave_hab_seed2 \\",
                 "  --out-root runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256 \\",
                 "  --profile Brain-AliasContract \\",
@@ -887,7 +892,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --stap-device cuda --tile-batch 192 \\",
                 "  --cuda-warmup-heavy --stap-debug-samples 0",
                 "",
-                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/latency_rerun_check.py \\",
                 "  --src runs/pilot/r4c_kwave_hab_seed2 \\",
                 "  --out-root runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256_cond \\",
                 "  --profile Brain-AliasContract \\",
@@ -896,7 +901,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --cuda-warmup-heavy --stap-debug-samples 0 \\",
                 "  --stap-conditional on",
                 "",
-                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/latency_rerun_check.py \\",
                 "  --src runs/pilot/r4c_kwave_hab_v3_skull_seed2 \\",
                 "  --out-root runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256 \\",
                 "  --profile Brain-SkullOR \\",
@@ -904,7 +909,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --stap-device cuda --tile-batch 192 \\",
                 "  --cuda-warmup-heavy --stap-debug-samples 0",
                 "",
-                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/latency_rerun_check.py \\",
                 "  --src runs/pilot/r4c_kwave_hab_v3_skull_seed2 \\",
                 "  --out-root runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256_cond \\",
                 "  --profile Brain-SkullOR \\",
@@ -916,7 +921,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "# Shin RatBrain Fig3 latency (requires dataset; see docs/data_download.md):",
                 "PYTHONPATH=. STAP_FAST_PATH=1 STAP_TILING_UNFOLD=0 STAP_FAST_CUDA_GRAPH=0 \\",
                 "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 STAP_TYLER_TRITON_CAPTURE=1 \\",
-                "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "conda run -n fus-detectors python scripts/latency_realdata_rerun_check.py \\",
                 "  --stap-device cuda --tile-batch 192 --clean \\",
                 "  --out-root runs/latency_4080super_shin_fig3_w128_tb192/legacy \\",
                 "  shin --data-root data/shin_zenodo_10711806/ratbrain_fig3_raw \\",
@@ -926,7 +931,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "",
                 "PYTHONPATH=. STAP_FAST_PATH=1 STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \\",
                 "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 STAP_TYLER_TRITON_CAPTURE=1 \\",
-                "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "conda run -n fus-detectors python scripts/latency_realdata_rerun_check.py \\",
                 "  --stap-device cuda --tile-batch 192 --clean \\",
                 "  --out-root runs/latency_4080super_shin_fig3_w128_tb192/optimized \\",
                 "  shin --data-root data/shin_zenodo_10711806/ratbrain_fig3_raw \\",
@@ -937,20 +942,20 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "# Gammex linear17 latency (along/across frames 0..5):",
                 "PYTHONPATH=. STAP_FAST_PATH=1 STAP_TILING_UNFOLD=0 STAP_FAST_CUDA_GRAPH=0 \\",
                 "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 STAP_TYLER_TRITON_CAPTURE=1 \\",
-                "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "conda run -n fus-detectors python scripts/latency_realdata_rerun_check.py \\",
                 "  --stap-device cuda --tile-batch 512 --clean \\",
                 "  --out-root runs/latency_4080super_gammex_linear17_f0_6_tb512/legacy \\",
                 "  gammex --frames-along 0:6 --frames-across 0:6",
                 "",
                 "PYTHONPATH=. STAP_FAST_PATH=1 STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \\",
                 "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 STAP_TYLER_TRITON_CAPTURE=1 \\",
-                "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "conda run -n fus-detectors python scripts/latency_realdata_rerun_check.py \\",
                 "  --stap-device cuda --tile-batch 512 --clean \\",
                 "  --out-root runs/latency_4080super_gammex_linear17_f0_6_tb512/optimized \\",
                 "  gammex --frames-along 0:6 --frames-across 0:6",
                 "",
                 "# Collect consolidated CSV/JSON (steady windows/frames 2..N; includes parity checks):",
-                "PYTHONPATH=. conda run -n stap-fus python scripts/collect_latency_summary.py",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/collect_latency_summary.py",
             ],
             notes=(
                 "The replay scripts print cold(win1) and steady(avg win2..N); the paper tables report steady-state means. "
@@ -971,7 +976,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
             ],
             commands=[
                 # OpenSkull seed1
-                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/latency_rerun_check.py \\",
                 "  --src runs/pilot/r4c_kwave_seed1 \\",
                 "  --out-root runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256 \\",
                 "  --profile Brain-OpenSkull \\",
@@ -980,7 +985,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --tile-batch 192 --cuda-warmup-heavy \\",
                 "  --stap-conditional off",
                 "",
-                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/latency_rerun_check.py \\",
                 "  --src runs/pilot/r4c_kwave_seed1 \\",
                 "  --out-root runs/latency_4080super_brain_openskull_w64_tb192_off0_64_128_192_256_cond \\",
                 "  --profile Brain-OpenSkull \\",
@@ -990,7 +995,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --stap-conditional on",
                 "",
                 # AliasContract seed2
-                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/latency_rerun_check.py \\",
                 "  --src runs/pilot/r4c_kwave_hab_seed2 \\",
                 "  --out-root runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256 \\",
                 "  --profile Brain-AliasContract \\",
@@ -999,7 +1004,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --tile-batch 192 --cuda-warmup-heavy \\",
                 "  --stap-conditional off",
                 "",
-                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/latency_rerun_check.py \\",
                 "  --src runs/pilot/r4c_kwave_hab_seed2 \\",
                 "  --out-root runs/latency_4080super_brain_aliascontract_w64_tb192_off0_64_128_192_256_cond \\",
                 "  --profile Brain-AliasContract \\",
@@ -1009,7 +1014,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --stap-conditional on",
                 "",
                 # SkullOR seed2
-                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/latency_rerun_check.py \\",
                 "  --src runs/pilot/r4c_kwave_hab_v3_skull_seed2 \\",
                 "  --out-root runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256 \\",
                 "  --profile Brain-SkullOR \\",
@@ -1018,7 +1023,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --tile-batch 192 --cuda-warmup-heavy \\",
                 "  --stap-conditional off",
                 "",
-                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_rerun_check.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/latency_rerun_check.py \\",
                 "  --src runs/pilot/r4c_kwave_hab_v3_skull_seed2 \\",
                 "  --out-root runs/latency_4080super_brain_skullor_w64_tb192_off0_64_128_192_256_cond \\",
                 "  --profile Brain-SkullOR \\",
@@ -1047,7 +1052,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "STAP_TILING_UNFOLD=0 STAP_FAST_CUDA_GRAPH=0 \\",
                 "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \\",
                 "STAP_TYLER_TRITON_CAPTURE=1 \\",
-                "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "conda run -n fus-detectors python scripts/latency_realdata_rerun_check.py \\",
                 "  --stap-device cuda --tile-batch 192 --clean \\",
                 "  --out-root runs/latency_4080super_shin_fig3_w128_tb192/legacy \\",
                 "  shin --iq-file IQData001.dat \\",
@@ -1059,7 +1064,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "STAP_FAST_PATH=1 STAP_TILING_UNFOLD=0 STAP_FAST_CUDA_GRAPH=0 \\",
                 "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \\",
                 "STAP_TYLER_TRITON_CAPTURE=1 \\",
-                "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "conda run -n fus-detectors python scripts/latency_realdata_rerun_check.py \\",
                 "  --stap-device cuda --tile-batch 512 --clean \\",
                 "  --out-root runs/latency_4080super_gammex_linear17_f0_6_tb512/legacy \\",
                 "  gammex --frames-along 0:6 --frames-across 0:6",
@@ -1069,7 +1074,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \\",
                 "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \\",
                 "STAP_TYLER_TRITON_CAPTURE=1 \\",
-                "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "conda run -n fus-detectors python scripts/latency_realdata_rerun_check.py \\",
                 "  --stap-device cuda --tile-batch 192 --clean \\",
                 "  --out-root runs/latency_4080super_shin_fig3_w128_tb192/optimized \\",
                 "  shin --iq-file IQData001.dat \\",
@@ -1081,7 +1086,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "STAP_FAST_PATH=1 STAP_TILING_UNFOLD=1 STAP_FAST_CUDA_GRAPH=1 \\",
                 "STAP_SNAPSHOT_STRIDE=4 STAP_TYLER_MAX_ITER=1 STAP_TYLER_EARLY_STOP=0 \\",
                 "STAP_TYLER_TRITON_CAPTURE=1 \\",
-                "conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "conda run -n fus-detectors python scripts/latency_realdata_rerun_check.py \\",
                 "  --stap-device cuda --tile-batch 512 --clean \\",
                 "  --out-root runs/latency_4080super_gammex_linear17_f0_6_tb512/optimized \\",
                 "  gammex --frames-along 0:6 --frames-across 0:6",
@@ -1099,7 +1104,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "reports/latency/4080super_latency_summary.json",
             ],
             commands=[
-                "PYTHONPATH=. conda run -n stap-fus python scripts/collect_latency_summary.py",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/collect_latency_summary.py",
             ],
             notes="Reads existing runs/latency_4080super_* folders and writes steady-state windows 2..N summaries.",
         ),
@@ -1132,7 +1137,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "bash scripts/reproduce_table5_brain_kwave.sh",
                 "",
                 "# Manual breakdown (equivalent to the script above):",
-                "PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/fair_filter_comparison.py \\",
                 "  --mode matrix --eval-score vnext \\",
                 "  --matrix-regimes open,aliascontract,skullor \\",
                 "  --matrix-seeds-open 1 --matrix-seeds-aliascontract 2 --matrix-seeds-skullor 2 \\",
@@ -1145,7 +1150,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --out-csv reports/fair_matrix_vnext_r3_localbaselines.csv \\",
                 "  --out-json reports/fair_matrix_vnext_r3_localbaselines.json",
                 "",
-                "PYTHONPATH=. conda run -n stap-fus python scripts/brain_kwave_vnext_baselines_table.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/brain_kwave_vnext_baselines_table.py \\",
                 "  --fair-matrix-json reports/fair_matrix_vnext_r3_localbaselines.json \\",
                 "  --out-tex reports/brain_kwave_vnext_baselines_table.tex",
             ],
@@ -1214,7 +1219,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "reports/brain_detector_ablation_table.tex",
             ],
             commands=[
-                "PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/fair_filter_comparison.py \\",
                 "  --mode matrix --eval-score vnext \\",
                 "  --matrix-regimes open,aliascontract,skullor \\",
                 "  --matrix-seeds-open 1 --matrix-seeds-aliascontract 2 --matrix-seeds-skullor 2 \\",
@@ -1250,7 +1255,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "reports/brain_detector_swap_table.tex",
             ],
             commands=[
-                "PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/fair_filter_comparison.py \\",
                 "  --mode matrix --eval-score vnext \\",
                 "  --matrix-regimes open,aliascontract,skullor \\",
                 "  --matrix-seeds-open 1 --matrix-seeds-aliascontract 2 --matrix-seeds-skullor 2 \\",
@@ -1284,7 +1289,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "reports/brain_cov_train_ablation_table.tex",
             ],
             commands=[
-                "PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/fair_filter_comparison.py \\",
                 "  --mode matrix --eval-score vnext \\",
                 "  --matrix-regimes open,aliascontract,skullor \\",
                 "  --matrix-seeds-open 1 --matrix-seeds-aliascontract 2 --matrix-seeds-skullor 2 \\",
@@ -1322,7 +1327,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "figs/paper/brain_openskull_profile_sensitivity.pdf",
             ],
             commands=[
-                "PYTHONPATH=. conda run -n stap-fus python scripts/brain_openskull_profile_sensitivity.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/brain_openskull_profile_sensitivity.py \\",
                 "  --autogen-missing --stap-device cuda",
             ],
             notes=(
@@ -1563,7 +1568,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
             commands=[
                 "SEQ_DIR=\"data/twinkling_artifact/Flow in Gammex phantom\"",
                 "SEQ_DIR=\"$SEQ_DIR/Flow in Gammex phantom (along - linear probe)\"",
-                "PYTHONPATH=. conda run -n stap-fus python scripts/fig_leading_structural_fidelity.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/fig_leading_structural_fidelity.py \\",
                 "  --seq-dir \"$SEQ_DIR\" \\",
                 "  --frame-idx 0 --mask-ref-frames 0:10 \\",
                 "  --prf-hz 2500 --Lt 16 \\",
@@ -2025,8 +2030,8 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --out-tex reports/ulm7883227_pala_structural_roc_table.tex \\",
                 "  --out-mask-fig figs/paper/ulm7883227_pala_structural_masks.pdf \\",
                 "  --out-roc-fig figs/paper/ulm7883227_pala_structural_roc_curves.pdf",
-                "PYTHONPATH=. conda run -n stap-fus python scripts/fig_ulm_pala_headline_hero.py",
-                "PYTHONPATH=. conda run -n stap-fus python scripts/latency_realdata_rerun_check.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/fig_ulm_pala_headline_hero.py",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/latency_realdata_rerun_check.py \\",
                 "  --summary-json reports/ulm7883227_pala_latency_rtx4080.json \\",
                 "  --out-root runs/latency_realdata_cuda_ulm_pala_noreg \\",
                 "  --stap-device cuda --stap-detector-variant msd_ratio \\",
@@ -2067,7 +2072,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "reports/ulm7883227_pala_fixed_calibration_transfer_table.tex",
             ],
             commands=[
-                "PYTHONPATH=. conda run -n stap-fus python scripts/fixed_calibration_transfer.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/fixed_calibration_transfer.py \\",
                 "  --stap-device cuda \\",
                 "  --alpha 0.001 \\",
                 "  --simus-stap-profile Brain-SIMUS-Clin-MotionMidRobust-v0 \\",
@@ -2115,27 +2120,27 @@ def _default_artifacts() -> list[ArtifactInfo]:
             ],
             commands=[
                 # Canonical SIMUS datasets (not tracked; deterministic given seed).
-                "PYTHONPATH=. conda run -n stap-fus python sim/simus/pilot_pymust_simus.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python sim/simus/pilot_pymust_simus.py \\",
                 "  --out runs/sim/simus_pymust_paper_micro_seed0 --preset microvascular_like --tier paper --seed 0 --skip-bundle",
-                "PYTHONPATH=. conda run -n stap-fus python sim/simus/pilot_pymust_simus.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python sim/simus/pilot_pymust_simus.py \\",
                 "  --out runs/sim/simus_pymust_paper_alias_seed0 --preset alias_stress --tier paper --seed 0 --skip-bundle",
                 "",
                 # Bundle derivation from canonical dataset/ (no re-sim).
-                "PYTHONPATH=. conda run -n stap-fus python scripts/icube_make_bundle.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/icube_make_bundle.py \\",
                 "  --run runs/sim/simus_pymust_paper_micro_seed0 --stap-device cpu",
-                "PYTHONPATH=. conda run -n stap-fus python scripts/icube_make_bundle.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/icube_make_bundle.py \\",
                 "  --run runs/sim/simus_pymust_paper_alias_seed0 --stap-device cpu",
                 "",
                 # HAB contract check logs.
-                "PYTHONPATH=. conda run -n stap-fus python scripts/hab_contract_check.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/hab_contract_check.py \\",
                 "  runs/sim/simus_pymust_paper_micro_seed0/bundle/simus_pymust_paper_micro_seed0 \\",
                 "  2>&1 | tee reports/simus_contract/simus_pymust_paper_micro_seed0_hab_contract.txt",
-                "PYTHONPATH=. conda run -n stap-fus python scripts/hab_contract_check.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/hab_contract_check.py \\",
                 "  runs/sim/simus_pymust_paper_alias_seed0/bundle/simus_pymust_paper_alias_seed0 \\",
                 "  2>&1 | tee reports/simus_contract/simus_pymust_paper_alias_seed0_hab_contract.txt",
                 "",
                 # Sanity-link telemetry vs real IQ (Shin Fig3 + Gammex phantom).
-                "PYTHONPATH=. conda run -n stap-fus python scripts/physical_doppler_sanity_link.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/physical_doppler_sanity_link.py \\",
                 "  --sim-run runs/sim/simus_pymust_paper_micro_seed0 \\",
                 "  --shin-root data/shin_zenodo_10711806/ratbrain_fig3_raw --shin-iq-file IQData001.dat \\",
                 "  --shin-frames 0:128 --shin-prf-hz 1000 \\",
@@ -2144,7 +2149,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --gammex-mask-mode bmode_tube --gammex-mask-ref-frames 0:6 \\",
                 "  --pf 30 250 --pg 250 400 --pa-lo 400 --tile-hw 8 8 --tile-stride 3 \\",
                 "  --tag simus_micro_paper_seed0_vs_shin_gammex",
-                "PYTHONPATH=. conda run -n stap-fus python scripts/physical_doppler_sanity_link.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/physical_doppler_sanity_link.py \\",
                 "  --sim-run runs/sim/simus_pymust_paper_alias_seed0 \\",
                 "  --shin-root data/shin_zenodo_10711806/ratbrain_fig3_raw --shin-iq-file IQData001.dat \\",
                 "  --shin-frames 0:128 --shin-prf-hz 1000 \\",
@@ -2155,7 +2160,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --tag simus_alias_paper_seed0_vs_shin_gammex",
                 "",
                 # Baseline vs STAP comparison (paper-style baselines; uses sim ground-truth masks).
-                "PYTHONPATH=. conda run -n stap-fus python scripts/icube_baseline_compare.py \\",
+                "PYTHONPATH=. conda run -n fus-detectors python scripts/icube_baseline_compare.py \\",
                 "  --run runs/sim/simus_pymust_paper_micro_seed0 \\",
                 "  --run runs/sim/simus_pymust_paper_alias_seed0 \\",
                 "  --out-root runs/sim_eval/simus_baseline_compare_r1 \\",
@@ -2236,7 +2241,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument(
         "--conda-env",
         type=str,
-        default=os.environ.get("STAP_FUS_CONDA_ENV", "stap-fus"),
+        default=os.environ.get("FUS_DETECTORS_CONDA_ENV") or os.environ.get("STAP_FUS_CONDA_ENV") or "fus-detectors",
         help="Conda env name to query for package/CUDA versions (preferred).",
     )
     ap.add_argument(

@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-ENV_NAME="${STAP_FUS_CONDA_ENV:-stap-fus}"
+ENV_NAME="${FUS_DETECTORS_CONDA_ENV:-${STAP_FUS_CONDA_ENV:-fus-detectors}}"
 STAP_DEVICE="${STAP_DEVICE:-cuda}"
 
 run_py() {

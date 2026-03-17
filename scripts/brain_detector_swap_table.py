@@ -13,7 +13,7 @@ matched-subspace statistic, we isolate "detector vs clutter suppression".
 Inputs
 ------
 `reports/fair_matrix_detector_swap.json` produced by:
-  PYTHONPATH=. conda run -n stap-fus python scripts/fair_filter_comparison.py --mode matrix ...
+  PYTHONPATH=. conda run -n fus-detectors python scripts/fair_filter_comparison.py --mode matrix ...
 
 Outputs (tracked)
 -----------------
