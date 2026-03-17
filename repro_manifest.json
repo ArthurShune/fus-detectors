@@ -1,38 +1,17 @@
 {
   "repo": {
-    "public_url": "https://github.com/ArthurShune/stap-for-fus",
+    "public_url": "https://github.com/ArthurShune/fus-detectors",
     "release_tag": "preprint-2026-03-17"
   },
   "git": {
-    "commit": "0e00bce051e84530a590d504b3d97e6193488907",
-    "commit_short": "0e00bce",
+    "commit": "950977c5c191b45a5bc01841ce3cf87fd0666e75",
+    "commit_short": "950977c",
     "branch": "main",
-    "dirty": true,
-    "dirty_paths_count": 11,
-    "dirty_ignored_paths_count": 8,
-    "dirty_paths": [
-      "M configs/physdoppler/psf_calib_kwave_pointtarget_brainlike.json",
-      "M docs/pymust_simus_clin_plan.md",
-      "M docs/simus_clinutility_v2_plan.md",
-      "M patent/generate_patent_figures.py",
-      "M patent/provisional_application_package.tex",
-      "M patent/provisional_drawings.tex",
-      "M pipeline/realdata/ulm_zenodo_7883227.py",
-      "M provisional_patent_draft_specification.md",
-      "M scripts/simus_v2_latency_frontier.py",
-      "M scripts/simus_v2_latency_summary.py",
-      "M sim/kwave/common.py"
-    ],
-    "dirty_ignored_paths": [
-      "M patent/figs/figure_01_overview.pdf",
-      "M patent/figs/figure_02_local_processing.pdf",
-      "M patent/figs/figure_03_adaptive_switch.pdf",
-      "M patent/figs/figure_04_penalty_layer.pdf",
-      "M patent/figs/figure_05_threshold_transfer.pdf",
-      "M patent/figs/figure_06_realtime_architecture.pdf",
-      "M patent/provisional_application_package.pdf",
-      "M patent/provisional_drawings.pdf"
-    ]
+    "dirty": false,
+    "dirty_paths_count": 0,
+    "dirty_ignored_paths_count": 0,
+    "dirty_paths": [],
+    "dirty_ignored_paths": []
   },
   "env": {
     "preferred_conda_env": "fus-detectors",
