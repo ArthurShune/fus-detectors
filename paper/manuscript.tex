@@ -280,7 +280,7 @@ The fixed head is a local band-limited flow detector applied after ordinary resi
 \paragraph{Pipeline overview.}
 \begin{enumerate}[nosep,leftmargin=1.6em,label=\arabic*.]
   \item Baseline clutter suppression (e.g.\ MC--SVD) produces a residual cube $X_{\mathrm{base}}$ and baseline score $S_{\mathrm{base}}(y,x)$.
-  \item For each tile $\Omega_i$: form slow-time snapshots $\{x_{i,k}\}_{k=1}^K$ via spatial sampling and, optionally, a sliding-window temporal embedding (Hankel matrix construction), estimate conditioned covariance $R_i$, and either keep the raw snapshots or whiten them as $y_{i,k}=R_i^{-1/2}x_{i,k}$.
+  \item \ifPAPERONLY For each tile $\Omega_i$, form the local slow-time support used by the chosen detector head; when whitening is active, apply the fixed regime-specific local covariance transform $y_{i,k}=R_i^{-1/2}x_{i,k}$. \else For each tile $\Omega_i$: form slow-time snapshots $\{x_{i,k}\}_{k=1}^K$ via spatial sampling and, optionally, a sliding-window temporal embedding (Hankel matrix construction), estimate conditioned covariance $R_i$, and either keep the raw snapshots or whiten them as $y_{i,k}=R_i^{-1/2}x_{i,k}$. \fi
   \item Compute the self-normalized matched-subspace score on the chosen tile representation and aggregate over overlapping tiles to obtain the detector score map. The fixed and fully whitened forms are given explicitly in Eqs.~\eqref{eq:s0} and \eqref{eq:sw}; setting $R_i=I$ recovers the simpler band-limited fixed head.
   \item If the adaptive variant is used, retain the fixed head by default and promote pixels onto the whitened branch only where a prespecified guard-band clutter feature exceeds a fixed threshold.
 \end{enumerate}
@@ -329,6 +329,11 @@ The paper studies three concrete detector variants. The fixed detector uses $S_{
 \end{equation}
 where $r^{\mathrm{base}}_{g}(i)$ is a baseline guard-band energy fraction and $\tau_g$ is fixed once and then held fixed across all reported experiments. The fully whitened detector uses $S_{w}(i)$ everywhere. In words, the adaptive detector keeps the simpler score in clean tiles and only turns on full whitening where the residual itself shows guard-band evidence of localized clutter.
 
+\ifPAPERONLY
+\paragraph{Tile support and switching rule.}
+All reported detectors operate on overlapping local tiles. In the main quantitative regimes, the spatial support is fixed at $8\times 8$ pixels, with slow-time aperture $L_t=8$ for kWave-Stress, $L_t=16$ for Gammex-Struct, and $L_t=64$ for SIMUS-Struct and ULM-CoreShell. The adaptive rule evaluates the baseline guard-band fraction $r^{\mathrm{base}}_{g}(i)$ on each tile and switches from $S_0(i)$ to $S_w(i)$ only when $r^{\mathrm{base}}_{g}(i)\ge \tau_g$; otherwise the fixed score is retained. Full details on sliding-window temporal embedding, covariance estimation, and conditioning are kept in the methods companion.
+
+\else
 \subsection{Localized detector core and Doppler band geometry}
 \paragraph{Tile-based detector family.}
 To mitigate the degraded tail sensitivity of global low-rank filters in high-clutter regimes, we study a localized matched-subspace detector family on overlapping spatial tiles. Its primary member keeps the same flow-band score without local whitening ($R_i=I$); its adaptive member uses that same score by default and promotes selected tiles onto a whitened branch; its fully whitened member adds a covariance-adaptive slow-time core in which spatial localization enters through tile-local covariance estimation. Let $\Omega_i$ denote tile $i$ and $L_t$ the slow-time aperture. From $X_{\mathrm{base}}$ we construct a set of slow-time training snapshots $\{x_{i,k}\in\mathbb{C}^{L_t}\}_{k=1}^K$ for each tile via spatial sampling and, when applicable, a sliding-window temporal embedding (Hankel construction) in slow time. Here $K$ denotes the number of training snapshots used to estimate the tile covariance; in the fully Hankelized case, each pixel contributes $N=T-L_t+1$ snapshots and pooling across $\Omega_i$ yields $K=N|\Omega_i|$ (or a subsampled/capped variant). We estimate a local covariance
@@ -415,6 +420,7 @@ This self-normalized statistic is the pre-regularization detector score $S_{\mat
 \caption{Doppler power spectral density (PSD) partitioning and kinematic band geometry (empirical example). Curves show one-sided PSDs of the tile-mean slow-time signal on the alias-dominant labeled brain simulation (PRF $=1500$~Hz): a flow-like tile (peak in $\Pf$) and an alias-dominant tile (peak in $\Pa$). The Nyquist interval is deterministically partitioned into DC/high-amplitude clutter ($\Po$), microvascular flow ($\Pf$), a transition guard band ($\Pg$), and aliased high-velocity artifacts or vibration ($\Pa$). Auxiliary band-energy descriptors (e.g.\ alias-to-flow ratios) are used for interpretation and runtime telemetry.}
 \label{fig:doppler_band_geometry_psd}
 \end{figure}
+\fi
 
 \ifPAPERONLY\else
 \subsection{Optional shrink-only regularization (brief main-text summary)}
@@ -440,7 +446,11 @@ For auditability, we log explicit reason labels so that ``regularizer off'' ($w\
 
 \subsection{Prespecified operating protocol and operating-point reporting}
 \label{sec:eval}
+\ifPAPERONLY
+All processing settings (tile geometry, aperture, band definitions, and adaptive threshold) are fixed for each regime before held-out results are reported. Detection is evaluated by thresholding the high-score tail (right tail) at fixed FPR targets:
+\else
 All processing settings (tile geometry, aperture, band definitions, conditioning targets, and prior thresholds) are fixed for each regime before held-out results are reported. Detection is evaluated by thresholding the high-score tail (right tail) at fixed FPR targets:
+\fi
 \[
   \mathbb{P}\{S\ge \tau_\alpha\mid H_0\}=\alpha,\qquad
   \mathrm{TPR}(\alpha)=\mathbb{P}\{S\ge \tau_\alpha\mid H_1\}.
@@ -469,7 +479,11 @@ We emphasize $\alpha=10^{-3}$--$10^{-4}$ because those operating points expose n
 Unless otherwise stated, $\tau_\alpha$ is calibrated per window (or per cine sequence) on that unit's negative set to report $\mathrm{TPR}(\alpha)$ at the intended operating point; in labeled regimes, the negative set is available for \emph{exact} calibration, while in deployment it would be estimated via a negative-only training procedure or from a fixed calibration set. The Results section therefore includes two non-retrospective transfer checks: a fixed-calibration audit on SIMUS-Struct and a complementary block-split fixed-calibration audit on the ULM structural audit.
 
 \paragraph{How the prespecified defaults were chosen.}
+\ifPAPERONLY
+The numerical settings in this pipeline do not all play the same role, and they were not selected in the same way. Band edges are tied to acquisition physics: PRF fixes the discrete Doppler grid and Nyquist limit, while the flow/guard/alias partitions are chosen to separate slow parenchymal microvascular content from transition-band and aliased high-velocity nuisance on that grid. Tile geometry and $L_t$ are chosen once per regime to preserve spatial adaptation while retaining enough slow-time support for stable detector estimates, then held fixed. The adaptive threshold $\tau_g$ is a single frozen guard-energy cutoff chosen to preserve the fixed head in cleaner regimes while turning on whitening only when guard-band clutter evidence is clearly non-negligible. Full whitening-estimator and conditioning details are kept in the methods companion.
+\else
 The numerical settings in this pipeline do not all play the same role, and they were not selected in the same way. Band edges are tied to acquisition physics: PRF fixes the discrete Doppler grid and Nyquist limit, while the flow/guard/alias partitions are chosen to separate slow parenchymal microvascular content from transition-band and aliased high-velocity nuisance on that grid. Tile geometry and $L_t$ are locality/support choices: they are chosen once per regime to preserve spatial adaptation while retaining enough slow-time support for stable covariance estimation, then held fixed. Conditioning parameters (for the fully whitened mode) are chosen to keep the robust covariance well behaved on development audits rather than to maximize held-out task scores. The adaptive threshold $\tau_g$ is a single frozen guard-energy cutoff chosen to preserve the fixed head in cleaner regimes while turning on whitening only when guard-band clutter evidence is clearly non-negligible.
+\fi
 
 \subsection{Integrity checks and deterministic sentinels}
 \ifPAPERONLY
@@ -493,7 +507,7 @@ The evidence is stratified by regime so that quantitative detection results rema
 \end{itemize}
 
 \ifPAPERONLY
-Each regime uses one frozen operating profile for baseline, detector support, and Doppler-band geometry. The main paper keeps the regime-level whitening recipe card in Table~\ref{tab:result_table_score_map}; the fuller profile table is kept in the methods companion.
+Each regime uses one frozen operating profile for baseline, detector support, and Doppler-band geometry. The methods companion records the full regime-level whitening recipes and profile details.
 \else
 \begin{table}[t]
 \centering
@@ -517,8 +531,10 @@ ULM Zenodo 7883227 motion and same-residual audits (PRF 1000; 128-frame blocks) 
 \end{table}
 \fi
 
+\ifPAPERONLY
+Equation~\eqref{eq:sbase} defines the baseline ROC score, Equation~\eqref{eq:s0} the fixed detector, Equation~\eqref{eq:sadapt} the adaptive detector, and Equation~\eqref{eq:sw} the fully whitened detector. Regime-specific whitening estimators, loading values, and training-support policies are fixed before reporting and are listed in the methods companion.
+\else
 Table~\ref{tab:result_table_score_map} condenses the whitening and conditioning recipe into one row per regime. The result tables themselves identify which detector head is being reported; the regime-level covariance estimator, loading, and training-support policy are fixed and summarized here, with short notes only for the few exceptions. Equation~\eqref{eq:sbase} defines the baseline ROC score, Equation~\eqref{eq:s0} the fixed detector, Equation~\eqref{eq:sadapt} the adaptive detector, and Equation~\eqref{eq:sw} the fully whitened detector.
-
 \begin{center}
 \captionsetup{type=table}
 \footnotesize
@@ -541,6 +557,7 @@ Shin-ProxyMotion & Tyler-type on promoted tiles; non-promoted tiles use $R_i=I$ 
 \caption{Regime-level recipe card for the reported results. Each row summarizes the covariance estimator, loading, and whitening-support policy used in that regime when whitening is active. Detector heads are identified directly in the result tables themselves.}
 \label{tab:result_table_score_map}
 \end{center}
+\fi
 
 \section{Results}
 \label{sec:results}
