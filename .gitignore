@@ -33,6 +33,8 @@ docs/refactor/
 docs/pymust_simus_clin_plan.md
 docs/simulation_spec_plan.md
 docs/simus_clinutility_v2_plan.md
+docs/final_artifact_index.md
+docs/legacy/
 notebooks/colab_play.ipynb
 pymust_spec.txt
 *.aux
@@ -52,12 +54,13 @@ reports/**
 !reports/latency/
 !reports/latency/4080super_latency_summary.csv
 !reports/latency/4080super_latency_summary.json
-
-# Physical Doppler sanity-link (SIMUS/PyMUST) Phase 3 artifacts.
-!reports/physdoppler_sanity_link/
-!reports/physdoppler_sanity_link/simus_*.json
-
-# SIMUS baseline vs STAP comparisons (paper-style baselines on SIMUS Icube).
-!reports/simus_baseline_compare/
-!reports/simus_baseline_compare/*.csv
-!reports/simus_baseline_compare/*.json
+reports/detector_family_policy_table.tex
+reports/final_parameter_sensitivity.csv
+reports/final_parameter_sensitivity.json
+reports/latency_named_preset_rtx4080_prf_product_v1.json
+reports/physdoppler_sanity_link/
+reports/simus_baseline_compare/
+reports/simus_motion/
+reports/simus_structural/
+reports/simus_clinical_stress_mobile_smoke_final.csv
+reports/simus_clinical_stress_mobile_smoke_final.json
