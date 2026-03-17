@@ -193,6 +193,8 @@ def _fmt_cell(cell: Cell | None) -> str:
 
 
 def _alpha_tex(a: float) -> str:
+    if abs(a - 1e-2) <= 1e-12:
+        return "10^{-2}"
     if abs(a - 1e-4) <= 1e-12:
         return "10^{-4}"
     if abs(a - 3e-4) <= 1e-12:
@@ -233,11 +235,12 @@ def _render_table(
     lines.append("\\centering")
     lines.append("\\small")
     lines.append("\\resizebox{\\linewidth}{!}{%")
-    lines.append("\\begin{tabular}{l ccc ccc}")
+    ncols = len(fprs)
+    lines.append("\\begin{tabular}{l " + ("c" * ncols) + " " + ("c" * ncols) + "}")
     lines.append("\\hline")
     lines.append(
-        " & \\multicolumn{3}{c}{Along (linear17 @ PRF 2500)} & "
-        "\\multicolumn{3}{c}{Across (linear17 @ PRF 2500)} \\\\"
+        f" & \\multicolumn{{{ncols}}}{{c}}{{Along (linear17 @ PRF 2500)}} & "
+        f"\\multicolumn{{{ncols}}}{{c}}{{Across (linear17 @ PRF 2500)}} \\\\"
     )
     lines.append(
         "Method / score & "
@@ -264,7 +267,8 @@ def _render_table(
         "the detector head. The baseline rows are power Doppler and Kasai lag-1 power on that residual; the detector "
         "ablations replace the fully whitened matched-subspace detector with either total whitened slow-time power (no Doppler "
         "band partition) or the same flow-band matched-subspace ratio without covariance whitening ($R=I$). "
-        "Thresholds are chosen per method on pooled background pixels to match each target FPR and evaluated on "
+        "The table includes $\\alpha=10^{-2}$ as a practitioner-facing relaxed operating point together with the stricter "
+        "$\\alpha\\le 10^{-3}$ tail regime used for stress testing. Thresholds are chosen per method on pooled background pixels to match each target FPR and evaluated on "
         "pooled lumen pixels. Brackets show 95\\% frame-bootstrap CIs ($n=2000$ resamples over cine frames) at the "
         "fixed pooled threshold. Pooled background counts are "
         f"$n_{{\\mathrm{{bg}}}}={_fmt_sci_tex(n_bg_along)}$ for the along view "
@@ -281,7 +285,7 @@ def _render_table(
 
 def main() -> None:
     args = parse_args()
-    fprs = [1e-4, 3e-4, 1e-3]
+    fprs = [1e-2, 1e-4, 3e-4, 1e-3]
 
     along_default = _load_json(args.along_default)
     along_power = _load_json(args.along_whitened_power)
