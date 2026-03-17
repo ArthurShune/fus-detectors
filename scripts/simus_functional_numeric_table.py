@@ -84,7 +84,7 @@ def main() -> None:
     lines.append("\\hline")
     lines.append("\\end{tabular}")
     lines.append(
-        "\\caption{Secondary held-out functional summary on the prespecified SIMUS/PyMUST settings. "
+        "\\caption{Secondary held-out functional summary on the prespecified SIMUS-Struct settings. "
         "This table uses one common background-controlled activation readout for every compared pipeline, so the rows differ only in the upstream residualizer and downstream detector head. "
         "``Best end-to-end chain'' is the strongest full held-out pipeline on that setting under that common readout. "
         "``Matched-subspace-positive families'' counts how many of the six prespecified residual families improved when the matched-subspace detector stage replaced the native conventional score on the same residual cube. "

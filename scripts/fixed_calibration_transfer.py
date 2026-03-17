@@ -284,7 +284,7 @@ def _build_simus_table(summary_rows: list[dict[str, Any]], *, alpha: float) -> s
     lines.append("\\end{tabular}%")
     lines.append("}")
     lines.append(
-        "\\caption{Fixed-calibration transfer on the prespecified held-out SIMUS/PyMUST structural benchmark at "
+        "\\caption{Fixed-calibration transfer on SIMUS-Struct at "
         f"nominal $\\alpha={_alpha_tex(alpha)}$. For each setting, a single threshold is learned once from pooled background negatives on separate calibration seeds 125--126 and then applied unchanged to the held-out evaluation seeds 127--128. Entries report mean [min,max] across the two held-out seeds, so this table is a direct non-retrospective threshold-transfer check rather than the per-window oracle calibration used for ROC reporting elsewhere.}}"
     )
     lines.append("\\label{tab:simus_fixed_calibration_transfer}")
