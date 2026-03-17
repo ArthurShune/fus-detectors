@@ -4,33 +4,14 @@
     "release_tag": "preprint-2026-03-17"
   },
   "git": {
-    "commit": "67d7354cc52e7447a296f164ee31ec95bcc27961",
-    "commit_short": "67d7354",
+    "commit": "ebcee6c746206ac17c004d79d72ce72576c41d6a",
+    "commit_short": "ebcee6c",
     "branch": "main",
-    "dirty": true,
-    "dirty_paths_count": 8,
-    "dirty_ignored_paths_count": 9,
-    "dirty_paths": [
-      "M README.md",
-      "M paper/README.md",
-      "RM paper/stap_fus_methodology.tex -> paper/manuscript.tex",
-      "RM paper/stap_fus_paper.tex -> paper/preprint.tex",
-      "RM paper/stap_fus_supplement.tex -> paper/supplement.tex",
-      "M pipeline/realdata/ulm_zenodo_7883227.py",
-      "M scripts/generate_repro_manifest.py",
-      "M sim/kwave/common.py"
-    ],
-    "dirty_ignored_paths": [
-      "RM paper/stap_fus_methodology.pdf -> paper/methods_companion.pdf",
-      "RM paper/stap_fus_paper.pdf -> paper/preprint.pdf",
-      "RM paper/stap_fus_supplement.pdf -> paper/supplement.pdf",
-      "?? manuscript.pdf",
-      "?? preprint.pdf",
-      "?? stap_fus_methodology.pdf",
-      "?? stap_fus_paper.pdf",
-      "?? stap_fus_supplement.pdf",
-      "?? supplement.pdf"
-    ]
+    "dirty": false,
+    "dirty_paths_count": 0,
+    "dirty_ignored_paths_count": 0,
+    "dirty_paths": [],
+    "dirty_ignored_paths": []
   },
   "env": {
     "preferred_conda_env": "fus-detectors",
