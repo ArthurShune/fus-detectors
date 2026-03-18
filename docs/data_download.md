@@ -1,6 +1,30 @@
-# Dataset Download Notes (For Repro Runs)
+# Dataset Setup Notes
 
-This repo intentionally ignores large datasets under `data/` (see `.gitignore`). These notes document how to fetch the real-data inputs needed by the reproducibility + latency scripts.
+Large datasets under `data/` are intentionally excluded from Git. These notes document the public inputs used by the reproduction and audit scripts, where to place them, and any download caveats.
+
+## SIMUS / PyMUST synthetic benchmark
+
+No external download is required. The held-out SIMUS structural benchmark is generated locally from the SIMUS/PyMUST toolchain.
+
+## ULM Zenodo 7883227 (rat-brain kHz IQ)
+
+Expected layout:
+
+- `data/ulm_zenodo_7883227/param.mat`
+- `data/ulm_zenodo_7883227/readme.pdf`
+- `data/ulm_zenodo_7883227/IQ_001_to_025.zip`
+- `data/ulm_zenodo_7883227/IQ_026_to_050.zip`
+- `...`
+
+The structural and motion scripts read directly from the `IQ_*.zip` archives and extract working files into `tmp/ulm_zenodo_7883227/` as needed.
+
+Download:
+
+1. Visit the Zenodo record: `https://doi.org/10.5281/zenodo.7883227`
+2. Download the `IQ_*.zip` archives together with `param.mat` / `readme.pdf`
+3. Place the files under `data/ulm_zenodo_7883227/`
+
+Reference install footprint: about `50 GB` of zip archives.
 
 ## Shin RatBrain Fig3 (Zenodo 10711806)
 
@@ -43,3 +67,24 @@ As of 2026-03-04, the MosMed dataset download flow is email-gated and uses a web
 
 Reference: DOI `10.17816/DD76511`.
 
+Reference extracted footprint in the local test environment: about `13.5 GB`.
+
+## Whole-brain mouse fUS atlas bundle (optional companion-only analyses)
+
+This bundle is used only for companion-only PD retrospectives and atlas-aligned descriptive summaries.
+
+Expected layout:
+
+- `data/whole-brain-fUS/scan1.mat`
+- `data/whole-brain-fUS/scan2.mat`
+- `...`
+- `data/whole-brain-fUS/allen_brain_atlas.mat`
+- `data/whole-brain-fUS/scan_anatomy.mat`
+
+Download:
+
+1. Visit the Zenodo record: `https://doi.org/10.5281/zenodo.4905862`
+2. Download the MATLAB bundle
+3. Extract it under `data/whole-brain-fUS/`
+
+Reference install footprint in the local test environment: about `0.7 GB`.
