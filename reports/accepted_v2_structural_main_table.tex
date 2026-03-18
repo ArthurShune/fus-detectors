@@ -7,12 +7,11 @@
 \smallskip\noindent Best conventional baseline: HOSVD $\rightarrow$ Kasai. Fixed detector chain: Adaptive Global SVD $\rightarrow$ fixed matched-subspace.\par\smallskip
 \begin{tabular}{@{}l c c c c c c@{}}
 \hline
-Seed & \multicolumn{3}{c}{Best conventional baseline} & \multicolumn{3}{c}{Fixed detector chain} \\
+Summary & \multicolumn{3}{c}{Best conventional baseline} & \multicolumn{3}{c}{Fixed detector chain} \\
 \cline{2-4} \cline{5-7}
  & AUC$_{\mathrm{main/bg}}$ & AUC$_{\mathrm{main/nuis}}$ & FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$ & AUC$_{\mathrm{main/bg}}$ & AUC$_{\mathrm{main/nuis}}$ & FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$ \\
 \hline
-Seed 127 & 0.647 & 0.624 & 0.361 & 0.798 & 0.923 & 0.000$^{\dagger}$ \\
-Seed 128 & 0.692 & 0.720 & 0.210 & 0.905 & 0.984 & 0.000$^{\dagger}$ \\
+Mean [min,max] over seeds 127--128 & 0.669 [0.647,0.692] & 0.672 [0.624,0.720] & 0.286 [0.210,0.361] & 0.851 [0.798,0.905] & 0.953 [0.923,0.984] & 0.000$^{\dagger}$ [0.000,0.000] \\
 \hline
 \end{tabular}
 \medskip
@@ -20,15 +19,14 @@ Seed 128 & 0.692 & 0.720 & 0.210 & 0.905 & 0.984 & 0.000$^{\dagger}$ \\
 \smallskip\noindent Best conventional baseline: HOSVD $\rightarrow$ Kasai. Fixed detector chain: RPCA $\rightarrow$ fixed matched-subspace.\par\smallskip
 \begin{tabular}{@{}l c c c c c c@{}}
 \hline
-Seed & \multicolumn{3}{c}{Best conventional baseline} & \multicolumn{3}{c}{Fixed detector chain} \\
+Summary & \multicolumn{3}{c}{Best conventional baseline} & \multicolumn{3}{c}{Fixed detector chain} \\
 \cline{2-4} \cline{5-7}
  & AUC$_{\mathrm{main/bg}}$ & AUC$_{\mathrm{main/nuis}}$ & FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$ & AUC$_{\mathrm{main/bg}}$ & AUC$_{\mathrm{main/nuis}}$ & FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$ \\
 \hline
-Seed 127 & 0.834 & 0.431 & 0.643 & 0.993 & 0.99998 & 0.000$^{\dagger}$ \\
-Seed 128 & 0.839 & 0.471 & 0.600 & 0.995 & 0.99994 & 0.000$^{\dagger}$ \\
+Mean [min,max] over seeds 127--128 & 0.837 [0.834,0.839] & 0.451 [0.431,0.471] & 0.621 [0.600,0.643] & 0.994 [0.993,0.995] & 0.99996 [0.99994,0.99998] & 0.000$^{\dagger}$ [0.000,0.000] \\
 \hline
 \end{tabular}
 \par\smallskip\noindent\footnotesize $^{\dagger}$Exactly zero observed nuisance detections; supported floor 1/886 (mobile) and 1/280 (intra-operative parenchymal).\par
-\caption{Held-out SIMUS-Struct reference regimes with explicit held-out seed rows. For each evaluated structural setting, we report the best conventional baseline from the development-split baseline sweep and the strongest fixed detector chain chosen on development seeds 125--126, then evaluated unchanged on held-out seeds 127--128. Seed-specific held-out values are shown directly rather than pooled summaries.}
+\caption{Held-out SIMUS-Struct reference settings. For each evaluated structural setting, we report the best conventional baseline from the development-split baseline sweep and the strongest fixed detector chain chosen on development seeds 125--126, then evaluated unchanged on held-out seeds 127--128. Values are mean [min,max] over the two held-out seeds.}
 \label{tab:accepted_v2_structural_main}
 \end{center}

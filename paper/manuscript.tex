@@ -208,7 +208,7 @@ The focus is downstream detector-head design after fixed residualization. The fi
 \end{itemize}
 
 \paragraph{Scope of empirical claims.}
-The evidence is stratified by data setting. Quantitative efficacy results are reported where independent $H_1/H_0$ labels or an external structural reference are available. The detector family also has a fixed hierarchy throughout the paper: the fixed matched-subspace head is the default method, the adaptive variant selectively invokes whitening, and the fully whitened variant applies whitening throughout. After first definition, we use the short labels kWave-Stress, Gammex-Struct, SIMUS-Struct-Mobile, SIMUS-Struct-Intraop, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion; SIMUS-Struct denotes the paired mobile and intra-operative structural benchmark.
+The evidence is stratified by data setting. Quantitative efficacy results are reported where independent $H_1/H_0$ labels or an external structural reference are available. After first definition, we use the short labels kWave-Stress, Gammex-Struct, SIMUS-Struct-Mobile, SIMUS-Struct-Intraop, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion; SIMUS-Struct denotes the paired mobile and intra-operative structural benchmark.
 
 \section{Background and Problem Formulation}
 \label{sec:background-problem}
@@ -305,7 +305,7 @@ The fixed head is a local band-limited flow detector applied after ordinary resi
 \label{fig:stap_pipeline}
 \end{figure}
 
-The hierarchy is simple: fixed is the default method, adaptive selectively invokes whitening, and fully whitened applies whitening throughout. The derivations below formalize those three detector modes.
+The derivations below formalize the three detector modes introduced above.
 
 \paragraph{Three detector variants.}
 On tile $i$, let $x_{i,k}$ denote the unwhitened slow-time snapshots and $y_{i,k}=R_i^{-1/2}x_{i,k}$ the whitened snapshots when whitening is active. The fixed detector is
@@ -430,6 +430,9 @@ This self-normalized statistic is the pre-regularization detector score $S_{\mat
 \fi
 
 \subsection{Algorithmic integrity and deterministic safeguards}
+\ifPAPERONLY
+Deterministic label-free integrity checks for proxy construction, band discretization, and conditional execution are documented in the methods companion. Invalid configurations are excluded from reporting, and decision-rule variants such as conditional execution are reported separately from the default detector pipeline.
+\else
 To make the architecture auditable and to avoid leakage or discretization artifacts masquerading as performance gains, we enforce deterministic, label-free safeguards:
 \begin{itemize}[nosep]
   \item \textbf{Conditional execution as a decision-rule variant.} To reduce latency, local whitening can be skipped outside a flow-proxy region and replaced by the baseline score there. Because this changes the overall decision rule, any conditional-execution reporting is treated as a distinct algorithmic variant and is accompanied by leakage controls (same-window vs.\ disjoint-window vs.\ randomized proxy masks). Unless otherwise stated, conditional execution uses \emph{disjoint-window} proxy gating for detection reporting.
@@ -437,9 +440,6 @@ To make the architecture auditable and to avoid leakage or discretization artifa
   \item \textbf{Proxy-mask circularity control.} Here, proxy-mask circularity means reusing a proxy-derived mask both to steer conditional execution and to define the same quantitative endpoint being reported. Proxy maps are never used to compute ROC/TPR/FPR. Quantitative ROC claims are restricted to settings with independent $H_1/H_0$ labels (simulator truth or B-mode structural geometry).
 \end{itemize}
 
-\ifPAPERONLY
-The methods companion records the corresponding reason labels and failure modes.
-\else
 For auditability, we log explicit reason labels so that ``regularizer off'' ($w\equiv 1$) is an expected success mode under flat or non-actionable evidence. \SuppOrApp{app:ka-contract-theory} provides modality-agnostic sufficient conditions and additional sentinels used to interpret when the optional penalty layer should be active or inert.
 \fi
 
@@ -489,7 +489,7 @@ The numerical settings in this pipeline do not all play the same role, and they 
 
 \subsection{Integrity checks and deterministic sentinels}
 \ifPAPERONLY
-This work uses deterministic, label-free integrity checks for acquisition metadata, short-ensemble band discretization, proxy construction, and compute gating. Those checks either record provenance and proceed conservatively or exclude invalid configurations from reporting. The compact checklist and logged failure modes are kept in the methods companion.
+Additional deterministic integrity checks for acquisition metadata and compute gating are listed in the methods companion together with their logged reason codes.
 \else
 This work is a reproducible processing pipeline (decode $\rightarrow$ baseline $\rightarrow$ detector score $\rightarrow$ optional shrink-only penalty layer). Several practical pathologies can invalidate tail-rate reporting or spuriously activate the penalty layer (e.g.\ missing acquisition metadata, coarse short-ensemble band discretization, proxy-mask circularity, or compute-gating leakage). We therefore enforce deterministic, label-free integrity checks that either (i) record provenance and proceed conservatively or (ii) disable the penalty layer ($w\equiv 1$) with an explicit reason label. A concise checklist (and where each safeguard is logged) is provided in \SuppOrApp{app:failure-modes}.
 \fi
@@ -497,7 +497,7 @@ This work is a reproducible processing pipeline (decode $\rightarrow$ baseline $
 \subsection{Regimes and scope}
 \label{sec:results-overview}
 
-The evidence is stratified by setting so that quantitative detection results remain clearly separated from robustness or transfer audits. The main scope is straightforward: downstream detector-head design matters after fixed residualization; the fixed band-limited head is the default structural choice on the held-out SIMUS benchmark; adaptive and fully whitened variants help in narrower clutter-heavy or structure-concentration settings; and fixed-threshold transfer is encouraging in selected settings but not solved.
+The evidence is stratified by setting so that quantitative detection results remain clearly separated from robustness or transfer audits. Downstream detector-head design matters after fixed residualization; the fixed band-limited head is the default structural choice on the held-out SIMUS benchmark; adaptive and fully whitened variants help in narrower clutter-heavy or structure-concentration settings; and fixed-threshold transfer is encouraging in selected settings but not solved.
 
 \begin{itemize}[nosep]
   \item \textbf{kWave-Stress.} These are controlled stress tests for strict-tail behavior. Across the open-skull, alias-dominant, and structured-clutter scenarios, the matched-subspace detector family retains measurable sensitivity at ultra-low FPR, with the strongest gains in the alias-dominant and structured-clutter settings.
@@ -607,7 +607,7 @@ We begin with the held-out reference setting that defines the default downstream
   \end{center}
 }
 
-\noindent Table~\ref{tab:accepted_v2_structural_main} is the held-out reference setting. On the mobile setting, the best conventional baseline among evaluated methods is HOSVD $\rightarrow$ Kasai, while the strongest fixed detector chain chosen on development seeds 125--126 and evaluated unchanged on held-out seeds 127--128 is Adaptive Global SVD $\rightarrow$ fixed matched-subspace. On the intra-operative parenchymal setting, the best conventional baseline is again HOSVD $\rightarrow$ Kasai, while the corresponding fixed detector chain is RPCA $\rightarrow$ fixed matched-subspace. The headline number is the intra-operative nuisance-tail reduction: at matched main-response recall 0.5, nuisance FPR falls from 0.998 [0.996, 1.000] for Kasai to 0.004 [0.004, 0.004] for the fixed matched-subspace detector. Figure~\ref{fig:simus_reference_benchmark_geometry} shows the mask geometry used for these audits: thresholds are set on a broad background pool and nuisance leakage is measured on compact structured artifact zones. The fixed-chain rows suppress those nuisance zones completely on all four held-out seed-setting pairs, and the table reports the seed-specific held-out values directly. In Table~\ref{tab:accepted_v2_structural_main}, the 0.000 nuisance rows are literal zero observed nuisance detections on the held-out masks, not rounded near-zero rates. This is the main benchmark result: the band-limited fixed matched-subspace head is the strongest fixed default on held-out structural data, while Table~\ref{tab:simus_stress_frontier_rpca_heads} shows where the adaptive and fully whitened variants help in clutter-heavier settings.
+\noindent Table~\ref{tab:accepted_v2_structural_main} is the held-out reference setting. On the mobile setting, the best conventional baseline among evaluated methods is HOSVD $\rightarrow$ Kasai, while the strongest fixed detector chain chosen on development seeds 125--126 and evaluated unchanged on held-out seeds 127--128 is Adaptive Global SVD $\rightarrow$ fixed matched-subspace. On the intra-operative parenchymal setting, the best conventional baseline is again HOSVD $\rightarrow$ Kasai, while the corresponding fixed detector chain is RPCA $\rightarrow$ fixed matched-subspace. The headline number is the intra-operative nuisance-tail reduction: at matched main-response recall 0.5, nuisance FPR falls from 0.998 [0.996, 1.000] for Kasai to 0.004 [0.004, 0.004] for the fixed matched-subspace detector. Figure~\ref{fig:simus_reference_benchmark_geometry} shows the mask geometry used for these audits: thresholds are set on a broad background pool and nuisance leakage is measured on compact structured artifact zones. The fixed-chain rows suppress those nuisance zones completely on all four held-out seed-setting pairs, and Table~\ref{tab:accepted_v2_structural_main} now reports pooled mean [min,max] summaries over held-out seeds 127 and 128. In Table~\ref{tab:accepted_v2_structural_main}, the 0.000 nuisance rows are literal zero observed nuisance detections on the held-out masks, not rounded near-zero rates. This is the main benchmark result: the band-limited fixed matched-subspace head is the strongest fixed default on held-out structural data, while Table~\ref{tab:simus_stress_frontier_rpca_heads} shows where the adaptive and fully whitened variants help in clutter-heavier settings.
 
 To isolate that detector-head claim directly on the main benchmark, Table~\ref{tab:simus_detector_family_ablation} fixes one held-out MC--SVD residual stream and swaps only the downstream score head. This removes residualizer choice from the comparison. On that fixed residual, PD and Kasai still rank nuisance highly, the fixed matched-subspace head is the strongest same-residual detector, and the fully whitened detector is worse on both held-out settings. The adaptive detector is numerically identical to the fixed head here because its frozen guard-promotion rule does not activate on these cleaner MC--SVD residuals. On this benchmark, the adaptive extension therefore preserves the fixed default when the clutter evidence is weak instead of forcing whitening where it does not help.
 
