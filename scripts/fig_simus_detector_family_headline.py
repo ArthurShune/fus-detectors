@@ -8,6 +8,7 @@ from pathlib import Path
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import Patch
 
 
 METHODS = [
@@ -76,6 +77,11 @@ def main() -> int:
     fig, axes = plt.subplots(1, 2, figsize=(8.8, 3.3), constrained_layout=True, sharey=True)
     x = np.arange(len(METHODS))
 
+    legend_handles = [
+        Patch(facecolor=COLORS[short], edgecolor="black", linewidth=0.6, label=method_label)
+        for method_label, short in METHODS
+    ]
+
     for ax, (setting_key, panel_title) in zip(axes, SETTINGS, strict=True):
         means = []
         lo_err = []
@@ -114,6 +120,16 @@ def main() -> int:
             ax.text(xi, mean + 0.03, f"{mean:.3f}", ha="center", va="bottom", fontsize=7)
 
     axes[1].set_ylabel("")
+    fig.legend(
+        handles=legend_handles,
+        loc="upper center",
+        ncol=3,
+        fontsize=7,
+        frameon=False,
+        bbox_to_anchor=(0.5, 1.08),
+        columnspacing=0.9,
+        handlelength=1.3,
+    )
     fig.savefig(args.out, bbox_inches="tight")
     plt.close(fig)
     return 0
