@@ -151,25 +151,6 @@ The scope is equally narrow. This paper is about downstream detection-statistic 
 
 The evidence proceeds from held-out structural benchmarking to stricter mechanism checks and bounded real-IQ corroboration. We use the short labels kWave-Stress, Gammex-Struct, SIMUS-Struct-Mobile, SIMUS-Struct-Intraop, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion throughout; SIMUS-Struct denotes the paired mobile and intra-operative structural benchmark.
 
-\begin{figure}[t]
-\centering
-\IfFileExists{figs/paper/leading_structural_fidelity_gammex.pdf}{%
-  \includegraphics[width=\linewidth]{figs/paper/leading_structural_fidelity_gammex.pdf}%
-}{%
-  \fbox{\begin{minipage}{0.95\linewidth}
-    \centering
-    \vspace{0.5em}
-    Missing figure \path{figs/paper/leading_structural_fidelity_gammex.pdf}.\\
-    Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/fig_leading_structural_fidelity.py}.
-    \vspace{0.5em}
-  \end{minipage}}%
-}
-\caption{Leading structural-fidelity visual on a structurally labeled Gammex flow phantom acquisition from the open Doppler Twinkling Artifact database (labels derived from B-mode-only tube segmentation). Top row: baseline power Doppler image $S_{\mathrm{base}}$ (SVD band-pass clutter suppression followed by power Doppler), the whitened-power map, the matched-subspace map, and a matched-FPR decision-difference panel at a fixed background false-positive rate ($10^{-2}$; chosen here for visualization), showing pixels detected only by whitened power versus only by the baseline. Bottom row: zoomed region of interest. The tube contour is overlaid for reference. The qualitative ordering now matches the later Gammex structural ROC tables: whitened power is the strongest phantom score in this short-ensemble setting, while the matched-subspace panel remains included as the detector-core reference.}
-\label{fig:leading_structural_fidelity}
-\end{figure}
-
-The effect is not confined to the extreme tail. On the representative Gammex frame in Figure~\ref{fig:leading_structural_fidelity}, matching the background FPR at $10^{-2}$ yields zero lumen recovery for the baseline image, whereas both detector-family maps recover lumen-consistent structure at the same matched background allowance, with the whitened-power map showing the cleaner phantom response. The later Gammex structural ROC tables confirm that whitened power is the stronger phantom score overall in this short-ensemble setting. We use the stricter $10^{-3}$--$10^{-4}$ operating points mainly as a stress test that exposes artifact sensitivity cleanly, not because the practical relevance begins only there.
-
 This problem matters now because fUS is no longer only a preclinical proof-of-concept modality. It is already used in intra-operative, neonatal, cranial-window, and emerging mobile settings \cite{Imbault2017,DemeneHumanNewborn2017,BarangerNeonates2021,Rabut2024,MobileFUS2025,Deffieux2021}, where rare nuisance-driven false positives can matter more than average image quality.
 
 \section{Background and Problem Formulation}
@@ -548,23 +529,6 @@ SIMUS-Struct is a synthetic benchmark motivated by reported fUS operating condit
 
 For the functional task, we use the same prespecified settings and a common background-controlled GLM-style readout on simulated task/null runs. We refer to that experiment as the SIMUS functional audit. Figure~\ref{fig:simus_reference_benchmark_geometry} shows the corresponding structural mask geometry, and Table~\ref{tab:accepted_v2_structural_main} gives the held-out reference setting that determines the default downstream score.
 
-\newpage
-\IfFileExists{reports/accepted_v2_structural_main_table.tex}{%
-  \input{reports/accepted_v2_structural_main_table.tex}%
-}{%
-  \begin{center}
-  \refstepcounter{table}\label{tab:accepted_v2_structural_main}%
-  \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/accepted_v2_structural_main_table.tex}.\\
-    Reproduce it with \path{PYTHONPATH=. python scripts/simus_cleaner_structural_checkpoint_table.py}.
-  \end{minipage}}
-  \end{center}
-}
-
-\noindent Table~\ref{tab:accepted_v2_structural_main} is the held-out reference setting. On the mobile setting, the best conventional baseline among evaluated methods is HOSVD $\rightarrow$ Kasai, while the strongest fixed detector chain chosen on development seeds 125--126 and evaluated unchanged on held-out seeds 127--128 is Adaptive Global SVD $\rightarrow$ fixed matched-subspace. On the intra-operative parenchymal setting, the best conventional baseline is again HOSVD $\rightarrow$ Kasai, while the corresponding fixed detector chain is RPCA $\rightarrow$ fixed matched-subspace. The headline number is the intra-operative nuisance-tail reduction: at matched main-response recall 0.5, nuisance FPR falls from 0.998 [0.996, 1.000] for Kasai to 0.004 [0.004, 0.004] for the fixed matched-subspace detector. Figure~\ref{fig:simus_reference_benchmark_geometry} shows the mask geometry used for these audits: thresholds are set on a broad background pool and nuisance leakage is measured on compact structured artifact zones. The fixed-chain rows suppress those nuisance zones completely on all four held-out seed-setting pairs, and Table~\ref{tab:accepted_v2_structural_main} now reports pooled mean [min,max] summaries over held-out seeds 127 and 128. In Table~\ref{tab:accepted_v2_structural_main}, the 0.000 nuisance rows are literal zero observed nuisance detections on the held-out masks, not rounded near-zero rates. This is the main benchmark result: the band-limited fixed matched-subspace head is the strongest fixed default on held-out structural data, while Table~\ref{tab:simus_stress_frontier_rpca_heads} shows where the adaptive and fully whitened variants help in clutter-heavier settings.
-
-To isolate that detector-head claim directly on the main benchmark, Table~\ref{tab:simus_detector_family_ablation} fixes one held-out MC--SVD residual stream and swaps only the downstream score head. This removes residualizer choice from the comparison. On that fixed residual, PD and Kasai still rank nuisance highly, the fixed matched-subspace head is the strongest same-residual detector, and the fully whitened detector is worse on both held-out settings. The adaptive detector is numerically identical to the fixed head here because its frozen guard-promotion rule does not activate on these cleaner MC--SVD residuals. On this benchmark, the adaptive extension therefore preserves the fixed default when the clutter evidence is weak instead of forcing whitening where it does not help.
-
 \begin{figure}[H]
 \centering
 \IfFileExists{figs/paper/simus_detector_family_headline.pdf}{%
@@ -581,6 +545,23 @@ To isolate that detector-head claim directly on the main benchmark, Table~\ref{t
 \caption{Headline same-residual downstream-head comparison on the held-out SIMUS reference benchmark using the common MC--SVD residual from Table~\ref{tab:simus_detector_family_ablation}. Bars show nuisance false-positive rate at matched main-response recall 0.5, the clearest operating-point summary of the benchmark. Lower bars are better. On the intra-operative setting, the fixed matched-subspace head reduces nuisance FPR from 0.998 for Kasai to 0.004 on the same residual stream; under this frozen guard rule, the adaptive variant matches that result. AUC$_{\mathrm{main/nuis}}$ values are reported in Table~\ref{tab:simus_detector_family_ablation}.}
 \label{fig:simus_detector_family_headline}
 \end{figure}
+
+\newpage
+\IfFileExists{reports/accepted_v2_structural_main_table.tex}{%
+  \input{reports/accepted_v2_structural_main_table.tex}%
+}{%
+  \begin{center}
+  \refstepcounter{table}\label{tab:accepted_v2_structural_main}%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/accepted_v2_structural_main_table.tex}.\\
+    Reproduce it with \path{PYTHONPATH=. python scripts/simus_cleaner_structural_checkpoint_table.py}.
+  \end{minipage}}
+  \end{center}
+}
+
+\noindent Table~\ref{tab:accepted_v2_structural_main} is the held-out reference setting. On the mobile setting, the best conventional baseline among evaluated methods is HOSVD $\rightarrow$ Kasai, while the strongest fixed detector chain chosen on development seeds 125--126 and evaluated unchanged on held-out seeds 127--128 is Adaptive Global SVD $\rightarrow$ fixed matched-subspace. On the intra-operative parenchymal setting, the best conventional baseline is again HOSVD $\rightarrow$ Kasai, while the corresponding fixed detector chain is RPCA $\rightarrow$ fixed matched-subspace. The headline number is the intra-operative nuisance-tail reduction: at matched main-response recall 0.5, nuisance FPR falls from 0.998 [0.996, 1.000] for Kasai to 0.004 [0.004, 0.004] for the fixed matched-subspace detector. Figure~\ref{fig:simus_reference_benchmark_geometry} shows the mask geometry used for these audits: thresholds are set on a broad background pool and nuisance leakage is measured on compact structured artifact zones. The fixed-chain rows suppress those nuisance zones completely on all four held-out seed-setting pairs, and Table~\ref{tab:accepted_v2_structural_main} now reports pooled mean [min,max] summaries over held-out seeds 127 and 128. In Table~\ref{tab:accepted_v2_structural_main}, the 0.000 nuisance rows are literal zero observed nuisance detections on the held-out masks, not rounded near-zero rates. This is the main benchmark result: the band-limited fixed matched-subspace head is the strongest fixed default on held-out structural data, while Table~\ref{tab:simus_stress_frontier_rpca_heads} shows where the adaptive and fully whitened variants help in clutter-heavier settings.
+
+To isolate that detector-head claim directly on the main benchmark, Table~\ref{tab:simus_detector_family_ablation} fixes one held-out MC--SVD residual stream and swaps only the downstream score head. This removes residualizer choice from the comparison. On that fixed residual, PD and Kasai still rank nuisance highly, the fixed matched-subspace head is the strongest same-residual detector, and the fully whitened detector is worse on both held-out settings. The adaptive detector is numerically identical to the fixed head here because its frozen guard-promotion rule does not activate on these cleaner MC--SVD residuals. On this benchmark, the adaptive extension therefore preserves the fixed default when the clutter evidence is weak instead of forcing whitening where it does not help.
 
 \newpage
 \IfFileExists{reports/simus_detector_family_ablation_table.tex}{%
@@ -774,6 +755,23 @@ The same-residual phantom comparison shows that the baseline residual still cont
 The view asymmetry still matters: the across view provides the clearest structural-label phantom evidence, whereas the along view remains a harsher artifact-tail stress test under this short-ensemble profile. A small untuned sanity audit in \SuppOrApp{app:supp-results} gives similar values: on the first 20 cine frames, applying the matched-subspace detector directly to raw registered IQ changes TPR@$10^{-3}$ only from $3.48\times 10^{-4}$ to $2.61\times 10^{-4}$ on the along view and from 0.202 to 0.205 on the across view; perturbing the frozen along-view PRF from 2000 to 3000~Hz leaves TPR@$10^{-3}$ unchanged at $3.48\times 10^{-4}$ in that limited audit.
 
 \input{reports/twinkling_gammex_detector_ablation_table.tex}
+
+\begin{figure}[H]
+\centering
+\IfFileExists{figs/paper/leading_structural_fidelity_gammex.pdf}{%
+  \includegraphics[width=\linewidth]{figs/paper/leading_structural_fidelity_gammex.pdf}%
+}{%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    \centering
+    \vspace{0.5em}
+    Missing figure \path{figs/paper/leading_structural_fidelity_gammex.pdf}.\\
+    Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/fig_leading_structural_fidelity.py}.
+    \vspace{0.5em}
+  \end{minipage}}%
+}
+\caption{Leading structural-fidelity visual on a structurally labeled Gammex flow phantom acquisition from the open Doppler Twinkling Artifact database (labels derived from B-mode-only tube segmentation). Top row: baseline power Doppler image $S_{\mathrm{base}}$ (SVD band-pass clutter suppression followed by power Doppler), the whitened-power map, the matched-subspace map, and a matched-FPR decision-difference panel at a fixed background false-positive rate ($10^{-2}$; chosen here for visualization), showing pixels detected only by whitened power versus only by the baseline. Bottom row: zoomed region of interest. The tube contour is overlaid for reference. The qualitative ordering matches Table~\ref{tab:twinkling_gammex_structural_roc}: whitened power is the strongest phantom score in this short-ensemble setting, while the matched-subspace panel remains included as the detector-core reference.}
+\label{fig:leading_structural_fidelity}
+\end{figure}
 
 \begin{figure}[H]
 \centering
