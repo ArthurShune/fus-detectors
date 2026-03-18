@@ -52,6 +52,14 @@ def _fmt(x: str | float) -> str:
     return f"{value:.3f}"
 
 
+def _fmt_fpr_with_zero_note(x: str | float) -> str:
+    value = float(x)
+    formatted = _fmt(value)
+    if formatted == "0.000":
+        return formatted + r"$^{\dagger}$"
+    return formatted
+
+
 def _find_public_row(rows: list[dict[str, str]], *, setting: str, seed: str, spec: dict[str, str]) -> dict[str, str]:
     case_name = f"{SETTING_ROWS[setting]['seed_prefix']}{seed}"
     for row in rows:
@@ -118,7 +126,7 @@ def _build_table(public_rows: list[dict[str, str]], fixed_rows: list[dict[str, s
                 _fmt(public["fpr_nuisance_match@0p5"]),
                 _fmt(fixed["auc_main_vs_bg"]),
                 _fmt(fixed["auc_main_vs_nuisance"]),
-                _fmt(fixed["fpr_nuisance_match@0p5"]),
+                _fmt_fpr_with_zero_note(fixed["fpr_nuisance_match@0p5"]),
             ]
             lines.append(" & ".join(row) + r" \\")
         lines.append(r"\hline")
@@ -127,7 +135,10 @@ def _build_table(public_rows: list[dict[str, str]], fixed_rows: list[dict[str, s
             lines.append(r"\medskip")
 
     lines.append(
-        r"\caption{Held-out SIMUS-Struct reference regimes with explicit held-out seed rows. For each evaluated structural setting, we report the best conventional baseline from the development-split baseline sweep and the strongest fixed detector chain chosen on development seeds 125--126, then evaluated unchanged on held-out seeds 127--128. Seed-specific held-out values are shown directly rather than pooled summaries. Here, 0.000 means exactly zero observed nuisance detections on the frozen held-out nuisance masks for that seed, not a rounded small value; the supported floor is set by the corresponding nuisance-mask size.}"
+        r"\par\smallskip\noindent\footnotesize $^{\dagger}$Exactly zero observed nuisance detections; supported floor 1/886 (mobile) and 1/280 (intra-operative parenchymal).\par"
+    )
+    lines.append(
+        r"\caption{Held-out SIMUS-Struct reference regimes with explicit held-out seed rows. For each evaluated structural setting, we report the best conventional baseline from the development-split baseline sweep and the strongest fixed detector chain chosen on development seeds 125--126, then evaluated unchanged on held-out seeds 127--128. Seed-specific held-out values are shown directly rather than pooled summaries.}"
     )
     lines.append(r"\label{tab:accepted_v2_structural_main}")
     lines.append(r"\end{center}")
