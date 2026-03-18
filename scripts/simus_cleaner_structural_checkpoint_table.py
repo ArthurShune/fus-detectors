@@ -60,6 +60,16 @@ def _fmt_fpr_with_zero_note(x: str | float) -> str:
     return formatted
 
 
+def _fmt_summary(values: list[str | float], *, zero_note: bool = False) -> str:
+    nums = [float(v) for v in values]
+    mean = sum(nums) / len(nums)
+    lo = min(nums)
+    hi = max(nums)
+    if zero_note and mean == 0.0 and lo == 0.0 and hi == 0.0:
+        return f"{_fmt(mean)}$^{{\\dagger}}$ [{_fmt(lo)},{_fmt(hi)}]"
+    return f"{_fmt(mean)} [{_fmt(lo)},{_fmt(hi)}]"
+
+
 def _find_public_row(rows: list[dict[str, str]], *, setting: str, seed: str, spec: dict[str, str]) -> dict[str, str]:
     case_name = f"{SETTING_ROWS[setting]['seed_prefix']}{seed}"
     for row in rows:
@@ -108,7 +118,7 @@ def _build_table(public_rows: list[dict[str, str]], fixed_rows: list[dict[str, s
         lines.append(r"\begin{tabular}{@{}l c c c c c c@{}}")
         lines.append(r"\hline")
         lines.append(
-            r"Seed & \multicolumn{3}{c}{Best conventional baseline} & \multicolumn{3}{c}{Fixed detector chain} \\"
+            r"Summary & \multicolumn{3}{c}{Best conventional baseline} & \multicolumn{3}{c}{Fixed detector chain} \\"
         )
         lines.append(r"\cline{2-4} \cline{5-7}")
         lines.append(
@@ -116,19 +126,23 @@ def _build_table(public_rows: list[dict[str, str]], fixed_rows: list[dict[str, s
             r"AUC$_{\mathrm{main/bg}}$ & AUC$_{\mathrm{main/nuis}}$ & FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$ \\"
         )
         lines.append(r"\hline")
+        public_seed_rows = []
+        fixed_seed_rows = []
         for seed in ("127", "128"):
             public = _find_public_row(public_rows, setting=setting, seed=seed, spec=spec["public"])
             fixed = _find_fixed_row(fixed_rows, setting=setting, seed=seed, spec=spec["fixed"])
-            row = [
-                f"Seed {seed}",
-                _fmt(public["auc_main_vs_bg"]),
-                _fmt(public["auc_main_vs_nuisance"]),
-                _fmt(public["fpr_nuisance_match@0p5"]),
-                _fmt(fixed["auc_main_vs_bg"]),
-                _fmt(fixed["auc_main_vs_nuisance"]),
-                _fmt_fpr_with_zero_note(fixed["fpr_nuisance_match@0p5"]),
-            ]
-            lines.append(" & ".join(row) + r" \\")
+            public_seed_rows.append(public)
+            fixed_seed_rows.append(fixed)
+        row = [
+            r"Mean [min,max] over seeds 127--128",
+            _fmt_summary([r["auc_main_vs_bg"] for r in public_seed_rows]),
+            _fmt_summary([r["auc_main_vs_nuisance"] for r in public_seed_rows]),
+            _fmt_summary([r["fpr_nuisance_match@0p5"] for r in public_seed_rows]),
+            _fmt_summary([r["auc_main_vs_bg"] for r in fixed_seed_rows]),
+            _fmt_summary([r["auc_main_vs_nuisance"] for r in fixed_seed_rows]),
+            _fmt_summary([r["fpr_nuisance_match@0p5"] for r in fixed_seed_rows], zero_note=True),
+        ]
+        lines.append(" & ".join(row) + r" \\")
         lines.append(r"\hline")
         lines.append(r"\end{tabular}")
         if idx == 0:
@@ -138,7 +152,7 @@ def _build_table(public_rows: list[dict[str, str]], fixed_rows: list[dict[str, s
         r"\par\smallskip\noindent\footnotesize $^{\dagger}$Exactly zero observed nuisance detections; supported floor 1/886 (mobile) and 1/280 (intra-operative parenchymal).\par"
     )
     lines.append(
-        r"\caption{Held-out SIMUS-Struct reference regimes with explicit held-out seed rows. For each evaluated structural setting, we report the best conventional baseline from the development-split baseline sweep and the strongest fixed detector chain chosen on development seeds 125--126, then evaluated unchanged on held-out seeds 127--128. Seed-specific held-out values are shown directly rather than pooled summaries.}"
+        r"\caption{Held-out SIMUS-Struct reference settings. For each evaluated structural setting, we report the best conventional baseline from the development-split baseline sweep and the strongest fixed detector chain chosen on development seeds 125--126, then evaluated unchanged on held-out seeds 127--128. Values are mean [min,max] over the two held-out seeds.}"
     )
     lines.append(r"\label{tab:accepted_v2_structural_main}")
     lines.append(r"\end{center}")
