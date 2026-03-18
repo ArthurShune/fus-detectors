@@ -4,149 +4,169 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Polygon
 
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "figs" / "paper" / "variant_selection_flowchart.pdf"
 
 
-def add_box(ax, xy, wh, text, *, fc="#f7f7f7", ec="#222222", fontsize=11, weight="normal"):
-    x, y = xy
-    w, h = wh
+def add_round_box(ax, center, size, text, *, fc, fontsize=11, weight="normal"):
+    cx, cy = center
+    w, h = size
+    x = cx - w / 2
+    y = cy - h / 2
     patch = FancyBboxPatch(
         (x, y),
         w,
         h,
-        boxstyle="round,pad=0.02,rounding_size=0.02",
+        boxstyle="round,pad=0.02,rounding_size=0.025",
         facecolor=fc,
-        edgecolor=ec,
-        linewidth=1.2,
+        edgecolor="#2b2b2b",
+        linewidth=1.3,
     )
     ax.add_patch(patch)
     ax.text(
-        x + w / 2,
-        y + h / 2,
+        cx,
+        cy,
         text,
         ha="center",
         va="center",
         fontsize=fontsize,
         weight=weight,
-        wrap=True,
+        linespacing=1.2,
     )
 
 
-def add_arrow(ax, start, end, text=None, *, text_offset=(0.0, 0.0)):
-    arrow = FancyArrowPatch(
+def add_diamond(ax, center, size, text, *, fc, fontsize=10.5):
+    cx, cy = center
+    w, h = size
+    verts = [
+        (cx, cy + h / 2),
+        (cx + w / 2, cy),
+        (cx, cy - h / 2),
+        (cx - w / 2, cy),
+    ]
+    patch = Polygon(verts, closed=True, facecolor=fc, edgecolor="#2b2b2b", linewidth=1.3)
+    ax.add_patch(patch)
+    ax.text(
+        cx,
+        cy,
+        text,
+        ha="center",
+        va="center",
+        fontsize=fontsize,
+        linespacing=1.15,
+    )
+
+
+def add_arrow(ax, start, end, *, connectionstyle="arc3", label=None, label_xy=None):
+    patch = FancyArrowPatch(
         start,
         end,
         arrowstyle="-|>",
-        mutation_scale=12,
-        linewidth=1.2,
-        color="#222222",
+        mutation_scale=14,
+        linewidth=1.4,
+        color="#2b2b2b",
         shrinkA=4,
-        shrinkB=4,
+        shrinkB=6,
+        connectionstyle=connectionstyle,
     )
-    ax.add_patch(arrow)
-    if text:
-        mx = 0.5 * (start[0] + end[0]) + text_offset[0]
-        my = 0.5 * (start[1] + end[1]) + text_offset[1]
-        ax.text(mx, my, text, ha="center", va="center", fontsize=10, weight="bold")
+    ax.add_patch(patch)
+    if label and label_xy is not None:
+        ax.text(label_xy[0], label_xy[1], label, fontsize=11, weight="bold", ha="center", va="center")
 
 
 def main() -> None:
     OUT.parent.mkdir(parents=True, exist_ok=True)
 
-    fig, ax = plt.subplots(figsize=(10.5, 5.8))
+    fig, ax = plt.subplots(figsize=(10.8, 6.6))
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.axis("off")
 
-    add_box(
+    add_round_box(
         ax,
-        (0.34, 0.82),
-        (0.32, 0.11),
+        (0.50, 0.89),
+        (0.44, 0.10),
         "Start with the fixed matched-subspace statistic",
-        fc="#eaf2f8",
-        fontsize=12,
+        fc="#e8f0fa",
+        fontsize=12.5,
         weight="bold",
     )
-    add_box(
+    add_round_box(
         ax,
-        (0.25, 0.59),
-        (0.50, 0.15),
+        (0.50, 0.70),
+        (0.66, 0.13),
         "Measure label-free runtime telemetry on representative windows:\n"
-        r"$Q_{0.90}(r_g)$, adaptive promotion fraction $p_{\mathrm{promote}}$, and replay budget",
-        fc="#fdf6e3",
-        fontsize=11,
+        r"high-end guard contamination $Q_{0.90}(r_g)$, promotion fraction $p_{\mathrm{promote}}$,"
+        "\nand replay budget",
+        fc="#fdf3db",
+        fontsize=11.2,
     )
-    add_box(
+    add_diamond(
         ax,
-        (0.24, 0.35),
-        (0.52, 0.14),
-        "Is guard-band clutter persistently low?\n"
-        r"$Q_{0.90}(r_g) < \tau_g$ and $p_{\mathrm{promote}} \approx 0$ across windows",
+        (0.50, 0.47),
+        (0.34, 0.16),
+        "Guard telemetry low\nacross windows?\n"
+        r"$Q_{0.90}(r_g) < \tau_g$ and $p_{\mathrm{promote}} \approx 0$",
         fc="#f4f4f4",
-        fontsize=11,
+        fontsize=10.8,
     )
-    add_box(
+    add_diamond(
         ax,
-        (0.04, 0.08),
-        (0.27, 0.16),
+        (0.74, 0.27),
+        (0.34, 0.16),
+        "Guard telemetry persistently\n elevated and latency budget\nsufficient for whitening?",
+        fc="#f4f4f4",
+        fontsize=10.5,
+    )
+    add_round_box(
+        ax,
+        (0.20, 0.12),
+        (0.26, 0.13),
         "Deploy the fixed statistic\n"
-        "Default supported by SIMUS-Struct\n"
-        "and by any regime with inactive adaptive telemetry",
+        "Default supported by the held-out\nSIMUS benchmark",
         fc="#e8f6ef",
-        fontsize=10.5,
+        fontsize=11,
     )
-    add_box(
+    add_round_box(
         ax,
-        (0.37, 0.08),
-        (0.26, 0.16),
+        (0.50, 0.12),
+        (0.26, 0.13),
         "Keep the fixed statistic\n"
-        "No validated prospective switch\n"
-        "is established for mixed telemetry",
+        "No validated prospective switch\nfor mixed telemetry",
         fc="#f9ebea",
-        fontsize=10.5,
+        fontsize=11,
     )
-    add_box(
+    add_round_box(
         ax,
-        (0.69, 0.08),
-        (0.27, 0.16),
+        (0.80, 0.12),
+        (0.30, 0.13),
         "Use the fully whitened variant\n"
-        "only when guard telemetry is repeatedly elevated,\n"
-        "promotion is nonzero, and latency permits whitening",
-        fc="#eaf2f8",
-        fontsize=10.2,
-    )
-    add_box(
-        ax,
-        (0.67, 0.35),
-        (0.29, 0.14),
-        "Is the elevated guard telemetry persistent across windows,\n"
-        "and does the replay budget tolerate whitening?",
-        fc="#f4f4f4",
-        fontsize=10.5,
+        "when guard telemetry stays high,\n"
+        "promotion is nonzero, and latency permits",
+        fc="#e8f0fa",
+        fontsize=10.8,
     )
 
-    add_arrow(ax, (0.50, 0.82), (0.50, 0.74))
-    add_arrow(ax, (0.50, 0.59), (0.50, 0.49))
-    add_arrow(ax, (0.24, 0.35), (0.18, 0.24), "yes", text_offset=(-0.02, 0.01))
-    add_arrow(ax, (0.76, 0.42), (0.82, 0.24))
-    add_arrow(ax, (0.50, 0.35), (0.74, 0.42), "no", text_offset=(0.02, 0.03))
-    add_arrow(ax, (0.67, 0.35), (0.50, 0.24), "no", text_offset=(-0.02, 0.03))
-    add_arrow(ax, (0.96, 0.35), (0.83, 0.24), "yes", text_offset=(0.02, 0.03))
+    add_arrow(ax, (0.50, 0.84), (0.50, 0.765))
+    add_arrow(ax, (0.50, 0.635), (0.50, 0.56))
+    add_arrow(ax, (0.35, 0.43), (0.23, 0.19), connectionstyle="angle3,angleA=180,angleB=-90", label="yes", label_xy=(0.29, 0.28))
+    add_arrow(ax, (0.65, 0.47), (0.67, 0.29), connectionstyle="angle3,angleA=0,angleB=90", label="no", label_xy=(0.64, 0.39))
+    add_arrow(ax, (0.66, 0.23), (0.56, 0.17), connectionstyle="angle3,angleA=180,angleB=90", label="no", label_xy=(0.62, 0.22))
+    add_arrow(ax, (0.82, 0.20), (0.81, 0.18), connectionstyle="arc3", label="yes", label_xy=(0.86, 0.20))
 
     ax.text(
         0.50,
-        0.01,
-        "Current evidence supports a conservative runtime triage rule, not a universal automatic selector.",
+        0.015,
+        "Current evidence supports a conservative deployment rule, not a universal automatic selector.",
         ha="center",
         va="bottom",
-        fontsize=10,
+        fontsize=10.5,
     )
 
-    fig.tight_layout(pad=0.3)
+    fig.tight_layout(pad=0.4)
     fig.savefig(OUT, bbox_inches="tight")
 
 
