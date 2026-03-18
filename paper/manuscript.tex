@@ -143,6 +143,8 @@ Functional ultrasound (fUS) is now used for vascular and functional mapping in s
 
 In intra-operative settings, a false-positive activation region can mislead surgical planning. In resting-state connectivity studies, a single artifactual hot spot that survives across blocks can create a spurious seed correlation. In neonatal bedside monitoring, where acquisition windows are short and motion is unavoidable, artifact leakage in the Doppler map can be hard to distinguish from genuine hemodynamic variation without independent confirmation that is rarely available. These are not average-sensitivity problems; they are rare-event problems driven by the right tail of the score distribution.
 
+This problem matters now because fUS is no longer only a preclinical proof-of-concept modality. It is already used in intra-operative, neonatal, cranial-window, and emerging mobile settings \cite{Imbault2017,DemeneHumanNewborn2017,BarangerNeonates2021,Rabut2024,MobileFUS2025,Deffieux2021}, where rare nuisance-driven false positives can matter more than average image quality.
+
 On the held-out SIMUS-Struct benchmark, changing only the final detection statistic eliminates all nuisance detections at matched 50\% target-flow recall on the same clutter-filtered residual: on the intra-operative setting, nuisance FPR falls from 0.998 for Kasai to 0.004 for the fixed matched-subspace statistic, and the corresponding fixed chain eliminates all nuisance detections on all four held-out seed-setting pairs.
 
 After ordinary clutter suppression, the method asks a local question: within a small neighborhood, is the remaining slow-time signal concentrated in a prespecified flow band, or is it more consistent with structured clutter residual? We study three downstream detection statistics on that fixed residual stream: a fixed matched-subspace statistic, an adaptive variant that selectively invokes local slow-time whitening, and a fully whitened variant that applies whitening throughout. Among these, the fixed statistic is the default on the held-out structural benchmark, while stronger whitening helps in narrower clutter-heavy or structure-concentration settings. Figure~\ref{fig:variant_selection_flowchart} later distills that practical choice into a label-free deployment rule.
@@ -150,8 +152,6 @@ After ordinary clutter suppression, the method asks a local question: within a s
 The scope is equally narrow. This paper is about downstream detection-statistic design after a fixed clutter filter, not about proposing another clutter filter. The same clutter-filtered residual comparisons are the point: PD, Kasai, whitened power, and matched-subspace variants are evaluated on identical residual cubes so scoring-function effects can be separated from clutter-filter effects.
 
 The evidence proceeds from held-out structural benchmarking to stricter mechanism checks and bounded real-IQ corroboration. We use the short labels kWave-Stress, Gammex-Struct, SIMUS-Struct-Mobile, SIMUS-Struct-Intraop, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion throughout; SIMUS-Struct denotes the paired mobile and intra-operative structural benchmark.
-
-This problem matters now because fUS is no longer only a preclinical proof-of-concept modality. It is already used in intra-operative, neonatal, cranial-window, and emerging mobile settings \cite{Imbault2017,DemeneHumanNewborn2017,BarangerNeonates2021,Rabut2024,MobileFUS2025,Deffieux2021}, where rare nuisance-driven false positives can matter more than average image quality.
 
 \section{Background and Problem Formulation}
 \label{sec:background-problem}
@@ -512,7 +512,7 @@ Shin-ProxyMotion & Tyler-type on promoted tiles; non-promoted tiles use $R_i=I$ 
 \label{sec:results}
 
 \paragraph{Results roadmap.}
-We first report the held-out SIMUS benchmark that determines the default detector configuration. We then show clutter-heavy stress tests that define when whitening helps. Next, we report mechanism ablations on labeled brain simulations and structurally labeled phantom data. Finally, we report bounded real-IQ structural and motion-robustness audits together with replay feasibility.
+We begin with the held-out SIMUS benchmark and proceed through mechanism checks and real-IQ audits.
 
 \subsection{SIMUS-Struct benchmark}
 \label{sec:accepted-v2-main}
