@@ -129,7 +129,7 @@ We isolate the detector stage after clutter suppression. All detector comparison
 
 We evaluate the detector on held-out structural benchmarks, clutter-stress simulations, a structurally labeled phantom, and open real-IQ audits. We use the short labels kWave-Stress, Gammex-Struct, SIMUS-Struct-Mobile, SIMUS-Struct-Intraop, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion throughout; SIMUS-Struct denotes the paired mobile and intra-operative structural benchmark.
 
-The clearest next test is prospective validation on raw task-driven fUS IQ. Labs with raw high-PRF IQ, task timing, and an anatomical or vascular reference would receive same-residual comparisons against PD/Kasai-style readouts together with a reusable evaluation harness configured for their pipeline.
+Labs with raw IQ and task timing can evaluate this detector as a drop-in replacement for the final PD/Kasai-style readout within an existing clutter-filtered pipeline. This work provides the detector implementation, same-residual evaluation protocol, and code needed for that comparison.
 
 \section{Background and Problem Formulation}
 \label{sec:background-problem}
