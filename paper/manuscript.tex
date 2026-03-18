@@ -123,6 +123,7 @@ On the held-out SIMUS-Struct benchmark, changing only the downstream detection s
 After ordinary clutter suppression, the method asks a local question: within a small neighborhood, is the remaining slow-time signal concentrated in a prespecified flow band, or is it more consistent with structured clutter residual? We study three downstream detection statistics on that fixed residual stream: a fixed matched-subspace statistic, an adaptive variant that selectively invokes local slow-time whitening, and a fully whitened variant that applies whitening throughout. Among these, the fixed statistic is the default on the held-out structural benchmark, while stronger whitening helps in narrower clutter-heavy or structure-concentration settings. Figure~\ref{fig:variant_selection_flowchart} later distills that practical choice into a label-free deployment rule.
 Because the method operates downstream of an existing clutter filter, adopting it does not require a change to the acquisition protocol or to the upstream clutter-filtering pipeline.
 In practice, a researcher would replace the power-Doppler-style scoring step in an existing pipeline with the matched-subspace statistic on the same clutter-filtered residual and obtain a Doppler map with fewer artifactual false detections.
+This is a drop-in replacement for the final scoring step of an SVD+PD-style pipeline; acquisition and clutter filtering stay unchanged.
 
 We isolate the detector stage after clutter suppression. All detector comparisons use the same clutter-filtered residual so detector effects can be separated from clutter-filter effects.
 
@@ -231,6 +232,7 @@ On tile $i$, let $x_{i,k}$ denote the unwhitened slow-time snapshots and $y_{i,k
   \label{eq:s0}
 \end{equation}
 which is the same band-limited matched-subspace ratio with $R_i=I$. The fully whitened detector is
+\noindent The fixed detector rewards energy in the slow-time band where microvascular flow is expected and penalizes residual energy elsewhere; whitening is added only when the local residual looks clutter-dominated.
 \begin{equation}
   S_{w}(i):=\frac{1}{K}\sum_{k=1}^K
   \frac{y_{i,k}\Hh \Pf\, y_{i,k}}{y_{i,k}\Hh (I-\Pf)\, y_{i,k}+\rho\, y_{i,k}\Hh y_{i,k}+\epsilon}.
@@ -818,6 +820,7 @@ For ULM we select a single MC--SVD energy-fraction cutoff by a one-time label-fr
 
 \subsubsection{Localization-derived structural audit}
 \paragraph{ULM-CoreShell.}
+This section is a structural sanity check, not a functional claim: it asks whether detector scores concentrate more on known vessels than on the immediately adjacent parenchyma.
 To obtain a more anatomical structural readout on the same open real-IQ data, we use the published PALA rat-brain ULM example as an external vascular reference derived from microbubble localization microscopy rather than from the Doppler scores being evaluated \cite{ChavignonZenodo7883227,HeilesULMBenchmark2021}. We first reproduce the corresponding short-horizon PALA PowDop rendering from the Zenodo IQ blocks using the published odd-block selection and SVD cutoff, register that published PowDop crop back to the Zenodo IQ field of view, and then downsample the published super-resolution MatOut vascular rendering onto the short-window evaluation lattice. From that registered localization map we derive a conservative vessel-core versus perivascular-shell label pair: the vessel mask is a peak-based core mask, and the background mask is the surrounding shell, so the endpoint asks whether a short-window detector concentrates score on the vascular core rather than the immediately adjacent parenchyma. That one-time PALA-to-IQ registration is part of the label construction only. For the short-window detector itself we keep frame-to-frame registration disabled in the frozen audit, because re-enabling it changes the structural ROC only below the fourth decimal place while adding substantial latency.
 
 \begin{center}
@@ -970,7 +973,7 @@ Figure~\ref{fig:variant_selection_flowchart} summarizes the practical deployment
 \begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{figs/paper/variant_selection_flowchart.pdf}
-\caption{Conservative label-free deployment rule for choosing between the fixed and fully whitened detector variants. The runtime telemetry is already produced by the adaptive branch: $r_g$ is the tile-level guard-band energy fraction, $Q_{0.90}(r_g)$ is its upper-tail summary across a representative window, and $p_{\mathrm{promote}}$ is the fraction of tiles that would be promoted onto the whitened branch by the frozen adaptive rule. Current evidence supports a conservative deployment rule: use the fixed detector by default and reserve the fully whitened variant for persistently clutter-dominant windows with sufficient latency margin. Mixed telemetry is not enough to justify an automatic switch.}
+\caption{Conservative label-free deployment rule for choosing between the fixed and fully whitened detector variants. The runtime telemetry is already produced by the adaptive branch: $r_g$ is the tile-level guard-band energy fraction, $Q_{0.90}(r_g)$ is the high-end summary of guard-band contamination across a representative window, and $p_{\mathrm{promote}}$ is the fraction of tiles that would switch onto the whitened branch under the frozen adaptive rule. Current evidence supports a conservative deployment rule: use the fixed detector by default and reserve the fully whitened variant for persistently clutter-dominant windows with sufficient latency margin. Mixed telemetry is not enough to justify an automatic switch.}
 \label{fig:variant_selection_flowchart}
 \end{figure}
 
