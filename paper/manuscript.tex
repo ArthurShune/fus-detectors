@@ -108,34 +108,6 @@ Functional ultrasound is now used for intraoperative, neonatal, and mobile brain
 \end{abstract}
 
 \begin{center}
-\setlength{\fboxsep}{7pt}
-\fbox{\begin{minipage}{0.97\linewidth}
-\textbf{Evidence at a glance.}
-The evidence spans four tiers, from controlled labeled detection to more limited real-IQ corroboration. The validation ladder below summarizes that hierarchy before the technical details.
-
-\captionsetup{type=table}
-\centering
-\small
-\begingroup
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}P{4.2cm} P{2.5cm} P{7.2cm}@{}}
-\hline
-Benchmark label & Independent anchor & Primary use \\
-\hline
-kWave-Stress & simulator truth & controlled mechanism checks and strict-tail sensitivity under labeled nuisance stress \\
-Gammex-Struct & B-mode structural labels & structural ROC on real phantom data with independent geometry \\
-SIMUS-Struct-Mobile / SIMUS-Struct-Intraop & simulated label masks in use-case-motivated scenes & main held-out structural benchmark, clutter-heavy stress tests, and fixed-calibration transfer \\
-ULM-CoreShell & published localization-derived vascular reference & structural audit on real in-vivo IQ plus block-split fixed-calibration transfer \\
-ULM-Motion / Shin-ProxyMotion & no independent task labels & robustness evidence and secondary real-IQ fixed-threshold corroboration \\
-\hline
-\end{tabular}
-\endgroup
-\captionof{table}{Compact validation ladder. For readability, the main text uses the short benchmark labels listed here: kWave-Stress, Gammex-Struct, SIMUS-Struct-Mobile, SIMUS-Struct-Intraop, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion. The evidence progresses from labeled simulation and structurally labeled phantom data to a held-out synthetic benchmark motivated by reported fUS operating conditions and open real in-vivo IQ audits.}
-\label{tab:validation_ladder_intro}
-\end{minipage}}
-\end{center}
-
-\begin{center}
 \IfFileExists{figs/paper/ulm7883227_pala_headline_hero.pdf}{%
   \includegraphics[width=\linewidth]{figs/paper/ulm7883227_pala_headline_hero.pdf}%
 }{%
@@ -197,7 +169,7 @@ The effect is not confined to the extreme tail. On the representative Gammex fra
 
 This problem matters now because fUS is no longer only a preclinical proof-of-concept modality. It is already used in intra-operative, neonatal, cranial-window, and emerging mobile settings \cite{Imbault2017,DemeneHumanNewborn2017,BarangerNeonates2021,Rabut2024,MobileFUS2025,Deffieux2021}, where rare nuisance-driven false positives can matter more than average image quality.
 
-The focus is downstream detector-head design after fixed residualization. The fixed non-whitened matched-subspace head is the default on the held-out synthetic structural benchmark, and the fully whitened variant helps in selected clutter-heavy or structure-concentration settings. The validation ladder in Table~\ref{tab:validation_ladder_intro} summarizes the evidence order before the notation and benchmark detail.
+The focus is downstream detector-head design after fixed residualization. The fixed non-whitened matched-subspace head is the default on the held-out synthetic structural benchmark, and the fully whitened variant helps in selected clutter-heavy or structure-concentration settings. The Results section organizes the evidence from held-out structural benchmarking through stricter mechanism and real-IQ audits.
 
 \paragraph{Contributions.}
 \begin{itemize}[nosep]
@@ -566,6 +538,34 @@ Shin-ProxyMotion & Tyler-type on promoted tiles; non-promoted tiles use $R_i=I$ 
 
 \paragraph{Results roadmap.}
 We first report the held-out SIMUS benchmark that determines the default detector configuration. We then show clutter-heavy stress tests that define when whitening helps. Next, we report mechanism ablations on labeled brain simulations and structurally labeled phantom data. Finally, we report bounded real-IQ structural and motion-robustness audits together with replay feasibility.
+
+\begin{center}
+\setlength{\fboxsep}{7pt}
+\fbox{\begin{minipage}{0.97\linewidth}
+\textbf{Evidence at a glance.}
+The evidence spans four tiers, from controlled labeled detection to more limited real-IQ corroboration. The validation ladder below summarizes that hierarchy before the benchmark-by-benchmark results.
+
+\captionsetup{type=table}
+\centering
+\small
+\begingroup
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}P{4.2cm} P{2.5cm} P{7.2cm}@{}}
+\hline
+Benchmark label & Independent anchor & Primary use \\
+\hline
+kWave-Stress & simulator truth & controlled mechanism checks and strict-tail sensitivity under labeled nuisance stress \\
+Gammex-Struct & B-mode structural labels & structural ROC on real phantom data with independent geometry \\
+SIMUS-Struct-Mobile / SIMUS-Struct-Intraop & simulated label masks in use-case-motivated scenes & main held-out structural benchmark, clutter-heavy stress tests, and fixed-calibration transfer \\
+ULM-CoreShell & published localization-derived vascular reference & structural audit on real in-vivo IQ plus block-split fixed-calibration transfer \\
+ULM-Motion / Shin-ProxyMotion & no independent task labels & robustness evidence and secondary real-IQ fixed-threshold corroboration \\
+\hline
+\end{tabular}
+\endgroup
+\captionof{table}{Compact validation ladder. For readability, the main text uses the short benchmark labels listed here: kWave-Stress, Gammex-Struct, SIMUS-Struct-Mobile, SIMUS-Struct-Intraop, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion. The evidence progresses from labeled simulation and structurally labeled phantom data to a held-out synthetic benchmark motivated by reported fUS operating conditions and open real in-vivo IQ audits.}
+\label{tab:validation_ladder_intro}
+\end{minipage}}
+\end{center}
 
 \subsection{SIMUS-Struct benchmark}
 \label{sec:accepted-v2-main}
