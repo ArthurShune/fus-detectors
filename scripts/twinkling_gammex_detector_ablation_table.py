@@ -86,7 +86,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument(
         "--out-tex",
         type=Path,
-        default=Path("reports/twinkling_gammex_detector_ablation_table.tex"),
+        default=Path("reports/paper/twinkling_gammex_detector_ablation_table.tex"),
         help="Output LaTeX table path.",
     )
     return ap.parse_args()

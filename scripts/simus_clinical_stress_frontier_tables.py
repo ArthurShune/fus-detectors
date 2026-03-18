@@ -434,17 +434,17 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument(
         "--out-provenance",
         type=Path,
-        default=Path("reports/simus_clinical_stress_frontier_provenance_table.tex"),
+        default=Path("reports/companion/simus_clinical_stress_frontier_provenance_table.tex"),
     )
     ap.add_argument(
         "--out-headline",
         type=Path,
-        default=Path("reports/simus_clinical_stress_frontier_headline_table.tex"),
+        default=Path("reports/companion/simus_clinical_stress_frontier_headline_table.tex"),
     )
     ap.add_argument(
         "--out-rpca-heads",
         type=Path,
-        default=Path("reports/simus_clinical_stress_frontier_rpca_heads_table.tex"),
+        default=Path("reports/paper/simus_clinical_stress_frontier_rpca_heads_table.tex"),
     )
     return ap.parse_args()
 

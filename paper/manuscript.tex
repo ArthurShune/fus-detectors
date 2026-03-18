@@ -123,13 +123,13 @@ Functional ultrasound is now used for intraoperative, neonatal, and mobile brain
 \label{fig:ulm_pala_headline_hero}
 \end{center}
 
-\IfFileExists{reports/ulm7883227_pala_detector_heads_table.tex}{%
-  \input{reports/ulm7883227_pala_detector_heads_table.tex}%
+\IfFileExists{reports/paper/ulm7883227_pala_detector_heads_table.tex}{%
+  \input{reports/paper/ulm7883227_pala_detector_heads_table.tex}%
 }{%
   \begin{center}
   \refstepcounter{table}\label{tab:ulm7883227_structural_roc}%
   \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/ulm7883227_pala_detector_heads_table.tex}.\\
+    Missing table \path{reports/paper/ulm7883227_pala_detector_heads_table.tex}.\\
     Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/ulm7883227_pala_support_tables.py}.
   \end{minipage}}
   \end{center}
@@ -554,13 +554,13 @@ For the functional task, we use the same prespecified settings and a common back
 \end{figure}
 
 \newpage
-\IfFileExists{reports/accepted_v2_structural_main_table.tex}{%
-  \input{reports/accepted_v2_structural_main_table.tex}%
+\IfFileExists{reports/paper/accepted_v2_structural_main_table.tex}{%
+  \input{reports/paper/accepted_v2_structural_main_table.tex}%
 }{%
   \begin{center}
   \refstepcounter{table}\label{tab:accepted_v2_structural_main}%
   \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/accepted_v2_structural_main_table.tex}.\\
+    Missing table \path{reports/paper/accepted_v2_structural_main_table.tex}.\\
     Reproduce it with \path{PYTHONPATH=. python scripts/simus_cleaner_structural_checkpoint_table.py}.
   \end{minipage}}
   \end{center}
@@ -571,13 +571,13 @@ For the functional task, we use the same prespecified settings and a common back
 To isolate that detection-statistic claim directly on the main benchmark, Table~\ref{tab:simus_detector_family_ablation} fixes one held-out MC--SVD residual stream and swaps only the downstream detection statistic. This removes clutter-filter choice from the comparison. On that fixed residual, PD and Kasai still rank nuisance highly, the fixed matched-subspace statistic is the strongest same-residual detector, and the fully whitened statistic is worse on both held-out settings. The adaptive statistic is numerically identical to the fixed statistic here because its frozen guard-promotion rule does not activate on these cleaner MC--SVD residuals. On this benchmark, the adaptive extension therefore preserves the fixed default when the clutter evidence is weak instead of forcing whitening where it does not help.
 
 \newpage
-\IfFileExists{reports/simus_detector_family_ablation_table.tex}{%
-  \input{reports/simus_detector_family_ablation_table.tex}%
+\IfFileExists{reports/paper/simus_detector_family_ablation_table.tex}{%
+  \input{reports/paper/simus_detector_family_ablation_table.tex}%
 }{%
   \begin{center}
   \refstepcounter{table}\label{tab:simus_detector_family_ablation}%
   \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/simus_detector_family_ablation_table.tex}.\\
+    Missing table \path{reports/paper/simus_detector_family_ablation_table.tex}.\\
     Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/simus_detector_family_ablation_table.py --reuse-bundles}.
   \end{minipage}}
   \end{center}
@@ -590,13 +590,13 @@ A companion fixed-threshold transfer audit shows that this default also survives
 \else
 That per-window operating-point protocol is still an evaluation protocol, not a scanner-time thresholding rule. To address the more practical question directly, we also ran a fixed-calibration transfer check in which the threshold is learned once from separate calibration seeds 125--126 and then applied unchanged to the held-out evaluation seeds 127--128. Table~\ref{tab:simus_fixed_calibration_transfer} reports that result at nominal $\alpha=10^{-3}$. On SIMUS-Struct-Mobile, the fixed matched-subspace statistic preserves nonzero held-out main recall (0.004 [0.002, 0.006]) while lowering realized nuisance FPR from 0.016 [0.015, 0.018] for PD to 0.003 [0.000, 0.006]. On SIMUS-Struct-Intraop, both methods remain near the nominal background target, but only the fixed statistic suppresses nuisance leakage to 0.000 [0.000, 0.000], whereas PD remains at 0.489 [0.464, 0.514]. The fixed default from the held-out reference setting therefore survives a separate-bank threshold transfer on the benchmark that anchors the paper.
 
-\IfFileExists{reports/simus_fixed_calibration_transfer_table.tex}{%
-  \input{reports/simus_fixed_calibration_transfer_table.tex}%
+\IfFileExists{reports/paper/simus_fixed_calibration_transfer_table.tex}{%
+  \input{reports/paper/simus_fixed_calibration_transfer_table.tex}%
 }{%
   \begin{center}
   \refstepcounter{table}\label{tab:simus_fixed_calibration_transfer}%
   \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/simus_fixed_calibration_transfer_table.tex}.\\
+    Missing table \path{reports/paper/simus_fixed_calibration_transfer_table.tex}.\\
     Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/fixed_calibration_transfer.py}.
   \end{minipage}}
   \end{center}
@@ -605,13 +605,13 @@ That per-window operating-point protocol is still an evaluation protocol, not a 
 
 Whitening starts to matter once the same benchmark is pushed into clutter-heavier settings. We test two held-out stresses: stronger cardiac-like low-frequency pulsation and shorter slow-time support (64, 48, and 32 frames). The pulsation rows use a fixed 1.30~Hz nuisance term with increasing amplitude, and the short-ensemble rows mimic clinically constrained acquisitions in which shorter windows are used to limit motion corruption or workflow burden \cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018,Imbault2017,Soloukey2020FUSAwake,MobileFUS2025}. The held-out evaluation is then rerun at full reporting tier for the clutter-filter families that survived the reduced-grid search.
 
-\IfFileExists{reports/simus_clinical_stress_frontier_rpca_heads_table.tex}{%
-  \input{reports/simus_clinical_stress_frontier_rpca_heads_table.tex}%
+\IfFileExists{reports/paper/simus_clinical_stress_frontier_rpca_heads_table.tex}{%
+  \input{reports/paper/simus_clinical_stress_frontier_rpca_heads_table.tex}%
 }{%
   \begin{center}
   \refstepcounter{table}\label{tab:simus_stress_frontier_rpca_heads}%
   \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/simus_clinical_stress_frontier_rpca_heads_table.tex}.\\
+    Missing table \path{reports/paper/simus_clinical_stress_frontier_rpca_heads_table.tex}.\\
     Reproduce it with \path{PYTHONPATH=. python scripts/simus_clinical_stress_frontier_tables.py}.
   \end{minipage}}
   \end{center}
@@ -624,13 +624,13 @@ Whitening starts to matter once the same benchmark is pushed into clutter-heavie
 A held-out functional audit on the same residual stream is directionally positive for the fully whitened variant across most residual families, but the effect is smaller than in the structural benchmark and is treated as secondary evidence. The full table is kept in the methods companion.
 \else
 Table~\ref{tab:accepted_v2_functional_main} reports one held-out functional same-cube audit on the same residual stream under an activation-versus-nuisance readout. The fully whitened variant is directionally positive across most residual families, but the effect is smaller than in the structural benchmark and is treated as secondary evidence.
-\IfFileExists{reports/simus_functional_numeric_summary_table.tex}{%
-  \input{reports/simus_functional_numeric_summary_table.tex}%
+\IfFileExists{reports/paper/simus_functional_numeric_summary_table.tex}{%
+  \input{reports/paper/simus_functional_numeric_summary_table.tex}%
 }{%
   \begin{center}
   \refstepcounter{table}\label{tab:accepted_v2_functional_main}%
   \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/simus_functional_numeric_summary_table.tex}.\\
+    Missing table \path{reports/paper/simus_functional_numeric_summary_table.tex}.\\
     Reproduce it with \path{PYTHONPATH=. python3 scripts/simus_functional_numeric_table.py}.
   \end{minipage}}
   \end{center}
@@ -689,13 +689,13 @@ To isolate detector effects from the clutter-suppression stage, we also compute 
 \paragraph{Robust-whitening stability audit (labeled brain simulations).}
 Because the fully whitened variant relies on tile-local covariance estimation, Table~\ref{tab:brain_huber_trim_stability} tests sensitivity to contaminated training support and threshold calibration by varying only the high-energy covariance-training trim over $q\in\{0.05,0.08,0.10\}$. The labeled-brain operating-point results are numerically unchanged across those trim settings, and open-skull realized FPR remains close to target under both pairwise cross-window transfer and a fixed calibration bank. In these stress tests, contamination-robust covariance training behaves as a stable recipe choice rather than as a dominant source of result variance.
 We further report a 1D sensitivity sweep over covariance diagonal loading $\lambda$, tile geometry, and slow-time aperture $L_t$ on the canonical open-skull pilot (\ifPAPERONLY Supplementary Material\else Figure~\ref{fig:brain_openskull_profile_sensitivity}\fi).
-\IfFileExists{reports/brain_huber_trim_stability_table.tex}{%
-  \input{reports/brain_huber_trim_stability_table.tex}%
+\IfFileExists{reports/paper/brain_huber_trim_stability_table.tex}{%
+  \input{reports/paper/brain_huber_trim_stability_table.tex}%
 }{%
   \begin{table}[t]
   \centering
   \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/brain_huber_trim_stability_table.tex}.\\
+    Missing table \path{reports/paper/brain_huber_trim_stability_table.tex}.\\
     Reproduce it with \path{PYTHONPATH=. python3 scripts/brain_huber_trim_stability_table.py}.
   \end{minipage}}
   \caption{Robust-whitening stability audit on the labeled brain simulation scenarios, showing that the prespecified Huber-whitened recipe remains stable across modest covariance-training trim variation and transfer calibration.}
@@ -770,7 +770,7 @@ The practical relevance is already visible at a conventional operating point. On
 The same-residual phantom comparison shows that the baseline residual still contains recoverable lumen signal, because changing only the downstream score restores nonzero sensitivity. In this short-ensemble setting, local whitening is the dominant ingredient, and total whitened slow-time power is stronger than the matched-subspace ratio on both views, especially across-view. Gammex therefore supports localized covariance-aware downstream scoring, but not the claim that the matched-subspace ratio is the preferred score in every phantom setting.
 The view asymmetry still matters: the across view provides the clearest structural-label phantom evidence, whereas the along view remains a harsher artifact-tail stress test under this short-ensemble profile. A small untuned sanity audit in \SuppOrApp{app:supp-results} gives similar values: on the first 20 cine frames, applying the matched-subspace detector directly to raw registered IQ changes TPR@$10^{-3}$ only from $3.48\times 10^{-4}$ to $2.61\times 10^{-4}$ on the along view and from 0.202 to 0.205 on the across view; perturbing the frozen along-view PRF from 2000 to 3000~Hz leaves TPR@$10^{-3}$ unchanged at $3.48\times 10^{-4}$ in that limited audit.
 
-\input{reports/twinkling_gammex_detector_ablation_table.tex}
+\input{reports/paper/twinkling_gammex_detector_ablation_table.tex}
 
 \begin{figure}[H]
 \centering
@@ -860,13 +860,13 @@ To reduce overlap between localization-derived label construction and scored win
 \ifPAPERONLY
 The full window-consistency breakdown is kept in the methods companion.
 \else
-\IfFileExists{reports/ulm7883227_pala_window_consistency_table.tex}{%
-  \input{reports/ulm7883227_pala_window_consistency_table.tex}%
+\IfFileExists{reports/paper/ulm7883227_pala_window_consistency_table.tex}{%
+  \input{reports/paper/ulm7883227_pala_window_consistency_table.tex}%
 }{%
   \begin{center}
   \refstepcounter{table}\label{tab:ulm_pala_window_consistency}%
   \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/ulm7883227_pala_window_consistency_table.tex}.\\
+    Missing table \path{reports/paper/ulm7883227_pala_window_consistency_table.tex}.\\
     Reproduce it with \path{python3 scripts/ulm7883227_pala_support_tables.py}.
   \end{minipage}}
   \end{center}
@@ -878,13 +878,13 @@ A companion fixed-threshold audit on the same structural endpoint shows that PD 
 \else
 A second transfer analysis uses the same structural endpoint but removes per-window retuning. We split the 10 audited blocks into two complementary 5-block calibration/evaluation halves, learn a single shell-calibrated threshold on one half, and apply it unchanged to the other half at nominal $\alpha=10^{-3}$. Table~\ref{tab:ulm_fixed_calibration_transfer} shows the result. Under that fixed threshold transfer, PD and Kasai collapse to zero held-out vessel-core recall, whereas the fully whitened matched-subspace variant retains a small but nonzero held-out core TPR of 0.002 [0.000, 0.004] at a realized shell FPR of 0.001 [0.000, 0.002]. More concretely, it is the only score with any positive held-out core detections at all, firing on 6 of the 20 held-out windows versus 0 of 20 for PD and Kasai. The effect is still modest, but it shows that the structural claim does not depend entirely on per-window threshold readjustment.
 
-\IfFileExists{reports/ulm7883227_pala_fixed_calibration_transfer_table.tex}{%
-  \input{reports/ulm7883227_pala_fixed_calibration_transfer_table.tex}%
+\IfFileExists{reports/paper/ulm7883227_pala_fixed_calibration_transfer_table.tex}{%
+  \input{reports/paper/ulm7883227_pala_fixed_calibration_transfer_table.tex}%
 }{%
   \begin{center}
   \refstepcounter{table}\label{tab:ulm_fixed_calibration_transfer}%
   \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/ulm7883227_pala_fixed_calibration_transfer_table.tex}.\\
+    Missing table \path{reports/paper/ulm7883227_pala_fixed_calibration_transfer_table.tex}.\\
     Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/fixed_calibration_transfer.py}.
   \end{minipage}}
   \end{center}
@@ -940,7 +940,7 @@ Latency is measured by replaying multiple windows or frames in a single GPU proc
 \ifPAPERONLY
 In the final reported configurations, all three labeled-brain stress tests run below the full acquisition-PRF budget (RTF $\approx 0.86$--$0.88$), the Shin real-IQ evaluation remains below budget (RTF $\approx 0.84$), and both Gammex views run below the 17-shot cine-frame budget (RTF $\approx 0.88$ along-view and $\approx 0.64$ across-view). The full timing table is kept in the methods companion.
 \else
-\input{reports/latency_named_preset_rtx4080_prf_product_v1_table.tex}
+\input{reports/paper/latency_named_preset_rtx4080_prf_product_v1_table.tex}
 
 Table~\ref{tab:latency_summary_4080super_product} shows that the replay picture is substantially better in the final reported configurations than in a dense fully whitened setup. All three labeled-brain stress tests run below the full acquisition-PRF budget (RTF $\approx 0.86$--$0.88$), the Shin rat-brain real-IQ evaluation also remains below budget (RTF $\approx 0.84$), and both Gammex views run below the 17-shot cine-frame budget (RTF $\approx 0.88$ along-view and $\approx 0.64$ across-view).\footnote{Latency is reported from steady-state replay (windows/frames 2..N) and excludes startup overhead and disk I/O. Table~\ref{tab:latency_summary_4080super_product} reports the final detector family used in the manuscript rather than a single worst-case fully whitened configuration applied everywhere.} These timings support workstation replay feasibility for the reported configurations, but not scanner-integrated or cross-session deployment.
 \fi

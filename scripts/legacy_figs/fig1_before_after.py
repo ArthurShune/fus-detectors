@@ -1,4 +1,4 @@
-# figs/fig1_before_after.py
+# scripts/legacy_figs/fig1_before_after.py
 import argparse
 import os
 from pathlib import Path

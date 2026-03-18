@@ -537,7 +537,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--simus-stap-profile", type=str, default="Brain-SIMUS-Clin-MotionRobust-v0")
     ap.add_argument("--simus-out-root", type=Path, default=ROOT / "runs" / "sim_eval" / "simus_fixed_calibration_transfer")
     ap.add_argument("--simus-out-csv", type=Path, default=ROOT / "reports" / "simus_v2" / "simus_fixed_calibration_transfer.csv")
-    ap.add_argument("--simus-out-tex", type=Path, default=ROOT / "reports" / "simus_fixed_calibration_transfer_table.tex")
+    ap.add_argument("--simus-out-tex", type=Path, default=ROOT / "reports" / "paper" / "simus_fixed_calibration_transfer_table.tex")
 
     ap.add_argument("--ulm-data-root", type=Path, default=ROOT / "data" / "ulm_zenodo_7883227")
     ap.add_argument("--ulm-cache-root", type=Path, default=ROOT / "tmp" / "ulm7883227_structural_roc_cache")
@@ -583,7 +583,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--ulm-bootstrap-seed", type=int, default=1337)
     ap.add_argument("--ulm-keep-bundles", action=argparse.BooleanOptionalAction, default=False)
     ap.add_argument("--ulm-out-csv", type=Path, default=ROOT / "reports" / "ulm7883227_pala_fixed_calibration_transfer.csv")
-    ap.add_argument("--ulm-out-tex", type=Path, default=ROOT / "reports" / "ulm7883227_pala_fixed_calibration_transfer_table.tex")
+    ap.add_argument("--ulm-out-tex", type=Path, default=ROOT / "reports" / "paper" / "ulm7883227_pala_fixed_calibration_transfer_table.tex")
 
     ap.add_argument("--out-json", type=Path, default=ROOT / "reports" / "fixed_calibration_transfer.json")
     return ap.parse_args()

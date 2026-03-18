@@ -175,7 +175,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument(
         "--out-tex",
         type=Path,
-        default=Path("reports/accepted_v2_structural_main_table.tex"),
+        default=Path("reports/paper/accepted_v2_structural_main_table.tex"),
     )
     return ap.parse_args()
 

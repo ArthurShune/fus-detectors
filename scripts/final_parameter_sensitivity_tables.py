@@ -440,8 +440,8 @@ def main() -> None:
 
     _write_json(ROOT / "reports/final_parameter_sensitivity.json", {"adaptive_tau_g": tau_payload, "ka_c_flow": ka_payload})
     _write_csv(ROOT / "reports/final_parameter_sensitivity.csv", tau_rows + ka_rows)
-    (ROOT / "reports/adaptive_tau_sensitivity_table.tex").write_text(tau_tex, encoding="utf-8")
-    (ROOT / "reports/ka_cflow_sensitivity_table.tex").write_text(ka_tex, encoding="utf-8")
+    (ROOT / "reports/companion/adaptive_tau_sensitivity_table.tex").write_text(tau_tex, encoding="utf-8")
+    (ROOT / "reports/companion/ka_cflow_sensitivity_table.tex").write_text(ka_tex, encoding="utf-8")
     print(ROOT / "reports/final_parameter_sensitivity.json")
 
 

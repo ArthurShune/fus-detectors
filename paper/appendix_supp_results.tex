@@ -86,13 +86,13 @@ The main labeled brain simulation results calibrate the operating threshold $\ta
 The frozen Huber-whitened advanced recipe uses Huber covariance estimation, stronger loading, and trimmed high-energy training support. To test whether its operating characteristics remain stable under modest changes to that trim, we reran the open-skull and structured-clutter stress tests while varying only the trim parameter over $q\in\{0.05,0.08,0.10\}$. Table~\ref{tab:brain_huber_trim_stability} reports within-window TPR at the strictest operating point together with realized FPR under pairwise cross-window transfer and a leave-one-window-out fixed calibration bank.
 \noindent The values are numerically unchanged across the tested trim settings in both regimes. In particular, the open-skull realized FPR remains near target for the Huber-whitened advanced recipe under both pairwise cross-window transfer (median $1.10\times 10^{-4}$, $q_{75}=1.64\times 10^{-4}$ at $\alpha=10^{-4}$) and fixed-calibration transfer (median $1.20\times 10^{-4}$). This is the main stability result for the finalized whitened variant.
 
-\IfFileExists{reports/brain_huber_trim_stability_table.tex}{%
-  \input{reports/brain_huber_trim_stability_table.tex}%
+\IfFileExists{reports/paper/brain_huber_trim_stability_table.tex}{%
+  \input{reports/paper/brain_huber_trim_stability_table.tex}%
 }{%
   \begin{center}
   \refstepcounter{table}\label{tab:brain_huber_trim_stability}%
   \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/brain_huber_trim_stability_table.tex}.\\
+    Missing table \path{reports/paper/brain_huber_trim_stability_table.tex}.\\
     Reproduce it with \path{PYTHONPATH=. python3 scripts/brain_huber_trim_stability_table.py}.
   \end{minipage}}
   \end{center}
@@ -181,25 +181,25 @@ An obvious overfitting concern is that the adaptive guard threshold $\tau_g$ and
 
 For the adaptive variant, Table~\ref{tab:adaptive_tau_sensitivity} evaluates the frozen tile-mean guard threshold around the deployed value on representative regimes spanning labeled brain stress tests, a structurally labeled phantom, and the Shin real-IQ corroboration. For the shrink-only regularizer, Table~\ref{tab:ka_cflow_sensitivity} recomputes the shrink-only calculi audit after perturbing $c_{\mathrm{flow}}$ by $\pm 10\%$ on the same frozen bundles. In both cases the behavior changes smoothly rather than collapsing: the labeled-brain TPRs are unchanged at the reported precision, the real-IQ and phantom endpoints shift modestly, and the calculi audit preserves both the regularizer activation pattern and exact protected-set invariance.
 
-\IfFileExists{reports/adaptive_tau_sensitivity_table.tex}{%
-  \input{reports/adaptive_tau_sensitivity_table.tex}%
+\IfFileExists{reports/companion/adaptive_tau_sensitivity_table.tex}{%
+  \input{reports/companion/adaptive_tau_sensitivity_table.tex}%
 }{%
   \begin{center}
   \refstepcounter{table}\label{tab:adaptive_tau_sensitivity}%
   \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/adaptive_tau_sensitivity_table.tex}.\\
+    Missing table \path{reports/companion/adaptive_tau_sensitivity_table.tex}.\\
     Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/final_parameter_sensitivity_tables.py}.
   \end{minipage}}
   \end{center}
 }
 
-\IfFileExists{reports/ka_cflow_sensitivity_table.tex}{%
-  \input{reports/ka_cflow_sensitivity_table.tex}%
+\IfFileExists{reports/companion/ka_cflow_sensitivity_table.tex}{%
+  \input{reports/companion/ka_cflow_sensitivity_table.tex}%
 }{%
   \begin{center}
   \refstepcounter{table}\label{tab:ka_cflow_sensitivity}%
   \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/ka_cflow_sensitivity_table.tex}.\\
+    Missing table \path{reports/companion/ka_cflow_sensitivity_table.tex}.\\
     Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/final_parameter_sensitivity_tables.py}.
   \end{minipage}}
   \end{center}
@@ -357,13 +357,13 @@ Reproduce it with \texttt{scripts/ulm7883227\_structural\_roc.py}; the exact com
 
 To reduce overlap between localization-derived label construction and scored windows, we also ran a stricter disjoint-source variant in which odd blocks were used only for localization-derived reference construction and even blocks were used only for scored-window evaluation under the same frozen 64-frame no-registration profile.
 
-\IfFileExists{reports/ulm7883227_pala_disjoint_source_table.tex}{%
-  \input{reports/ulm7883227_pala_disjoint_source_table.tex}%
+\IfFileExists{reports/companion/ulm7883227_pala_disjoint_source_table.tex}{%
+  \input{reports/companion/ulm7883227_pala_disjoint_source_table.tex}%
 }{%
   \begin{center}
   \refstepcounter{table}\label{tab:ulm7883227_structural_roc_disjoint_supp}%
   \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/ulm7883227_pala_disjoint_source_table.tex}.\\
+    Missing table \path{reports/companion/ulm7883227_pala_disjoint_source_table.tex}.\\
     Reproduce it with \path{python3 scripts/ulm7883227_pala_disjoint_support_table.py}.
   \end{minipage}}
   \end{center}
@@ -371,13 +371,13 @@ To reduce overlap between localization-derived label construction and scored win
 
 As a separate falsification check, we keep the detector outputs fixed and alter only the localization-derived structural masks. A large cyclic translation serves as a misregistration stress test, while a support-matched permutation redraws vessel-core and shell labels at random inside the same anatomical support. The permutation control is the cleaner chance-like test because a translated vascular mask can still land on other vessel-rich anatomy within the same acquisition.
 
-\IfFileExists{reports/ulm7883227_pala_mask_falsification_table.tex}{%
-  \input{reports/ulm7883227_pala_mask_falsification_table.tex}%
+\IfFileExists{reports/companion/ulm7883227_pala_mask_falsification_table.tex}{%
+  \input{reports/companion/ulm7883227_pala_mask_falsification_table.tex}%
 }{%
   \begin{center}
   \refstepcounter{table}\label{tab:ulm7883227_mask_falsification_supp}%
   \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/ulm7883227_pala_mask_falsification_table.tex}.\\
+    Missing table \path{reports/companion/ulm7883227_pala_mask_falsification_table.tex}.\\
     Reproduce it with \path{python3 scripts/ulm7883227_pala_mask_falsification_table.py}.
   \end{minipage}}
   \end{center}
@@ -817,12 +817,12 @@ This block collects the detailed simulation tables and held-out synthetic benchm
 \label{app:brain-kwave-vnext-table}
 The detailed labeled brain simulation low-FPR operating-point table is placed here so that the main text can foreground the narrower use-case-motivated synthetic \emph{SIMUS-ClinUtility-v2} checkpoint. These simulation pilots remain important as a labeled strict-tail stress test and as the basis for the detector-component ablations that follow.
 
-\IfFileExists{reports/brain_kwave_vnext_baselines_table.tex}{%
-  \input{reports/brain_kwave_vnext_baselines_table.tex}%
+\IfFileExists{reports/companion/brain_kwave_vnext_baselines_table.tex}{%
+  \input{reports/companion/brain_kwave_vnext_baselines_table.tex}%
 }{%
   \begin{center}
   \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/brain_kwave_vnext_baselines_table.tex}.\
+    Missing table \path{reports/companion/brain_kwave_vnext_baselines_table.tex}.\
     Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/brain_kwave_vnext_baselines_table.py}.
   \end{minipage}}
   \end{center}
@@ -932,15 +932,15 @@ RPCA $\rightarrow$ matched-subspace detector (headline) & 2.155 & 0.470 & 0.828 
 \paragraph{Clinically grounded stress frontier (held-out paper-tier SIMUS confirmation).}
 One remaining fairness concern is that the held-out structural checkpoint may still be too clean: perfect or near-perfect summary metrics can invite the criticism that the task is trivial rather than that the detector is meaningfully better. To address that directly, we first ran a reduced-grid sweep on the same mobile scene family to identify the strongest residualizer families under two clinically motivated stress axes, then reran a held-out paper-tier confirmation restricted to those strongest families (RPCA and adaptive-global SVD). The two stress axes are closer to the nuisance mechanisms emphasized in clinical fUS reports than the earlier generic motion/reflectivity audit. The first is a cardiac-like 1.30~Hz low-frequency tissue-pulsation term whose amplitude is increased across reference, moderate, and hard rows; this is intended to stress the same tissue-motion regime highlighted by Demen\'e \emph{et al.} for SVD clutter filtering and by Baranger \emph{et al.} for neonatal/open-skull Doppler \cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018}. The second shortens the slow-time support from 64 frames to 48 and 32 frames to mimic clinically constrained acquisitions in which shorter ensembles are used to limit motion corruption or workflow burden \cite{Imbault2017,Soloukey2020FUSAwake,MobileFUS2025}. This section asks a narrower question than the main benchmark. It does not replace the full-resolution prespecified benchmark in the main text, and it is not framed as a new universal ranking of all methods. Instead, it asks whether the detector family remains preferable to strong public baseline stacks once the acquisition is pushed toward pulsatile tissue leakage or reduced slow-time support.
 
-\input{reports/simus_clinical_stress_frontier_provenance_table.tex}
+\input{reports/companion/simus_clinical_stress_frontier_provenance_table.tex}
 
-\IfFileExists{reports/simus_clinical_stress_frontier_headline_table.tex}{%
-  \input{reports/simus_clinical_stress_frontier_headline_table.tex}%
+\IfFileExists{reports/companion/simus_clinical_stress_frontier_headline_table.tex}{%
+  \input{reports/companion/simus_clinical_stress_frontier_headline_table.tex}%
 }{%
   \begin{center}
   \refstepcounter{table}\label{tab:simus_stress_frontier_headline}%
   \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/simus_clinical_stress_frontier_headline_table.tex}.\\
+    Missing table \path{reports/companion/simus_clinical_stress_frontier_headline_table.tex}.\\
     Reproduce it with \path{PYTHONPATH=. python scripts/simus_clinical_stress_frontier_tables.py}.
   \end{minipage}}
   \end{center}

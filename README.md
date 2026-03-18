@@ -64,7 +64,7 @@ bash scripts/reproduce_figure8_table7.sh
 
 After those commands, you will have the headline same-residual SIMUS figure and table used in the paper:
 - `figs/paper/simus_detector_family_headline.pdf`
-- `reports/simus_detector_family_ablation_table.tex`
+- `reports/paper/simus_detector_family_ablation_table.tex`
 
 Full paper reproduction requires the datasets listed below. Helper scripts do not auto-download them.
 
@@ -121,7 +121,9 @@ Contact: `arthur@skymesasystems.com`
 - `pipeline/` detector statistics and clutter-filtered residual processing code
 - `sim/` k-Wave and SIMUS simulation wrappers
 - `scripts/` entry points for reported figures, tables, audits, and repro runs
-- `reports/` generated LaTeX tables, CSV summaries, and audit artifacts
+- `reports/paper/` tracked tables used by the main preprint
+- `reports/companion/` tracked tables used only by the companion/supplement
+- `reports/` generated CSV summaries, logs, and audit artifacts
 - `tests/` regression and unit tests
 
 ## License

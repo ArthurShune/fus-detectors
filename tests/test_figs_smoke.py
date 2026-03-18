@@ -19,20 +19,20 @@ def _run(script):
 
 
 def test_fig1():
-    _run("figs/fig1_before_after.py")
+    _run("scripts/legacy_figs/fig1_before_after.py")
 
 
 def test_fig2():
-    _run("figs/fig2_roc_calibrated.py")
+    _run("scripts/legacy_figs/fig2_roc_calibrated.py")
 
 
 def test_fig4():
-    _run("figs/fig4_latency_angle_trade.py")
+    _run("scripts/legacy_figs/fig4_latency_angle_trade.py")
 
 
 def test_fig5():
-    _run("figs/fig5_ablation_bars.py")
+    _run("scripts/legacy_figs/fig5_ablation_bars.py")
 
 
 def test_fig6():
-    _run("figs/fig6_telemetry_rank.py")
+    _run("scripts/legacy_figs/fig6_telemetry_rank.py")

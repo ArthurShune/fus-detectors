@@ -1,4 +1,4 @@
-# figs/fig4_latency_angle_trade.py
+# scripts/legacy_figs/fig4_latency_angle_trade.py
 import argparse
 import glob
 import json

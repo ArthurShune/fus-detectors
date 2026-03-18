@@ -96,12 +96,12 @@ phase-close-report:
 	PYTHONPATH=. python scripts/phase_close_report.py --phase $(PHASE) --verification-mode $(VERIFY_MODE) $(if $(PHASE_REPORT_OUT),--out $(PHASE_REPORT_OUT),)
 
 figs:
-	python figs/fig1_before_after.py
-	python figs/fig2_roc_calibrated.py
-	python figs/fig3_confirm2_curve.py
-	python figs/fig4_latency_angle_trade.py
-	python figs/fig5_ablation_bars.py
-	python figs/fig6_telemetry_rank.py
+	python scripts/legacy_figs/fig1_before_after.py
+	python scripts/legacy_figs/fig2_roc_calibrated.py
+	python scripts/legacy_figs/fig3_confirm2_curve.py
+	python scripts/legacy_figs/fig4_latency_angle_trade.py
+	python scripts/legacy_figs/fig5_ablation_bars.py
+	python scripts/legacy_figs/fig6_telemetry_rank.py
 
 motion-figs:
 	PYTHONPATH=. python scripts/pilot_visualize.py

@@ -175,7 +175,7 @@ run_py scripts/fair_filter_comparison.py \
 
 run_py scripts/brain_kwave_vnext_baselines_table.py \
   --fair-matrix-json reports/fair_matrix_vnext_r3_localbaselines.json \
-  --out-tex reports/brain_kwave_vnext_baselines_table.tex
+  --out-tex reports/companion/brain_kwave_vnext_baselines_table.tex
 
-echo "[repro] wrote reports/brain_kwave_vnext_baselines_table.tex"
+echo "[repro] wrote reports/companion/brain_kwave_vnext_baselines_table.tex"
 echo "[repro] wrote reports/fair_matrix_vnext_r3_localbaselines.json"
