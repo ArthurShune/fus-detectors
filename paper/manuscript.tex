@@ -581,7 +581,7 @@ To isolate that detection-statistic claim directly on the main benchmark, Table~
   \end{center}
 }
 
-The key practical question is not whether the method makes vessels look better on average, but whether fewer nuisance detections survive when the detector is tuned to preserve clinically relevant parenchymal flow. That is the practical meaning of \emph{FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$}: it asks how much structured false signal remains at a matched target-flow sensitivity operating point. Because fUS is already being used in intra-operative, bedside, cranial-window, and emerging mobile settings \cite{Imbault2017,DemeneHumanNewborn2017,BarangerNeonates2021,Rabut2024,MobileFUS2025}, that nuisance-leakage tradeoff is tied directly to usability and reader trust rather than to image aesthetics alone.
+\emph{FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$} directly measures artifact leakage at a clinically relevant sensitivity operating point.
 
 \ifPAPERONLY
 A companion fixed-threshold transfer audit shows that this default also survives a separate-bank threshold transfer on the same benchmark family: on SIMUS-Struct-Mobile, the fixed statistic preserves nonzero held-out main recall while reducing realized nuisance FPR relative to PD, and on SIMUS-Struct-Intraop it is the only statistic that suppresses nuisance leakage to zero under the transferred threshold. The full table is kept in the methods companion.
