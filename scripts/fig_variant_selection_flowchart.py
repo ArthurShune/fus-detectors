@@ -80,14 +80,14 @@ def add_arrow(ax, start, end, *, connectionstyle="arc3", label=None, label_xy=No
 def main() -> None:
     OUT.parent.mkdir(parents=True, exist_ok=True)
 
-    fig, ax = plt.subplots(figsize=(10.8, 6.6))
+    fig, ax = plt.subplots(figsize=(11.0, 8.6))
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.axis("off")
 
     add_round_box(
         ax,
-        (0.50, 0.89),
+        (0.50, 0.90),
         (0.44, 0.10),
         "Start with the fixed matched-subspace statistic",
         fc="#e8f0fa",
@@ -96,7 +96,7 @@ def main() -> None:
     )
     add_round_box(
         ax,
-        (0.50, 0.70),
+        (0.50, 0.73),
         (0.66, 0.13),
         "Measure label-free runtime telemetry on representative windows:\n"
         r"high-end guard contamination $Q_{0.90}(r_g)$, promotion fraction $p_{\mathrm{promote}}$,"
@@ -106,8 +106,8 @@ def main() -> None:
     )
     add_diamond(
         ax,
-        (0.50, 0.47),
-        (0.34, 0.16),
+        (0.50, 0.57),
+        (0.32, 0.14),
         "Guard telemetry low\nacross windows?\n"
         r"$Q_{0.90}(r_g) < \tau_g$ and $p_{\mathrm{promote}} \approx 0$",
         fc="#f4f4f4",
@@ -115,16 +115,16 @@ def main() -> None:
     )
     add_diamond(
         ax,
-        (0.74, 0.27),
-        (0.34, 0.16),
+        (0.76, 0.38),
+        (0.28, 0.12),
         "Guard telemetry persistently\n elevated and latency budget\nsufficient for whitening?",
         fc="#f4f4f4",
-        fontsize=10.5,
+        fontsize=9.6,
     )
     add_round_box(
         ax,
-        (0.20, 0.12),
-        (0.26, 0.13),
+        (0.18, 0.12),
+        (0.26, 0.11),
         "Deploy the fixed statistic\n"
         "Default supported by the held-out\nSIMUS benchmark",
         fc="#e8f6ef",
@@ -133,7 +133,7 @@ def main() -> None:
     add_round_box(
         ax,
         (0.50, 0.12),
-        (0.26, 0.13),
+        (0.26, 0.11),
         "Keep the fixed statistic\n"
         "No validated prospective switch\nfor mixed telemetry",
         fc="#f9ebea",
@@ -141,8 +141,8 @@ def main() -> None:
     )
     add_round_box(
         ax,
-        (0.80, 0.12),
-        (0.30, 0.13),
+        (0.82, 0.12),
+        (0.28, 0.11),
         "Use the fully whitened variant\n"
         "when guard telemetry stays high,\n"
         "promotion is nonzero, and latency permits",
@@ -150,20 +150,39 @@ def main() -> None:
         fontsize=10.8,
     )
 
-    add_arrow(ax, (0.50, 0.84), (0.50, 0.765))
-    add_arrow(ax, (0.50, 0.635), (0.50, 0.56))
-    add_arrow(ax, (0.35, 0.43), (0.23, 0.19), connectionstyle="angle3,angleA=180,angleB=-90", label="yes", label_xy=(0.29, 0.28))
-    add_arrow(ax, (0.65, 0.47), (0.67, 0.29), connectionstyle="angle3,angleA=0,angleB=90", label="no", label_xy=(0.64, 0.39))
-    add_arrow(ax, (0.66, 0.23), (0.56, 0.17), connectionstyle="angle3,angleA=180,angleB=90", label="no", label_xy=(0.62, 0.22))
-    add_arrow(ax, (0.82, 0.20), (0.81, 0.18), connectionstyle="arc3", label="yes", label_xy=(0.86, 0.20))
-
-    ax.text(
-        0.50,
-        0.015,
-        "Current evidence supports a conservative deployment rule, not a universal automatic selector.",
-        ha="center",
-        va="bottom",
-        fontsize=10.5,
+    add_arrow(ax, (0.50, 0.85), (0.50, 0.795))
+    add_arrow(ax, (0.50, 0.665), (0.50, 0.64))
+    add_arrow(
+        ax,
+        (0.34, 0.53),
+        (0.18, 0.18),
+        connectionstyle="angle3,angleA=180,angleB=-90",
+        label="yes",
+        label_xy=(0.27, 0.36),
+    )
+    add_arrow(
+        ax,
+        (0.66, 0.57),
+        (0.67, 0.42),
+        connectionstyle="angle3,angleA=0,angleB=90",
+        label="no",
+        label_xy=(0.68, 0.50),
+    )
+    add_arrow(
+        ax,
+        (0.69, 0.35),
+        (0.57, 0.17),
+        connectionstyle="angle3,angleA=180,angleB=90",
+        label="no",
+        label_xy=(0.67, 0.31),
+    )
+    add_arrow(
+        ax,
+        (0.83, 0.32),
+        (0.82, 0.17),
+        connectionstyle="arc3",
+        label="yes",
+        label_xy=(0.88, 0.29),
     )
 
     fig.tight_layout(pad=0.4)
