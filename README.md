@@ -1,14 +1,35 @@
 # fus-detectors
 
+[![Paper PDF](https://img.shields.io/badge/paper-PDF-B31B1B.svg)](paper/preprint.pdf)
+[![Extended Methods](https://img.shields.io/badge/methods-companion-4C6EF5.svg)](paper/methods_companion.pdf)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2EA44F.svg)](LICENSE)
+[![Public CI](https://github.com/ArthurShune/fus-detectors/actions/workflows/public_ci.yml/badge.svg)](https://github.com/ArthurShune/fus-detectors/actions/workflows/public_ci.yml)
+
 Post-clutter-suppression detection statistics that reduce artifact leakage in functional ultrasound and ultrafast Doppler maps, without changing the upstream clutter filter.
 
-`fus-detectors` is the reference implementation and manuscript repository for the preprint on localized matched-subspace detection for beamformed fUS slow-time data. The core question is deliberately narrow: once a clutter-filtered slow-time cube has been fixed, can changing only the final detection statistic reduce artifact leakage more effectively than power-Doppler-style readouts?
+`fus-detectors` is the reference implementation and paper repository for localized matched-subspace detection on beamformed fUS slow-time data. The central question is simple: once a clutter-filtered residual has been fixed, can changing only the final detection statistic suppress artifacts more effectively than power-Doppler-style readouts?
 
-Two headline results anchor the repo:
-- On the held-out SIMUS structural benchmark, the fixed matched-subspace statistic reduces nuisance false-positive rate from `0.998` to `0.004` at matched recall `0.5` on the same clutter-filtered residual.
-- On one open real-IQ rat-brain dataset, the fully whitened variant shows a consistent structural improvement across all `10` audited blocks (`p = 0.002`) on a conservative vessel-core versus perivascular-shell endpoint.
+## Why This Repo Matters
 
-> Status: active research code accompanying a preprint. Scripts and internal APIs may still change. If you want to test this on raw fUS IQ or task data, contact `arthur@skymesasystems.com`.
+- It isolates the downstream detection statistic as a separate design choice on the same clutter-filtered residual.
+- It keeps the existing acquisition and clutter-filtering pipeline intact.
+- It provides a reusable same-residual evaluation protocol for synthetic, phantom, and real-IQ audits.
+
+Two headline results anchor the repository:
+- On the held-out `SIMUS-Struct-Intraop` benchmark, the fixed matched-subspace statistic reduces nuisance false-positive rate from `0.998` to `0.004` at matched recall `0.5` on the same clutter-filtered residual.
+- On one open real-IQ rat-brain dataset, the fully whitened variant improves a conservative vessel-core versus perivascular-shell audit on all `10` evaluated blocks (`p = 0.002`).
+
+> Status: active research code accompanying a preprint. APIs and helper scripts may still change. If you want to test this on raw fUS IQ, task data, or a clinical/mobile workflow, contact `arthur@skymesasystems.com`.
+
+## Start Here
+
+| If you want to... | Go here |
+| --- | --- |
+| Read the paper | [paper/preprint.pdf](paper/preprint.pdf) |
+| See the full methods and companion analyses | [paper/methods_companion.pdf](paper/methods_companion.pdf) |
+| Reproduce the headline figure and table | [scripts/reproduce_figure8_table7.sh](scripts/reproduce_figure8_table7.sh) |
+| Prepare datasets | [docs/data_download.md](docs/data_download.md) |
+| Cite the work | [CITATION.cff](CITATION.cff) |
 
 ## Paper
 
@@ -32,7 +53,7 @@ Arthur Shune, *Localized Matched-Subspace Detection for Functional Ultrasound an
 
 Machine-readable citation metadata is also provided in [`CITATION.cff`](CITATION.cff).
 
-## Quick start
+## Quick Start
 
 ```bash
 conda env create -f environment.yml
@@ -41,48 +62,67 @@ python scripts/verify_gpu.py
 bash scripts/reproduce_figure8_table7.sh
 ```
 
-The last command regenerates the headline SIMUS figure and same-residual table used in the paper. Full benchmark reproduction requires the datasets listed below; helper scripts do not auto-download them.
+After those commands, you will have the headline same-residual SIMUS figure and table used in the paper:
+- `figs/paper/simus_detector_family_headline.pdf`
+- `reports/simus_detector_family_ablation_table.tex`
 
-## Reproduce the main results
+Full paper reproduction requires the datasets listed below. Helper scripts do not auto-download them.
 
-The shortest paper-facing reproduction path is:
+## Reproduce the Main Results
+
+### Fast path
 
 ```bash
 bash scripts/reproduce_figure8_table7.sh
 ```
 
-This regenerates:
-- `figs/paper/simus_detector_family_headline.pdf`
-- `reports/simus_detector_family_ablation_table.tex`
+Use this if you want the shortest paper-facing smoke test.
 
-For the full command manifest used to build the paper artifacts, see [`repro_manifest.json`](repro_manifest.json) and the companion document [`paper/methods_companion.pdf`](paper/methods_companion.pdf).
+### Full manifest
+
+For the command manifest used to build the reported paper artifacts, see:
+- [`repro_manifest.json`](repro_manifest.json)
+- [`paper/methods_companion.pdf`](paper/methods_companion.pdf)
 
 ## Datasets
 
-Paper-scale reproduction uses a mix of generated synthetic data and open public datasets staged under `data/`:
+Paper-scale reproduction uses generated synthetic data plus staged open datasets under `data/`.
 
-- `SIMUS/PyMUST synthetic benchmark`: generated locally, no external download required.
-- `ULM Zenodo 7883227` (rat-brain kHz IQ): DOI `10.5281/zenodo.7883227`, about `50 GB` of zip archives in the reference setup. Place the downloaded `IQ_*.zip` files and metadata under `data/ulm_zenodo_7883227/`.
-- `Shin RatBrain Fig3 (LOCA-ULM)` beamformed IQ: DOI `10.5281/zenodo.10711806`, about `6.5 GB`. Place the zip or extracted files under `data/shin_zenodo_10711806/`.
-- `Twinkling artifact / Gammex phantom` RawBCF bundle: DOI `10.17816/DD76511`, about `13.5 GB` extracted in the reference setup. Place it under `data/twinkling_artifact/`. The provider currently uses an email-plus-captcha download flow.
-- `Whole-brain mouse fUS atlas bundle` (optional companion-only PD retrospectives): DOI `10.5281/zenodo.4905862`, about `0.7 GB` in the reference setup. Place it under `data/whole-brain-fUS/`.
+| Dataset | Used for | Size | Expected location |
+| --- | --- | --- | --- |
+| `SIMUS/PyMUST` synthetic benchmark | Held-out structural benchmark | generated locally | `data/` not required |
+| `ULM Zenodo 7883227` | Real-IQ vessel-core vs shell audit | about `50 GB` | `data/ulm_zenodo_7883227/` |
+| `Shin RatBrain Fig3` | Real-IQ proxy-motion audit | about `6.5 GB` | `data/shin_zenodo_10711806/` |
+| `Twinkling artifact / Gammex phantom` | Phantom structural audit | about `13.5 GB` extracted | `data/twinkling_artifact/` |
+| `Whole-brain mouse fUS atlas` | Optional companion-only retrospectives | about `0.7 GB` | `data/whole-brain-fUS/` |
 
-Detailed download notes, expected filenames, and provider-specific caveats are in [`docs/data_download.md`](docs/data_download.md).
+Detailed download links, expected filenames, and provider-specific caveats are in [`docs/data_download.md`](docs/data_download.md).
 
 ## Requirements
 
-- Linux or WSL with conda/mamba
+- Linux or WSL with `conda` or `mamba`
 - NVIDIA GPU with CUDA recommended for paper-scale runs
-- The reported runtime numbers use an RTX 4080 SUPER (`16 GB` VRAM); that is the practical target for the heavier real-IQ and latency reproductions
+- RTX 4080 SUPER (`16 GB` VRAM) is the reference GPU for the reported latency measurements
 
-## Repository map
+## For Collaborators
+
+This repository is set up for same-residual comparisons on new data without changing the upstream clutter filter.
+
+If you have raw complex IQ, beamformed slow-time data, or task-driven fUS acquisitions, a practical collaboration would look like this:
+- you provide raw data, acquisition metadata, and any existing task or structural reference
+- this code runs the fixed, adaptive, and fully whitened statistics on your existing clutter-filtered residual pipeline
+- we return configured code, evaluation outputs, and a reusable harness you can run on later datasets
+
+Contact: `arthur@skymesasystems.com`
+
+## Repository Map
 
 - `paper/` manuscript sources and built PDFs
 - `pipeline/` detector statistics and clutter-filtered residual processing code
-- `sim/` k-Wave and SIMUS simulation wrappers plus ultrasound-specific runtime code
+- `sim/` k-Wave and SIMUS simulation wrappers
 - `scripts/` entry points for reported figures, tables, audits, and repro runs
-- `reports/` generated paper tables, CSV summaries, and audit artifacts
-- `tests/` regression and unit tests for the method and data loaders
+- `reports/` generated LaTeX tables, CSV summaries, and audit artifacts
+- `tests/` regression and unit tests
 
 ## License
 
