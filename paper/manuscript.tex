@@ -145,7 +145,7 @@ In intra-operative settings, a false-positive activation region can mislead surg
 
 On the held-out SIMUS-Struct benchmark, changing only the final scoring function eliminates structured artifact leakage on the same clutter-filtered residual: at matched target-flow recall 0.5, nuisance FPR on the intra-operative setting falls from 0.998 for Kasai to 0.004 for the fixed matched-subspace detector, and the corresponding fixed chain eliminates all nuisance detections on all four held-out seed-setting pairs. That is the headline result of the paper.
 
-The method is intentionally narrow. After ordinary clutter suppression, it asks a local question: within a small neighborhood, is the remaining slow-time signal concentrated in a prespecified flow band, or is it more consistent with structured clutter residual? We study three downstream scoring functions on that fixed residual stream: a fixed matched-subspace detection statistic, an adaptive variant that selectively invokes local slow-time whitening, and a fully whitened variant that applies whitening throughout. Among these, the fixed statistic is the default on the held-out structural benchmark, while stronger whitening helps in narrower clutter-heavy or structure-concentration settings.
+The method is intentionally narrow. After ordinary clutter suppression, it asks a local question: within a small neighborhood, is the remaining slow-time signal concentrated in a prespecified flow band, or is it more consistent with structured clutter residual? We study three downstream scoring functions on that fixed residual stream: a fixed matched-subspace detection statistic, an adaptive variant that selectively invokes local slow-time whitening, and a fully whitened variant that applies whitening throughout. Among these, the fixed statistic is the default on the held-out structural benchmark, while stronger whitening helps in narrower clutter-heavy or structure-concentration settings. Figure~\ref{fig:variant_selection_flowchart} later distills that practical choice into a label-free deployment rule.
 
 The scope is equally narrow. This paper is about downstream detection-statistic design after a fixed clutter filter, not about proposing another clutter filter. The same clutter-filtered residual comparisons are the point: PD, Kasai, whitened power, and matched-subspace variants are evaluated on identical residual cubes so scoring-function effects can be separated from clutter-filter effects.
 
@@ -183,7 +183,7 @@ H_0:\ x=c+n,\qquad H_1:\ x=s+c+n,
 where $s$ is flow-consistent signal, $c$ is structured clutter/motion, and $n$ is residual noise. In practice, $H_0$ is spatially nonstationary and heavy-tailed, motivating local covariance adaptation and tail-focused evaluation.
 
 \paragraph{Core notation and bands.}
-We use band operators $(\Po,\Pf,\Pg,\Pa)$ for clutter/DC, flow, guard, and alias regions, respectively. For short ensembles, these are exact orthogonal DFT-bin projectors; for longer apertures they are leakage-controlled analysis operators and are treated as band-energy statistics with explicit sanity sentinels (\SuppOrApp{app:alg-details}).
+We use band operators $(\Po,\Pf,\Pg,\Pa)$ for clutter/DC, flow, guard, and alias regions, respectively. Physically, $\Pf$ is the Doppler band where the targeted microvascular flow is expected, $\Pg$ is a transition guard band, and $\Pa$ captures aliased high-velocity flow or vibration. For short ensembles, these are exact orthogonal DFT-bin projectors; for longer apertures they are leakage-controlled analysis operators and are treated as band-energy statistics with explicit sanity sentinels (\SuppOrApp{app:alg-details}).
 
 \subsection{Related context}
 \ifPAPERONLY
@@ -282,6 +282,7 @@ which is the same band-limited matched-subspace ratio with $R_i=I$. The fully wh
   \frac{y_{i,k}\Hh \Pf\, y_{i,k}}{y_{i,k}\Hh (I-\Pf)\, y_{i,k}+\rho\, y_{i,k}\Hh y_{i,k}+\epsilon}.
   \label{eq:sw}
 \end{equation}
+In plain language, the numerator measures energy in the expected flow band, while the denominator measures energy everywhere else plus a small stabilizing ridge; the ratio is high only when flow-band energy dominates the rest of the slow-time spectrum.
 The detector family has three concrete variants. The fixed detector uses $S_{0}(i)$ everywhere. The prespecified adaptive detector uses
 \begin{equation}
   S(i)=
