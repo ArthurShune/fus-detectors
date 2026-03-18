@@ -16,6 +16,7 @@ dist/
 site/assets/
 .kwavedata/
 figs/outputs/
+figs/latency/
 runs/
 reports/
 data/
