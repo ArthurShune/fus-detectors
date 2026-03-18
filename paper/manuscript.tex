@@ -104,7 +104,7 @@ This build restores the full narrative behind the slimmer submission manuscript:
 \end{center}
 \fi
 \begin{abstract}
-Functional ultrasound is now used for intraoperative, neonatal, and mobile brain imaging, but even after standard clutter suppression, tissue motion, phase instability, and aliased flow can produce false detections that distort vascular maps and contaminate functional readouts. We study a family of localized matched-subspace detection statistics applied after conventional clutter suppression of beamformed fUS slow-time data, ranging from a fixed band-limited statistic to locally whitened variants. On the held-out SIMUS structural benchmark, changing only the downstream detection statistic sharply reduces nuisance leakage on the same clutter-filtered residual; in the intra-operative setting, nuisance false-positive rate falls from 0.998 for Kasai to 0.004 for the fixed matched-subspace statistic at matched recall 0.5. In the separate best-chain benchmark, the selected fixed detector chains yield zero observed nuisance detections on all four held-out seed-setting pairs. On one open real-IQ rat-brain dataset, the fully whitened variant shows a consistent structural improvement on a conservative same-acquisition ULM vessel-core versus shell structural audit across all 10 audited blocks (exact paired sign-flip test on block-mean AUC, $p=0.002$), improving AUC from 0.504 for power Doppler to 0.530. These results demonstrate that the downstream detection statistic is a separable, consequential design choice in post-beamformed fUS pipelines, and that band-limited matched-subspace scoring reduces nuisance leakage on the same clutter-filtered residual; broader real-data functional validation remains future work.
+Functional ultrasound is now used for intraoperative, neonatal, and mobile brain imaging, but even after standard clutter suppression, tissue motion, phase instability, and aliased flow can produce false detections that distort vascular maps and contaminate functional readouts. We study a family of localized matched-subspace detection statistics applied after conventional clutter suppression of beamformed fUS slow-time data, ranging from a fixed band-limited statistic to locally whitened variants. On the held-out SIMUS structural benchmark, changing only the downstream detection statistic sharply reduces nuisance leakage on the same clutter-filtered residual; in the intra-operative setting, nuisance false-positive rate falls from 0.998 for Kasai to 0.004 for the fixed matched-subspace statistic at matched recall 0.5. In the separate best-chain benchmark, the selected fixed detector chains yield zero observed nuisance detections on all four held-out seed-setting pairs. On one open real-IQ rat-brain dataset, the fully whitened variant shows a consistent structural improvement on a conservative same-acquisition ULM vessel-core versus shell structural audit across all 10 audited blocks (exact paired sign-flip test on block-mean AUC, $p=0.002$), improving AUC from 0.504 for power Doppler to 0.530. These results demonstrate that the downstream detection statistic is a separable, consequential design choice in post-beamformed fUS pipelines. The detector is a drop-in replacement for the final PD/Kasai-style readout on an existing clutter-filtered pipeline, providing a concrete collaboration path for labs with raw task-driven fUS IQ.
 \end{abstract}
 
 \fi
@@ -421,7 +421,6 @@ This work is a reproducible processing pipeline (decode $\rightarrow$ baseline $
 The evidence is stratified by setting so that quantitative detection results remain clearly separated from robustness or transfer audits. Downstream detection-statistic design matters after a fixed clutter filter; the fixed band-limited statistic is the default structural choice on the held-out SIMUS benchmark; adaptive and fully whitened variants help in narrower clutter-heavy or structure-concentration settings; and fixed-threshold transfer is encouraging in selected settings but not solved.
 
 \ifPAPERONLY
-The main text focuses on the held-out SIMUS benchmark, one clutter-heavy stress regime, the Gammex phantom, the bounded ULM structural audit, and replay feasibility.
 \else
 This extended companion preserves the same ordering as the preprint but restores the full setting-by-setting arc, so it can be read linearly from the held-out SIMUS benchmark through the mechanism checks, real-IQ audits, transfer analyses, and reproducibility appendices.
 \begin{itemize}[nosep]
@@ -531,6 +530,7 @@ For the functional task, we use the same prespecified settings and a common back
 \end{figure}
 
 \newpage
+\noindent Table~\ref{tab:accepted_v2_structural_main} is the best-chain benchmark: each row reports the strongest held-out end-to-end pipeline for that setting, so both clutter filter and final detector may differ across rows.
 \IfFileExists{reports/paper/accepted_v2_structural_main_table.tex}{%
   \input{reports/paper/accepted_v2_structural_main_table.tex}%
 }{%
@@ -550,6 +550,7 @@ For the functional task, we use the same prespecified settings and a common back
 To isolate that detection-statistic claim directly on the main benchmark, Table~\ref{tab:simus_detector_family_ablation} fixes one held-out MC--SVD residual stream and swaps only the downstream detection statistic. This removes clutter-filter choice from the comparison. On that fixed residual, PD and Kasai still rank nuisance highly, the fixed matched-subspace statistic is the strongest same-residual detector, and the fully whitened statistic is worse on both held-out settings. The adaptive statistic is numerically identical to the fixed statistic here because its frozen guard-promotion rule does not activate on these cleaner MC--SVD residuals. On this benchmark, the adaptive extension therefore preserves the fixed default when the clutter evidence is weak instead of forcing whitening where it does not help.
 
 \newpage
+\noindent Table~\ref{tab:simus_detector_family_ablation} is the same-residual score-swap comparison: every row uses the identical MC--SVD residual cube, and only the final scoring rule changes.
 \IfFileExists{reports/paper/simus_detector_family_ablation_table.tex}{%
   \input{reports/paper/simus_detector_family_ablation_table.tex}%
 }{%
@@ -724,7 +725,6 @@ We use the open-access Doppler Twinkling Artifact database \cite{LeonovTwinkling
 For the Gammex flow phantom sequences we derive evaluation masks from B-mode structure only (no Doppler or matched-subspace outputs). Using acquisition geometry metadata that specifies the CFM region-of-interest (ROI) within the B-mode grid (beam and sample offsets and any beam subsampling), we map the B-mode ROI onto the CFM grid and segment the tube lumen on a median log-envelope reference image. This yields (i) a conservative lumen (flow) mask, eroded to avoid wall pixels and (ii) a background mask that excludes a guard band around the lumen and bright reflectors. Mask provenance and QC metrics are recorded with each experiment. These structural labels support a defensible phantom ROC.
 
 \ifPAPERONLY
-\noindent The main text keeps only the headline structural ROC table and the matched-FPR phantom visual.
 \else
 \begin{figure}[H]
 \centering
@@ -978,7 +978,7 @@ Figure~\ref{fig:variant_selection_flowchart} summarizes the practical deployment
 \begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{figs/paper/variant_selection_flowchart.pdf}
-\caption{Conservative label-free deployment rule for choosing between the fixed and fully whitened detector variants. The runtime telemetry is already produced by the adaptive branch: $r_g$ is the tile-level guard-band energy fraction, $Q_{0.90}(r_g)$ is the high-end summary of guard-band contamination across a representative window, and $p_{\mathrm{promote}}$ is the fraction of tiles that would switch onto the whitened branch under the frozen adaptive rule. Current evidence supports a conservative deployment rule: use the fixed detector by default and reserve the fully whitened variant for persistently clutter-dominant windows with sufficient latency margin. Mixed telemetry is not enough to justify an automatic switch.}
+\caption{Conservative label-free deployment rule for choosing between the fixed and fully whitened detector variants. Here $r_g$ measures guard-band contamination in a tile, $Q_{0.90}(r_g)$ is a high-end summary across a representative window, and $p_{\mathrm{promote}}$ is the fraction of tiles that would switch onto the whitened branch. Use the fixed detector by default and reserve the fully whitened variant for persistently clutter-dominant windows with sufficient latency margin. Mixed telemetry is not enough to justify an automatic switch.}
 \label{fig:variant_selection_flowchart}
 \end{figure}
 

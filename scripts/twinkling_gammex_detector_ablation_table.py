@@ -281,11 +281,9 @@ def _render_table(
     lines.append("}")
     lines.append(
         "\\caption{Gammex flow phantom structural-label operating points using B-mode-derived structural masks. "
-        "All scores are right-tail (higher indicates more flow evidence). This is a same-residual scoring-rule "
-        "comparison: every row is evaluated on the identical baseline SVD band-pass residual cube, changing only "
-        "the final scoring rule. The baseline rows are power Doppler and Kasai lag-1 power on that residual; the detector "
-        "ablations replace the fully whitened matched-subspace detector with either total whitened slow-time power (no Doppler "
-        "band partition) or the same flow-band matched-subspace ratio without covariance whitening ($R=I$). "
+        "All scores are right-tail (higher indicates more flow evidence). Every row is evaluated on the identical baseline "
+        "SVD band-pass residual cube; only the final scoring rule changes. Rows compare power Doppler, Kasai, whitened power, "
+        "an unwhitened matched-subspace ratio, and the fully whitened matched-subspace detector on that same residual. "
         "The table includes $\\alpha=10^{-2}$ as a practitioner-facing relaxed operating point together with the stricter "
         "$\\alpha\\le 10^{-3}$ tail regime used for stress testing. Thresholds are chosen per method on pooled background pixels to match each target FPR and evaluated on "
         "pooled lumen pixels. Brackets show 95\\% frame-bootstrap CIs ($n=2000$ resamples over cine frames) at the "
