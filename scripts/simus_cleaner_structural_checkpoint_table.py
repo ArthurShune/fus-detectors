@@ -152,7 +152,7 @@ def _build_table(public_rows: list[dict[str, str]], fixed_rows: list[dict[str, s
         r"\par\smallskip\noindent\footnotesize $^{\dagger}$Exactly zero observed nuisance detections; supported floor 1/886 (mobile) and 1/280 (intra-operative parenchymal).\par"
     )
     lines.append(
-        r"\caption{Held-out SIMUS-Struct reference settings. For each evaluated structural setting, we report the best conventional baseline from the development-split baseline sweep and the strongest fixed detector chain chosen on development seeds 125--126, then evaluated unchanged on held-out seeds 127--128. Values are mean [min,max] over the two held-out seeds.}"
+        r"\caption{Held-out SIMUS-Struct reference settings. For each evaluated structural setting, we report the best conventional baseline from the development-split baseline sweep and the strongest fixed detector chain chosen on development seeds 125--126, then evaluated unchanged on held-out seeds 127--128. Values are mean [min,max] over the two held-out seeds. AUC$_{\mathrm{main/bg}}$ measures separation of target flow from ordinary background, AUC$_{\mathrm{main/nuis}}$ measures separation of target flow from explicit nuisance structures, and FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$ asks how many nuisance detections survive when the detector is tuned to retain half of the target positives.}"
     )
     lines.append(r"\label{tab:accepted_v2_structural_main}")
     lines.append(r"\end{center}")
