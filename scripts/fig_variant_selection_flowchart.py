@@ -66,7 +66,7 @@ def main() -> None:
         ax,
         (0.34, 0.82),
         (0.32, 0.11),
-        "Start with the fixed matched-subspace head",
+        "Start with the fixed matched-subspace statistic",
         fc="#eaf2f8",
         fontsize=12,
         weight="bold",
@@ -93,7 +93,7 @@ def main() -> None:
         ax,
         (0.04, 0.08),
         (0.27, 0.16),
-        "Deploy the fixed head\n"
+        "Deploy the fixed statistic\n"
         "Default supported by SIMUS-Struct\n"
         "and by any regime with inactive adaptive telemetry",
         fc="#e8f6ef",
@@ -103,7 +103,7 @@ def main() -> None:
         ax,
         (0.37, 0.08),
         (0.26, 0.16),
-        "Keep the fixed head\n"
+        "Keep the fixed statistic\n"
         "No validated prospective switch\n"
         "is established for mixed telemetry",
         fc="#f9ebea",
