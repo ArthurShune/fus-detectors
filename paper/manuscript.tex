@@ -143,10 +143,13 @@ Functional ultrasound (fUS) is now used for vascular and functional mapping in s
 
 In intra-operative settings, a false-positive activation region can mislead surgical planning. In resting-state connectivity studies, a single artifactual hot spot that survives across blocks can create a spurious seed correlation. In neonatal bedside monitoring, where acquisition windows are short and motion is unavoidable, nuisance leakage in the score map can be hard to distinguish from genuine hemodynamic variation without independent confirmation that is rarely available. These are not average-sensitivity problems; they are rare-event problems driven by the right tail of the score distribution.
 
-We address that problem with a localized matched-subspace detector framework for post-residual fUS. After ordinary clutter suppression, the method asks a local question: within a small neighborhood, is the remaining slow-time signal concentrated in a prespecified flow band, or is it more consistent with structured nuisance? The contribution is a detector-head family: the fixed matched-subspace head is the core and default method, the adaptive variant selectively invokes whitening, and the fully whitened variant applies whitening throughout. Among the downstream heads tested on the held-out SIMUS-Struct benchmark, a band-limited matched-subspace score without local whitening is the strongest fixed choice: on the intra-operative structural setting, nuisance FPR at matched recall 0.5 drops from 0.998 for Kasai to 0.004 on the same residual stream. That mechanism is not universal: in the short-ensemble Gammex phantom, whitening-dominant scoring is stronger than the matched-subspace ratio on the same residual. Figure~\ref{fig:ulm_pala_headline_hero} previews the clearest real-data result, and the same-residual table below shows the setting dependence directly.
+On the held-out SIMUS-Struct benchmark, changing only the downstream score head eliminates structured nuisance on the same residual stream: at matched target-flow recall 0.5, nuisance FPR on the intra-operative setting falls from 0.998 for Kasai to 0.004 for the fixed matched-subspace detector, while the corresponding fixed chain suppresses nuisance detections completely on all four held-out seed-setting pairs. That is the headline result of the paper.
 
-\paragraph{Terminology.}
-Throughout the paper, we refer to the three detector modes as the fixed matched-subspace detector, the adaptive detector, and the fully whitened detector. We use the full descriptive terms local slow-time whitening and empirical tail calibration rather than shorter signal-processing abbreviations.
+The method is intentionally narrow. After ordinary clutter suppression, it asks a local question: within a small neighborhood, is the remaining slow-time signal concentrated in a prespecified flow band, or is it more consistent with structured nuisance? We study three downstream heads on that fixed residual stream: a fixed matched-subspace detector, an adaptive variant that selectively invokes local slow-time whitening, and a fully whitened variant that applies whitening throughout. Among these, the fixed head is the default on the held-out structural benchmark, while stronger whitening helps in narrower clutter-heavy or structure-concentration settings.
+
+The scope is equally narrow. This paper is about downstream detector-head design after fixed residualization, not about proposing another clutter filter. The same-residual comparisons are the point: PD, Kasai, whitened power, and matched-subspace variants are evaluated on identical residual cubes so detector-head effects can be separated from residualization effects.
+
+The evidence proceeds from held-out structural benchmarking to stricter mechanism checks and bounded real-IQ corroboration. We use the short labels kWave-Stress, Gammex-Struct, SIMUS-Struct-Mobile, SIMUS-Struct-Intraop, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion throughout; SIMUS-Struct denotes the paired mobile and intra-operative structural benchmark.
 
 \begin{figure}[t]
 \centering
@@ -168,19 +171,6 @@ Throughout the paper, we refer to the three detector modes as the fixed matched-
 The effect is not confined to the extreme tail. On the representative Gammex frame in Figure~\ref{fig:leading_structural_fidelity}, matching the background FPR at $10^{-2}$ yields zero lumen recovery for the baseline score, whereas both detector-family score maps recover lumen-consistent structure at the same matched background allowance, with the whitened-power map showing the cleaner phantom response. The later Gammex structural ROC tables confirm that whitened power is the stronger phantom score overall in this short-ensemble setting. We use the stricter $10^{-3}$--$10^{-4}$ operating points mainly as a stress test that exposes nuisance sensitivity cleanly, not because the practical relevance begins only there.
 
 This problem matters now because fUS is no longer only a preclinical proof-of-concept modality. It is already used in intra-operative, neonatal, cranial-window, and emerging mobile settings \cite{Imbault2017,DemeneHumanNewborn2017,BarangerNeonates2021,Rabut2024,MobileFUS2025,Deffieux2021}, where rare nuisance-driven false positives can matter more than average image quality.
-
-The focus is downstream detector-head design after fixed residualization. The fixed non-whitened matched-subspace head is the default on the held-out synthetic structural benchmark, and the fully whitened variant helps in selected clutter-heavy or structure-concentration settings. The Results section organizes the evidence from held-out structural benchmarking through stricter mechanism and real-IQ audits.
-
-\paragraph{Contributions.}
-\begin{itemize}[nosep]
-  \item A post-residual localized matched-subspace detector family for beamformed fUS slow-time data, centered on a fixed band-limited head and extended by an adaptive whitening switch plus a fully whitened variant.
-  \item Held-out evidence that the fixed non-whitened matched-subspace score is the best-performing fixed head among the evaluated downstream heads on the held-out SIMUS-Struct benchmark, together with clutter-heavy stress tests showing where the adaptive and fully whitened extensions help in selected settings.
-  \item Same-residual and same-cube comparisons that separate detector-head effects from residualization, using PD/Kasai, whitened power, and the unwhitened ratio as direct comparators.
-  \item Limited transfer and replay-feasibility analyses, including fixed-threshold transfer on held-out synthetic and real-IQ audits and workstation replay latency.
-\end{itemize}
-
-\paragraph{Scope of empirical claims.}
-The evidence is stratified by data setting. Quantitative efficacy results are reported where independent $H_1/H_0$ labels or an external structural reference are available. After first definition, we use the short labels kWave-Stress, Gammex-Struct, SIMUS-Struct-Mobile, SIMUS-Struct-Intraop, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion; SIMUS-Struct denotes the paired mobile and intra-operative structural benchmark.
 
 \section{Background and Problem Formulation}
 \label{sec:background-problem}
