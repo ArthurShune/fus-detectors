@@ -107,33 +107,6 @@ This build restores the full narrative behind the slimmer submission manuscript:
 Functional ultrasound is now used for intraoperative, neonatal, and mobile brain imaging, but even after standard clutter suppression, tissue motion, phase instability, and aliased flow can produce false detections that distort vascular maps and contaminate functional readouts. We study a family of localized matched-subspace detection statistics applied after conventional clutter suppression of beamformed fUS slow-time data, ranging from a fixed band-limited statistic to locally whitened variants. On the held-out SIMUS structural benchmark, changing only the downstream detection statistic sharply reduces nuisance leakage on the same clutter-filtered residual; in the intra-operative setting, nuisance false-positive rate falls from 0.998 for Kasai to 0.004 for the fixed matched-subspace statistic at matched recall 0.5. In the separate best-chain benchmark, the selected fixed detector chains yield zero observed nuisance detections on all four held-out seed-setting pairs. On one open real-IQ rat-brain dataset, the fully whitened variant shows a consistent structural improvement across all 10 audited blocks (exact paired sign-flip test on block-mean AUC, $p=0.002$), improving AUC from 0.504 for power Doppler to 0.530 on a conservative same-acquisition vessel-core versus shell endpoint anchored by a published localization-derived vascular reference. These results demonstrate that the downstream detection statistic is a separable, consequential design choice in fUS pipelines, and that band-limited matched-subspace scoring reduces nuisance leakage on the same clutter-filtered residual; broader real-data functional validation remains future work.
 \end{abstract}
 
-\begin{center}
-\IfFileExists{figs/paper/ulm7883227_pala_headline_hero.pdf}{%
-  \includegraphics[width=\linewidth]{figs/paper/ulm7883227_pala_headline_hero.pdf}%
-}{%
-  \fbox{\begin{minipage}{0.95\linewidth}
-    \centering
-    \vspace{0.5em}
-    Missing figure \path{figs/paper/ulm7883227_pala_headline_hero.pdf}.\\
-    Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/fig_ulm_pala_headline_hero.py}.
-    \vspace{0.5em}
-  \end{minipage}}%
-}
-\captionof{figure}{Localization-derived structural-label result on ULM Zenodo 7883227 using the published PALA rat-brain localization rendering as an external vascular reference. Left: the PALA-derived vessel-core and perivascular-shell masks after registration back to the IQ grid. Middle and right: the same audited 64-frame MC--SVD residual window (block 001, frames 128:192), thresholded at matched 70\% vessel-core recall for baseline power Doppler and the prespecified no-registration whitened matched-subspace variant. Table~\ref{tab:ulm7883227_structural_roc} reports the formal same clutter-filtered-residual comparison of detection statistics.}
-\label{fig:ulm_pala_headline_hero}
-\end{center}
-
-\IfFileExists{reports/paper/ulm7883227_pala_detector_heads_table.tex}{%
-  \input{reports/paper/ulm7883227_pala_detector_heads_table.tex}%
-}{%
-  \begin{center}
-  \refstepcounter{table}\label{tab:ulm7883227_structural_roc}%
-  \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/paper/ulm7883227_pala_detector_heads_table.tex}.\\
-    Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/ulm7883227_pala_support_tables.py}.
-  \end{minipage}}
-  \end{center}
-}
 \fi
 
 \ifSUPPLEMENTONLY\else
@@ -846,6 +819,34 @@ For ULM we select a single MC--SVD energy-fraction cutoff by a one-time label-fr
 \subsubsection{Localization-derived structural audit}
 \paragraph{ULM-CoreShell.}
 To obtain a more anatomical structural readout on the same open real-IQ data, we use the published PALA rat-brain ULM example as an external vascular reference derived from microbubble localization microscopy rather than from the Doppler scores being evaluated \cite{ChavignonZenodo7883227,HeilesULMBenchmark2021}. We first reproduce the corresponding short-horizon PALA PowDop rendering from the Zenodo IQ blocks using the published odd-block selection and SVD cutoff, register that published PowDop crop back to the Zenodo IQ field of view, and then downsample the published super-resolution MatOut vascular rendering onto the short-window evaluation lattice. From that registered localization map we derive a conservative vessel-core versus perivascular-shell label pair: the vessel mask is a peak-based core mask, and the background mask is the surrounding shell, so the endpoint asks whether a short-window detector concentrates score on the vascular core rather than the immediately adjacent parenchyma. That one-time PALA-to-IQ registration is part of the label construction only. For the short-window detector itself we keep frame-to-frame registration disabled in the frozen audit, because re-enabling it changes the structural ROC only below the fourth decimal place while adding substantial latency.
+
+\begin{center}
+\IfFileExists{figs/paper/ulm7883227_pala_headline_hero.pdf}{%
+  \includegraphics[width=\linewidth]{figs/paper/ulm7883227_pala_headline_hero.pdf}%
+}{%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    \centering
+    \vspace{0.5em}
+    Missing figure \path{figs/paper/ulm7883227_pala_headline_hero.pdf}.\\
+    Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/fig_ulm_pala_headline_hero.py}.
+    \vspace{0.5em}
+  \end{minipage}}%
+}
+\captionof{figure}{Localization-derived structural-label result on ULM Zenodo 7883227 using the published PALA rat-brain localization rendering as an external vascular reference. Left: the PALA-derived vessel-core and perivascular-shell masks after registration back to the IQ grid. Middle and right: the same audited 64-frame MC--SVD residual window (block 001, frames 128:192), thresholded at matched 70\% vessel-core recall for baseline power Doppler and the prespecified no-registration whitened matched-subspace variant. Table~\ref{tab:ulm7883227_structural_roc} reports the formal same clutter-filtered-residual comparison of detection statistics.}
+\label{fig:ulm_pala_headline_hero}
+\end{center}
+
+\IfFileExists{reports/paper/ulm7883227_pala_detector_heads_table.tex}{%
+  \input{reports/paper/ulm7883227_pala_detector_heads_table.tex}%
+}{%
+  \begin{center}
+  \refstepcounter{table}\label{tab:ulm7883227_structural_roc}%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/paper/ulm7883227_pala_detector_heads_table.tex}.\\
+    Reproduce it with \path{PYTHONPATH=. conda run -n fus-detectors python scripts/ulm7883227_pala_support_tables.py}.
+  \end{minipage}}
+  \end{center}
+}
 
 On this endpoint, Table~\ref{tab:ulm7883227_structural_roc} reports PD, Kasai, the fixed statistic, the adaptive statistic, and the fully whitened variant on the same residual windows and the same localization-derived vessel-core versus shell masks. The fixed and adaptive statistics yield only modest pooled-ROC gains over PD and Kasai, and adaptive is nearly indistinguishable from fixed under this profile. The fully whitened variant is the only statistic that improves pooled AUC, strict-tail sensitivity, and shell FPR at matched 70\% vessel-core recall: AUC 0.530 [0.524, 0.537], TPR@$10^{-3}$ 0.004 [0.003, 0.006], and shell FPR 0.676 [0.665, 0.687], compared with AUC 0.514/0.514, TPR@$10^{-3}$ 0.000/0.000, and shell FPR 0.703/0.702 for the fixed/adaptive statistics and AUC 0.504/0.503, TPR@$10^{-3}$ 0.000/0.000, and shell FPR 0.698/0.701 for PD/Kasai.
 
