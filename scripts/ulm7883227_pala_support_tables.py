@@ -275,7 +275,7 @@ def _build_family_table(payload: dict[str, Any]) -> str:
     lines.append("}")
     lines.append(
         "\\captionof{table}{Same-residual ULM structural audit on real in vivo rat-brain IQ. "
-        "All rows use the same frozen 64-frame MC--SVD residual cube, the same localization-derived vessel-core versus shell masks, and the same SCM whitening recipe where applicable; only the downstream score head changes. "
+        "All rows use the same frozen 64-frame MC--SVD residual cube, the same localization-derived vessel-core versus shell masks, and the same SCM whitening recipe where applicable; only the downstream scoring rule changes. "
         "Entries report window-level means with 95\\% bootstrap intervals over the 70 audited windows."
         + pd_p_text
         + "}"
