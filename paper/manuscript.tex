@@ -961,7 +961,7 @@ Most public \emph{in vivo} fUS releases do not preserve the raw high-PRF complex
 
 A stricter disjoint-source odd/even block audit remained directionally consistent but weaker, and a support-matched permutation control collapsed the structural audit toward chance. Together these checks reduce the simplest same-acquisition leakage objections, but they do not turn the result into independent multimodal or cross-session validation.
 
-The simulation-to-reality gap should calibrate expectations: the held-out synthetic benchmark determines the default detector choice much more cleanly than the current real-IQ audits. What is still missing is a standardized open benchmark with repeated sessions and independent anatomical or task anchors for post-beamformed detector evaluation \cite{LambertNeuropixels2025,COMBOWindow2024,ChenComa2025,Rabut2024,MobileFUS2025}.
+The held-out synthetic benchmark determines the default detector choice much more cleanly than the current real-IQ audits. What is still missing is a standardized open benchmark with repeated sessions and independent anatomical or task anchors for post-beamformed detector evaluation \cite{LambertNeuropixels2025,COMBOWindow2024,ChenComa2025,Rabut2024,MobileFUS2025}.
 
 \subsection*{Recommended detector variant by setting}
 Figure~\ref{fig:variant_selection_flowchart} summarizes the practical deployment rule supported by the current evidence. The fixed statistic remains the default, while the fully whitened variant is reserved for repeated guard-dominant windows with nonzero promotion and sufficient latency margin; the current adaptive telemetry is useful for label-free monitoring, but not yet a validated universal selector.
