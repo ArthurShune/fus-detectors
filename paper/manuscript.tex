@@ -126,7 +126,7 @@ In practice, a researcher would replace the power-Doppler-style scoring step in 
 
 We isolate the detector stage after clutter suppression. All detector comparisons use the same clutter-filtered residual so detector effects can be separated from clutter-filter effects.
 
-The paper proceeds from held-out structural benchmarking to mechanism checks and limited real-IQ audits. We use the short labels kWave-Stress, Gammex-Struct, SIMUS-Struct-Mobile, SIMUS-Struct-Intraop, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion throughout; SIMUS-Struct denotes the paired mobile and intra-operative structural benchmark.
+We evaluate the detector on held-out structural benchmarks, clutter-stress simulations, a structurally labeled phantom, and open real-IQ audits. We use the short labels kWave-Stress, Gammex-Struct, SIMUS-Struct-Mobile, SIMUS-Struct-Intraop, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion throughout; SIMUS-Struct denotes the paired mobile and intra-operative structural benchmark.
 
 \section{Background and Problem Formulation}
 \label{sec:background-problem}
@@ -417,7 +417,7 @@ This work is a reproducible processing pipeline (decode $\rightarrow$ baseline $
 The evidence is stratified by setting so that quantitative detection results remain clearly separated from robustness or transfer audits. Downstream detection-statistic design matters after a fixed clutter filter; the fixed band-limited statistic is the default structural choice on the held-out SIMUS benchmark; adaptive and fully whitened variants help in narrower clutter-heavy or structure-concentration settings; and fixed-threshold transfer is encouraging in selected settings but not solved.
 
 \ifPAPERONLY
-The main text focuses on the held-out SIMUS benchmark, one clutter-heavy SIMUS stress setting, the Gammex structural phantom, the ULM structural audit, and replay feasibility. The companion gives the fuller setting-by-setting narrative, including secondary audits, transfer tables, and implementation details.
+The main text focuses on the held-out SIMUS benchmark, one clutter-heavy stress regime, the Gammex phantom, the bounded ULM structural audit, and replay feasibility.
 \else
 This extended companion preserves the same ordering as the preprint but restores the full setting-by-setting arc, so it can be read linearly from the held-out SIMUS benchmark through the mechanism checks, real-IQ audits, transfer analyses, and reproducibility appendices.
 \begin{itemize}[nosep]
@@ -970,7 +970,7 @@ Figure~\ref{fig:variant_selection_flowchart} summarizes the practical deployment
 \begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{figs/paper/variant_selection_flowchart.pdf}
-\caption{Conservative label-free deployment rule for choosing between the fixed and fully whitened detector variants. The runtime telemetry is already produced by the adaptive branch: $r_g$ is the tile-level guard-band energy fraction, $Q_{0.90}(r_g)$ is its upper-tail summary across a representative window, and $p_{\mathrm{promote}}$ is the fraction of tiles that would be promoted onto the whitened branch by the frozen adaptive rule. The flowchart encodes the present practical conclusion: fixed is the default, fully whitened is reserved for repeated guard-dominant windows with nonzero promotion and sufficient latency budget, and mixed telemetry is not enough to justify an automatic switch. This is a conservative deployment heuristic from the current evidence, not a validated universal selector.}
+\caption{Conservative label-free deployment rule for choosing between the fixed and fully whitened detector variants. The runtime telemetry is already produced by the adaptive branch: $r_g$ is the tile-level guard-band energy fraction, $Q_{0.90}(r_g)$ is its upper-tail summary across a representative window, and $p_{\mathrm{promote}}$ is the fraction of tiles that would be promoted onto the whitened branch by the frozen adaptive rule. Current evidence supports a conservative deployment rule: use the fixed detector by default and reserve the fully whitened variant for persistently clutter-dominant windows with sufficient latency margin. Mixed telemetry is not enough to justify an automatic switch.}
 \label{fig:variant_selection_flowchart}
 \end{figure}
 
