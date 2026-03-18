@@ -43,16 +43,16 @@ LEVEL_DISPLAY = {"reference": "Ref.", "moderate": "Mod.", "hard": "Hard"}
 PIPELINE_DISPLAY = {
     "RPCA -> PD": r"\shortstack[l]{RPCA\\$\rightarrow$ PD}",
     "RPCA -> Matched-subspace default": r"\shortstack[l]{RPCA\\$\rightarrow$ Fixed matched-subspace}",
-    "RPCA -> Adaptive guard": r"\shortstack[l]{RPCA\\$\rightarrow$ Adaptive head}",
+    "RPCA -> Adaptive guard": r"\shortstack[l]{RPCA\\$\rightarrow$ Adaptive statistic}",
     "RPCA -> Whitened specialist": r"\shortstack[l]{RPCA\\$\rightarrow$ Fully whitened variant}",
     "Adaptive Global SVD -> Matched-subspace default": r"\shortstack[l]{Adaptive-global SVD\\$\rightarrow$ Fixed matched-subspace}",
-    "Adaptive Global SVD -> Adaptive guard": r"\shortstack[l]{Adaptive-global SVD\\$\rightarrow$ Adaptive head}",
+    "Adaptive Global SVD -> Adaptive guard": r"\shortstack[l]{Adaptive-global SVD\\$\rightarrow$ Adaptive statistic}",
     "Adaptive Global SVD -> Whitened specialist": r"\shortstack[l]{Adaptive-global SVD\\$\rightarrow$ Fully whitened variant}",
 }
 DETECTOR_DISPLAY = {
-    "unwhitened_ref": "Fixed head",
-    "adaptive_guard_huber": "Adaptive head",
-    "huber_trim8": "Whitened head",
+    "unwhitened_ref": "Fixed statistic",
+    "adaptive_guard_huber": "Adaptive statistic",
+    "huber_trim8": "Whitened variant",
 }
 DETECTOR_ORDER = ["unwhitened_ref", "adaptive_guard_huber", "huber_trim8"]
 BOOTSTRAP_SAMPLES = 2000
@@ -369,7 +369,7 @@ def _frozen_rpca_heads_table(rows: list[dict[str, str]]) -> str:
                 rf"\par\medskip\noindent\textbf{{{meta['label']}}}\par\medskip",
                 r"\begin{tabular}{@{}P{3.9cm} P{2.3cm} P{2.3cm} P{2.3cm} P{2.3cm}@{}}",
                 r"\hline",
-                r"Level / perturbation & Baseline (RPCA$\rightarrow$PD) & Fixed head & Adaptive head & Whitened head \\",
+                r"Level / perturbation & Baseline (RPCA$\rightarrow$PD) & Fixed statistic & Adaptive statistic & Whitened variant \\",
                 r"\hline",
             ]
         )
@@ -400,7 +400,7 @@ def _frozen_rpca_heads_table(rows: list[dict[str, str]]) -> str:
             lines.append(r"\medskip")
     lines.extend(
         [
-            r"\caption{Concrete detector-head view of the held-out SIMUS mobile stress regime, fixing the residualizer to RPCA on every row. Entries report AUC$_{\mathrm{main/nuis}}$ (top) and FPR$_{\mathrm{nuis}}$@$0.5$ (bottom), with point estimates shown as $x_{\mathrm{lo}}^{\mathrm{hi}}$ using 95\% nonparametric bootstrap intervals over the held-out masked score samples. RPCA is used because RPCA $\rightarrow$ PD is the strongest conventional baseline among evaluated methods on every reported stress row. This table separates the fixed, adaptive, and fully whitened heads directly instead of reporting only the best family member on each row.}",
+            r"\caption{Held-out SIMUS mobile stress setting with RPCA fixed as the clutter filter on every row. Entries report AUC$_{\mathrm{main/nuis}}$ (top) and FPR$_{\mathrm{nuis}}$@$0.5$ (bottom), with point estimates shown as $x_{\mathrm{lo}}^{\mathrm{hi}}$ using 95\% nonparametric bootstrap intervals over the held-out masked score samples. RPCA is used because RPCA $\rightarrow$ PD is the strongest conventional baseline among evaluated methods on every reported stress row. This table separates the fixed, adaptive, and fully whitened detector statistics directly instead of reporting only the best family member on each row.}",
             r"\label{tab:simus_stress_frontier_rpca_heads}",
             r"\end{center}",
             "",

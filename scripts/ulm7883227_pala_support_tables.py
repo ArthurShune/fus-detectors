@@ -202,6 +202,20 @@ def _family_row_from_summary(
     }
 
 
+def _fmt_family_interval(
+    row: dict[str, Any],
+    key: str,
+    *,
+    best_center: float,
+    higher_is_better: bool,
+) -> str:
+    metric = row[key]
+    center = float(metric["center"])
+    text = _fmt_interval(center, metric["lo"], metric["hi"])
+    is_best = center >= best_center if higher_is_better else center <= best_center
+    return f"\\textbf{{{text}}}" if is_best else text
+
+
 def _build_consistency_table(payload: dict[str, Any]) -> str:
     fixed_sec = payload["specialist_vs_fixed"]
     adaptive_sec = payload["specialist_vs_adaptive"]
@@ -216,13 +230,13 @@ def _build_consistency_table(payload: dict[str, Any]) -> str:
     lines.append("Comparison & AUC wins (windows / blocks) & shell-FPR wins @70\\% core recall (windows / blocks) & nonzero TPR@$10^{-3}$ windows \\\\")
     lines.append("\\hline")
     lines.append(
-        "Fully whitened variant vs fixed head & "
+        "Fully whitened variant vs fixed statistic & "
         f"{fixed_sec['auc_wins']}/{fixed_sec['n_windows']} / {fixed_sec['auc_block_wins']}/{fixed_sec['n_blocks']} & "
         f"{fixed_sec['fpr70_wins']}/{fixed_sec['n_windows']} / {fixed_sec['fpr70_block_wins']}/{fixed_sec['n_blocks']} & "
         f"{fixed_sec['nonzero_tpr1e3_specialist']}/{fixed_sec['n_windows']} vs {fixed_sec['nonzero_tpr1e3_comp']}/{fixed_sec['n_windows']} \\\\"
     )
     lines.append(
-        "Fully whitened variant vs adaptive head & "
+        "Fully whitened variant vs adaptive statistic & "
         f"{adaptive_sec['auc_wins']}/{adaptive_sec['n_windows']} / {adaptive_sec['auc_block_wins']}/{adaptive_sec['n_blocks']} & "
         f"{adaptive_sec['fpr70_wins']}/{adaptive_sec['n_windows']} / {adaptive_sec['fpr70_block_wins']}/{adaptive_sec['n_blocks']} & "
         f"{adaptive_sec['nonzero_tpr1e3_specialist']}/{adaptive_sec['n_windows']} vs {adaptive_sec['nonzero_tpr1e3_comp']}/{adaptive_sec['n_windows']} \\\\"
@@ -232,7 +246,7 @@ def _build_consistency_table(payload: dict[str, Any]) -> str:
     lines.append("}")
     lines.append(
         "\\caption{Window-level consistency summary for the PALA-backed ULM structural audit. "
-        "Each row compares the prespecified fully whitened variant against another detector head on the same frozen 64-frame MC--SVD residual cube and the same localization-derived vessel-core versus shell labels. "
+        "Each row compares the prespecified fully whitened variant against another detector statistic on the same frozen 64-frame MC--SVD residual cube and the same localization-derived vessel-core versus shell labels. "
         "The window/block entries report how often the fully whitened variant has higher vessel-core AUC or lower shell false-positive rate at matched 70\\% vessel-core recall.}"
     )
     lines.append("\\label{tab:ulm_pala_window_consistency}")
@@ -258,25 +272,25 @@ def _build_family_table(payload: dict[str, Any]) -> str:
     lines.append("\\hline")
     lines.append("Score & AUC (H1 vs H0) & TPR@$10^{-2}$ & TPR@$10^{-3}$ & shell FPR @70\\% core recall \\\\")
     lines.append("\\hline")
+    best_auc = max(float(row["auc"]["center"]) for row in payload["family_rows"])
+    best_tpr2 = max(float(row["tpr_1e2"]["center"]) for row in payload["family_rows"])
+    best_tpr3 = max(float(row["tpr_1e3"]["center"]) for row in payload["family_rows"])
+    best_fpr70 = min(float(row["fpr_70"]["center"]) for row in payload["family_rows"])
     for row in payload["family_rows"]:
-        auc = row["auc"]
-        tpr2 = row["tpr_1e2"]
-        tpr3 = row["tpr_1e3"]
-        fpr70 = row["fpr_70"]
         lines.append(
             f"{row['label']} & "
-            f"{_fmt_interval(auc['center'], auc['lo'], auc['hi'])} & "
-            f"{_fmt_interval(tpr2['center'], tpr2['lo'], tpr2['hi'])} & "
-            f"{_fmt_interval(tpr3['center'], tpr3['lo'], tpr3['hi'])} & "
-            f"{_fmt_interval(fpr70['center'], fpr70['lo'], fpr70['hi'])} \\\\"
+            f"{_fmt_family_interval(row, 'auc', best_center=best_auc, higher_is_better=True)} & "
+            f"{_fmt_family_interval(row, 'tpr_1e2', best_center=best_tpr2, higher_is_better=True)} & "
+            f"{_fmt_family_interval(row, 'tpr_1e3', best_center=best_tpr3, higher_is_better=True)} & "
+            f"{_fmt_family_interval(row, 'fpr_70', best_center=best_fpr70, higher_is_better=False)} \\\\"
         )
     lines.append("\\hline")
     lines.append("\\end{tabular}")
     lines.append("}")
     lines.append(
         "\\captionof{table}{Same-residual ULM structural audit on real in vivo rat-brain IQ. "
-        "All rows use the same frozen 64-frame MC--SVD residual cube, the same localization-derived vessel-core versus shell masks, and the same SCM whitening recipe where applicable; only the downstream scoring rule changes. "
-        "Entries report window-level means with 95\\% bootstrap intervals over the 70 audited windows."
+        "All rows use the same frozen 64-frame MC--SVD residual cube and the same localization-derived vessel-core versus shell masks; only the downstream scoring rule changes. "
+        "Entries report window-level means with 95\\% bootstrap intervals over the 70 audited windows. Best values in each metric column are bolded."
         + pd_p_text
         + "}"
     )
@@ -380,8 +394,8 @@ def main() -> None:
         payload["family_rows"] = [
             _family_row_from_summary("Baseline (power Doppler)", fixed_summary["scores"]["pd"]),
             _family_row_from_summary("Baseline (Kasai lag-1 magnitude)", fixed_summary["scores"]["kasai"]),
-            _family_row_from_summary("Fixed matched-subspace head", fixed_summary["scores"]["matched_subspace"]),
-            _family_row_from_summary("Adaptive head", adaptive_summary["scores"]["matched_subspace"]),
+            _family_row_from_summary("Fixed matched-subspace statistic", fixed_summary["scores"]["matched_subspace"]),
+            _family_row_from_summary("Adaptive statistic", adaptive_summary["scores"]["matched_subspace"]),
             _family_row_from_summary(
                 "Fully whitened variant", main_summary["scores"]["matched_subspace"]
             ),
