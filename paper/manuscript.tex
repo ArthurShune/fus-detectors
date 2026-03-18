@@ -127,7 +127,7 @@ This is a drop-in replacement for the final scoring step of an SVD+PD-style pipe
 
 We isolate the detector stage after clutter suppression. All detector comparisons use the same clutter-filtered residual so detector effects can be separated from clutter-filter effects.
 
-We evaluate the detector on held-out structural benchmarks, clutter-stress simulations, a structurally labeled phantom, and open real-IQ audits. We use the short labels kWave-Stress, Gammex-Struct, SIMUS-Struct-Mobile, SIMUS-Struct-Intraop, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion throughout; SIMUS-Struct denotes the paired mobile and intra-operative structural benchmark.
+We evaluate the detector on held-out structural benchmarks, clutter-stress simulations, a structurally labeled phantom, and open real-IQ audits.
 
 Labs with raw IQ and task timing can evaluate this detector as a drop-in replacement for the final PD/Kasai-style readout within an existing clutter-filtered pipeline. This work provides the detector implementation, same-residual evaluation protocol, and code needed for that comparison.
 
@@ -418,7 +418,7 @@ This work is a reproducible processing pipeline (decode $\rightarrow$ baseline $
 \subsection{Regimes and scope}
 \label{sec:results-overview}
 
-The evidence is stratified by setting so that quantitative detection results remain clearly separated from robustness or transfer audits. Downstream detection-statistic design matters after a fixed clutter filter; the fixed band-limited statistic is the default structural choice on the held-out SIMUS benchmark; adaptive and fully whitened variants help in narrower clutter-heavy or structure-concentration settings; and fixed-threshold transfer is encouraging in selected settings but not solved.
+The evidence is stratified by setting so that quantitative detection results remain clearly separated from robustness or transfer audits. We use the short labels kWave-Stress, Gammex-Struct, SIMUS-Struct-Mobile, SIMUS-Struct-Intraop, ULM-CoreShell, ULM-Motion, and Shin-ProxyMotion throughout; SIMUS-Struct denotes the paired mobile and intra-operative structural benchmark. Downstream detection-statistic design matters after a fixed clutter filter; the fixed band-limited statistic is the default structural choice on the held-out SIMUS benchmark; adaptive and fully whitened variants help in narrower clutter-heavy or structure-concentration settings; and fixed-threshold transfer is encouraging in selected settings but not solved.
 
 \ifPAPERONLY
 \else
