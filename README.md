@@ -9,6 +9,10 @@ Post-clutter-suppression detection statistics that reduce artifact leakage in fu
 
 `fus-detectors` is the reference implementation and paper repository for localized matched-subspace detection on beamformed fUS slow-time data. The central question is simple: once a clutter-filtered residual has been fixed, can changing only the final detection statistic suppress artifacts more effectively than power-Doppler-style readouts?
 
+<p align="center">
+  <img src="docs/assets/readme_hero_ulm.png" alt="Representative real-IQ structural audit figure from the preprint." width="860">
+</p>
+
 ## Why This Repo Matters
 
 - It isolates the downstream detection statistic as a separate design choice on the same clutter-filtered residual.
@@ -18,6 +22,14 @@ Post-clutter-suppression detection statistics that reduce artifact leakage in fu
 Two headline results anchor the repository:
 - On the held-out `SIMUS-Struct-Intraop` benchmark, the fixed matched-subspace statistic reduces nuisance false-positive rate from `0.998` to `0.004` at matched recall `0.5` on the same clutter-filtered residual.
 - On one open real-IQ rat-brain dataset, the fully whitened variant improves a conservative vessel-core versus perivascular-shell audit on all `10` evaluated blocks (`p = 0.002`).
+
+## Method at a Glance
+
+<p align="center">
+  <img src="docs/assets/readme_pipeline.png" alt="Pipeline overview showing clutter-filtered residual input and downstream detection statistics." width="760">
+</p>
+
+The method does not replace the upstream clutter filter. It changes only the final detection statistic applied to the same clutter-filtered residual.
 
 > Status: active research code accompanying a preprint. APIs and helper scripts may still change. If you want to test this on raw fUS IQ, task data, or a clinical/mobile workflow, contact `arthur@skymesasystems.com`.
 
@@ -118,6 +130,7 @@ Contact: `arthur@skymesasystems.com`
 ## Repository Map
 
 - `paper/` manuscript sources and built PDFs
+- `docs/assets/` curated README graphics and lightweight repo-facing visuals
 - `pipeline/` detector statistics and clutter-filtered residual processing code
 - `sim/` k-Wave and SIMUS simulation wrappers
 - `scripts/` entry points for reported figures, tables, audits, and repro runs
