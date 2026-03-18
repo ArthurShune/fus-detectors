@@ -362,7 +362,7 @@ def _build_table(summary_rows: list[dict[str, Any]]) -> str:
     lines.append("}")
     lines.append(
         "\\caption{Same-residual detector-family ablation on SIMUS-Struct using a common MC--SVD residual. "
-        "Rows differ only in the downstream score head: power Doppler, Kasai lag-1 magnitude, the fixed "
+        "Rows differ only in the downstream scoring rule: power Doppler, Kasai lag-1 magnitude, the fixed "
         "flow-band matched-subspace detector without whitening ($R=I$), the adaptive detector that promotes "
         "clutter-heavy tiles onto a whitened branch, and the fully whitened detector. Values are means with "
         "[min,max] over held-out evaluation seeds 127 and 128 for each setting. Lower nuisance FPR at matched "
