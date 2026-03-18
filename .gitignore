@@ -25,6 +25,7 @@ figs/paper/
 mace_bridge/
 tmp/
 patent/
+external/
 provisional_patent_draft_specification.md
 provisional_patent_outline.md
 LATENCY_OPTIMIZATION_SPEC.md

@@ -4,22 +4,25 @@ channels:
   - nvidia
   - conda-forge
 dependencies:
-  - python=3.11
-  - numpy
-  - scipy
-  - scikit-image
+  - python=3.10
+  - numpy=1.26.*
   - scikit-learn
-  - matplotlib
   - numba
-  - pytorch=2.4.*
+  - pytorch=2.1.*
   - torchvision
   - torchaudio
-  - pytorch-cuda=12.1
+  - pytorch-cuda=11.8
+  - pyyaml
   - pip
   - pip:
       - k-Wave-python==0.4.0
       - PyMUST==0.1.9
-      - cupy-cuda12x
+      - scipy==1.14.1
+      - matplotlib==3.10.0
+      - scikit-image==0.25.2
+      - h5py==3.12.1
+      - imageio==2.37.3
+      - opencv-python==4.10.0.84
       - rich
       - tqdm
       - hydra-core
@@ -31,5 +34,5 @@ dependencies:
       - pytest
       - pytest-cov
       - mypy
-      - jupyter
+      - jupyterlab
       - ipykernel
