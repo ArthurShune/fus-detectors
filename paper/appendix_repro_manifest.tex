@@ -9,21 +9,21 @@ Run \path{PYTHONPATH=. conda run -n fus-detectors python scripts/generate_repro_
 \paragraph{Repository state.}
 Public repository: \path{git@github.com:ArthurShune/fus-detectors.git}.
 Release tag: (not recorded; set \texttt{FUS\_DETECTORS\_RELEASE\_TAG} or create a git tag).
-Commit: \texttt{53d827c} (full: \texttt{53d827ccb6}\allowbreak\texttt{bb6f0f1998}\allowbreak\texttt{d0d84c88c1}\allowbreak\texttt{79090a0730}); branch: \texttt{main}; dirty: \texttt{true}.
-Dirty details: non-ignored paths=5, ignored build products=2.
+Commit: \texttt{c2494ea} (full: \texttt{c2494ea4ef}\allowbreak\texttt{ebb220722f}\allowbreak\texttt{f4edaed314}\allowbreak\texttt{63d5fafd28}); branch: \texttt{main}; dirty: \texttt{true}.
+Dirty details: non-ignored paths=50, ignored build products=1.
 Note: dirty status ignores common LaTeX build products (e.g., \texttt{*.aux, *.log, *.out, *.fls, *.fdb\_latexmk, *.synctex.gz, *.pdf}).
 For archival reproducibility, generate this manifest from a clean, tagged release commit (\texttt{dirty=false}) and record the public repository URL and tag.
 
 \paragraph{Environment.}
-Conda spec: \path{environment.yml} (sha256: \texttt{653023c31d34f3ca}\allowbreak\texttt{8cf0e4f89b7c6aa1}\allowbreak\texttt{f1d3d1192604b391}\allowbreak\texttt{bdd0941d7ad53f79}).
+Conda spec: \path{environment.yml} (sha256: \texttt{b50293345709179b}\allowbreak\texttt{8df97e68b2886dda}\allowbreak\texttt{6a91d39b68cdc7c6}\allowbreak\texttt{b6caa670490cb194}).
 Create env: \path{conda env create -f environment.yml}.
 Docker: \path{Dockerfile} (sha256: \texttt{0746a21bcc0ecc75}\allowbreak\texttt{a67ac5f84c155a51}\allowbreak\texttt{85522b831eac4cdf}\allowbreak\texttt{3da05b777bf581ac}).
 Build container: \path{docker build -t fus-detectors -f Dockerfile .}.
 Runtime (conda env \texttt{fus-detectors}):
-Python: \path{3.11.9 (main, Apr 19 2024, 16:48:06) [GCC 11.2.0]}.
+Python: \path{3.10.19 | packaged by conda-forge | (main, Oct 22 2025, 22:29:10) [GCC 14.3.0]}.
 Platform: \path{Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39}.
-Packages: \texttt{numpy}={1.26.4}, \texttt{scipy}={1.17.1}, \texttt{torch}={2.4.1}, \texttt{matplotlib}={3.10.0}, \texttt{cupy}={14.0.1}.
-Torch CUDA: available=\texttt{true}, cuda=\texttt{12.1}, device0=\path{NVIDIA GeForce RTX 4080 SUPER}.
+Packages: \texttt{numpy}={1.26.4}, \texttt{scipy}={1.14.1}, \texttt{torch}={2.1.2}, \texttt{matplotlib}={3.10.0}.
+Torch CUDA: available=\texttt{true}, cuda=\texttt{11.8}, device0=\path{NVIDIA GeForce RTX 4080 SUPER}.
 
 \paragraph{Datasets.}
 Paths below are the expected on-disk locations used by the scripts in this repository. Large outputs under \path{runs/} and \path{reports/} are not tracked.
@@ -217,7 +217,7 @@ Each entry below lists the paper-facing artifact outputs and their repository en
       \item \path{runs/pilot/}\allowbreak\path{fair_filter_matrix_pd_r3_}\allowbreak\path{localbaselines/ (generated bundles)}
       \item \path{reports/}\allowbreak\path{fair_matrix_vnext_r3_localbaselines.csv}
       \item \path{reports/}\allowbreak\path{fair_matrix_vnext_r3_localbaselines.json}
-      \item \path{reports/}\allowbreak\path{brain_kwave_vnext_baselines_table.tex}
+      \item \path{reports/}\allowbreak\path{companion/brain_kwave_vnext_baselines_}\allowbreak\path{table.tex}
     \end{itemize}
     \endgroup
     Notes: Generates per-window acceptance bundles and writes a vnext-style strict-tail report, then renders the LaTeX table used in the main Brain-* baseline table; this run root is also consumed by the ROC and cross-window calibration scripts.
@@ -517,7 +517,7 @@ Each entry below lists the paper-facing artifact outputs and their repository en
       \item \path{reports/}\allowbreak\path{twinkling_gammex_across17_prf2500_str4_}\allowbreak\path{unwhitened_ratio_structural_summary.json}
       \item \path{reports/}\allowbreak\path{twinkling_gammex_detector_ablation.csv}
       \item \path{reports/}\allowbreak\path{twinkling_gammex_detector_ablation.json}
-      \item \path{reports/}\allowbreak\path{twinkling_gammex_detector_ablation_table.tex}
+      \item \path{reports/}\allowbreak\path{paper/twinkling_gammex_detector_ablation_}\allowbreak\path{table.tex}
     \end{itemize}
     \endgroup
     Notes: Same-residual fairness audit for the main Gammex table. Detector-variant ablations require the batched fast matched-subspace core; only the detector head changes across rows.
@@ -615,7 +615,7 @@ Each entry below lists the paper-facing artifact outputs and their repository en
     \begin{itemize}[nosep,leftmargin=0em,label={}]
       \item \path{reports/}\allowbreak\path{ulm7883227_pala_structural_roc.csv}
       \item \path{reports/}\allowbreak\path{ulm7883227_pala_structural_roc.json}
-      \item \path{reports/}\allowbreak\path{ulm7883227_pala_structural_roc_table.tex}
+      \item \path{reports/}\allowbreak\path{companion/ulm7883227_pala_structural_roc_}\allowbreak\path{table.tex}
       \item \path{reports/}\allowbreak\path{ulm7883227_pala_structural_roc_short32.json}
       \item \path{reports/}\allowbreak\path{ulm7883227_pala_structural_roc_brainlike_}\allowbreak\path{motion.json}
       \item \path{reports/}\allowbreak\path{ulm7883227_pala_latency_rtx4080.json}
@@ -641,9 +641,9 @@ Each entry below lists the paper-facing artifact outputs and their repository en
     \begin{itemize}[nosep,leftmargin=0em,label={}]
       \item \path{reports/}\allowbreak\path{fixed_calibration_transfer.json}
       \item \path{reports/}\allowbreak\path{simus_v2/simus_fixed_calibration_}\allowbreak\path{transfer.csv}
-      \item \path{reports/}\allowbreak\path{simus_fixed_calibration_transfer_table.tex}
+      \item \path{reports/}\allowbreak\path{paper/simus_fixed_calibration_transfer_}\allowbreak\path{table.tex}
       \item \path{reports/}\allowbreak\path{ulm7883227_pala_fixed_calibration_}\allowbreak\path{transfer.csv}
-      \item \path{reports/}\allowbreak\path{ulm7883227_pala_fixed_calibration_transfer_}\allowbreak\path{table.tex}
+      \item \path{reports/}\allowbreak\path{paper/ulm7883227_pala_fixed_calibration_}\allowbreak\path{transfer_table.tex}
     \end{itemize}
     \endgroup
     Notes: This is the paper's non-retrospective threshold-transfer check. On SIMUS/PyMUST, thresholds are learned once from separate calibration seeds 125--126 and applied unchanged to held-out seeds 127--128. On the bounded PALA-backed ULM endpoint, complementary 5-block calibration banks are used so that thresholds are fixed before evaluation on the held-out blocks. These are deployment-relevant transfer checks, not per-window oracle calibrations.

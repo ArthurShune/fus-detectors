@@ -9,7 +9,7 @@ Inputs:
   - reports/fair_matrix_vnext_r3_localbaselines.json (list of per-window records)
 
 Outputs:
-  - reports/brain_kwave_vnext_baselines_table.tex (LaTeX table environment)
+  - reports/companion/brain_kwave_vnext_baselines_table.tex (LaTeX table environment)
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument(
         "--out-tex",
         type=Path,
-        default=Path("reports/brain_kwave_vnext_baselines_table.tex"),
+        default=Path("reports/companion/brain_kwave_vnext_baselines_table.tex"),
         help="Output LaTeX table path.",
     )
     return ap.parse_args()

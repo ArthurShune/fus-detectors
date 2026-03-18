@@ -116,7 +116,7 @@ def main() -> None:
     ap.add_argument(
         "--out-tex",
         type=Path,
-        default=ROOT / "reports" / "ulm7883227_pala_mask_falsification_table.tex",
+        default=ROOT / "reports" / "companion" / "ulm7883227_pala_mask_falsification_table.tex",
     )
     args = ap.parse_args()
 

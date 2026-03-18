@@ -1131,7 +1131,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "runs/pilot/fair_filter_matrix_pd_r3_localbaselines/ (generated bundles)",
                 "reports/fair_matrix_vnext_r3_localbaselines.csv",
                 "reports/fair_matrix_vnext_r3_localbaselines.json",
-                "reports/brain_kwave_vnext_baselines_table.tex",
+                "reports/companion/brain_kwave_vnext_baselines_table.tex",
             ],
             commands=[
                 "bash scripts/reproduce_table5_brain_kwave.sh",
@@ -1152,7 +1152,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "",
                 "PYTHONPATH=. conda run -n fus-detectors python scripts/brain_kwave_vnext_baselines_table.py \\",
                 "  --fair-matrix-json reports/fair_matrix_vnext_r3_localbaselines.json \\",
-                "  --out-tex reports/brain_kwave_vnext_baselines_table.tex",
+                "  --out-tex reports/companion/brain_kwave_vnext_baselines_table.tex",
             ],
             notes=(
                 "Generates per-window acceptance bundles and writes a vnext-style strict-tail report, then renders the "
@@ -1701,7 +1701,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "reports/twinkling_gammex_across17_prf2500_str4_unwhitened_ratio_structural_summary.json",
                 "reports/twinkling_gammex_detector_ablation.csv",
                 "reports/twinkling_gammex_detector_ablation.json",
-                "reports/twinkling_gammex_detector_ablation_table.tex",
+                "reports/paper/twinkling_gammex_detector_ablation_table.tex",
             ],
             commands=[
                 "SEQ_BASE=\"data/twinkling_artifact/Flow in Gammex phantom\"",
@@ -1767,7 +1767,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "    reports/twinkling_gammex_across17_prf2500_str4_unwhitened_ratio_structural_summary.json \\",
                 "  --out-csv reports/twinkling_gammex_detector_ablation.csv \\",
                 "  --out-json reports/twinkling_gammex_detector_ablation.json \\",
-                "  --out-tex reports/twinkling_gammex_detector_ablation_table.tex",
+                "  --out-tex reports/paper/twinkling_gammex_detector_ablation_table.tex",
             ],
             notes=(
                 "Same-residual fairness audit for the main Gammex table. Detector-variant ablations require the "
@@ -1998,7 +1998,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
             outputs=[
                 "reports/ulm7883227_pala_structural_roc.csv",
                 "reports/ulm7883227_pala_structural_roc.json",
-                "reports/ulm7883227_pala_structural_roc_table.tex",
+                "reports/companion/ulm7883227_pala_structural_roc_table.tex",
                 "reports/ulm7883227_pala_structural_roc_short32.json",
                 "reports/ulm7883227_pala_structural_roc_brainlike_motion.json",
                 "reports/ulm7883227_pala_latency_rtx4080.json",
@@ -2027,7 +2027,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --bootstrap-n 500 \\",
                 "  --out-csv reports/ulm7883227_pala_structural_roc.csv \\",
                 "  --out-json reports/ulm7883227_pala_structural_roc.json \\",
-                "  --out-tex reports/ulm7883227_pala_structural_roc_table.tex \\",
+                "  --out-tex reports/companion/ulm7883227_pala_structural_roc_table.tex \\",
                 "  --out-mask-fig figs/paper/ulm7883227_pala_structural_masks.pdf \\",
                 "  --out-roc-fig figs/paper/ulm7883227_pala_structural_roc_curves.pdf",
                 "PYTHONPATH=. conda run -n fus-detectors python scripts/fig_ulm_pala_headline_hero.py",
@@ -2067,9 +2067,9 @@ def _default_artifacts() -> list[ArtifactInfo]:
             outputs=[
                 "reports/fixed_calibration_transfer.json",
                 "reports/simus_v2/simus_fixed_calibration_transfer.csv",
-                "reports/simus_fixed_calibration_transfer_table.tex",
+                "reports/paper/simus_fixed_calibration_transfer_table.tex",
                 "reports/ulm7883227_pala_fixed_calibration_transfer.csv",
-                "reports/ulm7883227_pala_fixed_calibration_transfer_table.tex",
+                "reports/paper/ulm7883227_pala_fixed_calibration_transfer_table.tex",
             ],
             commands=[
                 "PYTHONPATH=. conda run -n fus-detectors python scripts/fixed_calibration_transfer.py \\",
@@ -2078,12 +2078,12 @@ def _default_artifacts() -> list[ArtifactInfo]:
                 "  --simus-stap-profile Brain-SIMUS-Clin-MotionMidRobust-v0 \\",
                 "  --simus-out-root runs/fixed_calibration_transfer/simus \\",
                 "  --simus-out-csv reports/simus_v2/simus_fixed_calibration_transfer.csv \\",
-                "  --simus-out-tex reports/simus_fixed_calibration_transfer_table.tex \\",
+                "  --simus-out-tex reports/paper/simus_fixed_calibration_transfer_table.tex \\",
                 "  --ulm-data-root data/ulm_zenodo_7883227 \\",
                 "  --ulm-pala-example-root external/PALA/PALA_data_InVivoRatBrain \\",
                 "  --ulm-out-root runs/fixed_calibration_transfer/ulm \\",
                 "  --ulm-out-csv reports/ulm7883227_pala_fixed_calibration_transfer.csv \\",
-                "  --ulm-out-tex reports/ulm7883227_pala_fixed_calibration_transfer_table.tex \\",
+                "  --ulm-out-tex reports/paper/ulm7883227_pala_fixed_calibration_transfer_table.tex \\",
                 "  --out-json reports/fixed_calibration_transfer.json",
             ],
             notes=(

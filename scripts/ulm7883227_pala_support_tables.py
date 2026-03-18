@@ -302,12 +302,12 @@ def main() -> None:
     ap.add_argument(
         "--out-consistency-tex",
         type=Path,
-        default=ROOT / "reports" / "ulm7883227_pala_window_consistency_table.tex",
+        default=ROOT / "reports" / "paper" / "ulm7883227_pala_window_consistency_table.tex",
     )
     ap.add_argument(
         "--out-family-tex",
         type=Path,
-        default=ROOT / "reports" / "ulm7883227_pala_detector_heads_table.tex",
+        default=ROOT / "reports" / "paper" / "ulm7883227_pala_detector_heads_table.tex",
     )
     ap.add_argument(
         "--out-json",

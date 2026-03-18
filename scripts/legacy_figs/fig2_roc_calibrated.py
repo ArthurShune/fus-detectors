@@ -1,4 +1,4 @@
-# figs/fig2_roc_calibrated.py
+# scripts/legacy_figs/fig2_roc_calibrated.py
 import argparse
 import os
 from typing import Tuple

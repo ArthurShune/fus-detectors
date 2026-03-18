@@ -6,7 +6,7 @@ Input:
   reports/brain_whitening_policy_validation_huber_trim_sensitivity.csv
 
 Output:
-  reports/brain_huber_trim_stability_table.tex
+  reports/paper/brain_huber_trim_stability_table.tex
 """
 
 from __future__ import annotations
@@ -95,7 +95,7 @@ def main() -> None:
     ap.add_argument(
         "--out-tex",
         type=Path,
-        default=Path("reports/brain_huber_trim_stability_table.tex"),
+        default=Path("reports/paper/brain_huber_trim_stability_table.tex"),
         help="Output LaTeX table fragment path.",
     )
     args = ap.parse_args()

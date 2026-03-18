@@ -401,7 +401,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument(
         "--out-tex",
         type=Path,
-        default=Path("reports/simus_detector_family_ablation_table.tex"),
+        default=Path("reports/paper/simus_detector_family_ablation_table.tex"),
     )
     ap.add_argument("--stap-profile", type=str, default="Brain-SIMUS-Clin-MotionRobust-v0")
     ap.add_argument("--stap-device", type=str, default="cuda")

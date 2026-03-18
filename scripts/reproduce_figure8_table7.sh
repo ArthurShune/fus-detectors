@@ -11,5 +11,5 @@ echo "[repro] Regenerating headline same-residual SIMUS figure"
 conda run -n fus-detectors python scripts/fig_simus_detector_family_headline.py
 
 echo "[repro] Done"
-echo "  - reports/simus_detector_family_ablation_table.tex"
+echo "  - reports/paper/simus_detector_family_ablation_table.tex"
 echo "  - figs/paper/simus_detector_family_headline.pdf"

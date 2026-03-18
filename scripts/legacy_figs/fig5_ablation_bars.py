@@ -1,4 +1,4 @@
-# figs/fig5_ablation_bars.py
+# scripts/legacy_figs/fig5_ablation_bars.py
 import argparse
 import json
 import os

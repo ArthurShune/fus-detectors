@@ -4,68 +4,107 @@
     "release_tag": null
   },
   "git": {
-    "commit": "53d827ccb6bb6f0f1998d0d84c88c179090a0730",
-    "commit_short": "53d827c",
+    "commit": "c2494ea4efebb220722ff4edaed31463d5fafd28",
+    "commit_short": "c2494ea",
     "branch": "main",
     "dirty": true,
-    "dirty_paths_count": 5,
-    "dirty_ignored_paths_count": 2,
+    "dirty_paths_count": 50,
+    "dirty_ignored_paths_count": 1,
     "dirty_paths": [
-      "M paper/appendix_bundle_schema.tex",
-      "M paper/appendix_ka_contract_theory.tex",
+      "M .gitignore",
+      "M Makefile",
+      "M README.md",
+      "D figs/fig1_before_after.py",
+      "D figs/fig2_roc_calibrated.py",
+      "D figs/fig3_confirm2_curve.py",
+      "D figs/fig4_latency_angle_trade.py",
+      "D figs/fig5_ablation_bars.py",
+      "D figs/fig6_telemetry_rank.py",
       "M paper/appendix_supp_results.tex",
       "M paper/manuscript.tex",
-      "M scripts/generate_repro_manifest.py"
+      "D reports/accepted_v2_structural_main_table.tex",
+      "D reports/adaptive_tau_sensitivity_table.tex",
+      "D reports/brain_huber_trim_stability_table.tex",
+      "D reports/brain_kwave_vnext_baselines_table.tex",
+      "D reports/ka_cflow_sensitivity_table.tex",
+      "D reports/latency_named_preset_rtx4080_prf_product_v1_table.tex",
+      "D reports/simus_clinical_stress_frontier_headline_table.tex",
+      "D reports/simus_clinical_stress_frontier_provenance_table.tex",
+      "D reports/simus_clinical_stress_frontier_rpca_heads_table.tex",
+      "D reports/simus_detector_family_ablation_table.tex",
+      "D reports/simus_fixed_calibration_transfer_table.tex",
+      "D reports/simus_functional_numeric_summary_table.tex",
+      "D reports/twinkling_gammex_detector_ablation_table.tex",
+      "D reports/ulm7883227_pala_detector_heads_table.tex",
+      "D reports/ulm7883227_pala_disjoint_source_table.tex",
+      "D reports/ulm7883227_pala_fixed_calibration_transfer_table.tex",
+      "D reports/ulm7883227_pala_mask_falsification_table.tex",
+      "D reports/ulm7883227_pala_structural_roc_table.tex",
+      "D reports/ulm7883227_pala_window_consistency_table.tex",
+      "M scripts/brain_huber_trim_stability_table.py",
+      "M scripts/brain_kwave_vnext_baselines_table.py",
+      "M scripts/final_parameter_sensitivity_tables.py",
+      "M scripts/fixed_calibration_transfer.py",
+      "M scripts/generate_repro_manifest.py",
+      "M scripts/reproduce_figure8_table7.sh",
+      "M scripts/reproduce_table5_brain_kwave.sh",
+      "M scripts/run_latency_named_preset.py",
+      "M scripts/simus_cleaner_structural_checkpoint_table.py",
+      "M scripts/simus_clinical_stress_frontier_tables.py",
+      "M scripts/simus_detector_family_ablation_table.py",
+      "M scripts/simus_functional_numeric_table.py",
+      "M scripts/twinkling_gammex_detector_ablation_table.py",
+      "M scripts/ulm7883227_pala_disjoint_support_table.py",
+      "M scripts/ulm7883227_pala_mask_falsification_table.py",
+      "M scripts/ulm7883227_pala_support_tables.py",
+      "M tests/test_figs_smoke.py",
+      "?? reports/companion/",
+      "?? reports/paper/",
+      "?? scripts/legacy_figs/"
     ],
     "dirty_ignored_paths": [
-      "M paper/methods_companion.pdf",
-      "M paper/preprint.pdf"
+      "M paper/appendix_repro_manifest.tex"
     ]
   },
   "env": {
     "preferred_conda_env": "fus-detectors",
     "conda": {
-      "python": "3.11.9 (main, Apr 19 2024, 16:48:06) [GCC 11.2.0]",
+      "python": "3.10.19 | packaged by conda-forge | (main, Oct 22 2025, 22:29:10) [GCC 14.3.0]",
       "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
       "machine": "x86_64",
       "processor": "x86_64",
       "versions": {
         "numpy": "1.26.4",
-        "scipy": "1.17.1",
-        "torch": "2.4.1",
+        "scipy": "1.14.1",
+        "torch": "2.1.2",
         "matplotlib": "3.10.0",
-        "cupy": "14.0.1"
+        "cupy": null
       },
       "torch_cuda": {
         "cuda_is_available": true,
-        "cuda_version": "12.1",
+        "cuda_version": "11.8",
         "device_count": 1,
         "device0_name": "NVIDIA GeForce RTX 4080 SUPER"
       }
     },
     "current": {
-      "python": "3.11.9 (main, Apr 19 2024, 16:48:06) [GCC 11.2.0]",
+      "python": "3.12.3 (main, Mar  3 2026, 12:15:18) [GCC 13.3.0]",
       "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
       "machine": "x86_64",
       "processor": "x86_64",
       "versions": {
-        "numpy": "1.26.4",
-        "scipy": "1.17.1",
-        "torch": "2.4.1",
-        "matplotlib": "3.10.0",
-        "cupy": "14.0.1"
+        "numpy": null,
+        "scipy": null,
+        "torch": null,
+        "matplotlib": null,
+        "cupy": null
       },
-      "torch_cuda": {
-        "cuda_is_available": true,
-        "cuda_version": "12.1",
-        "device_count": 1,
-        "device0_name": "NVIDIA GeForce RTX 4080 SUPER"
-      },
+      "torch_cuda": {},
       "cwd": "/home/arthu/fus-detectors"
     },
     "environment_yml": {
       "path": "environment.yml",
-      "sha256": "653023c31d34f3ca8cf0e4f89b7c6aa1f1d3d1192604b391bdd0941d7ad53f79"
+      "sha256": "b50293345709179b8df97e68b2886dda6a91d39b68cdc7c6b6caa670490cb194"
     },
     "dockerfile": {
       "path": "Dockerfile",
@@ -583,7 +622,7 @@
         "runs/pilot/fair_filter_matrix_pd_r3_localbaselines/ (generated bundles)",
         "reports/fair_matrix_vnext_r3_localbaselines.csv",
         "reports/fair_matrix_vnext_r3_localbaselines.json",
-        "reports/brain_kwave_vnext_baselines_table.tex"
+        "reports/companion/brain_kwave_vnext_baselines_table.tex"
       ],
       "commands": [
         "bash scripts/reproduce_table5_brain_kwave.sh",
@@ -604,7 +643,7 @@
         "",
         "PYTHONPATH=. conda run -n fus-detectors python scripts/brain_kwave_vnext_baselines_table.py \\",
         "  --fair-matrix-json reports/fair_matrix_vnext_r3_localbaselines.json \\",
-        "  --out-tex reports/brain_kwave_vnext_baselines_table.tex"
+        "  --out-tex reports/companion/brain_kwave_vnext_baselines_table.tex"
       ],
       "notes": "Generates per-window acceptance bundles and writes a vnext-style strict-tail report, then renders the LaTeX table used in the main Brain-* baseline table; this run root is also consumed by the ROC and cross-window calibration scripts."
     },
@@ -1206,7 +1245,7 @@
         "reports/twinkling_gammex_across17_prf2500_str4_unwhitened_ratio_structural_summary.json",
         "reports/twinkling_gammex_detector_ablation.csv",
         "reports/twinkling_gammex_detector_ablation.json",
-        "reports/twinkling_gammex_detector_ablation_table.tex"
+        "reports/paper/twinkling_gammex_detector_ablation_table.tex"
       ],
       "commands": [
         "SEQ_BASE=\"data/twinkling_artifact/Flow in Gammex phantom\"",
@@ -1272,7 +1311,7 @@
         "    reports/twinkling_gammex_across17_prf2500_str4_unwhitened_ratio_structural_summary.json \\",
         "  --out-csv reports/twinkling_gammex_detector_ablation.csv \\",
         "  --out-json reports/twinkling_gammex_detector_ablation.json \\",
-        "  --out-tex reports/twinkling_gammex_detector_ablation_table.tex"
+        "  --out-tex reports/paper/twinkling_gammex_detector_ablation_table.tex"
       ],
       "notes": "Same-residual fairness audit for the main Gammex table. Detector-variant ablations require the batched fast matched-subspace core; only the detector head changes across rows."
     },
@@ -1509,7 +1548,7 @@
       "outputs": [
         "reports/ulm7883227_pala_structural_roc.csv",
         "reports/ulm7883227_pala_structural_roc.json",
-        "reports/ulm7883227_pala_structural_roc_table.tex",
+        "reports/companion/ulm7883227_pala_structural_roc_table.tex",
         "reports/ulm7883227_pala_structural_roc_short32.json",
         "reports/ulm7883227_pala_structural_roc_brainlike_motion.json",
         "reports/ulm7883227_pala_latency_rtx4080.json",
@@ -1538,7 +1577,7 @@
         "  --bootstrap-n 500 \\",
         "  --out-csv reports/ulm7883227_pala_structural_roc.csv \\",
         "  --out-json reports/ulm7883227_pala_structural_roc.json \\",
-        "  --out-tex reports/ulm7883227_pala_structural_roc_table.tex \\",
+        "  --out-tex reports/companion/ulm7883227_pala_structural_roc_table.tex \\",
         "  --out-mask-fig figs/paper/ulm7883227_pala_structural_masks.pdf \\",
         "  --out-roc-fig figs/paper/ulm7883227_pala_structural_roc_curves.pdf",
         "PYTHONPATH=. conda run -n fus-detectors python scripts/fig_ulm_pala_headline_hero.py",
@@ -1568,9 +1607,9 @@
       "outputs": [
         "reports/fixed_calibration_transfer.json",
         "reports/simus_v2/simus_fixed_calibration_transfer.csv",
-        "reports/simus_fixed_calibration_transfer_table.tex",
+        "reports/paper/simus_fixed_calibration_transfer_table.tex",
         "reports/ulm7883227_pala_fixed_calibration_transfer.csv",
-        "reports/ulm7883227_pala_fixed_calibration_transfer_table.tex"
+        "reports/paper/ulm7883227_pala_fixed_calibration_transfer_table.tex"
       ],
       "commands": [
         "PYTHONPATH=. conda run -n fus-detectors python scripts/fixed_calibration_transfer.py \\",
@@ -1579,12 +1618,12 @@
         "  --simus-stap-profile Brain-SIMUS-Clin-MotionMidRobust-v0 \\",
         "  --simus-out-root runs/fixed_calibration_transfer/simus \\",
         "  --simus-out-csv reports/simus_v2/simus_fixed_calibration_transfer.csv \\",
-        "  --simus-out-tex reports/simus_fixed_calibration_transfer_table.tex \\",
+        "  --simus-out-tex reports/paper/simus_fixed_calibration_transfer_table.tex \\",
         "  --ulm-data-root data/ulm_zenodo_7883227 \\",
         "  --ulm-pala-example-root external/PALA/PALA_data_InVivoRatBrain \\",
         "  --ulm-out-root runs/fixed_calibration_transfer/ulm \\",
         "  --ulm-out-csv reports/ulm7883227_pala_fixed_calibration_transfer.csv \\",
-        "  --ulm-out-tex reports/ulm7883227_pala_fixed_calibration_transfer_table.tex \\",
+        "  --ulm-out-tex reports/paper/ulm7883227_pala_fixed_calibration_transfer_table.tex \\",
         "  --out-json reports/fixed_calibration_transfer.json"
       ],
       "notes": "This is the paper's non-retrospective threshold-transfer check. On SIMUS/PyMUST, thresholds are learned once from separate calibration seeds 125--126 and applied unchanged to held-out seeds 127--128. On the bounded PALA-backed ULM endpoint, complementary 5-block calibration banks are used so that thresholds are fixed before evaluation on the held-out blocks. These are deployment-relevant transfer checks, not per-window oracle calibrations."

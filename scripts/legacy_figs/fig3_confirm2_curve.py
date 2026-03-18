@@ -1,4 +1,4 @@
-# figs/fig3_confirm2_curve.py
+# scripts/legacy_figs/fig3_confirm2_curve.py
 import os
 import sys
 from pathlib import Path

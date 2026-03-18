@@ -1,4 +1,4 @@
-# figs/fig6_telemetry_rank.py
+# scripts/legacy_figs/fig6_telemetry_rank.py
 import argparse
 import glob
 import json

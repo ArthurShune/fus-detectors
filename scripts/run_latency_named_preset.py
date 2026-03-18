@@ -175,7 +175,7 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument(
         "--out-tex",
         type=Path,
-        default=Path("reports/latency_named_preset_rtx4080_prf_product_v1_table.tex"),
+        default=Path("reports/paper/latency_named_preset_rtx4080_prf_product_v1_table.tex"),
         help="Paper-facing LaTeX table output.",
     )
     ap.add_argument(

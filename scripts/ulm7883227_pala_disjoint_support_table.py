@@ -145,7 +145,7 @@ def main() -> None:
     ap.add_argument(
         "--out-tex",
         type=Path,
-        default=ROOT / "reports" / "ulm7883227_pala_disjoint_source_table.tex",
+        default=ROOT / "reports" / "companion" / "ulm7883227_pala_disjoint_source_table.tex",
     )
     args = ap.parse_args()
 

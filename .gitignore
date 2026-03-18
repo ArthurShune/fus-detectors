@@ -59,6 +59,10 @@ runs/motion/r4c/mcsvd_k8_reg4_stride2_seed*/
 # Curated, paper-critical reproducibility artifacts (keep the rest of reports/ ignored).
 !reports/
 reports/**
+!reports/paper/
+!reports/paper/*.tex
+!reports/companion/
+!reports/companion/*.tex
 !reports/latency/
 !reports/latency/4080super_latency_summary.csv
 !reports/latency/4080super_latency_summary.json

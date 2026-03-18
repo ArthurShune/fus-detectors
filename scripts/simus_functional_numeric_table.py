@@ -10,7 +10,7 @@ REPORTS = ROOT / "reports" / "simus_v2"
 
 EVAL_CSV = REPORTS / "simus_eval_functional_seed221_222_to_223_224_ec6_bgcdf_outside_headline.csv"
 HEAD_CSV = REPORTS / "simus_functional_stap_head_search_seed221_222_to_223_224_ec6_bgcdf_outside_headline.csv"
-OUT_TEX = ROOT / "reports" / "simus_functional_numeric_summary_table.tex"
+OUT_TEX = ROOT / "reports" / "paper" / "simus_functional_numeric_summary_table.tex"
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
