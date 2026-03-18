@@ -265,7 +265,7 @@ def _provenance_table() -> str:
         r"\begin{table}[t]",
         r"\centering",
         r"\scriptsize",
-        r"\setlength{\tabcolsep}{4pt}",
+        r"\setlength{\tabcolsep}{3pt}",
         r"\begin{tabular}{@{}P{2.8cm} P{4.8cm} P{5.0cm}@{}}",
         r"\hline",
         r"Stress axis & Supplementary perturbation used here & Literature grounding \\",
@@ -360,14 +360,15 @@ def _frozen_rpca_heads_table(rows: list[dict[str, str]]) -> str:
         r"\begin{center}",
         r"\captionsetup{type=table}",
         r"\scriptsize",
-        r"\setlength{\tabcolsep}{4pt}",
+        r"\setlength{\tabcolsep}{3pt}",
     ]
     for axis_key in sorted(AXIS_META, key=lambda k: AXIS_ORDER[k]):
         meta = AXIS_META[axis_key]
         lines.extend(
             [
                 rf"\par\medskip\noindent\textbf{{{meta['label']}}}\par\medskip",
-                r"\begin{tabular}{@{}P{3.9cm} P{2.3cm} P{2.3cm} P{2.3cm} P{2.3cm}@{}}",
+                r"\resizebox{\linewidth}{!}{%",
+                r"\begin{tabular}{@{}P{3.7cm} P{2.2cm} P{2.2cm} P{2.2cm} P{2.2cm}@{}}",
                 r"\hline",
                 r"Level / perturbation & Baseline (RPCA$\rightarrow$PD) & Fixed statistic & Adaptive statistic & Whitened variant \\",
                 r"\hline",
@@ -395,7 +396,7 @@ def _frozen_rpca_heads_table(rows: list[dict[str, str]]) -> str:
                     rf"\shortstack[l]{{{_fmt_ci(detector['auc_main_vs_nuisance'], det_ci['auc_main_vs_nuisance'])}\\{_fmt_ci(detector['fpr_nuisance_match@0p5'], det_ci['fpr_nuisance_match@0p5'])}}}"
                 )
             lines.append(" & ".join(row_cells) + r" \\")
-        lines.extend([r"\hline", r"\end{tabular}"])
+        lines.extend([r"\hline", r"\end{tabular}", r"}"])
         if axis_key != "short_ensemble":
             lines.append(r"\medskip")
     lines.extend(

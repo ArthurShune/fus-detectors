@@ -1,9 +1,10 @@
 \begin{center}
 \captionsetup{type=table}
 \scriptsize
-\setlength{\tabcolsep}{4pt}
+\setlength{\tabcolsep}{3pt}
 \par\medskip\noindent\textbf{Cardiac-like pulsation}\par\medskip
-\begin{tabular}{@{}P{3.9cm} P{2.3cm} P{2.3cm} P{2.3cm} P{2.3cm}@{}}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{@{}P{3.7cm} P{2.2cm} P{2.2cm} P{2.2cm} P{2.2cm}@{}}
 \hline
 Level / perturbation & Baseline (RPCA$\rightarrow$PD) & Fixed statistic & Adaptive statistic & Whitened variant \\
 \hline
@@ -12,9 +13,11 @@ Level / perturbation & Baseline (RPCA$\rightarrow$PD) & Fixed statistic & Adapti
 \shortstack[l]{Hard\\3.0x cardiac amplitude at 1.30 Hz} & \shortstack[l]{$0.399_{0.365}^{0.433}$\\$0.609_{0.537}^{0.770}$} & \shortstack[l]{$0.875_{0.854}^{0.893}$\\$0.044_{0.029}^{0.058}$} & \shortstack[l]{$0.875_{0.854}^{0.894}$\\$0.044_{0.029}^{0.059}$} & \shortstack[l]{$0.905_{0.890}^{0.921}$\\$0.027_{0.017}^{0.041}$} \\
 \hline
 \end{tabular}
+}
 \medskip
 \par\medskip\noindent\textbf{Short ensemble}\par\medskip
-\begin{tabular}{@{}P{3.9cm} P{2.3cm} P{2.3cm} P{2.3cm} P{2.3cm}@{}}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{@{}P{3.7cm} P{2.2cm} P{2.2cm} P{2.2cm} P{2.2cm}@{}}
 \hline
 Level / perturbation & Baseline (RPCA$\rightarrow$PD) & Fixed statistic & Adaptive statistic & Whitened variant \\
 \hline
@@ -23,6 +26,7 @@ Level / perturbation & Baseline (RPCA$\rightarrow$PD) & Fixed statistic & Adapti
 \shortstack[l]{Hard\\32 frames (21.3 ms)} & \shortstack[l]{$0.426_{0.392}^{0.462}$\\$0.617_{0.536}^{0.727}$} & \shortstack[l]{$0.772_{0.746}^{0.796}$\\$0.166_{0.139}^{0.194}$} & \shortstack[l]{$0.772_{0.746}^{0.797}$\\$0.166_{0.139}^{0.193}$} & \shortstack[l]{$0.716_{0.686}^{0.745}$\\$0.160_{0.130}^{0.207}$} \\
 \hline
 \end{tabular}
+}
 \caption{Held-out SIMUS mobile stress setting with RPCA fixed as the clutter filter on every row. Entries report AUC$_{\mathrm{main/nuis}}$ (top) and FPR$_{\mathrm{nuis}}$@$0.5$ (bottom), with point estimates shown as $x_{\mathrm{lo}}^{\mathrm{hi}}$ using 95\% nonparametric bootstrap intervals over the held-out masked score samples. RPCA is used because RPCA $\rightarrow$ PD is the strongest conventional baseline among evaluated methods on every reported stress row. This table separates the fixed, adaptive, and fully whitened detector statistics directly instead of reporting only the best family member on each row.}
 \label{tab:simus_stress_frontier_rpca_heads}
 \end{center}
