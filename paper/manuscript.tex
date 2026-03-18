@@ -943,6 +943,9 @@ Figure~\ref{fig:variant_selection_flowchart} summarizes the practical deployment
 \label{fig:variant_selection_flowchart}
 \end{figure}
 
+\section*{Collaboration opportunities}
+The clearest next test is prospective validation on real task-driven fUS data. A collaborator would provide raw complex IQ or beamformed slow-time data, PRF and acquisition metadata, stimulus or task timing, and, when available, an independent structural anchor such as a localization-derived vascular map or structural co-registration. We would run the detector family on the collaborator's existing clutter-filtered residual pipeline, produce same-residual comparisons against PD/Kasai-style scores, and evaluate task-activation or structural readouts with the collaborator's current downstream analysis workflow rather than replacing it. The intended output is a joint validation study, positive or negative, together with a reusable evaluation harness the collaborator can continue using on future datasets. The contribution from this side is the tested detector implementation, the same-residual evaluation protocol, and the computational work needed to run the comparisons and package the results.
+
 \section{Conclusion and future work}
 We presented a localized matched-subspace detector framework for post-beamformed fUS and ultrafast Doppler data, centered on a band-limited fixed head and extended by an adaptive whitening switch plus a fully whitened variant. Across the evaluated labeled simulations, SIMUS-Struct, and one structurally labeled phantom setting, this detector family often improved low-FPR nuisance control relative to PD/Kasai-style downstream scores, but the preferred downstream head depended on setting. Across those tiers, the fixed band-limited head remains the structural default, while the adaptive and fully whitened variants help in selected clutter-heavy settings rather than serving as universal replacements. The phantom result should be read accordingly: it supports localized covariance-aware downstream scoring, but not a universal matched-subspace mechanism.
 
@@ -954,7 +957,7 @@ More broadly, freezing the clutter-suppressed cube and comparing only the downst
 All datasets used in this work are either publicly available (as cited) or derived deterministically from those sources. All code used to generate the reported tables and figures is versioned; the exact commit hash and release information are recorded in the reproducibility manifest (\SuppOrApp{app:repro}). A minimal CUDA-enabled software environment and container recipe are provided in the repository. End-to-end regeneration commands for the reported figures and tables are collected in the repository and summarized in the reproducibility appendix.
 
 \paragraph{Code repository.}
-The reference implementation and reproduction scripts are available at \path{https://github.com/ArthurShune/fus-detectors}. The canonical commit hash and release information are recorded in the reproducibility manifest (\SuppOrApp{app:repro}).
+The reference implementation and reproduction scripts are available at \path{https://github.com/ArthurShune/fus-detectors}. The repository is released under the MIT License, and the public codebase is the reference implementation used for the reported analyses. The canonical commit hash and release information are recorded in the reproducibility manifest (\SuppOrApp{app:repro}).
 
 \fi % end main-text block (skipped in supplement-only build)
 \FloatBarrier
