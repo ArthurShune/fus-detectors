@@ -107,7 +107,7 @@ def _build_table(public_rows: list[dict[str, str]], fixed_rows: list[dict[str, s
     lines.append(r"\begin{center}")
     lines.append(r"\captionsetup{type=table}")
     lines.append(r"\footnotesize")
-    lines.append(r"\setlength{\tabcolsep}{4pt}")
+    lines.append(r"\setlength{\tabcolsep}{3pt}")
 
     for idx, setting in enumerate(("Mobile", "Intra-operative parenchymal")):
         spec = SETTING_ROWS[setting]
@@ -115,6 +115,7 @@ def _build_table(public_rows: list[dict[str, str]], fixed_rows: list[dict[str, s
         lines.append(
             rf"\smallskip\noindent Best conventional baseline: {spec['public']['label']}. Fixed detector chain: {spec['fixed']['label']}.\par\smallskip"
         )
+        lines.append(r"\resizebox{\linewidth}{!}{%")
         lines.append(r"\begin{tabular}{@{}l c c c c c c@{}}")
         lines.append(r"\hline")
         lines.append(
@@ -145,6 +146,7 @@ def _build_table(public_rows: list[dict[str, str]], fixed_rows: list[dict[str, s
         lines.append(" & ".join(row) + r" \\")
         lines.append(r"\hline")
         lines.append(r"\end{tabular}")
+        lines.append(r"}")
         if idx == 0:
             lines.append(r"\medskip")
 

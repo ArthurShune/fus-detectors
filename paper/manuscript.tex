@@ -549,7 +549,6 @@ For the functional task, we use the same prespecified settings and a common back
 \paragraph{Same-residual scoring-rule ablation.}
 To isolate that detection-statistic claim directly on the main benchmark, Table~\ref{tab:simus_detector_family_ablation} fixes one held-out MC--SVD residual stream and swaps only the downstream detection statistic. This removes clutter-filter choice from the comparison. On that fixed residual, PD and Kasai still rank nuisance highly, the fixed matched-subspace statistic is the strongest same-residual detector, and the fully whitened statistic is worse on both held-out settings. The adaptive statistic is numerically identical to the fixed statistic here because its frozen guard-promotion rule does not activate on these cleaner MC--SVD residuals. On this benchmark, the adaptive extension therefore preserves the fixed default when the clutter evidence is weak instead of forcing whitening where it does not help.
 
-\newpage
 \noindent Table~\ref{tab:simus_detector_family_ablation} is the same-residual score-swap comparison: every row uses the identical MC--SVD residual cube, and only the final scoring rule changes.
 \IfFileExists{reports/paper/simus_detector_family_ablation_table.tex}{%
   \input{reports/paper/simus_detector_family_ablation_table.tex}%
