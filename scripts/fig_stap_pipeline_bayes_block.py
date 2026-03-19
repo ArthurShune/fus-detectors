@@ -39,7 +39,7 @@ def add_box(
     text: str,
     *,
     fc: str = "#f7f7f7",
-    fontsize: float = 9.0,
+    fontsize: float = 10.0,
     weight: str = "normal",
 ) -> None:
     patch = FancyBboxPatch(
@@ -60,7 +60,7 @@ def add_box(
         va="center",
         fontsize=fontsize,
         weight=weight,
-        linespacing=1.18,
+        linespacing=1.08,
         multialignment="center",
     )
 
@@ -84,54 +84,54 @@ def add_arrow(ax, start: tuple[float, float], end: tuple[float, float]) -> None:
 def build(out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    fig, ax = plt.subplots(figsize=(9.9, 5.2))
+    fig, ax = plt.subplots(figsize=(10.2, 5.0))
     ax.set_xlim(0.0, 1.0)
     ax.set_ylim(0.0, 1.0)
     ax.axis("off")
 
-    iq_box = BoxSpec(0.12, 0.73, 0.16, 0.17)
-    clutter_box = BoxSpec(0.41, 0.73, 0.21, 0.17)
-    bands_box = BoxSpec(0.77, 0.73, 0.26, 0.20)
-    detector_box = BoxSpec(0.42, 0.28, 0.43, 0.29)
-    output_box = BoxSpec(0.84, 0.28, 0.16, 0.17)
+    iq_box = BoxSpec(0.15, 0.74, 0.20, 0.16)
+    clutter_box = BoxSpec(0.44, 0.74, 0.24, 0.16)
+    bands_box = BoxSpec(0.77, 0.74, 0.28, 0.18)
+    detector_box = BoxSpec(0.44, 0.28, 0.46, 0.25)
+    output_box = BoxSpec(0.85, 0.28, 0.18, 0.16)
 
     add_box(
         ax,
         iq_box,
         "Beamformed IQ\ncomplex slow-time data",
         fc="#f7f7f7",
-        fontsize=11.4,
+        fontsize=10.0,
     )
     add_box(
         ax,
         clutter_box,
-        "Conventional clutter suppression\nclutter-filtered residual",
+        "Conventional clutter\nsuppression\nclutter-filtered residual",
         fc="#f7f7f7",
-        fontsize=10.8,
+        fontsize=10.0,
     )
     add_box(
         ax,
         bands_box,
         "Local tiles and band summaries\nflow, guard, and alias-band energy\nin overlapping neighborhoods",
         fc="#f3f7fc",
-        fontsize=10.4,
+        fontsize=10.0,
     )
     add_box(
         ax,
         detector_box,
-        "Detector family\n\n"
+        "Detector family\n"
         "Fixed: non-whitened statistic\n"
         "Adaptive: whiten only when guard-band clutter rises\n"
         "Fully whitened: local covariance-adaptive variant",
         fc="#fbfcfe",
-        fontsize=10.3,
+        fontsize=10.0,
     )
     add_box(
         ax,
         output_box,
         "Output map\nfinal detector readout",
         fc="#f7f7f7",
-        fontsize=11.0,
+        fontsize=10.0,
     )
 
     add_arrow(
@@ -147,7 +147,7 @@ def build(out: Path) -> None:
     add_arrow(
         ax,
         (bands_box.cx, bands_box.bottom),
-        (detector_box.cx + 0.10, detector_box.top),
+        (detector_box.cx, detector_box.top),
     )
     add_arrow(
         ax,
