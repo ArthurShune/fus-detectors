@@ -89,32 +89,32 @@ def build(out: Path) -> None:
     ax.set_ylim(0.0, 1.0)
     ax.axis("off")
 
-    iq_box = BoxSpec(0.14, 0.70, 0.20, 0.16)
-    clutter_box = BoxSpec(0.40, 0.70, 0.24, 0.16)
-    bands_box = BoxSpec(0.71, 0.70, 0.31, 0.19)
-    detector_box = BoxSpec(0.47, 0.29, 0.45, 0.27)
-    output_box = BoxSpec(0.84, 0.29, 0.18, 0.16)
+    iq_box = BoxSpec(0.14, 0.70, 0.21, 0.17)
+    clutter_box = BoxSpec(0.40, 0.70, 0.25, 0.17)
+    bands_box = BoxSpec(0.71, 0.70, 0.33, 0.21)
+    detector_box = BoxSpec(0.47, 0.29, 0.47, 0.29)
+    output_box = BoxSpec(0.84, 0.29, 0.19, 0.17)
 
     add_box(
         ax,
         iq_box,
         "Beamformed IQ\ncomplex slow-time data",
         fc="#f7f7f7",
-        fontsize=9.6,
+        fontsize=10.4,
     )
     add_box(
         ax,
         clutter_box,
         "Conventional clutter suppression\nclutter-filtered residual",
         fc="#f7f7f7",
-        fontsize=9.3,
+        fontsize=10.0,
     )
     add_box(
         ax,
         bands_box,
         "Local tiles and band summaries\nflow, guard, and alias-band energy\nin overlapping neighborhoods",
         fc="#f3f7fc",
-        fontsize=9.0,
+        fontsize=9.8,
     )
     add_box(
         ax,
@@ -124,14 +124,14 @@ def build(out: Path) -> None:
         "Adaptive: whiten only when guard-band clutter rises\n"
         "Fully whitened: local covariance-adaptive variant",
         fc="#fbfcfe",
-        fontsize=8.7,
+        fontsize=9.6,
     )
     add_box(
         ax,
         output_box,
         "Output map\nfinal detector readout",
         fc="#f7f7f7",
-        fontsize=9.4,
+        fontsize=10.2,
     )
 
     add_arrow(
