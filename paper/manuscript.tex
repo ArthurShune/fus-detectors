@@ -550,7 +550,6 @@ For the functional task, we use the same prespecified settings and a common back
 \paragraph{Same-residual scoring-rule ablation.}
 We first fix one held-out MC--SVD residual stream and swap only the downstream detection statistic to isolate the detector effect directly. This removes clutter-filter choice from the comparison. On that fixed residual, PD and Kasai still rank nuisance highly, the fixed matched-subspace statistic is the strongest same-residual detector, and the fully whitened statistic is worse on both held-out settings. The adaptive statistic is numerically identical to the fixed statistic here because its frozen guard-promotion rule does not activate on these cleaner MC--SVD residuals. The adaptive extension therefore preserves the fixed default when the clutter evidence is weak instead of forcing whitening where it does not help. The full same-residual comparison is reported in Table~\ref{tab:simus_detector_family_ablation} below.
 
-\newpage
 \noindent Table~\ref{tab:accepted_v2_structural_main} is the best-chain benchmark: each row reports the strongest held-out end-to-end pipeline for that setting, so both clutter filter and final detector may differ across rows.
 \IfFileExists{reports/paper/accepted_v2_structural_main_table.tex}{%
   \input{reports/paper/accepted_v2_structural_main_table.tex}%
@@ -981,9 +980,9 @@ Most public \emph{in vivo} fUS releases do not preserve the raw high-PRF complex
 \subsection*{Recommended detector variant by setting}
 Figure~\ref{fig:variant_selection_flowchart} summarizes the practical deployment rule supported by the current evidence. The fixed statistic is the default. Use the fully whitened variant only when representative windows remain persistently clutter-dominant and the latency budget allows it.
 
-\begin{figure}[H]
+\begin{figure}[t]
 \centering
-\includegraphics[width=\linewidth]{figs/paper/variant_selection_flowchart.pdf}
+\includegraphics[width=0.92\linewidth]{figs/paper/variant_selection_flowchart.pdf}
 \caption{Conservative label-free deployment rule for choosing between the fixed and fully whitened detector variants. Here $r_g$ measures guard-band contamination in a tile, $Q_{0.90}(r_g)$ is a high-end summary across a representative window, and $p_{\mathrm{promote}}$ is the fraction of tiles that would switch onto the whitened branch. Use the fixed detector by default and reserve the fully whitened variant for persistently clutter-dominant windows with sufficient latency margin.}
 \label{fig:variant_selection_flowchart}
 \end{figure}
