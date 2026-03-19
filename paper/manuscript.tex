@@ -128,6 +128,7 @@ This is a drop-in replacement for the final scoring step of an SVD+PD-style pipe
 We isolate the detector stage after clutter suppression. All detector comparisons use the same clutter-filtered residual so detector effects can be separated from clutter-filter effects.
 
 We evaluate the detector on held-out structural benchmarks, clutter-stress simulations, a structurally labeled phantom, and open real-IQ audits.
+Figure~\ref{fig:ulm_intro_preview} gives a qualitative real-IQ preview; the quantitative detector benchmark that sets the default statistic is reported later on held-out SIMUS.
 
 Labs with raw IQ and task timing can evaluate this detector as a drop-in replacement for the final PD/Kasai-style readout within an existing clutter-filtered pipeline. This work provides the detector implementation, same-residual evaluation protocol, and code needed for that comparison.
 
@@ -137,7 +138,8 @@ Labs with raw IQ and task timing can evaluate this detector as a drop-in replace
 \includegraphics[width=0.82\linewidth]{figs/paper/ulm7883227_pala_headline_hero.pdf}
 \par\smallskip
 \footnotesize
-\textit{Representative real-IQ structural audit preview.} The full same-window comparison and quantitative ULM audit appear later in Section~\ref{sec:ulm7883227}; the main held-out benchmark result still begins with SIMUS.
+\textit{Real-IQ structural audit preview.} Same audited 64-frame residual window shown with a localization-derived vascular reference, baseline power Doppler, and the fully whitened detector at matched 70\% vessel-core recall. Quantitative results appear in Section~\ref{sec:ulm7883227}; the default detector choice is set by the held-out SIMUS benchmark.
+\label{fig:ulm_intro_preview}
 \end{center}
 \fi
 
