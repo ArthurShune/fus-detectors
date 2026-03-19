@@ -13,6 +13,22 @@ Post-clutter-suppression detection statistics that reduce artifact leakage in fu
   <img src="docs/assets/readme_hero_ulm.png" alt="Representative real-IQ structural audit figure from the preprint." width="860">
 </p>
 
+## Can I Use This?
+
+Use this repo if:
+- your pipeline already produces complex beamformed slow-time IQ or a complex clutter-filtered residual cube
+- you want to change only the final PD/Kasai-style readout, not redesign acquisition or clutter filtering
+- you want same-residual comparisons between baseline PD and the detector family
+
+This repo is probably not the right fit if:
+- you only have sparse compounded magnitude frames and want end-to-end PD reconstruction
+- you only have rendered Doppler images with no slow-time cube behind them
+- you want a raw-channel beamformer or a new clutter filter rather than a downstream detector
+
+Best first try:
+- start with the `fixed` variant on the same clutter-filtered residual you already use for PD
+- if you are unsure whether your data fit the public API contract, read [docs/integration.md](docs/integration.md) and [docs/troubleshooting.md](docs/troubleshooting.md) first
+
 ## Why This Repo Matters
 
 - It isolates the downstream detection statistic as a separate design choice on the same clutter-filtered residual.
@@ -41,8 +57,11 @@ The method does not replace the upstream clutter filter. It changes only the fin
 | See the full methods and companion analyses | [paper/methods_companion.pdf](paper/methods_companion.pdf) |
 | Reproduce the headline figure and table | [scripts/reproduce_figure8_table7.sh](scripts/reproduce_figure8_table7.sh) |
 | Integrate into an existing pipeline | [docs/integration.md](docs/integration.md) |
+| Check whether your data are a good fit | [docs/troubleshooting.md#can-i-use-this-on-my-data](docs/troubleshooting.md#can-i-use-this-on-my-data) |
 | Decide which detector variant to try first | [docs/integration.md#when-to-use-each-variant](docs/integration.md#when-to-use-each-variant) |
 | Run the minimal public API example | [examples/minimal_integration.py](examples/minimal_integration.py) |
+| See a PD-to-detector swap example | [examples/svd_pipeline_readout_swap.py](examples/svd_pipeline_readout_swap.py) |
+| Troubleshoot common integration failures | [docs/troubleshooting.md](docs/troubleshooting.md) |
 | Prepare datasets | [docs/data_download.md](docs/data_download.md) |
 | Cite the work | [CITATION.cff](CITATION.cff) |
 
@@ -105,7 +124,9 @@ summary = result.summary.to_dict()
 See [docs/integration.md](docs/integration.md) for the supported variants, the
 public config surface, adaptive routing behavior, and the expected input/output
 contract. A runnable end-to-end example is available at
-[examples/minimal_integration.py](examples/minimal_integration.py).
+[examples/minimal_integration.py](examples/minimal_integration.py). For a more
+realistic “replace the final PD readout in an existing SVD pipeline” pattern,
+see [examples/svd_pipeline_readout_swap.py](examples/svd_pipeline_readout_swap.py).
 
 ## Which Variant to Use
 
@@ -120,6 +141,17 @@ Use the public variants this way:
 - `whitened_power`: keep as a bounded ablation, not a default deployment choice.
 
 The short integration rule is: start with `fixed`, inspect the adaptive telemetry, and only move to `whitened` when the clutter evidence stays elevated on representative windows. The fuller rationale is in [docs/integration.md](docs/integration.md) and in the deployment flowchart in [paper/preprint.pdf](paper/preprint.pdf).
+
+## Common Failure Modes
+
+Before assuming the detector “doesn’t work,” check these first:
+- input is not complex slow-time IQ or a complex clutter-filtered residual cube
+- axis order is wrong; the public API expects `(T, H, W)`
+- PRF is wrong or missing, so the Doppler bands do not match the acquisition
+- the ensemble is too short for your chosen parameters
+- you are comparing against a different residual rather than doing a same-residual swap
+
+The full checklist, including cases that are intentionally out of scope for this repo, is in [docs/troubleshooting.md](docs/troubleshooting.md).
 
 ## Reproduce the Main Results
 

@@ -18,6 +18,26 @@ the compatibility layer intended for third-party pipelines.
 
 For a runnable command-line example, see
 [`examples/minimal_integration.py`](../examples/minimal_integration.py).
+For a more realistic “swap the final readout in an existing SVD pipeline”
+pattern, see [`examples/svd_pipeline_readout_swap.py`](../examples/svd_pipeline_readout_swap.py).
+If you are not sure whether your data fit this contract, start with
+[`docs/troubleshooting.md`](troubleshooting.md).
+
+## Input Contract
+
+The public API assumes:
+- complex-valued input
+- shape `(T, H, W)`, where `T` is slow time
+- a residual cube that is already clutter-filtered, or beamformed slow-time IQ you intend to compare on the same residual path
+- a correct slow-time `prf_hz` for the acquisition
+
+The public API does not assume:
+- raw-channel beamforming
+- sparse-compounded-frame PD reconstruction
+- a replacement clutter filter
+
+If you only have rendered Doppler images or magnitude-only summaries, this is
+not the right integration surface.
 
 ## When to Use Each Variant
 
