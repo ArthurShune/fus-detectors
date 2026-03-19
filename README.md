@@ -101,7 +101,8 @@ summary = result.summary.to_dict()
 ```
 
 See [docs/integration.md](docs/integration.md) for the supported variants, the
-public config surface, and the expected input/output contract.
+public config surface, adaptive routing behavior, and the expected input/output
+contract.
 
 ## Reproduce the Main Results
 

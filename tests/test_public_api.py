@@ -25,6 +25,27 @@ def _tone_cube(
     return cube.astype(np.complex64)
 
 
+def _tile_tone_cube(
+    t_len: int,
+    height: int,
+    width: int,
+    *,
+    prf_hz: float,
+    fd_hz: float,
+    tile_slice: tuple[slice, slice],
+    amp: float = 1.0,
+) -> np.ndarray:
+    t = np.arange(t_len, dtype=np.float32)
+    tone = amp * np.exp(1j * 2.0 * np.pi * fd_hz * t / prf_hz).astype(np.complex64)
+    cube = 0.01 * (
+        np.random.randn(t_len, height, width).astype(np.float32)
+        + 1j * np.random.randn(t_len, height, width).astype(np.float32)
+    )
+    ys, xs = tile_slice
+    cube[:, ys, xs] += tone[:, None, None]
+    return cube.astype(np.complex64)
+
+
 def _direct_core_maps(cube: np.ndarray, *, prf_hz: float, config: DetectorConfig) -> tuple[np.ndarray, np.ndarray]:
     internal_variant = {"fixed": "unwhitened_ratio", "fully_whitened": "msd_ratio"}.get(
         str(config.variant),
@@ -145,6 +166,55 @@ def test_public_batch_api_returns_one_result_per_cube():
     assert all(result.readout_map.shape == (8, 8) for result in results)
     assert all(result.score_map.shape == (8, 8) for result in results)
     assert all(result.summary.internal_variant == "msd_ratio" for result in results)
+
+
+def test_public_adaptive_api_promotes_guard_heavy_tiles():
+    cube = _tile_tone_cube(
+        24,
+        8,
+        8,
+        prf_hz=2500.0,
+        fd_hz=312.5,
+        tile_slice=(slice(0, 4), slice(0, 4)),
+        amp=1.5,
+    )
+    config = DetectorConfig(
+        variant="adaptive",
+        tile_shape=(4, 4),
+        tile_stride=4,
+        temporal_support=8,
+        diag_load=0.07,
+        covariance_estimator="scm",
+        huber_c=5.0,
+        grid_step_rel=0.1,
+        fd_span_rel=(0.2, 0.8),
+        min_frequency_bins=3,
+        max_frequency_bins=9,
+        min_flow_hz=0.0,
+        msd_lambda=0.05,
+        msd_ridge=0.10,
+        msd_aggregation="median",
+        msd_ratio_rho=0.05,
+        adaptive_guard_flow_band_hz=(30.0, 250.0),
+        adaptive_guard_alias_center_hz=575.0,
+        adaptive_guard_alias_width_hz=175.0,
+        adaptive_guard_tapers=3,
+        adaptive_guard_bandwidth=2.0,
+        adaptive_guard_promote_threshold=0.05,
+        device="cpu",
+        chunk_size=8,
+    )
+
+    result = score_residual_cube(cube, prf_hz=2500.0, config=config, return_tile_telemetry=True)
+
+    assert result.summary.variant == "adaptive"
+    assert result.summary.internal_variant == "adaptive_guard"
+    assert result.summary.adaptive_promote_fraction is not None
+    assert result.summary.adaptive_promote_fraction > 0.0
+    assert result.summary.adaptive_promoted_tiles is not None
+    assert result.summary.adaptive_promoted_tiles >= 1
+    assert result.tile_telemetry is not None
+    assert any(bool(info.get("adaptive_promoted")) for info in result.tile_telemetry)
 
 
 def test_public_api_rejects_real_input():

@@ -43,6 +43,9 @@ summary = result.summary.to_dict()
 
 - `fixed`: the fixed matched-subspace statistic. This is the default and the
   recommended drop-in starting point.
+- `adaptive`: the fixed statistic plus label-free guard telemetry. It keeps the
+  fixed statistic by default and promotes clutter-dominant tiles onto the
+  whitened branch when guard-band contamination stays high.
 - `whitened`: the fully whitened matched-subspace statistic.
 - `whitened_power`: total whitened slow-time power, kept as a bounded ablation.
 
@@ -61,5 +64,7 @@ existing scripts under `scripts/`.
 
 - Persist `DetectorConfig.to_dict()` alongside any saved score maps.
 - Log `DetectorResult.summary.to_dict()` for quick run-to-run comparison.
+- For the adaptive variant, persist the `adaptive_*` summary fields so you can
+  track when and why tiles were promoted onto the whitened branch.
 - Keep the residual cube fixed when comparing variants. That is the central
   same-residual evaluation discipline used throughout the repo and manuscript.
