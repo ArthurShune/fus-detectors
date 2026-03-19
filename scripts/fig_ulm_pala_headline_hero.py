@@ -169,34 +169,25 @@ def _difference_panel(
 
     anatomy_mask = np.asarray(anatomy_mask, dtype=bool)
     pd_only = np.asarray(pd_mask, dtype=bool) & ~np.asarray(detector_mask, dtype=bool) & anatomy_mask
-    detector_only = np.asarray(detector_mask, dtype=bool) & ~np.asarray(pd_mask, dtype=bool) & anatomy_mask
     shell_mask = np.asarray(shell_mask, dtype=bool)
-    core_mask = np.asarray(core_mask, dtype=bool)
 
     pd_shell_only = pd_only & shell_mask
-    detector_core_only = detector_only & core_mask
 
     overlay = np.zeros((*pd_only.shape, 4), dtype=np.float32)
     pd_rgb = np.array([0xFF, 0x6B, 0x57], dtype=np.float32) / 255.0
-    det_rgb = np.array([0x4F, 0xD1, 0xC5], dtype=np.float32) / 255.0
     overlay[pd_shell_only, :3] = pd_rgb
     overlay[pd_shell_only, 3] = 0.82 * np.clip(
         0.25 + 0.75 * np.asarray(bg_img, dtype=np.float32)[pd_shell_only], 0.0, 1.0
     )
-    overlay[detector_core_only, :3] = det_rgb
-    overlay[detector_core_only, 3] = 0.82 * np.clip(
-        0.25 + 0.75 * np.asarray(bg_img, dtype=np.float32)[detector_core_only], 0.0, 1.0
-    )
     ax.imshow(overlay, interpolation="nearest")
 
     pd_shell_n = int(np.count_nonzero(pd_shell_only))
-    det_core_n = int(np.count_nonzero(detector_core_only))
 
-    ax.set_title("Why the detector scores better", fontsize=12, fontweight="bold", pad=8)
+    ax.set_title("Removed PD shell leakage", fontsize=12, fontweight="bold", pad=8)
     ax.text(
         0.5,
         -0.10,
-        f"red: PD-only shell leakage removed ({pd_shell_n} px)   |   cyan: detector-only core support ({det_core_n} px)",
+        f"red: PD-only shell leakage removed ({pd_shell_n} px)",
         transform=ax.transAxes,
         ha="center",
         va="top",
