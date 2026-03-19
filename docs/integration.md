@@ -16,6 +16,9 @@ Use the stable `fus_detectors` package for external integration. Internal
 modules under `pipeline/` remain available for research work, but they are not
 the compatibility layer intended for third-party pipelines.
 
+For a runnable command-line example, see
+[`examples/minimal_integration.py`](../examples/minimal_integration.py).
+
 ## Minimal Example
 
 ```python

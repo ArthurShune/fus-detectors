@@ -41,6 +41,7 @@ The method does not replace the upstream clutter filter. It changes only the fin
 | See the full methods and companion analyses | [paper/methods_companion.pdf](paper/methods_companion.pdf) |
 | Reproduce the headline figure and table | [scripts/reproduce_figure8_table7.sh](scripts/reproduce_figure8_table7.sh) |
 | Integrate into an existing pipeline | [docs/integration.md](docs/integration.md) |
+| Run the minimal public API example | [examples/minimal_integration.py](examples/minimal_integration.py) |
 | Prepare datasets | [docs/data_download.md](docs/data_download.md) |
 | Cite the work | [CITATION.cff](CITATION.cff) |
 
@@ -102,7 +103,8 @@ summary = result.summary.to_dict()
 
 See [docs/integration.md](docs/integration.md) for the supported variants, the
 public config surface, adaptive routing behavior, and the expected input/output
-contract.
+contract. A runnable end-to-end example is available at
+[examples/minimal_integration.py](examples/minimal_integration.py).
 
 ## Reproduce the Main Results
 
