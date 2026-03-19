@@ -126,7 +126,7 @@ def main() -> int:
         ncol=3,
         fontsize=7,
         frameon=False,
-        bbox_to_anchor=(0.5, 1.08),
+        bbox_to_anchor=(0.5, 1.11),
         columnspacing=0.9,
         handlelength=1.3,
     )
