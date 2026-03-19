@@ -147,7 +147,7 @@ We isolate the detector stage after clutter suppression. All detector comparison
 
 We evaluate the detector on held-out structural benchmarks, clutter-stress simulations, a structurally labeled phantom, and open real-IQ audits.
 
-Labs with raw complex IQ or beamformed slow-time data, together with task timing, can evaluate this detector as a drop-in replacement for the final PD/Kasai-style readout within an existing clutter-filtered pipeline. This work provides the detector implementation, same-residual evaluation protocol, and code needed for that comparison.
+What collaboration looks like is straightforward. Labs with raw complex IQ or beamformed slow-time data, acquisition metadata, and task timing can evaluate this detector as a drop-in replacement for the final PD/Kasai-style readout within an existing clutter-filtered pipeline. We run same-residual comparisons against the lab's current readout and return structural or activation analyses in the lab's existing downstream workflow, together with the detector implementation and reusable evaluation harness.
 
 \section{Background and Problem Formulation}
 \label{sec:background-problem}
