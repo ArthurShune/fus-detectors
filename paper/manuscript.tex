@@ -505,23 +505,6 @@ SIMUS-Struct uses the open-source SIMUS/PyMUST moving-scatterer forward model an
 \paragraph{Same-residual scoring-rule ablation.}
 We first fix one held-out MC--SVD residual stream and swap only the downstream detection statistic to isolate the detector effect directly. This removes clutter-filter choice from the comparison. On that fixed residual, PD and Kasai still rank nuisance highly, the fixed matched-subspace statistic is the strongest same-residual detector, and the fully whitened statistic is worse on both held-out settings. The adaptive statistic is numerically identical to the fixed statistic here because its frozen guard-promotion rule does not activate on these cleaner MC--SVD residuals. The adaptive extension therefore preserves the fixed default when the clutter evidence is weak instead of forcing whitening where it does not help. Figure~\ref{fig:simus_detector_family_headline} gives the operating-point summary, and Table~\ref{tab:simus_detector_family_ablation} reports the full same-residual comparison.
 
-\begin{figure}[t]
-\centering
-\IfFileExists{figs/paper/simus_detector_family_headline.pdf}{%
-  \includegraphics[width=\linewidth]{figs/paper/simus_detector_family_headline.pdf}%
-}{%
-  \fbox{\begin{minipage}{0.95\linewidth}
-    \centering
-    \vspace{0.5em}
-    Missing figure \path{figs/paper/simus_detector_family_headline.pdf}.\\
-    Reproduce it with \path{PYTHONPATH=. python scripts/fig_simus_detector_family_headline.py}.
-    \vspace{0.5em}
-  \end{minipage}}%
-}
-\caption{Headline same-residual scoring-rule comparison on the held-out SIMUS reference benchmark using the common MC--SVD residual from Table~\ref{tab:simus_detector_family_ablation}. Bars show nuisance false-positive rate at matched main-response recall 0.5, the clearest operating-point summary of the benchmark. Lower bars are better. On the intra-operative setting, the fixed matched-subspace detector reduces nuisance FPR from 0.998 for Kasai to 0.004 on the same residual stream; under this frozen guard rule, the adaptive variant matches that result. AUC$_{\mathrm{main/nuis}}$ values are reported in Table~\ref{tab:simus_detector_family_ablation}.}
-\label{fig:simus_detector_family_headline}
-\end{figure}
-
 \noindent Table~\ref{tab:accepted_v2_structural_main} is the best-chain benchmark: each row reports the strongest held-out end-to-end pipeline for that setting, so both clutter filter and final detector may differ across rows.
 \IfFileExists{reports/paper/accepted_v2_structural_main_table.tex}{%
   \input{reports/paper/accepted_v2_structural_main_table.tex}%
@@ -550,6 +533,23 @@ We first fix one held-out MC--SVD residual stream and swap only the downstream d
 }
 
 \emph{FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$} directly measures artifact leakage at a clinically relevant sensitivity operating point.
+
+\begin{figure}[t]
+\centering
+\IfFileExists{figs/paper/simus_detector_family_headline.pdf}{%
+  \includegraphics[width=\linewidth]{figs/paper/simus_detector_family_headline.pdf}%
+}{%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    \centering
+    \vspace{0.5em}
+    Missing figure \path{figs/paper/simus_detector_family_headline.pdf}.\\
+    Reproduce it with \path{PYTHONPATH=. python scripts/fig_simus_detector_family_headline.py}.
+    \vspace{0.5em}
+  \end{minipage}}%
+}
+\caption{Headline same-residual scoring-rule comparison on the held-out SIMUS reference benchmark using the common MC--SVD residual from Table~\ref{tab:simus_detector_family_ablation}. Bars show nuisance false-positive rate at matched main-response recall 0.5, the clearest operating-point summary of the benchmark. Lower bars are better. On the intra-operative setting, the fixed matched-subspace detector reduces nuisance FPR from 0.998 for Kasai to 0.004 on the same residual stream; under this frozen guard rule, the adaptive variant matches that result. AUC$_{\mathrm{main/nuis}}$ values are reported in Table~\ref{tab:simus_detector_family_ablation}.}
+\label{fig:simus_detector_family_headline}
+\end{figure}
 
 \ifPAPERONLY
 A fixed-threshold transfer audit also survives on the same benchmark family: on SIMUS-Struct-Mobile, the fixed statistic preserves nonzero held-out main recall while reducing realized nuisance FPR relative to PD, and on SIMUS-Struct-Intraop it is the only statistic that suppresses nuisance leakage to zero under the transferred threshold.
