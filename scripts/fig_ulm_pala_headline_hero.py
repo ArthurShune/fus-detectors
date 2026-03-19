@@ -174,7 +174,7 @@ def _difference_panel(
     pd_shell_only = pd_only & shell_mask
 
     overlay = np.zeros((*pd_only.shape, 4), dtype=np.float32)
-    pd_rgb = np.array([0xFF, 0x6B, 0x57], dtype=np.float32) / 255.0
+    pd_rgb = np.array([0xD8, 0x1B, 0x60], dtype=np.float32) / 255.0
     overlay[pd_shell_only, :3] = pd_rgb
     overlay[pd_shell_only, 3] = 0.82 * np.clip(
         0.25 + 0.75 * np.asarray(bg_img, dtype=np.float32)[pd_shell_only], 0.0, 1.0
