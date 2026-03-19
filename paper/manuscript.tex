@@ -735,10 +735,10 @@ On the short-ensemble Gammex phantom, changing only the downstream score recover
 
 \input{reports/paper/twinkling_gammex_detector_ablation_table.tex}
 
-\begin{figure}[H]
+\begin{figure}[t]
 \centering
 \IfFileExists{figs/paper/leading_structural_fidelity_gammex.pdf}{%
-  \includegraphics[width=\linewidth]{figs/paper/leading_structural_fidelity_gammex.pdf}%
+  \includegraphics[width=0.92\linewidth]{figs/paper/leading_structural_fidelity_gammex.pdf}%
 }{%
   \fbox{\begin{minipage}{0.95\linewidth}
     \centering
@@ -748,7 +748,7 @@ On the short-ensemble Gammex phantom, changing only the downstream score recover
     \vspace{0.5em}
   \end{minipage}}%
 }
-\caption{Leading structural-fidelity visual on a structurally labeled Gammex flow phantom acquisition from the open Doppler Twinkling Artifact database (labels derived from B-mode-only tube segmentation). Top row: baseline power Doppler image $S_{\mathrm{base}}$ (SVD band-pass clutter suppression followed by power Doppler), the whitened-power map, the matched-subspace map, and a matched-FPR decision-difference panel at a fixed background false-positive rate ($10^{-2}$; chosen here for visualization), showing pixels detected only by whitened power versus only by the baseline. Bottom row: zoomed region of interest. The tube contour is overlaid for reference. The qualitative ordering matches Table~\ref{tab:twinkling_gammex_structural_roc}: whitened power is the strongest phantom score in this short-ensemble setting, while the matched-subspace panel remains included as the detector-core reference.}
+\caption{Leading structural-fidelity visual on a structurally labeled Gammex flow phantom acquisition from the open Doppler Twinkling Artifact database (labels derived from B-mode-only tube segmentation). Top row: baseline power Doppler, whitened power, matched-subspace, and a matched-FPR decision-difference panel at background false-positive rate $10^{-2}$, showing pixels detected only by whitened power versus only by baseline. Bottom row: zoomed region of interest. The tube contour is overlaid for reference. The qualitative ordering matches Table~\ref{tab:twinkling_gammex_structural_roc}: whitened power is the strongest phantom score in this short-ensemble setting, while the matched-subspace panel remains included as the detector-core reference.}
 \label{fig:leading_structural_fidelity}
 \end{figure}
 
