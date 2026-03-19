@@ -510,9 +510,6 @@ Shin-ProxyMotion & Tyler-type on promoted tiles; non-promoted tiles use $R_i=I$ 
 \section{Results}
 \label{sec:results}
 
-\paragraph{Results roadmap.}
-We begin with the held-out SIMUS benchmark and proceed through mechanism checks and real-IQ audits.
-
 \subsection{SIMUS-Struct benchmark}
 \label{sec:accepted-v2-main}
 SIMUS-Struct uses the open-source SIMUS/PyMUST moving-scatterer forward model and is calibrated to reported fUS operating conditions rather than to a generic parameter sweep \cite{GarciaSIMUSPartI2022,CigierSIMUSPartII2022,UrbanWholeBrain2015,Deffieux2021,Soloukey2020FUSAwake,Rabut2024}. We report two prespecified structural settings, SIMUS-Struct-Mobile and SIMUS-Struct-Intraop, with frozen positive, background, and nuisance masks and held-out evaluation on seeds 127--128 after development on seeds 125--126. The positive class is unaliased parenchymal Pf-band flow; the negatives are ordinary background and explicit nuisance structures such as superficial high-velocity or specular components. Throughout this section, \emph{AUC$_{\mathrm{main/bg}}$} measures separation from background, \emph{AUC$_{\mathrm{main/nuis}}$} measures separation from clinically relevant nuisance, and \emph{FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$} measures nuisance leakage when half of the target positives are retained.
@@ -550,6 +547,9 @@ For the functional task, we use the same prespecified settings and a common back
 \label{fig:simus_detector_family_headline}
 \end{figure}
 
+\paragraph{Same-residual scoring-rule ablation.}
+We first fix one held-out MC--SVD residual stream and swap only the downstream detection statistic to isolate the detector effect directly. This removes clutter-filter choice from the comparison. On that fixed residual, PD and Kasai still rank nuisance highly, the fixed matched-subspace statistic is the strongest same-residual detector, and the fully whitened statistic is worse on both held-out settings. The adaptive statistic is numerically identical to the fixed statistic here because its frozen guard-promotion rule does not activate on these cleaner MC--SVD residuals. The adaptive extension therefore preserves the fixed default when the clutter evidence is weak instead of forcing whitening where it does not help. The full same-residual comparison is reported in Table~\ref{tab:simus_detector_family_ablation} below.
+
 \newpage
 \noindent Table~\ref{tab:accepted_v2_structural_main} is the best-chain benchmark: each row reports the strongest held-out end-to-end pipeline for that setting, so both clutter filter and final detector may differ across rows.
 \IfFileExists{reports/paper/accepted_v2_structural_main_table.tex}{%
@@ -566,9 +566,6 @@ For the functional task, we use the same prespecified settings and a common back
 
 \paragraph{Best-chain benchmark.}
 \noindent We then report the strongest end-to-end chain in each held-out setting. On the mobile setting, HOSVD $\rightarrow$ Kasai is the strongest conventional baseline. Adaptive Global SVD $\rightarrow$ fixed matched-subspace improves AUC$_{\mathrm{main/nuis}}$ from 0.672 [0.624, 0.720] to 0.953 [0.923, 0.984] and yields zero observed nuisance detections on both held-out seeds. On the intra-operative parenchymal setting, HOSVD $\rightarrow$ Kasai is again the strongest conventional baseline, while RPCA $\rightarrow$ fixed matched-subspace improves AUC$_{\mathrm{main/nuis}}$ from 0.451 [0.431, 0.471] to 0.99996 [0.99994, 0.99998] and again yields zero observed nuisance detections on both held-out seeds. Figure~\ref{fig:simus_reference_benchmark_geometry} shows the held-out mask geometry used for these comparisons, and the 0.000 nuisance rows in Table~\ref{tab:accepted_v2_structural_main} are literal zero observed nuisance detections rather than rounded near-zero rates. The detector-only same-residual comparison is reported separately in Table~\ref{tab:simus_detector_family_ablation} and Figure~\ref{fig:simus_detector_family_headline}. This benchmark sets the default detector configuration.
-
-\paragraph{Same-residual scoring-rule ablation.}
-We next fix one held-out MC--SVD residual stream and swap only the downstream detection statistic to isolate the detector effect directly. This removes clutter-filter choice from the comparison. On that fixed residual, PD and Kasai still rank nuisance highly, the fixed matched-subspace statistic is the strongest same-residual detector, and the fully whitened statistic is worse on both held-out settings. The adaptive statistic is numerically identical to the fixed statistic here because its frozen guard-promotion rule does not activate on these cleaner MC--SVD residuals. The adaptive extension therefore preserves the fixed default when the clutter evidence is weak instead of forcing whitening where it does not help.
 \IfFileExists{reports/paper/simus_detector_family_ablation_table.tex}{%
   \input{reports/paper/simus_detector_family_ablation_table.tex}%
 }{%
@@ -635,9 +632,6 @@ Table~\ref{tab:accepted_v2_functional_main} reports one held-out functional same
   \end{center}
 }
 \fi
-
-\paragraph{Scope and low-FPR operating protocol.}
-Quantitative detection performance is reported on kWave-Stress, Gammex-Struct, and SIMUS-Struct using the strict low-FPR operating protocol of Section~\ref{sec:eval}. The ULM and Shin sections add structural, robustness, and transfer audits on open real-IQ data. Conditional execution is a decision-rule variant that uses a flow-proxy mask; leakage ablations and additional diagnostics are reported in \SuppOrApp{app:supp-results}.
 
 \subsection{Brain simulation stress tests}
 \ifPAPERONLY
@@ -955,8 +949,6 @@ These motion-injection experiments do not replace upstream motion correction or 
 \paragraph{Shin-ProxyMotion.}
 To avoid making the motion-robustness story depend on a single open dataset, we also summarize the strongest existing Shin rat-brain motion-stress result from the supplement \cite{ShinLOCAULM2024,ShinZenodo10711806}. Under a prespecified low-frequency operating setting and a controlled residual-motion stress test, the matched-subspace map is more stable than the MC--SVD baseline map across all three audited windows, while the separate fixed-threshold proxy-transfer check remains negative.
 
-The real-data results span four roles: Gammex-Struct provides structurally labeled phantom evidence, ULM-CoreShell adds a structural check using a localization-derived vascular reference plus block-split threshold transfer, ULM-Motion provides open real-IQ robustness evidence, and Shin-ProxyMotion provides a second open real-IQ corroboration under controlled residual-motion stress plus a negative cross-clip proxy-transfer check. Additional real-IQ audits, including same-cube score checks and extended motion variants, are summarized in the Supplementary Material.
-
 \subsection{Computational cost and replay feasibility}
 \label{sec:latency}
 
@@ -984,9 +976,7 @@ Post-beamformed fUS benefits from a better detection statistic, not only from a 
 For a practitioner, the immediate implication is simple: the same SVD residual already used in an existing pipeline can yield a more reliable Doppler map by changing only the final detection statistic. On the held-out same-residual benchmark, the fixed statistic lowers intra-operative nuisance FPR from 0.998 for Kasai to 0.004 at matched 50\% target-flow recall, while the separate best-chain benchmark yields zero observed nuisance detections on all four held-out seed-setting pairs. The strict-tail operating points are an evaluation lens, not a proposed clinical thresholding workflow; threshold transfer on raw \emph{in vivo} IQ remains unresolved.
 
 \subsection*{Real-data scope and clinical interpretation}
-Most public \emph{in vivo} fUS releases do not preserve the raw high-PRF complex IQ and metadata needed for independent detector evaluation after beamforming. For that reason, the strongest efficacy evidence in this paper still comes from labeled simulations and structurally labeled phantom data, while the open real-IQ sections are narrower structural evaluations. The ULM-CoreShell result is directionally positive, and only the fully whitened variant shows a clear advantage there. A stricter disjoint-source odd/even block audit remained directionally consistent but weaker, and a support-matched permutation control collapsed the structural endpoint toward chance. These real-IQ results are structural rather than functional and should be read as conservative corroboration of a detector-stage effect that is already established on held-out same-residual benchmarks.
-
-The held-out synthetic benchmark determines the default detector choice much more cleanly than the current real-IQ audits. What is still missing is a standardized open benchmark with repeated sessions and independent anatomical or task anchors for post-beamformed detector evaluation \cite{LambertNeuropixels2025,COMBOWindow2024,ChenComa2025,Rabut2024,MobileFUS2025}.
+Most public \emph{in vivo} fUS releases do not preserve the raw high-PRF complex IQ and metadata needed for independent detector evaluation after beamforming. For that reason, the strongest efficacy evidence in this paper still comes from labeled simulations and structurally labeled phantom data, while the open real-IQ sections are narrower structural evaluations. The ULM-CoreShell result is directionally positive, and only the fully whitened variant shows a clear advantage there. A stricter disjoint-source odd/even block audit remained directionally consistent but weaker, and a support-matched permutation control collapsed the structural endpoint toward chance. These real-IQ results are structural rather than functional and should be read as conservative corroboration of a detector-stage effect that is already established on held-out same-residual benchmarks. What is still missing is a standardized open benchmark with repeated sessions and independent anatomical or task anchors for post-beamformed detector evaluation \cite{LambertNeuropixels2025,COMBOWindow2024,ChenComa2025,Rabut2024,MobileFUS2025}.
 
 \subsection*{Recommended detector variant by setting}
 Figure~\ref{fig:variant_selection_flowchart} summarizes the practical deployment rule supported by the current evidence. The fixed statistic is the default. Use the fully whitened variant only when representative windows remain persistently clutter-dominant and the latency budget allows it.
