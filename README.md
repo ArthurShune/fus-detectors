@@ -29,13 +29,13 @@ Best first try:
 - start with the `fixed` variant on the same clutter-filtered residual you already use for PD
 - if you are unsure whether your data fit the public API contract, read [docs/integration.md](docs/integration.md) and [docs/troubleshooting.md](docs/troubleshooting.md) first
 
-## Why This Repo Matters
+## What This Repo Adds
 
-- It isolates the downstream detection statistic as a separate design choice on the same clutter-filtered residual.
-- It keeps the existing acquisition and clutter-filtering pipeline intact.
-- It provides a reusable same-residual evaluation protocol for synthetic, phantom, and real-IQ audits.
+- A drop-in detector replacement for the final PD/Kasai-style readout in an existing clutter-filtered pipeline.
+- A stable public API for running fixed, adaptive, and whitened detector variants on the same residual stream.
+- A same-residual evaluation workflow for comparing detector behavior on synthetic, phantom, and real-IQ data.
 
-Two headline results anchor the repository:
+Two headline results anchor the repo:
 - On the held-out `SIMUS-Struct-Intraop` benchmark, the fixed matched-subspace statistic reduces nuisance false-positive rate from `0.998` to `0.004` at matched recall `0.5` on the same clutter-filtered residual.
 - On one open real-IQ rat-brain dataset, the fully whitened variant improves a conservative vessel-core versus perivascular-shell audit on all `10` evaluated blocks (`p = 0.002`).
 
