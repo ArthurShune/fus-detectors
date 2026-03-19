@@ -6,6 +6,7 @@
 \usepackage{fullpage}
 \usepackage{enumitem}
 \usepackage{array}
+\usepackage{booktabs}
 \usepackage{cite}
 \usepackage{float}
 \usepackage{iftex}
@@ -1830,6 +1831,42 @@ For the latency results reported here we implement the matched-subspace stage as
 The reported replay numbers are not obtained by changing the detector into a different approximate method after the fact. Three choices matter most. First, the default deployment path remains the fixed statistic unless guard telemetry justifies stronger whitening, so the measured workloads match the detector family actually reported in the paper rather than a universally whitened worst case. Second, when whitening is active, computation is organized around tile-batched GPU linear algebra with cached overlap geometry and optional CUDA-graph replay, which reduces launch overhead without changing the exported detector scores. Third, the final latency configurations use only exact-output-preserving bookkeeping reductions: redundant raw-baseline PD generation is skipped in the short-ensemble phantom path, nonessential per-tile diagnostics are omitted after extracting the quantities needed by the reported detector hierarchy, and zero-shift replay windows bypass registration work exactly when the estimated motion is zero.
 
 \noindent The final latency configuration reported in the main paper uses only exact-output-preserving implementation optimizations. In particular, the implementation reuses cached geometry-only overlap counts, defers redundant raw-baseline PD generation in the short-ensemble phantom path, omits nonessential per-tile diagnostics after extracting the quantities required by the reported detector hierarchy, and applies an exact zero-shift registration bypass when the replayed window has no estimated motion. These changes reduce bookkeeping and launch overhead without changing exported detector scores, routing masks, or baseline maps. Exact commands and runtime settings used for the CUDA latency tables are listed in the reproducibility manifest (\SuppOrApp{app:repro}).
+
+\paragraph{Execution architecture behind replay feasibility.}
+The practical replay story can be decomposed into five questions: what is computed on every support, what is computed only on promoted supports, what is cached and reused, what is skipped without changing outputs, and what belongs to the measurement protocol rather than to the detector itself. In the reported adaptive and fully whitened paths, all supports still receive the fixed branch quantities needed for detector output formation and branch telemetry, but covariance estimation, whitening, and covariance-adaptive scoring are only executed on supports selected by the branch policy. Reusable geometry-dependent terms are cached across repeated windows, and the batched GPU workload is kept shape-stable so that fixed-shape replay mechanisms such as CUDA-graph capture can reduce launch overhead. Table~\ref{tab:execution_architecture_runtime} summarizes the exact-output-preserving design choices, and Algorithm~\ref{alg:runtime_execution_path} gives the execution flow in compact form.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{P{0.31\linewidth} P{0.30\linewidth} C{0.18\linewidth}}
+\toprule
+\textbf{Design choice} & \textbf{Runtime effect} & \textbf{Exact-output-preserving?} \\
+\midrule
+Fixed-first staged execution with promotion only on selected supports & Avoids covariance estimation and whitening on supports that remain on the fixed branch & Yes \\
+Fixed-shape tile batching and temporal embedding & Amortizes per-support overhead and enables repeated-workload replay & Yes \\
+Cached overlap counts, support geometry, and reusable band operators & Avoids recomputing geometry-only terms across repeated windows & Yes \\
+Optional CUDA-graph replay after first-window setup & Reduces kernel-launch overhead on repeated fixed-shape workloads & Yes \\
+Zero-shift registration bypass when estimated motion is exactly zero & Skips unnecessary registration work in replay windows with no motion & Yes \\
+Omission of nonessential diagnostics after extracting reported telemetry & Reduces bookkeeping and export overhead for deployment-facing runs & Yes \\
+Steady-state timing over windows/frames 2..N, excluding disk I/O & Measurement protocol only; removes cold-start and I/O artifacts from reported replay times & Not part of detector output \\
+\bottomrule
+\end{tabular}
+\caption{Execution-architecture choices behind the reported replay-feasibility numbers. The key distinction is between exact-output-preserving runtime reductions, which leave exported detector scores and routing decisions unchanged, and the separate timing protocol used to measure steady-state replay.}
+\label{tab:execution_architecture_runtime}
+\end{table}
+
+\begin{algorithm}[Branch-aware execution path for replay-feasible detector evaluation]
+\label{alg:runtime_execution_path}
+\begin{enumerate}[nosep,leftmargin=1.5em,label=\arabic*.]
+  \item Form fixed-shape tile batches and any fixed geometry-dependent support operators.
+  \item Compute fixed-branch band summaries and branch-telemetry features on all supports.
+  \item Apply the branch policy to mark promoted supports for covariance-adaptive processing.
+  \item For non-promoted supports, emit the fixed statistic directly.
+  \item For promoted supports only, estimate local covariance, apply conditioning and whitening, and compute the covariance-adaptive score.
+  \item Stitch support-level outputs back to the image lattice using cached overlap-add bookkeeping.
+  \item Export detector outputs and required telemetry; omit nonessential diagnostics in deployment-facing replay runs.
+\end{enumerate}
+\end{algorithm}
 
 \subsection{Covariance blending constraints and shrink-only regularizer modes}
 
