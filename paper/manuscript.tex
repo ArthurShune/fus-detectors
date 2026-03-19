@@ -829,7 +829,7 @@ To obtain a labeled motion-robustness curve on a real acquisition without extern
 \subsection{ULM real-IQ audits}
 \label{sec:ulm7883227}
 
-This section provides bounded real-IQ structural corroboration of the detector story, not the benchmark that determines the default variant.
+We next test the detector on open real-IQ rat-brain data using conservative structural endpoints.
 
 \paragraph{Dataset and loader.}
 We use a real kHz IQ dataset released for ultrasound localization microscopy benchmarking \cite{ChavignonZenodo7883227,HeilesULMBenchmark2021} and distributed as HDF5 blocks with accompanying acquisition metadata. Each block contains a dataset \texttt{iq} of shape $(2,H,W,T)=(2,256,180,800)$ float32 representing I/Q over $T=800$ slow-time frames. We load blocks on demand and return complex IQ as a cube of shape $(T,H,W)$ (reproduction details in \SuppOrApp{app:repro}).
@@ -839,7 +839,7 @@ For ULM we select a single MC--SVD energy-fraction cutoff by a one-time label-fr
 
 \subsubsection{Localization-derived structural evaluation}
 \paragraph{ULM-CoreShell.}
-This section is a structural sanity check, not a functional claim: it asks whether detector scores concentrate more on known vessels than on the immediately adjacent parenchyma.
+Using a published PALA localization rendering as an external vascular reference, we ask whether detector scores concentrate on vessel cores rather than the adjacent parenchyma.
 To obtain a more anatomical structural readout on the same open real-IQ data, we use the published PALA rat-brain ULM example as an external vascular reference derived from microbubble localization microscopy rather than from the Doppler scores being evaluated \cite{ChavignonZenodo7883227,HeilesULMBenchmark2021}. We first reproduce the corresponding short-horizon PALA PowDop rendering from the Zenodo IQ blocks using the published odd-block selection and SVD cutoff, register that published PowDop crop back to the Zenodo IQ field of view, and then downsample the published super-resolution MatOut vascular rendering onto the short-window evaluation lattice. From that registered localization map we derive a conservative vessel-core versus perivascular-shell label pair: the vessel mask is a peak-based core mask, and the background mask is the surrounding shell, so the endpoint asks whether a short-window detector concentrates score on the vascular core rather than the immediately adjacent parenchyma. That one-time PALA-to-IQ registration is part of the label construction only. For the short-window detector itself we keep frame-to-frame registration disabled in the frozen audit, because re-enabling it changes the structural ROC only below the fourth decimal place while adding substantial latency.
 
 \begin{center}
