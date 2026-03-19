@@ -107,6 +107,53 @@ def _score_panel(
     ax.set_yticks([])
 
 
+def _difference_panel(
+    ax,
+    *,
+    bg_img: np.ndarray,
+    support_mask: np.ndarray,
+    core_mask: np.ndarray,
+    shell_mask: np.ndarray,
+    pd_mask: np.ndarray,
+    detector_mask: np.ndarray,
+) -> None:
+    import matplotlib.pyplot as plt
+
+    bg = np.ma.masked_where(~np.asarray(support_mask, dtype=bool), bg_img)
+    cmap = plt.get_cmap("gray").copy()
+    cmap.set_bad(color=(0.98, 0.98, 0.98, 1.0))
+    ax.imshow(bg, cmap=cmap, interpolation="nearest", vmin=0.0, vmax=1.0)
+    ax.contour(support_mask.astype(np.uint8), levels=[0.5], colors=["#f8fafc"], linewidths=1.0)
+    ax.contour(shell_mask.astype(np.uint8), levels=[0.5], colors=["#ffb000"], linewidths=1.2, linestyles="--")
+    ax.contour(core_mask.astype(np.uint8), levels=[0.5], colors=["#00d5ff"], linewidths=1.4)
+
+    pd_only = np.asarray(pd_mask, dtype=bool) & ~np.asarray(detector_mask, dtype=bool)
+    detector_only = np.asarray(detector_mask, dtype=bool) & ~np.asarray(pd_mask, dtype=bool)
+
+    overlay = np.zeros((*pd_only.shape, 4), dtype=np.float32)
+    pd_rgb = np.array([0xFF, 0x6B, 0x57], dtype=np.float32) / 255.0
+    det_rgb = np.array([0x4F, 0xD1, 0xC5], dtype=np.float32) / 255.0
+    overlay[pd_only, :3] = pd_rgb
+    overlay[pd_only, 3] = 0.78
+    overlay[detector_only, :3] = det_rgb
+    overlay[detector_only, 3] = 0.78
+    ax.imshow(overlay, interpolation="nearest")
+
+    ax.set_title("Where the detector differs", fontsize=12, fontweight="bold", pad=8)
+    ax.text(
+        0.5,
+        -0.10,
+        "red: PD only   |   cyan: detector only",
+        transform=ax.transAxes,
+        ha="center",
+        va="top",
+        fontsize=8.8,
+        color="#0f172a",
+    )
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(
         description="Generate the headline PALA-backed real in-vivo ULM hero figure."
@@ -160,12 +207,16 @@ def main() -> int:
     args = parse_args()
 
     try:
-        import scienceplots  # noqa: F401
         import matplotlib.pyplot as plt
     except Exception as exc:  # pragma: no cover
         raise RuntimeError(f"matplotlib required: {exc}") from exc
 
-    plt.style.use(["science", "nature", "no-latex"])
+    try:  # Optional style package for cleaner paper defaults.
+        import scienceplots  # noqa: F401
+
+        plt.style.use(["science", "nature", "no-latex"])
+    except Exception:
+        plt.style.use("default")
     plt.rcParams.update(
         {
             "figure.facecolor": "white",
@@ -268,17 +319,18 @@ def main() -> int:
     pd_crop = det_pd[y0:y1, x0:x1]
     wp_crop = det_wp[y0:y1, x0:x1]
 
-    fig = plt.figure(figsize=(11.4, 3.95))
+    fig = plt.figure(figsize=(14.2, 4.1))
     gs = fig.add_gridspec(
         1,
-        3,
-        width_ratios=[1.0, 1.0, 1.0],
-        wspace=0.18,
+        4,
+        width_ratios=[1.0, 1.0, 1.0, 0.92],
+        wspace=0.16,
     )
 
     ax_ref = fig.add_subplot(gs[0, 0])
     ax_pd = fig.add_subplot(gs[0, 1])
     ax_wp = fig.add_subplot(gs[0, 2])
+    ax_diff = fig.add_subplot(gs[0, 3])
 
     ref_disp = np.ma.masked_where(~support_crop, ref_crop)
     cmap = plt.get_cmap("magma").copy()
@@ -318,8 +370,18 @@ def main() -> int:
         fpr70=float("nan"),
     )
     ax_wp.set_anchor("C")
+    _difference_panel(
+        ax_diff,
+        bg_img=ref_crop,
+        support_mask=support_crop,
+        core_mask=flow_crop,
+        shell_mask=bg_crop,
+        pd_mask=pd_crop,
+        detector_mask=wp_crop,
+    )
+    ax_diff.set_anchor("C")
 
-    for ax, label in zip((ax_ref, ax_pd, ax_wp), ("a", "b", "c"), strict=True):
+    for ax, label in zip((ax_ref, ax_pd, ax_wp, ax_diff), ("a", "b", "c", "d"), strict=True):
         ax.text(
             0.02,
             0.98,
@@ -332,7 +394,7 @@ def main() -> int:
             color="#0f172a",
         )
 
-    fig.subplots_adjust(left=0.03, right=0.99, top=0.88, bottom=0.09)
+    fig.subplots_adjust(left=0.025, right=0.995, top=0.88, bottom=0.16)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(args.out)
