@@ -10,7 +10,7 @@ Post-clutter-suppression detection statistics that reduce artifact leakage in fu
 `fus-detectors` is the reference implementation and paper repository for localized matched-subspace detection on beamformed fUS slow-time data. The central question is simple: once a clutter-filtered residual has been fixed, can changing only the final detection statistic suppress artifacts more effectively than power-Doppler-style readouts?
 
 <p align="center">
-  <img src="docs/assets/readme_hero_ulm.png" alt="Representative real-IQ structural audit figure from the preprint." width="860">
+  <img src="docs/assets/readme_hero_ulm.png" alt="Representative real-IQ structural evaluation figure from the preprint." width="860">
 </p>
 
 ## Can I Use This?
@@ -37,7 +37,7 @@ Best first try:
 
 Two headline results anchor the repo:
 - On the held-out `SIMUS-Struct-Intraop` benchmark, the fixed matched-subspace statistic reduces nuisance false-positive rate from `0.998` to `0.004` at matched recall `0.5` on the same clutter-filtered residual.
-- On one open real-IQ rat-brain dataset, the fully whitened variant improves a conservative vessel-core versus perivascular-shell audit on all `10` evaluated blocks (`p = 0.002`).
+- On one open real-IQ rat-brain dataset, the fully whitened variant improves a conservative vessel-core versus perivascular-shell structural evaluation on all `10` evaluated blocks (`p = 0.002`).
 
 ## Performance / Replay Feasibility
 
@@ -184,7 +184,7 @@ Paper-scale reproduction uses generated synthetic data plus staged open datasets
 | `SIMUS/PyMUST` synthetic benchmark | Held-out structural benchmark | generated locally | `data/` not required |
 | `ULM Zenodo 7883227` | Real-IQ vessel-core vs shell audit | about `50 GB` | `data/ulm_zenodo_7883227/` |
 | `Shin RatBrain Fig3` | Real-IQ proxy-motion audit | about `6.5 GB` | `data/shin_zenodo_10711806/` |
-| `Twinkling artifact / Gammex phantom` | Phantom structural audit | about `13.5 GB` extracted | `data/twinkling_artifact/` |
+| `Twinkling artifact / Gammex phantom` | Phantom structural evaluation | about `13.5 GB` extracted | `data/twinkling_artifact/` |
 | `Whole-brain mouse fUS atlas` | Optional companion-only retrospectives | about `0.7 GB` | `data/whole-brain-fUS/` |
 
 Detailed download links, expected filenames, and provider-specific caveats are in [`docs/data_download.md`](docs/data_download.md).
