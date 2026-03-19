@@ -1,0 +1,65 @@
+# Integration Guide
+
+`fus-detectors` is easiest to integrate when your existing pipeline already
+produces a complex clutter-filtered slow-time cube with shape `(T, H, W)`.
+The public API keeps that contract narrow on purpose: you hand it the residual
+cube and the slow-time PRF, and it returns a PD-style detector readout plus the
+primary right-tail score map.
+
+## Stable Import Surface
+
+```python
+from fus_detectors import DetectorConfig, score_residual_cube
+```
+
+Use the stable `fus_detectors` package for external integration. Internal
+modules under `pipeline/` remain available for research work, but they are not
+the compatibility layer intended for third-party pipelines.
+
+## Minimal Example
+
+```python
+import numpy as np
+
+from fus_detectors import DetectorConfig, score_residual_cube
+
+residual_cube = np.load("clutter_filtered_residual.npy")  # complex64, shape (T, H, W)
+
+result = score_residual_cube(
+    residual_cube,
+    prf_hz=3000.0,
+    config=DetectorConfig(
+        variant="fixed",
+        device="cpu",
+    ),
+)
+
+readout_map = result.readout_map
+score_map = result.score_map
+summary = result.summary.to_dict()
+```
+
+## Supported Public Variants
+
+- `fixed`: the fixed matched-subspace statistic. This is the default and the
+  recommended drop-in starting point.
+- `whitened`: the fully whitened matched-subspace statistic.
+- `whitened_power`: total whitened slow-time power, kept as a bounded ablation.
+
+The public API keeps the stable detector surface small. If you need the larger
+research script surface used for paper reproduction, keep using the repo’s
+existing scripts under `scripts/`.
+
+## Returned Maps
+
+- `readout_map`: a PD-style detector readout suitable for display or for
+  swapping into an existing downstream map-rendering step.
+- `score_map`: the primary right-tail detector score map used for thresholding,
+  ROC evaluation, and acceptance-style comparisons.
+
+## Reproducibility Tips
+
+- Persist `DetectorConfig.to_dict()` alongside any saved score maps.
+- Log `DetectorResult.summary.to_dict()` for quick run-to-run comparison.
+- Keep the residual cube fixed when comparing variants. That is the central
+  same-residual evaluation discipline used throughout the repo and manuscript.
