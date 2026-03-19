@@ -2180,9 +2180,7 @@ def _default_artifacts() -> list[ArtifactInfo]:
             paper_refs=["Build packaging (Phase 7)"],
             outputs=["paper/preprint.pdf", "paper/supplement.pdf", "paper/methods_companion.pdf"],
             commands=[
-                "pdflatex paper/manuscript.tex   # full (default)",
-                "pdflatex paper/preprint.tex     # paper-only (no appendices)",
-                "pdflatex paper/supplement.tex   # supplement-only (appendices only)",
+                "./scripts/build_paper_artifacts.sh",
             ],
         ),
     ]
