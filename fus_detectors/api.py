@@ -9,20 +9,34 @@ import torch
 from pipeline.stap.temporal import pd_temporal_core_batched
 from pipeline.stap.tiles import extract_tiles_3d, make_tile_specs, overlap_add
 
-DetectorVariant = Literal["fixed", "whitened", "whitened_power"]
+from .adaptive import choose_promoted_tiles, compute_guard_fraction_tiles
+from .defaults import ADAPTIVE_GUARD_DEFAULTS, PUBLIC_DETECTOR_DEFAULTS
+
+DetectorVariant = Literal["fixed", "adaptive", "whitened", "whitened_power"]
 
 _VARIANT_ALIASES: dict[str, str] = {
-    "fixed": "unwhitened_ratio",
-    "fixed_statistic": "unwhitened_ratio",
-    "unwhitened_ratio": "unwhitened_ratio",
-    "raw": "unwhitened_ratio",
-    "raw_ratio": "unwhitened_ratio",
-    "whitened": "msd_ratio",
-    "fully_whitened": "msd_ratio",
-    "whitened_variant": "msd_ratio",
-    "msd_ratio": "msd_ratio",
+    "fixed": "fixed",
+    "fixed_statistic": "fixed",
+    "unwhitened_ratio": "fixed",
+    "raw": "fixed",
+    "raw_ratio": "fixed",
+    "adaptive": "adaptive",
+    "adaptive_guard": "adaptive",
+    "adaptive_guard_v1": "adaptive",
+    "guard_promote": "adaptive",
+    "whitened": "whitened",
+    "fully_whitened": "whitened",
+    "whitened_variant": "whitened",
+    "msd_ratio": "whitened",
     "whitened_power": "whitened_power",
     "power": "whitened_power",
+}
+
+_CORE_VARIANTS: dict[str, str] = {
+    "fixed": "unwhitened_ratio",
+    "adaptive": "adaptive_guard",
+    "whitened": "msd_ratio",
+    "whitened_power": "whitened_power",
 }
 
 
@@ -33,16 +47,6 @@ def _normalize_variant(variant: str) -> str:
     except KeyError as exc:  # pragma: no cover - defensive
         supported = ", ".join(sorted(set(_VARIANT_ALIASES)))
         raise ValueError(f"Unsupported variant {variant!r}. Expected one of: {supported}.") from exc
-
-
-def _variant_label(internal_variant: str) -> str:
-    if internal_variant == "unwhitened_ratio":
-        return "fixed"
-    if internal_variant == "msd_ratio":
-        return "whitened"
-    if internal_variant == "whitened_power":
-        return "whitened_power"
-    return internal_variant
 
 
 def _as_complex64_cube(residual_cube: Any) -> np.ndarray:
@@ -74,35 +78,44 @@ def _finite_mean(values: list[float]) -> float | None:
     return float(np.mean(np.asarray(finite, dtype=np.float64)))
 
 
+def _finite_quantile(values: np.ndarray, q: float) -> float | None:
+    finite = np.asarray(values, dtype=np.float64)
+    finite = finite[np.isfinite(finite)]
+    if finite.size == 0:
+        return None
+    return float(np.quantile(finite, q))
+
+
 @dataclass(frozen=True)
 class DetectorConfig:
-    """Public integration config for detector scoring on a clutter-filtered residual cube.
-
-    The defaults are conservative drop-in settings for a fixed matched-subspace
-    statistic. They intentionally avoid the larger script surface used for paper
-    generation so external callers can depend on a narrow, documented API.
-    """
+    """Stable integration config for detector scoring on clutter-filtered residual cubes."""
 
     variant: DetectorVariant | str = "fixed"
-    tile_shape: tuple[int, int] = (12, 12)
-    tile_stride: int = 4
-    temporal_support: int = 8
-    diag_load: float = 1e-2
-    covariance_estimator: str = "tyler_pca"
-    huber_c: float = 4.5
-    grid_step_rel: float = 0.12
-    fd_span_rel: tuple[float, float] = (0.30, 1.10)
-    min_frequency_bins: int = 3
-    max_frequency_bins: int = 7
-    min_flow_hz: float = 30.0
-    msd_lambda: float | None = 0.05
-    msd_ridge: float = 0.12
-    msd_aggregation: str = "median"
-    msd_ratio_rho: float = 0.05
-    motion_half_span_rel: float | None = None
-    whiten_gamma: float = 1.0
+    tile_shape: tuple[int, int] = PUBLIC_DETECTOR_DEFAULTS.tile_shape
+    tile_stride: int = PUBLIC_DETECTOR_DEFAULTS.tile_stride
+    temporal_support: int = PUBLIC_DETECTOR_DEFAULTS.temporal_support
+    diag_load: float = PUBLIC_DETECTOR_DEFAULTS.diag_load
+    covariance_estimator: str = PUBLIC_DETECTOR_DEFAULTS.covariance_estimator
+    huber_c: float = PUBLIC_DETECTOR_DEFAULTS.huber_c
+    grid_step_rel: float = PUBLIC_DETECTOR_DEFAULTS.grid_step_rel
+    fd_span_rel: tuple[float, float] = PUBLIC_DETECTOR_DEFAULTS.fd_span_rel
+    min_frequency_bins: int = PUBLIC_DETECTOR_DEFAULTS.min_frequency_bins
+    max_frequency_bins: int = PUBLIC_DETECTOR_DEFAULTS.max_frequency_bins
+    min_flow_hz: float = PUBLIC_DETECTOR_DEFAULTS.min_flow_hz
+    msd_lambda: float | None = PUBLIC_DETECTOR_DEFAULTS.msd_lambda
+    msd_ridge: float = PUBLIC_DETECTOR_DEFAULTS.msd_ridge
+    msd_aggregation: str = PUBLIC_DETECTOR_DEFAULTS.msd_aggregation
+    msd_ratio_rho: float = PUBLIC_DETECTOR_DEFAULTS.msd_ratio_rho
+    motion_half_span_rel: float | None = PUBLIC_DETECTOR_DEFAULTS.motion_half_span_rel
+    whiten_gamma: float = PUBLIC_DETECTOR_DEFAULTS.whiten_gamma
+    adaptive_guard_flow_band_hz: tuple[float, float] = ADAPTIVE_GUARD_DEFAULTS.flow_band_hz
+    adaptive_guard_alias_center_hz: float = ADAPTIVE_GUARD_DEFAULTS.alias_center_hz
+    adaptive_guard_alias_width_hz: float = ADAPTIVE_GUARD_DEFAULTS.alias_width_hz
+    adaptive_guard_tapers: int = ADAPTIVE_GUARD_DEFAULTS.tapers
+    adaptive_guard_bandwidth: float = ADAPTIVE_GUARD_DEFAULTS.bandwidth
+    adaptive_guard_promote_threshold: float = ADAPTIVE_GUARD_DEFAULTS.promote_threshold
     device: str | None = None
-    chunk_size: int = 128
+    chunk_size: int = PUBLIC_DETECTOR_DEFAULTS.chunk_size
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -120,6 +133,9 @@ class DetectorSummary:
     p90_band_fraction: float | None
     mean_score: float | None
     median_loaded_condition_number: float | None
+    adaptive_guard_fraction_p90: float | None = None
+    adaptive_promote_fraction: float | None = None
+    adaptive_promoted_tiles: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -129,10 +145,9 @@ class DetectorSummary:
 class DetectorResult:
     """Detector outputs for one clutter-filtered residual cube.
 
-    `readout_map` is the PD-style map after applying the detector's band-limited
-    weighting, which is useful for display and backwards-compatible pipeline
-    wiring. `score_map` is the primary right-tail detector statistic used for
-    thresholding and ROC-style evaluation.
+    `readout_map` is the detector-weighted PD-style readout for display and
+    backwards-compatible pipeline wiring. `score_map` is the primary detector
+    statistic used for thresholding and ROC-style evaluation.
     """
 
     config: DetectorConfig
@@ -166,6 +181,12 @@ def _validate_config(config: DetectorConfig, *, cube_shape: tuple[int, int, int]
         )
     if int(config.chunk_size) <= 0:
         raise ValueError(f"chunk_size must be positive; got {config.chunk_size}.")
+    if float(config.adaptive_guard_alias_width_hz) < 0.0:
+        raise ValueError("adaptive_guard_alias_width_hz must be non-negative.")
+    if int(config.adaptive_guard_tapers) <= 0:
+        raise ValueError("adaptive_guard_tapers must be positive.")
+    if float(config.adaptive_guard_bandwidth) < 1.0:
+        raise ValueError("adaptive_guard_bandwidth must be >= 1.0.")
 
 
 def _score_tile_batch(
@@ -208,68 +229,22 @@ def _score_tile_batch(
     return (
         np.asarray(band_batch, dtype=np.float32),
         np.asarray(score_batch, dtype=np.float32),
-        list(info_batch),
+        [dict(info or {}) for info in info_batch],
     )
 
 
-def score_residual_cube(
-    residual_cube: Any,
+def _build_summary(
+    tile_infos: list[dict[str, Any]],
     *,
-    prf_hz: float,
-    config: DetectorConfig | None = None,
-    return_tile_telemetry: bool = False,
-) -> DetectorResult:
-    """Score one clutter-filtered residual cube with a stable public detector API.
-
-    Parameters
-    ----------
-    residual_cube:
-        Complex-valued clutter-filtered slow-time cube with shape `(T, H, W)`.
-    prf_hz:
-        Slow-time pulse repetition frequency for the residual cube.
-    config:
-        Public detector configuration. When omitted, uses the fixed matched-subspace
-        default.
-    return_tile_telemetry:
-        When true, include per-tile telemetry dictionaries in the result.
-    """
-
-    cfg = config or DetectorConfig()
-    cube = _as_complex64_cube(residual_cube)
-    _validate_config(cfg, cube_shape=tuple(int(x) for x in cube.shape))
-    internal_variant = _normalize_variant(cfg.variant)
-
-    _, height, width = cube.shape
-    tile_h, tile_w = (int(cfg.tile_shape[0]), int(cfg.tile_shape[1]))
-    specs = make_tile_specs(height, width, tile_h, tile_w, int(cfg.tile_stride), dtype=np.float32)
-    tile_cubes = extract_tiles_3d(cube, specs)
-
-    readout_tiles: list[np.ndarray] = []
-    score_tiles: list[np.ndarray] = []
-    tile_infos: list[dict[str, Any]] = []
-    chunk = int(cfg.chunk_size)
-
-    for start in range(0, len(tile_cubes), chunk):
-        batch = np.stack(tile_cubes[start : start + chunk], axis=0).astype(np.complex64, copy=False)
-        band_batch, score_batch, info_batch = _score_tile_batch(
-            batch,
-            prf_hz=float(prf_hz),
-            config=cfg,
-            internal_variant=internal_variant,
-        )
-        base_batch = np.mean(np.abs(batch) ** 2, axis=1, dtype=np.float32)
-        readout_batch = base_batch * band_batch
-        readout_tiles.extend(readout_batch)
-        score_tiles.extend(score_batch)
-        tile_infos.extend(info_batch)
-
-    readout_map = overlap_add(readout_tiles, specs, height, width, dtype=np.float32)
-    score_map = overlap_add(score_tiles, specs, height, width, dtype=np.float32)
-
-    summary = DetectorSummary(
-        variant=_variant_label(internal_variant),
-        internal_variant=internal_variant,
-        total_tiles=len(specs),
+    variant: str,
+    internal_variant: str,
+    guard_fraction_tiles: np.ndarray | None = None,
+    promote_tiles: np.ndarray | None = None,
+) -> DetectorSummary:
+    return DetectorSummary(
+        variant=str(variant),
+        internal_variant=str(internal_variant),
+        total_tiles=len(tile_infos),
         fast_path_tile_fraction=_finite_mean(
             [1.0 if bool(info.get("stap_fast_path_used")) else 0.0 for info in tile_infos]
         ),
@@ -283,6 +258,172 @@ def score_residual_cube(
         median_loaded_condition_number=_finite_median(
             [float(info.get("cond_loaded", np.nan)) for info in tile_infos]
         ),
+        adaptive_guard_fraction_p90=(
+            _finite_quantile(np.asarray(guard_fraction_tiles, dtype=np.float32), 0.90)
+            if guard_fraction_tiles is not None
+            else None
+        ),
+        adaptive_promote_fraction=(
+            float(np.mean(np.asarray(promote_tiles, dtype=np.float32)))
+            if promote_tiles is not None and np.asarray(promote_tiles).size > 0
+            else None
+        ),
+        adaptive_promoted_tiles=(
+            int(np.count_nonzero(np.asarray(promote_tiles, dtype=bool)))
+            if promote_tiles is not None
+            else None
+        ),
+    )
+
+
+def _score_nonadaptive(
+    tile_cubes: list[np.ndarray],
+    *,
+    prf_hz: float,
+    config: DetectorConfig,
+    internal_variant: str,
+) -> tuple[list[np.ndarray], list[np.ndarray], list[dict[str, Any]]]:
+    readout_tiles: list[np.ndarray] = []
+    score_tiles: list[np.ndarray] = []
+    tile_infos: list[dict[str, Any]] = []
+    chunk = int(config.chunk_size)
+
+    for start in range(0, len(tile_cubes), chunk):
+        batch = np.stack(tile_cubes[start : start + chunk], axis=0).astype(np.complex64, copy=False)
+        band_batch, score_batch, info_batch = _score_tile_batch(
+            batch,
+            prf_hz=float(prf_hz),
+            config=config,
+            internal_variant=internal_variant,
+        )
+        base_batch = np.mean(np.abs(batch) ** 2, axis=1, dtype=np.float32)
+        readout_tiles.extend(list(base_batch * band_batch))
+        score_tiles.extend(list(score_batch))
+        tile_infos.extend(info_batch)
+    return readout_tiles, score_tiles, tile_infos
+
+
+def _score_adaptive(
+    tile_cubes: list[np.ndarray],
+    *,
+    prf_hz: float,
+    config: DetectorConfig,
+) -> tuple[
+    list[np.ndarray],
+    list[np.ndarray],
+    list[dict[str, Any]],
+    np.ndarray,
+    np.ndarray,
+]:
+    readout_tiles: list[np.ndarray] = []
+    score_tiles: list[np.ndarray] = []
+    tile_infos: list[dict[str, Any]] = []
+    guard_chunks: list[np.ndarray] = []
+    chunk = int(config.chunk_size)
+
+    for start in range(0, len(tile_cubes), chunk):
+        batch = np.stack(tile_cubes[start : start + chunk], axis=0).astype(np.complex64, copy=False)
+        band_batch, score_batch, info_batch = _score_tile_batch(
+            batch,
+            prf_hz=float(prf_hz),
+            config=config,
+            internal_variant="unwhitened_ratio",
+        )
+        base_batch = np.mean(np.abs(batch) ** 2, axis=1, dtype=np.float32)
+        guard_fraction = compute_guard_fraction_tiles(
+            batch,
+            prf_hz=float(prf_hz),
+            flow_band_hz=tuple(float(v) for v in config.adaptive_guard_flow_band_hz),
+            alias_center_hz=float(config.adaptive_guard_alias_center_hz),
+            alias_width_hz=float(config.adaptive_guard_alias_width_hz),
+            tapers=int(config.adaptive_guard_tapers),
+            bandwidth=float(config.adaptive_guard_bandwidth),
+        )
+        readout_tiles.extend(list(base_batch * band_batch))
+        score_tiles.extend(list(score_batch))
+        guard_chunks.append(guard_fraction)
+        for idx, info in enumerate(info_batch):
+            info["adaptive_guard_fraction"] = float(guard_fraction[idx])
+            tile_infos.append(info)
+
+    guard_fraction_tiles = np.concatenate(guard_chunks, axis=0) if guard_chunks else np.zeros((0,), dtype=np.float32)
+    promote_tiles = choose_promoted_tiles(
+        guard_fraction_tiles,
+        threshold=float(config.adaptive_guard_promote_threshold),
+    )
+    promoted_indices = np.flatnonzero(promote_tiles)
+
+    for start in range(0, int(promoted_indices.size), chunk):
+        idxs = promoted_indices[start : start + chunk]
+        batch = np.stack([tile_cubes[int(idx)] for idx in idxs], axis=0).astype(np.complex64, copy=False)
+        band_batch, score_batch, info_batch = _score_tile_batch(
+            batch,
+            prf_hz=float(prf_hz),
+            config=config,
+            internal_variant="msd_ratio",
+        )
+        base_batch = np.mean(np.abs(batch) ** 2, axis=1, dtype=np.float32)
+        readout_batch = base_batch * band_batch
+        for local_idx, tile_idx in enumerate(idxs.tolist()):
+            readout_tiles[tile_idx] = readout_batch[local_idx]
+            score_tiles[tile_idx] = score_batch[local_idx]
+            promoted_info = dict(info_batch[local_idx] or {})
+            promoted_info["adaptive_guard_fraction"] = float(guard_fraction_tiles[tile_idx])
+            tile_infos[tile_idx] = promoted_info
+
+    for tile_idx, info in enumerate(tile_infos):
+        info["adaptive_promoted"] = bool(promote_tiles[tile_idx])
+        info["adaptive_branch"] = "whitened" if bool(promote_tiles[tile_idx]) else "fixed"
+        info["adaptive_guard_threshold"] = float(config.adaptive_guard_promote_threshold)
+
+    return readout_tiles, score_tiles, tile_infos, guard_fraction_tiles, promote_tiles
+
+
+def score_residual_cube(
+    residual_cube: Any,
+    *,
+    prf_hz: float,
+    config: DetectorConfig | None = None,
+    return_tile_telemetry: bool = False,
+) -> DetectorResult:
+    """Score one clutter-filtered residual cube with the stable public API."""
+
+    cfg = config or DetectorConfig()
+    cube = _as_complex64_cube(residual_cube)
+    _validate_config(cfg, cube_shape=tuple(int(x) for x in cube.shape))
+    variant = _normalize_variant(cfg.variant)
+    internal_variant = _CORE_VARIANTS[variant]
+
+    _, height, width = cube.shape
+    tile_h, tile_w = (int(cfg.tile_shape[0]), int(cfg.tile_shape[1]))
+    specs = make_tile_specs(height, width, tile_h, tile_w, int(cfg.tile_stride), dtype=np.float32)
+    tile_cubes = extract_tiles_3d(cube, specs)
+
+    guard_fraction_tiles: np.ndarray | None = None
+    promote_tiles: np.ndarray | None = None
+    if variant == "adaptive":
+        readout_tiles, score_tiles, tile_infos, guard_fraction_tiles, promote_tiles = _score_adaptive(
+            tile_cubes,
+            prf_hz=float(prf_hz),
+            config=cfg,
+        )
+    else:
+        readout_tiles, score_tiles, tile_infos = _score_nonadaptive(
+            tile_cubes,
+            prf_hz=float(prf_hz),
+            config=cfg,
+            internal_variant=internal_variant,
+        )
+
+    readout_map = overlap_add(readout_tiles, specs, height, width, dtype=np.float32)
+    score_map = overlap_add(score_tiles, specs, height, width, dtype=np.float32)
+
+    summary = _build_summary(
+        tile_infos,
+        variant=variant,
+        internal_variant=internal_variant,
+        guard_fraction_tiles=guard_fraction_tiles,
+        promote_tiles=promote_tiles,
     )
 
     return DetectorResult(
@@ -301,11 +442,7 @@ def score_residual_batch(
     config: DetectorConfig | None = None,
     return_tile_telemetry: bool = False,
 ) -> list[DetectorResult]:
-    """Score a batch of clutter-filtered residual cubes.
-
-    The public batch API deliberately returns one `DetectorResult` per cube so
-    callers can log, persist, or post-process each run independently.
-    """
+    """Score a batch of clutter-filtered residual cubes."""
 
     if hasattr(residual_batch, "detach") and hasattr(residual_batch, "cpu"):
         residual_batch = residual_batch.detach().cpu()
