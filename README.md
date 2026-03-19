@@ -39,6 +39,12 @@ Two headline results anchor the repository:
 - On the held-out `SIMUS-Struct-Intraop` benchmark, the fixed matched-subspace statistic reduces nuisance false-positive rate from `0.998` to `0.004` at matched recall `0.5` on the same clutter-filtered residual.
 - On one open real-IQ rat-brain dataset, the fully whitened variant improves a conservative vessel-core versus perivascular-shell audit on all `10` evaluated blocks (`p = 0.002`).
 
+## Performance / Replay Feasibility
+
+Timing in this repo is reported in steady-state replay, excluding disk I/O and one-time startup overhead. Budget is defined as the acquired ensemble duration `N/PRF`. Under the reported replay conditions, the final manuscript configurations ran below budget across the labeled-brain, Shin, and Gammex evaluations (`RTF ~= 0.64-0.88`). In the 64-frame no-registration ULM configuration, total steady-state time was `41.3 ms` for a `64 ms` acquisition budget.
+
+This is a replay-feasibility statement, not an end-to-end scanner-integration claim.
+
 ## Method at a Glance
 
 <p align="center">
