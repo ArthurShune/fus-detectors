@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+from scipy import ndimage
 
 from pipeline.realdata.ulm_zenodo_7883227 import load_ulm_block_iq
 from scripts.ulm7883227_structural_roc import (
@@ -59,14 +60,47 @@ def _crop_bbox(*masks: np.ndarray, pad: int = 8) -> tuple[int, int, int, int]:
     return y0, y1, x0, x1
 
 
+def _largest_component(mask: np.ndarray) -> np.ndarray:
+    labeled, ncomp = ndimage.label(mask.astype(bool))
+    if ncomp <= 1:
+        return mask.astype(bool)
+    counts = np.bincount(labeled.ravel())
+    counts[0] = 0
+    keep = int(np.argmax(counts))
+    return labeled == keep
+
+
+def _compute_anatomy_background(cube: np.ndarray, *, support_mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    envelope = np.mean(np.abs(np.asarray(cube, dtype=np.complex64)), axis=0, dtype=np.float64)
+    envelope = ndimage.gaussian_filter(envelope, sigma=1.0)
+    env_norm = _normalize(envelope, qlo=0.05, qhi=0.995)
+
+    vals = env_norm[np.asarray(support_mask, dtype=bool)]
+    if vals.size == 0:
+        anatomy_mask = np.asarray(support_mask, dtype=bool)
+    else:
+        thresh = max(0.03, float(np.quantile(vals, 0.08)))
+        anatomy_mask = env_norm >= thresh
+        anatomy_mask &= np.asarray(support_mask, dtype=bool)
+        anatomy_mask = ndimage.binary_closing(anatomy_mask, iterations=2)
+        anatomy_mask = ndimage.binary_fill_holes(anatomy_mask)
+        anatomy_mask = _largest_component(anatomy_mask)
+        anatomy_mask = ndimage.binary_dilation(anatomy_mask, iterations=2)
+        support_area = max(int(np.count_nonzero(support_mask)), 1)
+        if np.count_nonzero(anatomy_mask) < 0.30 * support_area:
+            anatomy_mask = np.asarray(support_mask, dtype=bool)
+    return env_norm.astype(np.float32), anatomy_mask.astype(bool)
+
+
 def _score_panel(
     ax,
     *,
     bg_img: np.ndarray,
-    support_mask: np.ndarray,
+    anatomy_mask: np.ndarray,
     core_mask: np.ndarray,
     shell_mask: np.ndarray,
     det_mask: np.ndarray,
+    alpha_img: np.ndarray,
     color: str,
     title: str,
     auc: float,
@@ -74,11 +108,11 @@ def _score_panel(
 ) -> None:
     import matplotlib.pyplot as plt
 
-    bg = np.ma.masked_where(~np.asarray(support_mask, dtype=bool), bg_img)
-    cmap = plt.get_cmap("magma").copy()
+    bg = np.ma.masked_where(~np.asarray(anatomy_mask, dtype=bool), bg_img)
+    cmap = plt.get_cmap("gray").copy()
     cmap.set_bad(color=(0.98, 0.98, 0.98, 1.0))
-    ax.imshow(bg, cmap=cmap, interpolation="nearest")
-    ax.contour(support_mask.astype(np.uint8), levels=[0.5], colors=["#f8fafc"], linewidths=1.0)
+    ax.imshow(bg, cmap=cmap, interpolation="nearest", vmin=0.0, vmax=1.0)
+    ax.contour(anatomy_mask.astype(np.uint8), levels=[0.5], colors=["#f8fafc"], linewidths=1.0)
     ax.contour(shell_mask.astype(np.uint8), levels=[0.5], colors=["#ffb000"], linewidths=1.3, linestyles="--")
     ax.contour(core_mask.astype(np.uint8), levels=[0.5], colors=["#00d5ff"], linewidths=1.5)
 
@@ -88,7 +122,13 @@ def _score_panel(
         dtype=np.float32,
     ) / 255.0
     overlay[..., :3] = rgb[None, None, :]
-    overlay[..., 3] = 0.68 * (det_mask.astype(np.float32) * support_mask.astype(np.float32))
+    alpha_img = np.asarray(alpha_img, dtype=np.float32)
+    overlay[..., 3] = (
+        0.72
+        * det_mask.astype(np.float32)
+        * anatomy_mask.astype(np.float32)
+        * np.clip(0.25 + 0.75 * alpha_img, 0.0, 1.0)
+    )
     ax.imshow(overlay, interpolation="nearest")
 
     ax.set_title(title, fontsize=12, fontweight="bold", pad=8)
@@ -111,7 +151,7 @@ def _difference_panel(
     ax,
     *,
     bg_img: np.ndarray,
-    support_mask: np.ndarray,
+    anatomy_mask: np.ndarray,
     core_mask: np.ndarray,
     shell_mask: np.ndarray,
     pd_mask: np.ndarray,
@@ -119,31 +159,34 @@ def _difference_panel(
 ) -> None:
     import matplotlib.pyplot as plt
 
-    bg = np.ma.masked_where(~np.asarray(support_mask, dtype=bool), bg_img)
+    bg = np.ma.masked_where(~np.asarray(anatomy_mask, dtype=bool), bg_img)
     cmap = plt.get_cmap("gray").copy()
     cmap.set_bad(color=(0.98, 0.98, 0.98, 1.0))
     ax.imshow(bg, cmap=cmap, interpolation="nearest", vmin=0.0, vmax=1.0)
-    ax.contour(support_mask.astype(np.uint8), levels=[0.5], colors=["#f8fafc"], linewidths=1.0)
+    ax.contour(anatomy_mask.astype(np.uint8), levels=[0.5], colors=["#f8fafc"], linewidths=1.0)
     ax.contour(shell_mask.astype(np.uint8), levels=[0.5], colors=["#ffb000"], linewidths=1.2, linestyles="--")
     ax.contour(core_mask.astype(np.uint8), levels=[0.5], colors=["#00d5ff"], linewidths=1.4)
 
-    pd_only = np.asarray(pd_mask, dtype=bool) & ~np.asarray(detector_mask, dtype=bool)
-    detector_only = np.asarray(detector_mask, dtype=bool) & ~np.asarray(pd_mask, dtype=bool)
+    anatomy_mask = np.asarray(anatomy_mask, dtype=bool)
+    pd_only = np.asarray(pd_mask, dtype=bool) & ~np.asarray(detector_mask, dtype=bool) & anatomy_mask
+    detector_only = np.asarray(detector_mask, dtype=bool) & ~np.asarray(pd_mask, dtype=bool) & anatomy_mask
 
     overlay = np.zeros((*pd_only.shape, 4), dtype=np.float32)
     pd_rgb = np.array([0xFF, 0x6B, 0x57], dtype=np.float32) / 255.0
     det_rgb = np.array([0x4F, 0xD1, 0xC5], dtype=np.float32) / 255.0
     overlay[pd_only, :3] = pd_rgb
-    overlay[pd_only, 3] = 0.78
+    overlay[pd_only, 3] = 0.78 * np.clip(0.25 + 0.75 * np.asarray(bg_img, dtype=np.float32)[pd_only], 0.0, 1.0)
     overlay[detector_only, :3] = det_rgb
-    overlay[detector_only, 3] = 0.78
+    overlay[detector_only, 3] = 0.78 * np.clip(
+        0.25 + 0.75 * np.asarray(bg_img, dtype=np.float32)[detector_only], 0.0, 1.0
+    )
     ax.imshow(overlay, interpolation="nearest")
 
     ax.set_title("Where the detector differs", fontsize=12, fontweight="bold", pad=8)
     ax.text(
         0.5,
         -0.10,
-        "red: PD only   |   cyan: detector only",
+        "red: PD only removed   |   cyan: detector only",
         transform=ax.transAxes,
         ha="center",
         va="top",
@@ -274,6 +317,7 @@ def main() -> int:
     start = int(args.window_start)
     stop = int(args.window_start) + int(args.window_frames)
     cube = load_ulm_block_iq(int(args.block_id), frames=slice(start, stop), root=Path(args.data_root))
+    anatomy_bg, anatomy_mask = _compute_anatomy_background(cube, support_mask=support_mask)
     with tempfile.TemporaryDirectory(dir=ROOT / "tmp") as td:
         paths = write_acceptance_bundle_from_icube(
             out_root=Path(td),
@@ -311,9 +355,11 @@ def main() -> int:
     det_pd = np.asarray(scores["pd"] >= tau_pd, dtype=bool)
     det_wp = np.asarray(scores["matched_subspace"] >= tau_wp, dtype=bool)
 
-    y0, y1, x0, x1 = _crop_bbox(mask_flow, mask_bg, support_mask, pad=6)
+    y0, y1, x0, x1 = _crop_bbox(mask_flow, mask_bg, anatomy_mask, pad=6)
     ref_crop = _normalize(ref_map[y0:y1, x0:x1])
     support_crop = support_mask[y0:y1, x0:x1]
+    anatomy_crop = anatomy_mask[y0:y1, x0:x1]
+    anatomy_bg_crop = anatomy_bg[y0:y1, x0:x1]
     flow_crop = mask_flow[y0:y1, x0:x1]
     bg_crop = mask_bg[y0:y1, x0:x1]
     pd_crop = det_pd[y0:y1, x0:x1]
@@ -332,7 +378,7 @@ def main() -> int:
     ax_wp = fig.add_subplot(gs[0, 2])
     ax_diff = fig.add_subplot(gs[0, 3])
 
-    ref_disp = np.ma.masked_where(~support_crop, ref_crop)
+    ref_disp = np.ma.masked_where(~anatomy_crop, ref_crop)
     cmap = plt.get_cmap("magma").copy()
     cmap.set_bad(color=(0.98, 0.98, 0.98, 1.0))
     ax_ref.imshow(ref_disp, cmap=cmap, interpolation="nearest")
@@ -346,11 +392,12 @@ def main() -> int:
 
     _score_panel(
         ax_pd,
-        bg_img=ref_crop,
-        support_mask=support_crop,
+        bg_img=anatomy_bg_crop,
+        anatomy_mask=anatomy_crop,
         core_mask=flow_crop,
         shell_mask=bg_crop,
         det_mask=pd_crop,
+        alpha_img=anatomy_bg_crop,
         color="#ff6b57",
         title="Baseline power Doppler\nmatched 70% core recall",
         auc=float("nan"),
@@ -359,11 +406,12 @@ def main() -> int:
     ax_pd.set_anchor("C")
     _score_panel(
         ax_wp,
-        bg_img=ref_crop,
-        support_mask=support_crop,
+        bg_img=anatomy_bg_crop,
+        anatomy_mask=anatomy_crop,
         core_mask=flow_crop,
         shell_mask=bg_crop,
         det_mask=wp_crop,
+        alpha_img=anatomy_bg_crop,
         color="#4fd1c5",
         title=f"{specialist_name}\nmatched 70% core recall",
         auc=float("nan"),
@@ -372,8 +420,8 @@ def main() -> int:
     ax_wp.set_anchor("C")
     _difference_panel(
         ax_diff,
-        bg_img=ref_crop,
-        support_mask=support_crop,
+        bg_img=anatomy_bg_crop,
+        anatomy_mask=anatomy_crop,
         core_mask=flow_crop,
         shell_mask=bg_crop,
         pd_mask=pd_crop,
