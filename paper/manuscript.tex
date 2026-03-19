@@ -885,7 +885,7 @@ A second transfer analysis uses the same structural endpoint but removes per-win
 \subsubsection{Motion robustness audit}
 \ifPAPERONLY
 \paragraph{Motion audit.}
-A motion-injection audit on ULM-CoreShell and Shin-ProxyMotion provides secondary robustness evidence under controlled residual-motion stress. In those audits, matched-subspace score maps are more stable than the baseline maps, but these results are corroboration rather than the structural efficacy claim that anchors the main real-IQ section.
+A motion-injection audit on ULM-CoreShell and Shin-ProxyMotion provides secondary robustness evidence under controlled residual-motion stress. In those audits, matched-subspace score maps are more stable than the baseline maps, but these results remain corroboration rather than the structural efficacy claim that anchors the main real-IQ section.
 \else
 \paragraph{Nonrigid motion injection and fairness alignment ablation.}
 We evaluate motion robustness by injecting controlled motion directly into the beamformed IQ cube and re-running the baseline plus matched-subspace detector under a frozen ULM profile (PRF $=1000$ Hz; $L_t=64$; tiles $8\times 8$; stride 3; SCM covariance; diagonal loading $\lambda=0.07$; baseline MC--SVD with frozen $e=0.975$). Because motion is injected at the beamformed IQ stage, this test stresses post-beamforming robustness to residual motion mismatch; it does not model channel-domain decorrelation or skull-induced phase-aberration physics. Motion ladders span two nonrigid families: \texttt{brainlike} (rigid random-walk translation plus a smooth, depth-decaying elastic warp with temporally correlated coefficients and micro-jitter) and \texttt{elastic} (nonrigid-only; rigid and micro-jitter disabled). For each amplitude we compute label-free robustness endpoints on the baseline score $S_{\mathrm{base}}$ and the matched-subspace detector score $S_{\mathrm{det,pre}}$ relative to the no-motion reference under three \emph{common} alignment modes (none / common B-mode / injected GT proxy) plus a diagnostic per-method ``self'' alignment. We additionally report degeneracy checks (std ratios, top-$k$ overlap, and tail quantile ratios) to rule out ``stability by collapse.'' Figure~\ref{fig:ulm_brainlike_e975} shows the main \texttt{brainlike} sweep; additional motion variants are provided in \SuppOrApp{app:supp-results}.
@@ -919,24 +919,37 @@ These motion-injection experiments do not replace upstream motion correction or 
 \paragraph{Shin-ProxyMotion.}
 To avoid making the motion-robustness story depend on a single open dataset, we also summarize the strongest existing Shin rat-brain motion-stress result from the supplement \cite{ShinLOCAULM2024,ShinZenodo10711806}. Under a prespecified low-frequency operating setting and a controlled residual-motion stress test, the matched-subspace map is more stable than the MC--SVD baseline map across all three audited windows, while the separate fixed-threshold proxy-transfer check remains negative.
 
+\ifPAPERONLY
+\paragraph{Replay feasibility.}
+Under the reported steady-state replay conditions, the final detector configurations remain below the acquisition-time budget on the labeled-brain, Shin, and Gammex evaluations.
+\else
 \subsection{Computational cost and replay feasibility}
 \label{sec:latency}
-
 We also report representative runtimes for the final detector family evaluated in this manuscript rather than for a whitening-heavy research configuration. In this evaluation, the labeled-brain stress tests use the fixed matched-subspace default with conditional execution, the Shin real-IQ evaluation uses the adaptive variant, and Gammex uses the short-ensemble raw-baseline plus fixed matched-subspace statistic. Conditional execution changes the decision rule by deciding which tiles receive the adaptive detector, so it is reported as part of the detector configuration rather than as a free acceleration of the same method. Unless otherwise stated, conditional-execution reporting uses the same leakage-controlled, disjoint-window proxy discipline as the detection results.
 
 Latency is measured by replaying multiple windows or frames in a single GPU process and reporting \emph{steady-state} means over windows/frames 2..N. The first replay window/frame is excluded because it includes one-time startup overheads. We time the baseline and detector stages separately, excluding disk I/O, and ``Total'' reports baseline plus detector wall time. ``Budget'' denotes the acquired slow-time duration of the corresponding ensemble: $64/1500\approx 42.7$~ms for the brain windows, $128/1000=128$~ms for Shin, and $17/2500=6.8$~ms for the Gammex cines. The reported real-time factor (RTF) is therefore $\text{Total}/\text{Budget}$.
 
-\ifPAPERONLY
-In the final reported configurations, all three labeled-brain stress tests run below the full acquisition-PRF budget (RTF $\approx 0.86$--$0.88$), the Shin real-IQ evaluation remains below budget (RTF $\approx 0.84$), and both Gammex views run below the 17-shot cine-frame budget (RTF $\approx 0.88$ along-view and $\approx 0.64$ across-view).
-\else
 \input{reports/paper/latency_named_preset_rtx4080_prf_product_v1_table.tex}
 
 Table~\ref{tab:latency_summary_4080super_product} shows that the replay picture is substantially better in the final reported configurations than in a dense fully whitened setup. All three labeled-brain stress tests run below the full acquisition-PRF budget (RTF $\approx 0.86$--$0.88$), the Shin rat-brain real-IQ evaluation also remains below budget (RTF $\approx 0.84$), and both Gammex views run below the 17-shot cine-frame budget (RTF $\approx 0.88$ along-view and $\approx 0.64$ across-view).\footnote{Latency is reported from steady-state replay (windows/frames 2..N) and excludes startup overhead and disk I/O. Table~\ref{tab:latency_summary_4080super_product} reports the final detector family used in the manuscript rather than a single worst-case fully whitened configuration applied everywhere.} These timings support workstation replay feasibility for the reported configurations, but not scanner-integrated or cross-session deployment.
+A leakage ablation confirms that conditional execution can inflate apparent performance under same-window proxy gating, while leakage-controlled gating yields a small TPR decrease (order $10^{-3}$) at the target FPRs. The full open-skull leakage table with bootstrap intervals is provided in the \SuppOrApp{app:supp-results}.
 \fi
 
-A leakage ablation confirms that conditional execution can inflate apparent performance under same-window proxy gating, while leakage-controlled gating yields a small TPR decrease (order $10^{-3}$) at the target FPRs. The full open-skull leakage table with bootstrap intervals is provided in the \SuppOrApp{app:supp-results}.
-
 \FloatBarrier
+\ifPAPERONLY
+\section{Closing perspective}
+\label{sec:discussion}
+
+Post-beamformed fUS benefits from a better downstream detection statistic, not only from a better clutter filter. On the held-out same-residual SIMUS benchmark, the fixed statistic lowers intra-operative nuisance FPR from 0.998 for Kasai to 0.004 at matched 50\% target-flow recall, while the separate best-chain benchmark yields zero observed nuisance detections on all four held-out seed-setting pairs. The mechanism is setting-dependent: the fixed band-limited statistic is the structural default, while stronger whitening helps in narrower clutter-dominant settings.
+
+The open real-IQ sections should be read more narrowly. The ULM structural evaluation is directionally positive and favors the fully whitened variant, but it remains a conservative structural corroboration of a detector-stage effect already established on held-out same-residual benchmarks rather than a completed functional validation. In practice, the fixed statistic is the default; the fully whitened variant is reserved for persistently clutter-dominant windows when the latency budget allows it.
+
+\section*{Collaboration opportunities}
+The clearest next test is prospective validation on real task-driven fUS data. A collaborator would provide raw complex IQ or beamformed slow-time data, PRF and acquisition metadata, stimulus or task timing, and, when available, an independent structural anchor such as a localization-derived vascular map or structural co-registration. We would run the detector family as a drop-in replacement for the final PD/Kasai-style readout on the collaborator's existing clutter-filtered residual pipeline, produce same-residual comparisons against PD/Kasai-style scores, and evaluate task-activation or structural readouts with the collaborator's current downstream analysis workflow rather than replacing it. The intended output is a joint validation study, positive or negative, together with a reusable evaluation harness the collaborator can continue using on future datasets. Collaborators would also receive the full detector implementation configured for their acquisition parameters, together with the evaluation harness, for use on future datasets. The contribution from this side is the tested detector implementation, the same-residual evaluation protocol, and the computational work needed to run the comparisons and package the results. The author welcomes collaboration inquiries from labs with raw fUS IQ data and task paradigms; correspondence to \href{mailto:arthur@skymesasystems.com}{arthur@skymesasystems.com}.
+
+\section*{Data and code availability}
+All datasets used in this work are publicly available or derived deterministically from those sources. The reference implementation, reproduction scripts, and canonical commit information are available at \path{https://github.com/ArthurShune/fus-detectors}; the repository is released under the MIT License and is the reference implementation used for the reported analyses (\SuppOrApp{app:repro}).
+\else
 \section{Discussion}
 \label{sec:discussion}
 
@@ -973,6 +986,7 @@ All datasets used in this work are either publicly available (as cited) or deriv
 
 \paragraph{Code repository.}
 The reference implementation and reproduction scripts are available at \path{https://github.com/ArthurShune/fus-detectors}. The repository is released under the MIT License, and the public codebase is the reference implementation used for the reported analyses. The canonical commit hash and release information are recorded in the reproducibility manifest (\SuppOrApp{app:repro}).
+\fi
 
 \fi % end main-text block (skipped in supplement-only build)
 \FloatBarrier
