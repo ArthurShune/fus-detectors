@@ -282,6 +282,7 @@ To mitigate the degraded tail sensitivity of global low-rank filters in high-clu
   \wh R_i := \frac{1}{K}\sum_{k=1}^K x_{i,k}x_{i,k}\Hh,
 \]
 apply conditioning/diagonal loading to obtain $R_i$, and whiten snapshots as $y_{i,k}:=R_i^{-1/2}x_{i,k}$.
+Here whitening means locally rescaling the residual by its estimated slow-time covariance so recurring nuisance patterns are less likely to dominate the score.
 \paragraph{Training support and Hankel dependence.}
 In the fully Hankelized case, each pixel in $\Omega_i$ contributes $N=T-L_t+1$ overlapping slow-time snapshots; pooling across the $|\Omega_i|$ pixels yields $K=N|\Omega_i|$ tile-local training vectors. These Hankelized snapshots are temporally correlated due to overlap, so $K$ should not be interpreted as an independent-sample count. Our robust covariance estimators do not require independence, but the effective support can be significantly smaller than $K$; Hankel columns are therefore optionally subsampled (stride) and capped to bound computation and avoid overweighting highly correlated samples (fixed per setting; \SuppOrApp{app:repro}).
 
@@ -308,6 +309,7 @@ Figure~\ref{fig:hankelization_local_stap} illustrates the local tile extraction 
 
 \paragraph{Band operators and matched-subspace detector score.}
 We partition the Doppler spectrum into clutter/DC, flow, guard, and alias bands using projectors $(\Po,\Pf,\Pg,\Pa)$ (Notation). For short ensembles, these are exact, orthogonal DFT-bin projectors with $\Po+\Pf+\Pg+\Pa=I$; for longer apertures they are leakage-controlled operators that are approximately orthogonal and are treated as band-energy statistics. We define a matched-subspace detector statistic by flow-subspace energy on whitened snapshots, e.g.,
+In plain terms, $\Pf$ is the flow band we want to detect, while $\Pg$ and $\Pa$ capture transition-band and aliased nuisance energy.
 \ifPAPERONLY
 \[
   S_{\mathrm{det}}(i) := \frac{1}{K}\sum_{k=1}^K
@@ -397,6 +399,7 @@ All processing settings (tile geometry, aperture, band definitions, conditioning
   \mathrm{TPR}(\alpha)=\mathbb{P}\{S\ge \tau_\alpha\mid H_1\}.
 \]
 For each experiment, we report the supported floor $fpr_{\min}=1/n_{\mathrm{neg}}$ and bootstrap uncertainty at the natural unit of variation (windows or frames, depending on setting). These choices enforce a strict low-FPR operating discipline and avoid over-interpreting unsupported tail points.
+These operating points are stress tests for rare false detections, not proposed clinical thresholds.
 We emphasize $\alpha=10^{-3}$--$10^{-4}$ because those operating points expose nuisance-tail failure modes cleanly, not because routine fUS use must literally operate at those exact values. The same map-trustworthiness problem is already visible at a conventional matched background FPR of $10^{-2}$ in the worked Gammex example of Figure~\ref{fig:leading_structural_fidelity}, where the baseline thresholded map is dominated by off-lumen detections while the matched-subspace score recovers lumen-consistent structure.
 
 \begin{figure}[t]
