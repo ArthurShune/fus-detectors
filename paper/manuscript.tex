@@ -157,14 +157,14 @@ For each spatial location (or tile-aggregated snapshot), let $x\in\mathbb{C}^{L_
 \[
 H_0:\ x=c+n,\qquad H_1:\ x=s+c+n,
 \]
-where $s$ is flow-consistent signal, $c$ is structured clutter/motion, and $n$ is residual noise. In practice, $H_0$ is spatially nonstationary and heavy-tailed, motivating local covariance adaptation and tail-focused evaluation.
+where $s$ is flow-consistent signal, $c$ is structured clutter or motion, and $n$ is residual noise.
 
 \paragraph{Core notation and bands.}
-We use band operators $(\Po,\Pf,\Pg,\Pa)$ for clutter/DC, flow, guard, and alias regions, respectively. Physically, $\Pf$ is the Doppler band where the targeted microvascular flow is expected, $\Pg$ is a transition guard band, and $\Pa$ captures aliased high-velocity flow or vibration. For short ensembles, these are exact orthogonal DFT-bin projectors; for longer apertures they are leakage-controlled analysis operators and are treated as band-energy statistics with explicit sanity sentinels (\SuppOrApp{app:alg-details}).
+We use band operators $(\Po,\Pf,\Pg,\Pa)$ for clutter/DC, flow, guard, and alias regions, respectively. Physically, $\Pf$ is the Doppler band where the targeted microvascular flow is expected, $\Pg$ is a transition guard band, and $\Pa$ captures aliased high-velocity flow or vibration. Band-discretization details and sentinels are documented in \SuppOrApp{app:alg-details}.
 
 \subsection{Related context}
 \ifPAPERONLY
-Spatiotemporal SVD, RPCA, HOSVD, and local adaptive clutter filtering are established in ultrafast Doppler and fUS, and learned clutter filters are relevant prior work on the residual-formation side of the pipeline \cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018,CandesRPCA,SolomonDeepUnfoldedRPCA2020,HuangAdaptiveHOSVD2024}. These methods improve the residual itself; none explicitly evaluates the downstream detection statistic as a separable design choice on the same residual. The question here is narrower: once a clutter-filtered slow-time cube has been fixed, can the downstream detection statistic reduce artifact leakage more effectively than PD- or Kasai-style readouts? That separates this paper from Yu-, Baranger-, and Song-style local clutter filtering, which adapts the clutter filter itself before a conventional Doppler score is applied \cite{YuLovstakkenEigenReview2010,SongBlockwiseLocal2017,CheeGPUEigen2017}. ULM motion correction, twinkling-phantom structure audits, and hemodynamic fUS readouts therefore enter here as evaluation context and downstream audits rather than as the primary algorithmic contribution.
+Spatiotemporal SVD, RPCA, HOSVD, local adaptive clutter filtering, and learned clutter filters are established ways to improve the residual itself in ultrafast Doppler and fUS \cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018,CandesRPCA,SolomonDeepUnfoldedRPCA2020,HuangAdaptiveHOSVD2024}. The question here is narrower: once a clutter-filtered slow-time cube has been fixed, can the downstream detection statistic reduce artifact leakage more effectively than PD- or Kasai-style readouts on that same residual? That separates this paper from Yu-, Baranger-, and Song-style methods, which adapt the clutter filter itself before a conventional Doppler score is applied \cite{YuLovstakkenEigenReview2010,SongBlockwiseLocal2017,CheeGPUEigen2017}.
 \else
 \textbf{Ultrasound clutter suppression.} Spatiotemporal SVD clutter filters are a standard tool in ultrafast Doppler and fUS \cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018,Mace2013,Rabut2020,ICDFUS2021}. Real-time feasibility has been studied via randomized/approximate decompositions and GPU implementations \cite{LokRandomizedSVD2020,CheeGPUEigen2017}. Robust PCA and tensor/HOSVD variants have also been studied for clutter suppression and motion robustness \cite{CandesRPCA,SolomonDeepUnfoldedRPCA2020,HuangAdaptiveHOSVD2024}. These methods improve the residual itself; none explicitly evaluates the downstream detection statistic as a separable design choice on the same residual. We benchmark against representative ultrasound-native clutter-filter families, including adaptive-global SVD, local block-wise SVD, adaptive-local SVD, RPCA, HOSVD, and conventional Doppler detection statistics.
 
@@ -182,25 +182,16 @@ Spatiotemporal SVD, RPCA, HOSVD, and local adaptive clutter filtering are establ
 \fi
 
 \subsection{Baseline scores and detector definitions}
-\paragraph{Beamformed slow-time data.}
-Let $X[t,y,x]\in\mathbb{C}$ denote a beamformed slow-time IQ movie over $t=0,\dots,T-1$ and spatial indices $(y,x)$. We first apply a baseline clutter-suppression operator (e.g.\ motion-compensated SVD), producing a residual cube $X_{\mathrm{base}}[t,y,x]$ used for both baseline scoring and as the input to the detector family.
-
-\paragraph{Power Doppler proxy and baseline scores.}
-From the baseline-filtered cube we define the baseline ROC score map
+\paragraph{Baseline residual and baseline score.}
+Let $X[t,y,x]\in\mathbb{C}$ denote a beamformed slow-time IQ movie over $t=0,\dots,T-1$ and spatial indices $(y,x)$. A baseline clutter-suppression operator (e.g.\ motion-compensated SVD) produces a residual cube $X_{\mathrm{base}}[t,y,x]$, from which we define the baseline ROC score map
 \begin{equation}
   S_{\mathrm{base}}(y,x):=\frac{1}{T}\sum_{t=0}^{T-1}\left|X_{\mathrm{base}}(t,y,x)\right|^2.
   \label{eq:sbase}
 \end{equation}
-This is ordinary power Doppler on $X_{\mathrm{base}}$. For short-ensemble settings we additionally report auxiliary conventional comparators such as log-power Doppler and Kasai lag-1 magnitude \cite{KasaiAutocorrelation1985} so that baseline-score idiosyncrasies do not dominate the comparison.
-
-\noindent When the same power statistic is used only as a display or proxy map for deterministic preprocessing, we write
-\[
-  \mathrm{PD}^{\uparrow}(y,x)\equiv S_{\mathrm{base}}(y,x),
-\]
-to make it explicit that the quantity is being used for visualization or mask construction rather than as the ROC score itself.
+This is ordinary power Doppler on $X_{\mathrm{base}}$; short-ensemble sections additionally compare against Kasai lag-1 magnitude and related conventional readouts \cite{KasaiAutocorrelation1985}.
 \addtocounter{table}{1}
 \ifPAPERONLY
-$S_{\mathrm{base}}$ denotes the baseline ROC score map on $X_{\mathrm{base}}$, $S_{\mathrm{det}}$ the matched-subspace detector score map, and $\mathrm{PD}^{\uparrow}$ a display or proxy map used only for visualization or deterministic preprocessing rather than for ROC scoring. Unless explicitly stated, the detector family consists of three variants built from the same band-limited statistic family: a fixed matched-subspace statistic without whitening, a prespecified adaptive variant that promotes selected pixels onto a whitened branch when guard-band evidence indicates clutter, and a fully whitened covariance-adaptive variant.
+$S_{\mathrm{base}}$ denotes the baseline ROC score map on $X_{\mathrm{base}}$, and $S_{\mathrm{det}}$ the matched-subspace detector score map. Unless otherwise stated, the detector family consists of a fixed statistic, a prespecified adaptive statistic, and a fully whitened covariance-adaptive variant.
 \else
 $S_{\mathrm{base}}$ denotes the baseline ROC score map on $X_{\mathrm{base}}$, $S_{\mathrm{det,pre}}$ the pre-regularization matched-subspace detector score map, $S_{\mathrm{det,post}}$ the optional shrink-only post-regularization score map, and $\mathrm{PD}^{\uparrow}$ a display or proxy map used only for visualization or deterministic preprocessing rather than for ROC scoring. Unless explicitly stated, the detector family consists of three pre-regularization variants built from the same band-limited statistic family: a fixed matched-subspace statistic without whitening, a prespecified adaptive variant that promotes selected pixels onto a whitened branch when guard-band evidence indicates clutter, and a fully whitened covariance-adaptive variant. The shrink-only regularizer is analyzed separately as an optional post-processing layer.
 \fi
@@ -211,19 +202,10 @@ $S_{\mathrm{base}}$ denotes the baseline ROC score map on $X_{\mathrm{base}}$, $
 \label{sec:ka-contract-v2} % Backward-compatible label used throughout.
 
 \paragraph{What changes relative to SVD + PD.}
-Relative to a conventional ultrafast Doppler pipeline, the proposed detector family changes the final detection statistic rather than replacing upstream clutter suppression. After forming a clutter-filtered slow-time residual, we score its energy inside a prespecified flow subspace rather than using only aggregate Doppler power. The simplest fixed statistic uses that score without local whitening, a prespecified adaptive variant promotes clutter-heavy pixels onto a whitened branch only when guard-band evidence warrants it, and a fully whitened variant is retained for settings where stronger local adaptation is beneficial. The goal is not simply to increase vessel conspicuity, but to reduce nuisance-driven high scores in operating regions where false positives matter.
+Relative to a conventional ultrafast Doppler pipeline, the proposed detector family changes the final detection statistic rather than replacing upstream clutter suppression. After forming a clutter-filtered slow-time residual, we score its energy inside a prespecified flow subspace rather than using only aggregate Doppler power. The detector family has three variants: a fixed statistic, a prespecified adaptive statistic that whitens only clutter-dominant neighborhoods, and a fully whitened variant for settings where stronger local adaptation is beneficial.
 
 \paragraph{Plain-language interpretation.}
-The fixed statistic is a local band-limited flow detector applied after ordinary clutter filtering. The adaptive branch adds tile-local whitening only where guard-band energy indicates localized clutter.
-
-\paragraph{Pipeline overview.}
-\begin{enumerate}[nosep,leftmargin=1.6em,label=\arabic*.]
-  \item Baseline clutter suppression (e.g.\ MC--SVD) produces a residual cube $X_{\mathrm{base}}$ and baseline score $S_{\mathrm{base}}(y,x)$.
-  \item \ifPAPERONLY For each tile $\Omega_i$, form the local slow-time support used by the chosen detection statistic; when whitening is active, apply the fixed setting-specific local covariance transform $y_{i,k}=R_i^{-1/2}x_{i,k}$. \else For each tile $\Omega_i$: form slow-time snapshots $\{x_{i,k}\}_{k=1}^K$ via spatial sampling and, optionally, a sliding-window temporal embedding (Hankel matrix construction), estimate conditioned covariance $R_i$, and either keep the raw snapshots or whiten them as $y_{i,k}=R_i^{-1/2}x_{i,k}$. \fi
-  \item Compute the self-normalized matched-subspace score on the chosen tile representation and aggregate over overlapping tiles to obtain the detector output map. The fixed and fully whitened forms are given explicitly in Eqs.~\eqref{eq:s0} and \eqref{eq:sw}; setting $R_i=I$ recovers the simpler band-limited fixed statistic.
-  \item If the adaptive variant is used, retain the fixed statistic by default and promote pixels onto the whitened branch only where a prespecified guard-band clutter feature exceeds a fixed threshold.
-\end{enumerate}
-\noindent In practical terms, the method asks a local question after ordinary clutter suppression: within a small spatial neighborhood, does the remaining slow-time activity look more like microvascular flow or more like locally structured nuisance? Detector-core ablations on labeled brain simulations and the Gammex phantom are reported in the main Results.
+The fixed statistic is a local band-limited flow detector applied after ordinary clutter filtering. In practical terms, the method asks a local question after ordinary clutter suppression: within a small spatial neighborhood, does the remaining slow-time activity look more like microvascular flow or more like locally structured nuisance? The adaptive branch adds tile-local whitening only where guard-band energy indicates localized clutter. Figure~\ref{fig:stap_pipeline} summarizes the pipeline.
 
 \begin{figure}[t]
 \centering
@@ -242,8 +224,6 @@ The fixed statistic is a local band-limited flow detector applied after ordinary
 \label{fig:stap_pipeline}
 \end{figure}
 
-The derivations below formalize the three detector modes introduced above.
-
 \paragraph{Three detector variants.}
 On tile $i$, let $x_{i,k}$ denote the unwhitened slow-time snapshots and $y_{i,k}=R_i^{-1/2}x_{i,k}$ the whitened snapshots when whitening is active. The fixed detector is
 \begin{equation}
@@ -251,15 +231,13 @@ On tile $i$, let $x_{i,k}$ denote the unwhitened slow-time snapshots and $y_{i,k
   \frac{x_{i,k}\Hh \Pf\, x_{i,k}}{x_{i,k}\Hh (I-\Pf)\, x_{i,k}+\rho\, x_{i,k}\Hh x_{i,k}+\epsilon},
   \label{eq:s0}
 \end{equation}
-which is the same band-limited matched-subspace ratio with $R_i=I$.
-\noindent The fixed detector rewards energy in the slow-time band where microvascular flow is expected and penalizes residual energy elsewhere; whitening is added only when the local residual looks clutter-dominated.
+which omits local whitening.
 \begin{equation}
   S_{w}(i):=\frac{1}{K}\sum_{k=1}^K
   \frac{y_{i,k}\Hh \Pf\, y_{i,k}}{y_{i,k}\Hh (I-\Pf)\, y_{i,k}+\rho\, y_{i,k}\Hh y_{i,k}+\epsilon}.
   \label{eq:sw}
 \end{equation}
-In plain language, the numerator measures energy in the expected flow band, while the denominator measures energy everywhere else plus a small stabilizing ridge; the ratio is high only when flow-band energy dominates the rest of the slow-time spectrum.
-The detector family has three concrete variants. The fixed detector uses $S_{0}(i)$ everywhere. The prespecified adaptive detector uses
+The fixed detector uses $S_{0}(i)$ everywhere. The prespecified adaptive detector uses
 \begin{equation}
   S(i)=
   \begin{cases}
@@ -268,12 +246,9 @@ The detector family has three concrete variants. The fixed detector uses $S_{0}(
   \end{cases}
   \label{eq:sadapt}
 \end{equation}
-where $r^{\mathrm{base}}_{g}(i)$ is a baseline guard-band energy fraction and $\tau_g$ is fixed once and then held fixed across all reported experiments. The fully whitened detector uses $S_{w}(i)$ everywhere. In words, the adaptive detector keeps the simpler score in clean tiles and only turns on full whitening where the residual itself shows guard-band evidence of localized clutter.
+where $r^{\mathrm{base}}_{g}(i)$ is a baseline guard-band energy fraction and $\tau_g$ is fixed once for the setting. The fully whitened detector uses $S_{w}(i)$ everywhere.
 
 \ifPAPERONLY
-\paragraph{Tile support and switching rule.}
-All reported detectors operate on overlapping local tiles. In the main quantitative settings, the spatial support is fixed at $8\times 8$ pixels, with slow-time aperture $L_t=8$ for kWave-Stress, $L_t=16$ for Gammex-Struct, and $L_t=64$ for SIMUS-Struct and ULM-CoreShell. The adaptive rule evaluates the baseline guard-band fraction $r^{\mathrm{base}}_{g}(i)$ on each tile and switches from $S_0(i)$ to $S_w(i)$ only when $r^{\mathrm{base}}_{g}(i)\ge \tau_g$; otherwise the fixed score is retained.
-
 \else
 \subsection{Localized detector core and Doppler band geometry}
 \paragraph{Tile-based detector family.}
@@ -371,7 +346,6 @@ This self-normalized statistic is the pre-regularization detector score $S_{\mat
 \fi
 
 \ifPAPERONLY
-\noindent Proxy construction, band discretization, and conditional-execution checks are deterministic. Invalid configurations are excluded from reporting, and decision-rule variants such as conditional execution are reported separately from the default detector pipeline.
 \else
 \subsection{Algorithmic integrity and deterministic safeguards}
 To make the architecture auditable and to avoid leakage or discretization artifacts masquerading as performance gains, we enforce deterministic, label-free safeguards:
