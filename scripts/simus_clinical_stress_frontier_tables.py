@@ -215,6 +215,16 @@ def _fmt_ci(point: float | str | None, ci: tuple[float, float] | None = None) ->
     return rf"${p:.3f}_{{{lo:.3f}}}^{{{hi:.3f}}}$"
 
 
+def _fmt_ci_bracket(point: float | str | None, ci: tuple[float, float] | None = None) -> str:
+    if point is None:
+        return "--"
+    p = float(point)
+    if ci is None:
+        return f"{p:.3f}"
+    lo, hi = ci
+    return f"{p:.3f} [{lo:.3f}, {hi:.3f}]"
+
+
 def _arrow_metric_cell(
     public: dict[str, str],
     detector: dict[str, str],
@@ -359,29 +369,28 @@ def _frozen_rpca_heads_table(rows: list[dict[str, str]]) -> str:
     lines = [
         r"\begin{center}",
         r"\captionsetup{type=table}",
-        r"\scriptsize",
+        r"\footnotesize",
         r"\setlength{\tabcolsep}{3pt}",
+        r"\renewcommand{\arraystretch}{1.15}",
     ]
     for axis_key in sorted(AXIS_META, key=lambda k: AXIS_ORDER[k]):
         meta = AXIS_META[axis_key]
         lines.extend(
             [
                 rf"\par\medskip\noindent\textbf{{{meta['label']}}}\par\medskip",
-                r"\resizebox{\linewidth}{!}{%",
-                r"\begin{tabular}{@{}P{3.7cm} P{2.2cm} P{2.2cm} P{2.2cm} P{2.2cm}@{}}",
+                r"\begin{tabular}{@{}P{3.0cm} P{2.4cm} P{2.4cm} P{2.4cm} P{2.4cm}@{}}",
                 r"\hline",
-                r"Level / perturbation & Baseline (RPCA$\rightarrow$PD) & Fixed statistic & Adaptive statistic & Whitened variant \\",
+                r"Metric & Baseline (RPCA$\rightarrow$PD) & Fixed statistic & Adaptive statistic & Whitened variant \\",
                 r"\hline",
             ]
         )
         for level in sorted(meta["levels"], key=lambda l: LEVEL_ORDER[l]):
-            condition_cell = rf"\shortstack[l]{{{LEVEL_DISPLAY[level]}\\{meta['levels'][level]}}}"
             public = _best_by(rows, split="eval", role="public", axis_key=axis_key, level=level)
-            row_cells = [condition_cell]
             public_ci = _row_intervals(public, interval_cache)
-            row_cells.append(
-                rf"\shortstack[l]{{{_fmt_ci(public['auc_main_vs_nuisance'], public_ci['auc_main_vs_nuisance'])}\\{_fmt_ci(public['fpr_nuisance_match@0p5'], public_ci['fpr_nuisance_match@0p5'])}}}"
-            )
+            auc_cells = [r"AUC$_{\mathrm{main/nuis}}$"]
+            fpr_cells = [r"FPR$_{\mathrm{nuis}}$@$0.5$"]
+            auc_cells.append(_fmt_ci_bracket(public["auc_main_vs_nuisance"], public_ci["auc_main_vs_nuisance"]))
+            fpr_cells.append(_fmt_ci_bracket(public["fpr_nuisance_match@0p5"], public_ci["fpr_nuisance_match@0p5"]))
             for detector_name in DETECTOR_ORDER:
                 detector = _best_detector_by_name(
                     rows,
@@ -392,16 +401,17 @@ def _frozen_rpca_heads_table(rows: list[dict[str, str]]) -> str:
                     detector_name=detector_name,
                 )
                 det_ci = _row_intervals(detector, interval_cache)
-                row_cells.append(
-                    rf"\shortstack[l]{{{_fmt_ci(detector['auc_main_vs_nuisance'], det_ci['auc_main_vs_nuisance'])}\\{_fmt_ci(detector['fpr_nuisance_match@0p5'], det_ci['fpr_nuisance_match@0p5'])}}}"
-                )
-            lines.append(" & ".join(row_cells) + r" \\")
-        lines.extend([r"\hline", r"\end{tabular}", r"}"])
+                auc_cells.append(_fmt_ci_bracket(detector["auc_main_vs_nuisance"], det_ci["auc_main_vs_nuisance"]))
+                fpr_cells.append(_fmt_ci_bracket(detector["fpr_nuisance_match@0p5"], det_ci["fpr_nuisance_match@0p5"]))
+            lines.append(rf"\multicolumn{{5}}{{@{{}}l@{{}}}}{{\textbf{{{LEVEL_DISPLAY[level]}}} {meta['levels'][level]}}} \\")
+            lines.append(" & ".join(auc_cells) + r" \\")
+            lines.append(" & ".join(fpr_cells) + r" \\")
+        lines.extend([r"\hline", r"\end{tabular}"])
         if axis_key != "short_ensemble":
             lines.append(r"\medskip")
     lines.extend(
         [
-            r"\caption{Held-out SIMUS mobile stress setting with RPCA fixed as the clutter filter on every row. Entries report AUC$_{\mathrm{main/nuis}}$ (top) and FPR$_{\mathrm{nuis}}$@$0.5$ (bottom), with point estimates shown as $x_{\mathrm{lo}}^{\mathrm{hi}}$ using 95\% nonparametric bootstrap intervals over the held-out masked score samples. RPCA is used because RPCA $\rightarrow$ PD is the strongest conventional baseline among evaluated methods on every reported stress row. This table separates the fixed, adaptive, and fully whitened detector statistics directly instead of reporting only the best family member on each row.}",
+            r"\caption{Held-out SIMUS mobile stress setting with RPCA fixed as the clutter filter on every row. Entries report AUC$_{\mathrm{main/nuis}}$ and FPR$_{\mathrm{nuis}}$@$0.5$, with point estimates shown as $x$ [lo, hi] using 95\% nonparametric bootstrap intervals over the held-out masked score samples. RPCA is used because RPCA $\rightarrow$ PD is the strongest conventional baseline among evaluated methods on every reported stress row. This table separates the fixed, adaptive, and fully whitened detector statistics directly instead of reporting only the best family member on each row.}",
             r"\label{tab:simus_stress_frontier_rpca_heads}",
             r"\end{center}",
             "",

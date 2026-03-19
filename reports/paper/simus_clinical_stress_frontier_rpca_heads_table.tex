@@ -1,32 +1,41 @@
 \begin{center}
 \captionsetup{type=table}
-\scriptsize
+\footnotesize
 \setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
 \par\medskip\noindent\textbf{Cardiac-like pulsation}\par\medskip
-\resizebox{\linewidth}{!}{%
-\begin{tabular}{@{}P{3.7cm} P{2.2cm} P{2.2cm} P{2.2cm} P{2.2cm}@{}}
+\begin{tabular}{@{}P{3.0cm} P{2.4cm} P{2.4cm} P{2.4cm} P{2.4cm}@{}}
 \hline
-Level / perturbation & Baseline (RPCA$\rightarrow$PD) & Fixed statistic & Adaptive statistic & Whitened variant \\
+Metric & Baseline (RPCA$\rightarrow$PD) & Fixed statistic & Adaptive statistic & Whitened variant \\
 \hline
-\shortstack[l]{Ref.\\1.0x cardiac amplitude at 1.30 Hz} & \shortstack[l]{$0.381_{0.345}^{0.416}$\\$0.743_{0.652}^{0.842}$} & \shortstack[l]{$0.879_{0.860}^{0.898}$\\$0.034_{0.023}^{0.047}$} & \shortstack[l]{$0.879_{0.860}^{0.898}$\\$0.034_{0.023}^{0.046}$} & \shortstack[l]{$0.911_{0.894}^{0.925}$\\$0.017_{0.008}^{0.027}$} \\
-\shortstack[l]{Mod.\\2.0x cardiac amplitude at 1.30 Hz} & \shortstack[l]{$0.388_{0.354}^{0.423}$\\$0.668_{0.593}^{0.795}$} & \shortstack[l]{$0.877_{0.857}^{0.895}$\\$0.049_{0.030}^{0.064}$} & \shortstack[l]{$0.877_{0.857}^{0.895}$\\$0.049_{0.030}^{0.064}$} & \shortstack[l]{$0.903_{0.886}^{0.920}$\\$0.030_{0.019}^{0.043}$} \\
-\shortstack[l]{Hard\\3.0x cardiac amplitude at 1.30 Hz} & \shortstack[l]{$0.399_{0.365}^{0.433}$\\$0.609_{0.537}^{0.770}$} & \shortstack[l]{$0.875_{0.854}^{0.893}$\\$0.044_{0.029}^{0.058}$} & \shortstack[l]{$0.875_{0.854}^{0.894}$\\$0.044_{0.029}^{0.059}$} & \shortstack[l]{$0.905_{0.890}^{0.921}$\\$0.027_{0.017}^{0.041}$} \\
+\multicolumn{5}{@{}l@{}}{\textbf{Ref.} 1.0x cardiac amplitude at 1.30 Hz} \\
+AUC$_{\mathrm{main/nuis}}$ & 0.381 [0.345, 0.416] & 0.879 [0.860, 0.898] & 0.879 [0.860, 0.898] & 0.911 [0.894, 0.925] \\
+FPR$_{\mathrm{nuis}}$@$0.5$ & 0.743 [0.652, 0.842] & 0.034 [0.023, 0.047] & 0.034 [0.023, 0.046] & 0.017 [0.008, 0.027] \\
+\multicolumn{5}{@{}l@{}}{\textbf{Mod.} 2.0x cardiac amplitude at 1.30 Hz} \\
+AUC$_{\mathrm{main/nuis}}$ & 0.388 [0.354, 0.423] & 0.877 [0.857, 0.895] & 0.877 [0.857, 0.895] & 0.903 [0.886, 0.920] \\
+FPR$_{\mathrm{nuis}}$@$0.5$ & 0.668 [0.593, 0.795] & 0.049 [0.030, 0.064] & 0.049 [0.030, 0.064] & 0.030 [0.019, 0.043] \\
+\multicolumn{5}{@{}l@{}}{\textbf{Hard} 3.0x cardiac amplitude at 1.30 Hz} \\
+AUC$_{\mathrm{main/nuis}}$ & 0.399 [0.365, 0.433] & 0.875 [0.854, 0.893] & 0.875 [0.854, 0.894] & 0.905 [0.890, 0.921] \\
+FPR$_{\mathrm{nuis}}$@$0.5$ & 0.609 [0.537, 0.770] & 0.044 [0.029, 0.058] & 0.044 [0.029, 0.059] & 0.027 [0.017, 0.041] \\
 \hline
 \end{tabular}
-}
 \medskip
 \par\medskip\noindent\textbf{Short ensemble}\par\medskip
-\resizebox{\linewidth}{!}{%
-\begin{tabular}{@{}P{3.7cm} P{2.2cm} P{2.2cm} P{2.2cm} P{2.2cm}@{}}
+\begin{tabular}{@{}P{3.0cm} P{2.4cm} P{2.4cm} P{2.4cm} P{2.4cm}@{}}
 \hline
-Level / perturbation & Baseline (RPCA$\rightarrow$PD) & Fixed statistic & Adaptive statistic & Whitened variant \\
+Metric & Baseline (RPCA$\rightarrow$PD) & Fixed statistic & Adaptive statistic & Whitened variant \\
 \hline
-\shortstack[l]{Ref.\\64 frames (42.7 ms)} & \shortstack[l]{$0.381_{0.345}^{0.415}$\\$0.743_{0.649}^{0.840}$} & \shortstack[l]{$0.879_{0.861}^{0.897}$\\$0.034_{0.023}^{0.046}$} & \shortstack[l]{$0.879_{0.859}^{0.898}$\\$0.034_{0.023}^{0.047}$} & \shortstack[l]{$0.911_{0.895}^{0.926}$\\$0.017_{0.008}^{0.027}$} \\
-\shortstack[l]{Mod.\\48 frames (32.0 ms)} & \shortstack[l]{$0.390_{0.356}^{0.423}$\\$0.754_{0.708}^{0.814}$} & \shortstack[l]{$0.784_{0.758}^{0.807}$\\$0.137_{0.102}^{0.169}$} & \shortstack[l]{$0.784_{0.759}^{0.808}$\\$0.137_{0.103}^{0.167}$} & \shortstack[l]{$0.846_{0.824}^{0.868}$\\$0.058_{0.034}^{0.080}$} \\
-\shortstack[l]{Hard\\32 frames (21.3 ms)} & \shortstack[l]{$0.426_{0.392}^{0.462}$\\$0.617_{0.536}^{0.727}$} & \shortstack[l]{$0.772_{0.746}^{0.796}$\\$0.166_{0.139}^{0.194}$} & \shortstack[l]{$0.772_{0.746}^{0.797}$\\$0.166_{0.139}^{0.193}$} & \shortstack[l]{$0.716_{0.686}^{0.745}$\\$0.160_{0.130}^{0.207}$} \\
+\multicolumn{5}{@{}l@{}}{\textbf{Ref.} 64 frames (42.7 ms)} \\
+AUC$_{\mathrm{main/nuis}}$ & 0.381 [0.345, 0.415] & 0.879 [0.861, 0.897] & 0.879 [0.859, 0.898] & 0.911 [0.895, 0.926] \\
+FPR$_{\mathrm{nuis}}$@$0.5$ & 0.743 [0.649, 0.840] & 0.034 [0.023, 0.046] & 0.034 [0.023, 0.047] & 0.017 [0.008, 0.027] \\
+\multicolumn{5}{@{}l@{}}{\textbf{Mod.} 48 frames (32.0 ms)} \\
+AUC$_{\mathrm{main/nuis}}$ & 0.390 [0.356, 0.423] & 0.784 [0.758, 0.807] & 0.784 [0.759, 0.808] & 0.846 [0.824, 0.868] \\
+FPR$_{\mathrm{nuis}}$@$0.5$ & 0.754 [0.708, 0.814] & 0.137 [0.102, 0.169] & 0.137 [0.103, 0.167] & 0.058 [0.034, 0.080] \\
+\multicolumn{5}{@{}l@{}}{\textbf{Hard} 32 frames (21.3 ms)} \\
+AUC$_{\mathrm{main/nuis}}$ & 0.426 [0.392, 0.462] & 0.772 [0.746, 0.796] & 0.772 [0.746, 0.797] & 0.716 [0.686, 0.745] \\
+FPR$_{\mathrm{nuis}}$@$0.5$ & 0.617 [0.536, 0.727] & 0.166 [0.139, 0.194] & 0.166 [0.139, 0.193] & 0.160 [0.130, 0.207] \\
 \hline
 \end{tabular}
-}
-\caption{Held-out SIMUS mobile stress setting with RPCA fixed as the clutter filter on every row. Entries report AUC$_{\mathrm{main/nuis}}$ (top) and FPR$_{\mathrm{nuis}}$@$0.5$ (bottom), with point estimates shown as $x_{\mathrm{lo}}^{\mathrm{hi}}$ using 95\% nonparametric bootstrap intervals over the held-out masked score samples. RPCA is used because RPCA $\rightarrow$ PD is the strongest conventional baseline among evaluated methods on every reported stress row. This table separates the fixed, adaptive, and fully whitened detector statistics directly instead of reporting only the best family member on each row.}
+\caption{Held-out SIMUS mobile stress setting with RPCA fixed as the clutter filter on every row. Entries report AUC$_{\mathrm{main/nuis}}$ and FPR$_{\mathrm{nuis}}$@$0.5$, with point estimates shown as $x$ [lo, hi] using 95\% nonparametric bootstrap intervals over the held-out masked score samples. RPCA is used because RPCA $\rightarrow$ PD is the strongest conventional baseline among evaluated methods on every reported stress row. This table separates the fixed, adaptive, and fully whitened detector statistics directly instead of reporting only the best family member on each row.}
 \label{tab:simus_stress_frontier_rpca_heads}
 \end{center}
