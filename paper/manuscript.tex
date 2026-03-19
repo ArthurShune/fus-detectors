@@ -128,15 +128,15 @@ This is a drop-in replacement for the final scoring step of an SVD+PD-style pipe
 We isolate the detector stage after clutter suppression. All detector comparisons use the same clutter-filtered residual so detector effects can be separated from clutter-filter effects.
 
 We evaluate the detector on held-out structural benchmarks, clutter-stress simulations, a structurally labeled phantom, and open real-IQ audits.
-Figure~\ref{fig:ulm_intro_preview} gives a qualitative real-IQ preview; the quantitative detector benchmark that sets the default statistic is reported later on held-out SIMUS.
+Figure~\ref{fig:ulm_intro_preview} gives a qualitative real-IQ preview. The quantitative detector benchmark that sets the default statistic is reported later on held-out SIMUS.
 
 Labs with raw IQ and task timing can evaluate this detector as a drop-in replacement for the final PD/Kasai-style readout within an existing clutter-filtered pipeline. This work provides the detector implementation, same-residual evaluation protocol, and code needed for that comparison.
 
 \ifPAPERONLY
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \includegraphics[width=0.82\linewidth]{figs/paper/ulm7883227_pala_headline_hero.pdf}
-\caption{Real-IQ structural audit preview. Same audited 64-frame residual window shown with a localization-derived vascular reference, baseline power Doppler, and the fully whitened detector at matched 70\% vessel-core recall. Quantitative results appear in Section~\ref{sec:ulm7883227}; the default detector choice is set by the held-out SIMUS benchmark.}
+\caption{\textit{Illustrative real-IQ structural audit preview.} Same audited 64-frame residual window shown with a localization-derived vascular reference, baseline power Doppler, and the fully whitened detector. Panels b--c are thresholded at matched 70\% vessel-core recall. Full quantitative same-residual results are reported in Section~\ref{sec:ulm7883227}; the held-out SIMUS benchmark sets the default detector choice.}
 \label{fig:ulm_intro_preview}
 \end{figure}
 \fi

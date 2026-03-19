@@ -181,19 +181,7 @@ def _difference_panel(
     )
     ax.imshow(overlay, interpolation="nearest")
 
-    pd_shell_n = int(np.count_nonzero(pd_shell_only))
-
-    ax.set_title("Removed PD shell leakage", fontsize=12, fontweight="bold", pad=8)
-    ax.text(
-        0.5,
-        -0.10,
-        f"red: PD-only shell leakage removed ({pd_shell_n} px)",
-        transform=ax.transAxes,
-        ha="center",
-        va="top",
-        fontsize=8.8,
-        color="#0f172a",
-    )
+    ax.set_title("Leakage removed vs PD", fontsize=12, fontweight="bold", pad=8)
     ax.set_xticks([])
     ax.set_yticks([])
 
@@ -386,7 +374,7 @@ def main() -> int:
     ax_ref.contour(support_crop.astype(np.uint8), levels=[0.5], colors=["#f8fafc"], linewidths=1.0)
     ax_ref.contour(bg_crop.astype(np.uint8), levels=[0.5], colors=["#ffb000"], linewidths=1.5, linestyles="--")
     ax_ref.contour(flow_crop.astype(np.uint8), levels=[0.5], colors=["#00d5ff"], linewidths=1.8)
-    ax_ref.set_title("External PALA localization reference\nregistered to the IQ grid", pad=8)
+    ax_ref.set_title("Localization reference", pad=8)
     ax_ref.set_xticks([])
     ax_ref.set_yticks([])
     ax_ref.set_anchor("C")
@@ -400,7 +388,7 @@ def main() -> int:
         det_mask=pd_crop,
         alpha_img=anatomy_bg_crop,
         color="#ff6b57",
-        title="Baseline power Doppler\nmatched 70% core recall",
+        title="Power Doppler",
         auc=float("nan"),
         fpr70=float("nan"),
     )
@@ -414,7 +402,7 @@ def main() -> int:
         det_mask=wp_crop,
         alpha_img=anatomy_bg_crop,
         color="#4fd1c5",
-        title=f"{specialist_name}\nmatched 70% core recall",
+        title="Whitened detector",
         auc=float("nan"),
         fpr70=float("nan"),
     )
