@@ -71,12 +71,12 @@ def add_arrow(ax, start: tuple[float, float], end: tuple[float, float]) -> None:
             start,
             end,
             arrowstyle="-|>",
-            mutation_scale=16,
-            linewidth=1.4,
+            mutation_scale=18,
+            linewidth=1.55,
             color="#2b2b2b",
-            shrinkA=5,
-            shrinkB=7,
-            connectionstyle="arc3",
+            shrinkA=2,
+            shrinkB=4,
+            connectionstyle="arc3,rad=0.0",
         )
     )
 
@@ -84,37 +84,37 @@ def add_arrow(ax, start: tuple[float, float], end: tuple[float, float]) -> None:
 def build(out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    fig, ax = plt.subplots(figsize=(12.2, 5.4))
+    fig, ax = plt.subplots(figsize=(9.9, 5.2))
     ax.set_xlim(0.0, 1.0)
     ax.set_ylim(0.0, 1.0)
     ax.axis("off")
 
-    iq_box = BoxSpec(0.14, 0.70, 0.21, 0.17)
-    clutter_box = BoxSpec(0.40, 0.70, 0.25, 0.17)
-    bands_box = BoxSpec(0.71, 0.70, 0.33, 0.21)
-    detector_box = BoxSpec(0.47, 0.29, 0.47, 0.29)
-    output_box = BoxSpec(0.84, 0.29, 0.19, 0.17)
+    iq_box = BoxSpec(0.12, 0.73, 0.16, 0.17)
+    clutter_box = BoxSpec(0.41, 0.73, 0.21, 0.17)
+    bands_box = BoxSpec(0.77, 0.73, 0.26, 0.20)
+    detector_box = BoxSpec(0.42, 0.28, 0.43, 0.29)
+    output_box = BoxSpec(0.84, 0.28, 0.16, 0.17)
 
     add_box(
         ax,
         iq_box,
         "Beamformed IQ\ncomplex slow-time data",
         fc="#f7f7f7",
-        fontsize=10.4,
+        fontsize=11.4,
     )
     add_box(
         ax,
         clutter_box,
         "Conventional clutter suppression\nclutter-filtered residual",
         fc="#f7f7f7",
-        fontsize=10.0,
+        fontsize=10.8,
     )
     add_box(
         ax,
         bands_box,
         "Local tiles and band summaries\nflow, guard, and alias-band energy\nin overlapping neighborhoods",
         fc="#f3f7fc",
-        fontsize=9.8,
+        fontsize=10.4,
     )
     add_box(
         ax,
@@ -124,14 +124,14 @@ def build(out: Path) -> None:
         "Adaptive: whiten only when guard-band clutter rises\n"
         "Fully whitened: local covariance-adaptive variant",
         fc="#fbfcfe",
-        fontsize=9.6,
+        fontsize=10.3,
     )
     add_box(
         ax,
         output_box,
         "Output map\nfinal detector readout",
         fc="#f7f7f7",
-        fontsize=10.2,
+        fontsize=11.0,
     )
 
     add_arrow(
@@ -147,7 +147,7 @@ def build(out: Path) -> None:
     add_arrow(
         ax,
         (bands_box.cx, bands_box.bottom),
-        (detector_box.cx + 0.02, detector_box.top),
+        (detector_box.cx + 0.10, detector_box.top),
     )
     add_arrow(
         ax,
