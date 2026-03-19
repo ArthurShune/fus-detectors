@@ -19,6 +19,28 @@ the compatibility layer intended for third-party pipelines.
 For a runnable command-line example, see
 [`examples/minimal_integration.py`](../examples/minimal_integration.py).
 
+## When to Use Each Variant
+
+Start with the fixed statistic unless you already know your acquisition is
+persistently clutter-dominant. The paper’s deployment rule is intentionally
+conservative: the fixed statistic is the default, adaptive is a telemetry-aware
+bridge, and the fully whitened variant is a narrower escalation path rather
+than a universal upgrade.
+
+- `fixed`: recommended default for first integration and the best public starting point.
+- `adaptive`: use when you want the fixed statistic plus guard telemetry and selective whitening on promoted tiles.
+- `whitened`: use when representative windows repeatedly show elevated guard-band contamination and your runtime budget can tolerate the extra cost.
+- `whitened_power`: use only as an ablation or diagnostic comparison, not as a default deployment rule.
+
+The practical interpretation of the adaptive summary fields is:
+- `adaptive_guard_fraction_p90`: high-end guard-band contamination across tiles.
+- `adaptive_promote_fraction`: fraction of tiles promoted onto the whitened branch.
+- `adaptive_promoted_tiles`: raw count of promoted tiles.
+
+If those telemetry fields stay near zero on representative windows, keep
+`fixed`. If they stay elevated and the replay budget remains acceptable, test
+`whitened` on the same clutter-filtered residual before changing anything else.
+
 ## Minimal Example
 
 ```python

@@ -183,7 +183,7 @@ def _difference_panel(
 
     pd_shell_n = int(np.count_nonzero(pd_shell_only))
 
-    ax.set_title("Removed PD shell leakage", fontsize=12, fontweight="bold", pad=8)
+    ax.set_title("PD leakage\nremoved", fontsize=12, fontweight="bold", pad=8)
     ax.text(
         0.5,
         -0.10,

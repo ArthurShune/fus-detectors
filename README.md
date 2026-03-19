@@ -41,6 +41,7 @@ The method does not replace the upstream clutter filter. It changes only the fin
 | See the full methods and companion analyses | [paper/methods_companion.pdf](paper/methods_companion.pdf) |
 | Reproduce the headline figure and table | [scripts/reproduce_figure8_table7.sh](scripts/reproduce_figure8_table7.sh) |
 | Integrate into an existing pipeline | [docs/integration.md](docs/integration.md) |
+| Decide which detector variant to try first | [docs/integration.md#when-to-use-each-variant](docs/integration.md#when-to-use-each-variant) |
 | Run the minimal public API example | [examples/minimal_integration.py](examples/minimal_integration.py) |
 | Prepare datasets | [docs/data_download.md](docs/data_download.md) |
 | Cite the work | [CITATION.cff](CITATION.cff) |
@@ -105,6 +106,20 @@ See [docs/integration.md](docs/integration.md) for the supported variants, the
 public config surface, adaptive routing behavior, and the expected input/output
 contract. A runnable end-to-end example is available at
 [examples/minimal_integration.py](examples/minimal_integration.py).
+
+## Which Variant to Use
+
+<p align="center">
+  <img src="docs/assets/readme_variant_selection.png" alt="Detector selection flowchart: start with fixed, escalate to fully whitened only in persistently clutter-dominant windows with latency margin." width="760">
+</p>
+
+Use the public variants this way:
+- `fixed`: default starting point for new pipelines and the recommended first integration target.
+- `adaptive`: same fixed statistic plus guard telemetry and selective promotion; useful when you want runtime monitoring without committing to full whitening everywhere.
+- `whitened`: use when your acquisition repeatedly shows clutter-dominant windows and you can tolerate the extra compute.
+- `whitened_power`: keep as a bounded ablation, not a default deployment choice.
+
+The short integration rule is: start with `fixed`, inspect the adaptive telemetry, and only move to `whitened` when the clutter evidence stays elevated on representative windows. The fuller rationale is in [docs/integration.md](docs/integration.md) and in the deployment flowchart in [paper/preprint.pdf](paper/preprint.pdf).
 
 ## Reproduce the Main Results
 
