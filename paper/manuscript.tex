@@ -127,12 +127,7 @@ In practice, a researcher would replace the power-Doppler-style scoring step in 
 This is a drop-in replacement for the final scoring step of an SVD+PD-style pipeline; acquisition and clutter filtering stay unchanged.
 In the reported configurations, steady-state replay remains below the acquisition-time budget, so the method is not only a drop-in detector replacement but also computationally practical.
 
-We isolate the detector stage after clutter suppression. All detector comparisons use the same clutter-filtered residual so detector effects can be separated from clutter-filter effects.
-
-We evaluate the detector on held-out structural benchmarks, clutter-stress simulations, a structurally labeled phantom, and open real-IQ audits.
 Figure~\ref{fig:ulm_intro_preview} gives a qualitative real-IQ preview. The quantitative detector benchmark that sets the default statistic is reported later on held-out SIMUS.
-
-Labs with raw IQ and task timing can evaluate this detector as a drop-in replacement for the final PD/Kasai-style readout within an existing clutter-filtered pipeline. This work provides the detector implementation, same-residual evaluation protocol, and code needed for that comparison.
 
 \ifPAPERONLY
 \enlargethispage{4\baselineskip}
@@ -146,6 +141,12 @@ Labs with raw IQ and task timing can evaluate this detector as a drop-in replace
 \end{figure}
 \vspace{-0.25\baselineskip}
 \fi
+
+We isolate the detector stage after clutter suppression. All detector comparisons use the same clutter-filtered residual so detector effects can be separated from clutter-filter effects.
+
+We evaluate the detector on held-out structural benchmarks, clutter-stress simulations, a structurally labeled phantom, and open real-IQ audits.
+
+Labs with raw IQ and task timing can evaluate this detector as a drop-in replacement for the final PD/Kasai-style readout within an existing clutter-filtered pipeline. This work provides the detector implementation, same-residual evaluation protocol, and code needed for that comparison.
 
 \section{Background and Problem Formulation}
 \label{sec:background-problem}
