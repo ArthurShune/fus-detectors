@@ -40,6 +40,7 @@ The method does not replace the upstream clutter filter. It changes only the fin
 | Read the paper | [paper/preprint.pdf](paper/preprint.pdf) |
 | See the full methods and companion analyses | [paper/methods_companion.pdf](paper/methods_companion.pdf) |
 | Reproduce the headline figure and table | [scripts/reproduce_figure8_table7.sh](scripts/reproduce_figure8_table7.sh) |
+| Integrate into an existing pipeline | [docs/integration.md](docs/integration.md) |
 | Prepare datasets | [docs/data_download.md](docs/data_download.md) |
 | Cite the work | [CITATION.cff](CITATION.cff) |
 
@@ -79,6 +80,28 @@ After those commands, you will have the headline same-residual SIMUS figure and 
 - `reports/paper/simus_detector_family_ablation_table.tex`
 
 Full paper reproduction requires the datasets listed below. Helper scripts do not auto-download them.
+
+## Library API
+
+For drop-in use inside an existing clutter-filtered pipeline, use the stable
+`fus_detectors` package rather than importing internal research modules.
+
+```python
+from fus_detectors import DetectorConfig, score_residual_cube
+
+result = score_residual_cube(
+    residual_cube,  # complex clutter-filtered residual, shape (T, H, W)
+    prf_hz=3000.0,
+    config=DetectorConfig(variant="fixed", device="cpu"),
+)
+
+readout_map = result.readout_map
+score_map = result.score_map
+summary = result.summary.to_dict()
+```
+
+See [docs/integration.md](docs/integration.md) for the supported variants, the
+public config surface, and the expected input/output contract.
 
 ## Reproduce the Main Results
 
@@ -131,6 +154,7 @@ Contact: `arthur@skymesasystems.com`
 
 - `paper/` manuscript sources and built PDFs
 - `docs/assets/` curated README graphics and lightweight repo-facing visuals
+- `fus_detectors/` stable install-facing API for third-party pipeline integration
 - `pipeline/` detector statistics and clutter-filtered residual processing code
 - `sim/` k-Wave and SIMUS simulation wrappers
 - `scripts/` entry points for reported figures, tables, audits, and repro runs

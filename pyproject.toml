@@ -1,3 +1,37 @@
+[project]
+name = "fus-detectors"
+version = "0.1.0"
+description = "Post-clutter-suppression detection statistics for beamformed functional ultrasound slow-time data."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Arthur Shune", email = "arthur@skymesasystems.com" },
+]
+keywords = ["functional ultrasound", "ultrafast doppler", "beamforming", "detection"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Scientific/Engineering :: Image Processing",
+]
+dependencies = [
+  "numpy>=1.26",
+  "torch>=2.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "black",
+  "build",
+  "pytest",
+  "pytest-cov",
+  "ruff",
+]
+
 [tool.black]
 line-length = 99
 
@@ -20,3 +54,9 @@ testpaths = ["tests"]
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["fus_detectors*", "pipeline*"]
+
+[tool.setuptools.package-data]
+fus_detectors = ["py.typed"]
