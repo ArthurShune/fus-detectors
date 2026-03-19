@@ -354,12 +354,12 @@ def main() -> int:
     pd_crop = det_pd[y0:y1, x0:x1]
     wp_crop = det_wp[y0:y1, x0:x1]
 
-    fig = plt.figure(figsize=(14.2, 4.1))
+    fig = plt.figure(figsize=(13.0, 4.35))
     gs = fig.add_gridspec(
         1,
         4,
-        width_ratios=[1.0, 1.0, 1.0, 0.92],
-        wspace=0.16,
+        width_ratios=[1.0, 1.0, 1.0, 0.98],
+        wspace=0.08,
     )
 
     ax_ref = fig.add_subplot(gs[0, 0])
@@ -431,7 +431,7 @@ def main() -> int:
             color="#0f172a",
         )
 
-    fig.subplots_adjust(left=0.025, right=0.995, top=0.88, bottom=0.16)
+    fig.subplots_adjust(left=0.012, right=0.995, top=0.90, bottom=0.13)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(args.out)
