@@ -2,50 +2,80 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
 
-def add_box(ax, center, size, text, *, fc="#f7f7f7", fontsize=8.2, weight="normal"):
-    cx, cy = center
-    w, h = size
-    x = cx - w / 2
-    y = cy - h / 2
+@dataclass(frozen=True)
+class BoxSpec:
+    cx: float
+    cy: float
+    w: float
+    h: float
+
+    @property
+    def left(self) -> float:
+        return self.cx - self.w / 2.0
+
+    @property
+    def right(self) -> float:
+        return self.cx + self.w / 2.0
+
+    @property
+    def bottom(self) -> float:
+        return self.cy - self.h / 2.0
+
+    @property
+    def top(self) -> float:
+        return self.cy + self.h / 2.0
+
+
+def add_box(
+    ax,
+    spec: BoxSpec,
+    text: str,
+    *,
+    fc: str = "#f7f7f7",
+    fontsize: float = 9.0,
+    weight: str = "normal",
+) -> None:
     patch = FancyBboxPatch(
-        (x, y),
-        w,
-        h,
-        boxstyle="round,pad=0.015,rounding_size=0.02",
+        (spec.left, spec.bottom),
+        spec.w,
+        spec.h,
+        boxstyle="round,pad=0.015,rounding_size=0.025",
         facecolor=fc,
         edgecolor="#2b2b2b",
-        linewidth=1.2,
+        linewidth=1.35,
     )
     ax.add_patch(patch)
     ax.text(
-        cx,
-        cy,
+        spec.cx,
+        spec.cy,
         text,
         ha="center",
         va="center",
         fontsize=fontsize,
         weight=weight,
-        linespacing=1.15,
+        linespacing=1.18,
+        multialignment="center",
     )
 
 
-def add_arrow(ax, start, end):
+def add_arrow(ax, start: tuple[float, float], end: tuple[float, float]) -> None:
     ax.add_patch(
         FancyArrowPatch(
             start,
             end,
             arrowstyle="-|>",
-            mutation_scale=14,
-            linewidth=1.3,
+            mutation_scale=16,
+            linewidth=1.4,
             color="#2b2b2b",
-            shrinkA=4,
-            shrinkB=6,
+            shrinkA=5,
+            shrinkB=7,
             connectionstyle="arc3",
         )
     )
@@ -54,43 +84,78 @@ def add_arrow(ax, start, end):
 def build(out: Path) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    fig, ax = plt.subplots(figsize=(11.6, 4.8))
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
+    fig, ax = plt.subplots(figsize=(12.2, 5.4))
+    ax.set_xlim(0.0, 1.0)
+    ax.set_ylim(0.0, 1.0)
     ax.axis("off")
 
-    add_box(ax, (0.15, 0.68), (0.22, 0.12), "Beamformed IQ\nComplex slow-time data", fontsize=8.0)
+    iq_box = BoxSpec(0.14, 0.70, 0.20, 0.16)
+    clutter_box = BoxSpec(0.40, 0.70, 0.24, 0.16)
+    bands_box = BoxSpec(0.71, 0.70, 0.31, 0.19)
+    detector_box = BoxSpec(0.47, 0.29, 0.45, 0.27)
+    output_box = BoxSpec(0.84, 0.29, 0.18, 0.16)
+
     add_box(
         ax,
-        (0.40, 0.68),
-        (0.24, 0.12),
-        "Conventional clutter suppression\nClutter-filtered residual",
-        fontsize=7.8,
+        iq_box,
+        "Beamformed IQ\ncomplex slow-time data",
+        fc="#f7f7f7",
+        fontsize=9.6,
     )
     add_box(
         ax,
-        (0.68, 0.68),
-        (0.30, 0.15),
-        "Local tiles and band summaries\nFlow, guard, and alias-band energy\nin overlapping neighborhoods",
-        fc="#f4f7fb",
-        fontsize=7.6,
+        clutter_box,
+        "Conventional clutter suppression\nclutter-filtered residual",
+        fc="#f7f7f7",
+        fontsize=9.3,
     )
     add_box(
         ax,
-        (0.40, 0.33),
-        (0.42, 0.24),
-        "Detector family\n\nFixed: non-whitened score\nAdaptive: whiten only when guard-band clutter rises\nFully whitened: local covariance-adaptive variant",
+        bands_box,
+        "Local tiles and band summaries\nflow, guard, and alias-band energy\nin overlapping neighborhoods",
+        fc="#f3f7fc",
+        fontsize=9.0,
+    )
+    add_box(
+        ax,
+        detector_box,
+        "Detector family\n\n"
+        "Fixed: non-whitened statistic\n"
+        "Adaptive: whiten only when guard-band clutter rises\n"
+        "Fully whitened: local covariance-adaptive variant",
         fc="#fbfcfe",
-        fontsize=7.4,
+        fontsize=8.7,
     )
-    add_box(ax, (0.82, 0.33), (0.22, 0.13), "Output map\nDetector score map", fontsize=8.0)
+    add_box(
+        ax,
+        output_box,
+        "Output map\nfinal detector readout",
+        fc="#f7f7f7",
+        fontsize=9.4,
+    )
 
-    add_arrow(ax, (0.26, 0.68), (0.28, 0.68))
-    add_arrow(ax, (0.52, 0.68), (0.55, 0.68))
-    add_arrow(ax, (0.68, 0.60), (0.50, 0.44))
-    add_arrow(ax, (0.61, 0.33), (0.70, 0.33))
+    add_arrow(
+        ax,
+        (iq_box.right, iq_box.cy),
+        (clutter_box.left, clutter_box.cy),
+    )
+    add_arrow(
+        ax,
+        (clutter_box.right, clutter_box.cy),
+        (bands_box.left, bands_box.cy),
+    )
+    add_arrow(
+        ax,
+        (bands_box.cx, bands_box.bottom),
+        (detector_box.cx + 0.02, detector_box.top),
+    )
+    add_arrow(
+        ax,
+        (detector_box.right, detector_box.cy),
+        (output_box.left, output_box.cy),
+    )
 
-    fig.tight_layout(pad=0.4)
+    fig.tight_layout(pad=0.5)
     fig.savefig(out, bbox_inches="tight")
 
 
