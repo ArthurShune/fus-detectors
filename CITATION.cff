@@ -15,3 +15,13 @@ abstract: >
   ultrasound and ultrafast Doppler imaging. The repository includes held-out
   synthetic benchmarking, phantom and real-IQ audits, manuscript sources, and
   reproduction scripts for the reported figures and tables.
+keywords:
+  - functional ultrasound
+  - fUS
+  - ultrafast Doppler
+  - Doppler imaging
+  - ultrasound detection
+  - matched-subspace detection
+  - signal processing
+  - medical imaging
+  - microvascular imaging

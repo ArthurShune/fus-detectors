@@ -8,7 +8,17 @@ license = "MIT"
 authors = [
   { name = "Arthur Shune", email = "arthur@skymesasystems.com" },
 ]
-keywords = ["functional ultrasound", "ultrafast doppler", "beamforming", "detection"]
+keywords = [
+  "functional ultrasound",
+  "fUS",
+  "ultrafast doppler",
+  "doppler imaging",
+  "ultrasound detection",
+  "matched-subspace detection",
+  "beamforming",
+  "medical imaging",
+  "signal processing",
+]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",

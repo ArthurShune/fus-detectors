@@ -5,9 +5,9 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-2EA44F.svg)](LICENSE)
 [![Public CI](https://github.com/ArthurShune/fus-detectors/actions/workflows/public_ci.yml/badge.svg)](https://github.com/ArthurShune/fus-detectors/actions/workflows/public_ci.yml)
 
-Post-clutter-suppression detection statistics that reduce artifact leakage in functional ultrasound and ultrafast Doppler maps, without changing the upstream clutter filter.
+Post-clutter-suppression detection statistics that reduce artifact leakage in functional ultrasound (fUS) and ultrafast Doppler maps, without changing the upstream clutter filter.
 
-`fus-detectors` is the reference implementation and paper repository for localized matched-subspace detection on beamformed fUS slow-time data. The central question is simple: once a clutter-filtered residual has been fixed, can changing only the final detection statistic suppress artifacts more effectively than power-Doppler-style readouts?
+`fus-detectors` is the reference implementation and paper repository for localized matched-subspace detection on beamformed fUS slow-time data. If you are looking for functional ultrasound detection, fUS detection, or post-clutter-filter Doppler detection that can drop into an existing pipeline, this repo is the public implementation of that detector family. The central question is simple: once a clutter-filtered residual has been fixed, can changing only the final detection statistic suppress artifacts more effectively than power-Doppler-style readouts?
 
 <p align="center">
   <img src="docs/assets/readme_hero_ulm.png" alt="Representative real-IQ structural evaluation figure from the preprint." width="860">
@@ -34,6 +34,8 @@ Best first try:
 - A drop-in detector replacement for the final PD/Kasai-style readout in an existing clutter-filtered pipeline.
 - A stable public API for running fixed, adaptive, and whitened detector variants on the same residual stream.
 - A same-residual evaluation workflow for comparing detector behavior on synthetic, phantom, and real-IQ data.
+
+In search terms, this repository is about downstream functional ultrasound detection, ultrafast Doppler detection statistics, artifact-aware Doppler readouts, and matched-subspace scoring for clutter-filtered residual data.
 
 Two headline results anchor the repo:
 - On the held-out `SIMUS-Struct-Intraop` benchmark, the fixed matched-subspace statistic reduces nuisance false-positive rate from `0.998` to `0.004` at matched recall `0.5` on the same clutter-filtered residual.
@@ -92,6 +94,23 @@ Arthur Shune, *Localized Matched-Subspace Detection for Functional Ultrasound an
 ```
 
 Machine-readable citation metadata is also provided in [`CITATION.cff`](CITATION.cff).
+
+## GitHub Discoverability
+
+For GitHub search and repository topics, the most accurate public labels for this repo are:
+- `functional-ultrasound`
+- `fus`
+- `ultrafast-doppler`
+- `doppler-imaging`
+- `ultrasound`
+- `signal-processing`
+- `medical-imaging`
+- `microvascular-imaging`
+- `power-doppler`
+- `python`
+
+Recommended GitHub description:
+- `Post-clutter-suppression detection statistics for functional ultrasound and ultrafast Doppler that reduce artifact leakage without changing the upstream clutter filter.`
 
 ## Quick Start
 
