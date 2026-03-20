@@ -220,7 +220,7 @@ The fixed statistic is a local band-limited flow detector applied after ordinary
     \vspace{0.5em}
   \end{minipage}}%
 }
-\caption{Method overview. Beamformed IQ first undergoes ordinary clutter filtering, after which the detector operates tilewise in slow time. The fixed detector uses the band-limited matched-subspace score everywhere. The adaptive detector uses that same score by default and switches to a whitened branch only in tiles with strong guard-band evidence of localized clutter. The fully whitened detector applies whitening everywhere.}
+\caption{Method overview. All three detector variants operate on the same clutter-filtered residual and the same overlapping tile geometry. The fixed detector applies the unwhitened band-limited score everywhere. The adaptive detector first scores every tile with that fixed rule, computes a tile-mean guard-fraction telemetry summary, and reruns only promoted clutter-heavy tiles with whitening. The fully whitened detector estimates a local covariance and applies whitening on every tile before overlap-add reconstruction of the final maps.}
 \label{fig:stap_pipeline}
 \end{figure}
 
