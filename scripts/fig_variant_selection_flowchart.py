@@ -1,193 +1,208 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
+import re
+import shutil
+import subprocess
 from pathlib import Path
-
-import matplotlib.pyplot as plt
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Polygon
 
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "figs" / "paper" / "variant_selection_flowchart.pdf"
+README_PNG = ROOT / "docs" / "assets" / "readme_variant_selection.png"
+
+DOT_SOURCE = r"""
+digraph G {
+  graph [
+    rankdir=TB,
+    bgcolor="white",
+    splines=ortho,
+    nodesep=0.40,
+    ranksep=0.58,
+    pad=0.12
+  ];
+  node [fontname="Helvetica", color="#2b2b2b", penwidth=1.4];
+  edge [fontname="Helvetica", color="#2b2b2b", penwidth=1.4, arrowsize=0.8];
+
+  start [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="#e8f0fa",
+    margin="0.28,0.22",
+    fontsize=16,
+    fontname="Helvetica-Bold",
+    label="Start with the fixed matched-subspace statistic"
+  ];
+
+  measure [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="#fdf3db",
+    margin="0.28,0.22",
+    fontsize=13,
+    label="Measure label-free runtime telemetry on representative windows:\nhigh-end guard contamination Q0.90(rg), promotion fraction ppromote,\nand replay budget"
+  ];
+
+  low_guard [
+    shape=diamond,
+    style="filled",
+    fillcolor="#f6f6f6",
+    margin="0.20,0.12",
+    fontsize=13,
+    label="Guard telemetry low across windows?\nQ0.90(rg) < τg and ppromote ≈ 0"
+  ];
+
+  high_guard [
+    shape=diamond,
+    style="filled",
+    fillcolor="#f6f6f6",
+    margin="0.20,0.12",
+    fontsize=12,
+    label="Guard telemetry persistently elevated\nand latency budget sufficient\nfor whitening?"
+  ];
+
+  deploy_fixed [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="#e8f6ef",
+    margin="0.24,0.18",
+    fontsize=13,
+    label="Deploy the fixed statistic\nDefault supported by the held-out\nSIMUS benchmark"
+  ];
+
+  keep_fixed [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="#f9ebea",
+    margin="0.24,0.18",
+    fontsize=13,
+    label="Keep the fixed statistic\nNo validated prospective switch\nfor mixed telemetry"
+  ];
+
+  use_whitened [
+    shape=box,
+    style="rounded,filled",
+    fillcolor="#e8f0fa",
+    margin="0.24,0.18",
+    fontsize=13,
+    label="Use the fully whitened variant\nwhen guard telemetry stays high,\npromotion is nonzero, and latency permits"
+  ];
+
+  { rank=same; deploy_fixed keep_fixed use_whitened }
+
+  start -> measure;
+  measure -> low_guard;
+  low_guard -> deploy_fixed [label="yes", labeldistance=2.0];
+  low_guard -> high_guard [label="no", labeldistance=2.0];
+  high_guard -> keep_fixed [label="no", labeldistance=2.0];
+  high_guard -> use_whitened [label="yes", labeldistance=2.0];
+
+  deploy_fixed -> keep_fixed [style=invis];
+  keep_fixed -> use_whitened [style=invis];
+}
+"""
 
 
-def add_round_box(ax, center, size, text, *, fc, fontsize=11, weight="normal"):
-    cx, cy = center
-    w, h = size
-    x = cx - w / 2
-    y = cy - h / 2
-    patch = FancyBboxPatch(
-        (x, y),
-        w,
-        h,
-        boxstyle="round,pad=0.02,rounding_size=0.025",
-        facecolor=fc,
-        edgecolor="#2b2b2b",
-        linewidth=1.3,
-    )
-    ax.add_patch(patch)
-    ax.text(
-        cx,
-        cy,
-        text,
-        ha="center",
-        va="center",
-        fontsize=fontsize,
-        weight=weight,
-        linespacing=1.2,
-    )
+def _find_browser() -> str:
+    for name in ("chromium", "chromium-browser", "google-chrome"):
+        path = shutil.which(name)
+        if path:
+            return path
+    snap_path = Path("/snap/bin/chromium")
+    if snap_path.exists():
+        return str(snap_path)
+    raise RuntimeError("Could not find a Chromium-compatible browser for export.")
 
 
-def add_diamond(ax, center, size, text, *, fc, fontsize=10.5):
-    cx, cy = center
-    w, h = size
-    verts = [
-        (cx, cy + h / 2),
-        (cx + w / 2, cy),
-        (cx, cy - h / 2),
-        (cx - w / 2, cy),
-    ]
-    patch = Polygon(verts, closed=True, facecolor=fc, edgecolor="#2b2b2b", linewidth=1.3)
-    ax.add_patch(patch)
-    ax.text(
-        cx,
-        cy,
-        text,
-        ha="center",
-        va="center",
-        fontsize=fontsize,
-        linespacing=1.15,
-    )
+def _svg_size(svg: str) -> tuple[str, str]:
+    match = re.search(r'width="([^"]+)"\s+height="([^"]+)"', svg)
+    if not match:
+        raise RuntimeError("Could not parse rendered SVG size.")
+    return match.group(1), match.group(2)
 
 
-def add_arrow(ax, start, end, *, connectionstyle="arc3", label=None, label_xy=None):
-    patch = FancyArrowPatch(
-        start,
-        end,
-        arrowstyle="-|>",
-        mutation_scale=14,
-        linewidth=1.4,
-        color="#2b2b2b",
-        shrinkA=4,
-        shrinkB=6,
-        connectionstyle=connectionstyle,
-    )
-    ax.add_patch(patch)
-    if label and label_xy is not None:
-        ax.text(label_xy[0], label_xy[1], label, fontsize=11, weight="bold", ha="center", va="center")
+def _run(cmd: list[str], *, cwd: Path | None = None) -> None:
+    try:
+        subprocess.run(
+            cmd,
+            cwd=cwd,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"Missing required tool: {cmd[0]}") from exc
 
 
-def main() -> None:
-    OUT.parent.mkdir(parents=True, exist_ok=True)
+def build_pdf(out: Path) -> None:
+    out.parent.mkdir(parents=True, exist_ok=True)
 
-    fig, ax = plt.subplots(figsize=(11.0, 8.6))
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.axis("off")
+    temp_dir = ROOT / "tmp" / "graphviz_variant_selection"
+    temp_dir.mkdir(parents=True, exist_ok=True)
 
-    add_round_box(
-        ax,
-        (0.50, 0.90),
-        (0.44, 0.10),
-        "Start with the fixed matched-subspace statistic",
-        fc="#e8f0fa",
-        fontsize=12.5,
-        weight="bold",
-    )
-    add_round_box(
-        ax,
-        (0.50, 0.73),
-        (0.66, 0.13),
-        "Measure label-free runtime telemetry on representative windows:\n"
-        r"high-end guard contamination $Q_{0.90}(r_g)$, promotion fraction $p_{\mathrm{promote}}$,"
-        "\nand replay budget",
-        fc="#fdf3db",
-        fontsize=11.2,
-    )
-    add_diamond(
-        ax,
-        (0.50, 0.57),
-        (0.32, 0.14),
-        "Guard telemetry low\nacross windows?\n"
-        r"$Q_{0.90}(r_g) < \tau_g$ and $p_{\mathrm{promote}} \approx 0$",
-        fc="#f4f4f4",
-        fontsize=10.8,
-    )
-    add_diamond(
-        ax,
-        (0.76, 0.38),
-        (0.28, 0.12),
-        "Guard telemetry persistently\n elevated and latency budget\nsufficient for whitening?",
-        fc="#f4f4f4",
-        fontsize=9.6,
-    )
-    add_round_box(
-        ax,
-        (0.18, 0.12),
-        (0.26, 0.11),
-        "Deploy the fixed statistic\n"
-        "Default supported by the held-out\nSIMUS benchmark",
-        fc="#e8f6ef",
-        fontsize=11,
-    )
-    add_round_box(
-        ax,
-        (0.50, 0.12),
-        (0.26, 0.11),
-        "Keep the fixed statistic\n"
-        "No validated prospective switch\nfor mixed telemetry",
-        fc="#f9ebea",
-        fontsize=11,
-    )
-    add_round_box(
-        ax,
-        (0.82, 0.12),
-        (0.28, 0.11),
-        "Use the fully whitened variant\n"
-        "when guard telemetry stays high,\n"
-        "promotion is nonzero, and latency permits",
-        fc="#e8f0fa",
-        fontsize=10.8,
-    )
+    dot_path = temp_dir / "variant_selection.dot"
+    svg_path = temp_dir / "variant_selection.svg"
+    html_path = temp_dir / "variant_selection.html"
+    raw_pdf_path = temp_dir / "variant_selection_raw.pdf"
 
-    add_arrow(ax, (0.50, 0.85), (0.50, 0.795))
-    add_arrow(ax, (0.50, 0.665), (0.50, 0.64))
-    add_arrow(
-        ax,
-        (0.34, 0.53),
-        (0.18, 0.18),
-        connectionstyle="angle3,angleA=180,angleB=-90",
-        label="yes",
-        label_xy=(0.27, 0.36),
-    )
-    add_arrow(
-        ax,
-        (0.66, 0.57),
-        (0.67, 0.42),
-        connectionstyle="angle3,angleA=0,angleB=90",
-        label="no",
-        label_xy=(0.68, 0.50),
-    )
-    add_arrow(
-        ax,
-        (0.69, 0.35),
-        (0.57, 0.17),
-        connectionstyle="angle3,angleA=180,angleB=90",
-        label="no",
-        label_xy=(0.67, 0.31),
-    )
-    add_arrow(
-        ax,
-        (0.83, 0.32),
-        (0.82, 0.17),
-        connectionstyle="arc3",
-        label="yes",
-        label_xy=(0.88, 0.29),
-    )
+    dot_path.write_text(DOT_SOURCE, encoding="utf-8")
 
-    fig.tight_layout(pad=0.4)
-    fig.savefig(OUT, bbox_inches="tight")
+    helper = ROOT / "scripts" / "render_graphviz_svg.mjs"
+    if not helper.exists():
+        raise RuntimeError(f"Missing renderer helper: {helper}")
+    if not (ROOT / "node_modules" / "@viz-js" / "viz").exists():
+        raise RuntimeError(
+            "Missing @viz-js/viz. Run `npm install` from the repository root "
+            "before regenerating this figure."
+        )
+
+    _run(["node", str(helper), str(dot_path), str(svg_path)], cwd=ROOT)
+    svg = svg_path.read_text(encoding="utf-8")
+    width, height = _svg_size(svg)
+    html = (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        f"<style>@page {{ size: {width} {height}; margin: 0; }}"
+        "html,body{margin:0;padding:0;background:#fff;}"
+        f"svg{{display:block;width:{width};height:{height};}}"
+        "</style></head><body>"
+        f"{svg}</body></html>"
+    )
+    html_path.write_text(html, encoding="utf-8")
+
+    browser = _find_browser()
+    _run(
+        [
+            browser,
+            "--headless",
+            "--disable-gpu",
+            "--no-sandbox",
+            f"--print-to-pdf={raw_pdf_path}",
+            "--print-to-pdf-no-header",
+            html_path.as_uri(),
+        ]
+    )
+    _run(["pdfcrop", str(raw_pdf_path), str(out)])
+
+
+def build_readme_png(pdf_path: Path, png_path: Path) -> None:
+    png_path.parent.mkdir(parents=True, exist_ok=True)
+    base = png_path.with_suffix("")
+    _run(["pdftoppm", "-png", "-r", "220", "-singlefile", str(pdf_path), str(base)])
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Generate the detector-variant selection flowchart.")
+    parser.add_argument("--out", default=str(OUT), help="Output PDF path.")
+    parser.add_argument("--readme-png", default=str(README_PNG), help="Output README PNG path.")
+    args = parser.parse_args()
+
+    out = Path(args.out)
+    readme_png = Path(args.readme_png)
+    build_pdf(out)
+    build_readme_png(out, readme_png)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
