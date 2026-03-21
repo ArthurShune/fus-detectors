@@ -272,7 +272,7 @@ def _best_detector_by_name(
 
 def _provenance_table() -> str:
     lines = [
-        r"\begin{table}[t]",
+        r"\begin{table}[H]",
         r"\centering",
         r"\scriptsize",
         r"\setlength{\tabcolsep}{3pt}",
@@ -367,8 +367,8 @@ def _frozen_rpca_heads_table(rows: list[dict[str, str]]) -> str:
     interval_cache: dict[tuple[str, str], tuple[float, float]] = {}
 
     lines = [
-        r"\begin{center}",
-        r"\captionsetup{type=table}",
+        r"\begin{table}[t]",
+        r"\centering",
         r"\footnotesize",
         r"\setlength{\tabcolsep}{3pt}",
         r"\renewcommand{\arraystretch}{1.15}",
@@ -413,9 +413,9 @@ def _frozen_rpca_heads_table(rows: list[dict[str, str]]) -> str:
         [
             r"\caption{Held-out SIMUS mobile stress setting with RPCA fixed as the clutter filter on every row. Entries report AUC$_{\mathrm{main/nuis}}$ and FPR$_{\mathrm{nuis}}$@$0.5$, with point estimates shown as $x$ [lo, hi] using 95\% nonparametric bootstrap intervals over the held-out masked score samples. RPCA is used because RPCA $\rightarrow$ PD is the strongest conventional baseline among evaluated methods on every reported stress row. This table separates the fixed, adaptive, and fully whitened detector statistics directly instead of reporting only the best family member on each row.}",
             r"\label{tab:simus_stress_frontier_rpca_heads}",
-            r"\end{center}",
-            "",
-        ]
+        r"\end{table}",
+        "",
+    ]
     )
     return "\n".join(lines)
 

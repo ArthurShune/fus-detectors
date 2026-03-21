@@ -2,340 +2,183 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+import os
+import re
+import shutil
+import subprocess
 from pathlib import Path
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Rectangle
+
+DOT_SOURCE = r"""
+digraph G {
+  graph [
+    rankdir=TB,
+    bgcolor="white",
+    splines=ortho,
+    nodesep=0.42,
+    ranksep=0.50,
+    pad=0.12
+  ];
+  node [shape=plain, fontname="Helvetica"];
+  edge [color="#27313a", penwidth=1.5, arrowsize=0.8];
+
+  input [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="10" STYLE="ROUNDED" COLOR="#27313a" BGCOLOR="#f6f7f9">
+      <TR><TD><B>Clutter-filtered slow-time data</B></TD></TR>
+      <TR><TD>Same clutter-filtered<BR/>complex slow-time cube</TD></TR>
+    </TABLE>
+  >];
+
+  shared [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8" STYLE="ROUNDED" COLOR="#27313a" BGCOLOR="#eef5fb">
+      <TR><TD><B>Common setup for all variants</B></TD></TR>
+      <TR><TD>Same clutter-filtered residual, tiles, and slow-time bands</TD></TR>
+      <TR><TD><FONT POINT-SIZE="11"><B>Only the downstream score differs</B></FONT></TD></TR>
+      <TR><TD>
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6" COLOR="#46627a">
+          <TR>
+            <TD BGCOLOR="#d9e6f2">extract tiles</TD>
+            <TD BGCOLOR="#d9e6f2">define local neighborhoods</TD>
+            <TD BGCOLOR="#d9e6f2">use shared slow-time bands</TD>
+          </TR>
+        </TABLE>
+      </TD></TR>
+      <TR><TD>
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6" COLOR="#27313a">
+          <TR>
+            <TD BGCOLOR="#57b881"><B>flow band P<FONT POINT-SIZE="10"><SUB>f</SUB></FONT></B></TD>
+            <TD BGCOLOR="#f4c95d"><B>guard band P<FONT POINT-SIZE="10"><SUB>g</SUB></FONT></B></TD>
+            <TD BGCOLOR="#ee6c73"><B>alias band P<FONT POINT-SIZE="10"><SUB>a</SUB></FONT></B></TD>
+          </TR>
+        </TABLE>
+      </TD></TR>
+    </TABLE>
+  >];
+
+  fixed [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="10" STYLE="ROUNDED" COLOR="#27313a" BGCOLOR="#edf8f0">
+      <TR><TD><B>Fixed statistic (default)</B></TD></TR>
+      <TR><TD>Unwhitened band-limited score<BR/>No covariance estimation</TD></TR>
+    </TABLE>
+  >];
+
+  adaptive [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8" STYLE="ROUNDED" COLOR="#27313a" BGCOLOR="#fff5d8">
+      <TR><TD><B>Adaptive statistic</B></TD></TR>
+      <TR><TD>1. score all tiles with the fixed rule</TD></TR>
+      <TR><TD>2. estimate guard-band clutter level</TD></TR>
+      <TR><TD>3. flag clutter-heavy tiles</TD></TR>
+      <TR><TD>4. whiten and rescore flagged tiles</TD></TR>
+    </TABLE>
+  >];
+
+  whitened [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="10" STYLE="ROUNDED" COLOR="#27313a" BGCOLOR="#edf3fd">
+      <TR><TD><B>Fully whitened</B></TD></TR>
+      <TR><TD>Estimate local covariance<BR/>Whiten every tile before scoring</TD></TR>
+    </TABLE>
+  >];
+
+  recon [label=<
+    <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="10" STYLE="ROUNDED" COLOR="#27313a" BGCOLOR="#f7f7f7">
+      <TR><TD><B>Combine overlapping tiles</B></TD></TR>
+      <TR><TD>Combine tile scores into the final<BR/>score and readout maps</TD></TR>
+    </TABLE>
+  >];
+
+  { rank=same; fixed adaptive whitened }
+
+  input -> shared;
+  shared -> fixed;
+  shared -> adaptive;
+  shared -> whitened;
+  fixed -> recon;
+  adaptive -> recon;
+  whitened -> recon;
+}
+"""
 
 
-@dataclass(frozen=True)
-class BoxSpec:
-    cx: float
-    cy: float
-    w: float
-    h: float
-
-    @property
-    def left(self) -> float:
-        return self.cx - self.w / 2.0
-
-    @property
-    def right(self) -> float:
-        return self.cx + self.w / 2.0
-
-    @property
-    def bottom(self) -> float:
-        return self.cy - self.h / 2.0
-
-    @property
-    def top(self) -> float:
-        return self.cy + self.h / 2.0
+def _find_browser() -> str:
+    for name in ("chromium", "chromium-browser", "google-chrome"):
+        path = shutil.which(name)
+        if path:
+            return path
+    snap_path = Path("/snap/bin/chromium")
+    if snap_path.exists():
+        return str(snap_path)
+    raise RuntimeError("Could not find a Chromium-compatible browser for PDF export.")
 
 
-def add_round_box(
-    ax,
-    spec: BoxSpec,
-    *,
-    facecolor: str,
-    edgecolor: str = "#27313a",
-    linewidth: float = 1.35,
-    radius: float = 0.025,
-) -> None:
-    ax.add_patch(
-        FancyBboxPatch(
-            (spec.left, spec.bottom),
-            spec.w,
-            spec.h,
-            boxstyle=f"round,pad=0.015,rounding_size={radius}",
-            facecolor=facecolor,
-            edgecolor=edgecolor,
-            linewidth=linewidth,
+def _svg_size(svg: str) -> tuple[str, str]:
+    match = re.search(r'width="([^"]+)"\s+height="([^"]+)"', svg)
+    if not match:
+        raise RuntimeError("Could not parse rendered SVG size.")
+    return match.group(1), match.group(2)
+
+
+def _run(cmd: list[str], *, cwd: Path | None = None) -> None:
+    try:
+        subprocess.run(
+            cmd,
+            cwd=cwd,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
-    )
-
-
-def add_box_text(
-    ax,
-    spec: BoxSpec,
-    *,
-    title: str,
-    body: str,
-    title_size: float = 11.5,
-    body_size: float = 9.6,
-) -> None:
-    ax.text(
-        spec.cx,
-        spec.top - 0.055,
-        title,
-        ha="center",
-        va="top",
-        fontsize=title_size,
-        fontweight="bold",
-        color="#111111",
-    )
-    ax.text(
-        spec.cx,
-        spec.cy - 0.012,
-        body,
-        ha="center",
-        va="center",
-        fontsize=body_size,
-        color="#1a1a1a",
-        linespacing=1.15,
-        multialignment="center",
-    )
-
-
-def add_arrow(
-    ax,
-    start: tuple[float, float],
-    end: tuple[float, float],
-    *,
-    rad: float = 0.0,
-    lw: float = 1.55,
-) -> None:
-    ax.add_patch(
-        FancyArrowPatch(
-            start,
-            end,
-            arrowstyle="-|>",
-            mutation_scale=18,
-            linewidth=lw,
-            color="#27313a",
-            shrinkA=2,
-            shrinkB=4,
-            connectionstyle=f"arc3,rad={rad}",
-        )
-    )
-
-
-def add_band_bar(ax, spec: BoxSpec) -> None:
-    bar_x = spec.left + 0.04
-    bar_y = spec.bottom + 0.048
-    bar_w = spec.w - 0.08
-    bar_h = 0.04
-    segments = [
-        ("flow $P_f$", "#57b881", 0.42),
-        ("guard $P_g$", "#f4c95d", 0.24),
-        ("alias $P_a$", "#ee6c73", 0.34),
-    ]
-    offset = 0.0
-    for label, color, frac in segments:
-        seg_w = bar_w * frac
-        ax.add_patch(
-            Rectangle(
-                (bar_x + offset, bar_y),
-                seg_w,
-                bar_h,
-                facecolor=color,
-                edgecolor="#27313a",
-                linewidth=1.0,
-            )
-        )
-        ax.text(
-            bar_x + offset + seg_w / 2.0,
-            bar_y + bar_h / 2.0,
-            label,
-            ha="center",
-            va="center",
-            fontsize=8.3,
-            color="#182026",
-            fontweight="bold",
-        )
-        offset += seg_w
-
-
-def add_tile_icon(ax, spec: BoxSpec) -> None:
-    icon_w = 0.07
-    icon_h = 0.07
-    x0 = spec.left + 0.04
-    y0 = spec.bottom + 0.045
-    cell_pad = 0.004
-    cell_w = (icon_w - 2 * cell_pad) / 3.0
-    cell_h = (icon_h - 2 * cell_pad) / 3.0
-    for row in range(3):
-        for col in range(3):
-            ax.add_patch(
-                Rectangle(
-                    (
-                        x0 + col * cell_w,
-                        y0 + row * cell_h,
-                    ),
-                    cell_w - cell_pad,
-                    cell_h - cell_pad,
-                    facecolor="#d9e6f2" if (row + col) % 2 == 0 else "#f3f7fb",
-                    edgecolor="#46627a",
-                    linewidth=0.7,
-                )
-            )
-    ax.text(
-        x0 + icon_w + 0.012,
-        y0 + icon_h / 2.0,
-        "same residual,\noverlapping tiles",
-        ha="left",
-        va="center",
-        fontsize=8.9,
-        color="#26415a",
-    )
-
-
-def add_adaptive_inset(ax, spec: BoxSpec) -> None:
-    pill_h = 0.06
-    inset_w = spec.w - 0.09
-    top_pill = BoxSpec(spec.cx, spec.cy + 0.02, inset_w, pill_h)
-    left_pill = BoxSpec(spec.cx - 0.09, spec.bottom + 0.08, 0.16, pill_h)
-    right_pill = BoxSpec(spec.cx + 0.09, spec.bottom + 0.08, 0.16, pill_h)
-
-    for pill, fc in (
-        (top_pill, "#fff8da"),
-        (left_pill, "#eef6ff"),
-        (right_pill, "#edf8f0"),
-    ):
-        add_round_box(ax, pill, facecolor=fc, linewidth=1.0, radius=0.02)
-
-    ax.text(
-        top_pill.cx,
-        top_pill.cy,
-        "tile-mean PSD -> guard fraction $r_g$",
-        ha="center",
-        va="center",
-        fontsize=8.5,
-        color="#1c1c1c",
-    )
-    ax.text(
-        left_pill.cx,
-        left_pill.cy,
-        "$r_g < \\tau_g$\nkeep fixed score",
-        ha="center",
-        va="center",
-        fontsize=8.2,
-        color="#1c1c1c",
-        linespacing=1.08,
-    )
-    ax.text(
-        right_pill.cx,
-        right_pill.cy,
-        "$r_g \\geq \\tau_g$\nrerun whitened score",
-        ha="center",
-        va="center",
-        fontsize=8.2,
-        color="#1c1c1c",
-        linespacing=1.08,
-    )
-
-    add_arrow(
-        ax,
-        (top_pill.cx, top_pill.bottom),
-        (left_pill.cx, left_pill.top),
-        rad=0.08,
-        lw=1.15,
-    )
-    add_arrow(
-        ax,
-        (top_pill.cx, top_pill.bottom),
-        (right_pill.cx, right_pill.top),
-        rad=-0.08,
-        lw=1.15,
-    )
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"Missing required tool: {cmd[0]}") from exc
 
 
 def build(out: Path) -> None:
+    root = Path(__file__).resolve().parents[1]
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    fig, ax = plt.subplots(figsize=(11.6, 6.15))
-    ax.set_xlim(0.0, 1.0)
-    ax.set_ylim(0.0, 1.0)
-    ax.axis("off")
+    temp_dir = root / "tmp" / "graphviz_method_overview"
+    temp_dir.mkdir(parents=True, exist_ok=True)
 
-    input_box = BoxSpec(0.14, 0.79, 0.20, 0.19)
-    tile_box = BoxSpec(0.38, 0.79, 0.20, 0.19)
-    band_box = BoxSpec(0.63, 0.79, 0.24, 0.20)
-    output_box = BoxSpec(0.50, 0.12, 0.46, 0.15)
+    dot_path = temp_dir / "method_overview.dot"
+    svg_path = temp_dir / "method_overview.svg"
+    html_path = temp_dir / "method_overview.html"
+    raw_pdf_path = temp_dir / "method_overview_raw.pdf"
 
-    fixed_box = BoxSpec(0.18, 0.43, 0.25, 0.23)
-    adaptive_box = BoxSpec(0.50, 0.43, 0.31, 0.28)
-    whitened_box = BoxSpec(0.82, 0.43, 0.25, 0.23)
+    dot_path.write_text(DOT_SOURCE, encoding="utf-8")
 
-    add_round_box(ax, input_box, facecolor="#f6f7f9")
-    add_round_box(ax, tile_box, facecolor="#f5f8fb")
-    add_round_box(ax, band_box, facecolor="#eef5fb")
-    add_round_box(ax, fixed_box, facecolor="#edf8f0")
-    add_round_box(ax, adaptive_box, facecolor="#fff5d8")
-    add_round_box(ax, whitened_box, facecolor="#edf3fd")
-    add_round_box(ax, output_box, facecolor="#f7f7f7")
+    helper = root / "scripts" / "render_graphviz_svg.mjs"
+    if not helper.exists():
+        raise RuntimeError(f"Missing renderer helper: {helper}")
+    if not (root / "node_modules" / "@viz-js" / "viz").exists():
+        raise RuntimeError(
+            "Missing @viz-js/viz. Run `npm install` from the repository root "
+            "before regenerating this figure."
+        )
 
-    add_box_text(
-        ax,
-        input_box,
-        title="Input Residual",
-        body="Same clutter-filtered\ncomplex slow-time cube\n$X_{\\mathrm{base}}(T,H,W)$",
+    _run(["node", str(helper), str(dot_path), str(svg_path)], cwd=root)
+    svg = svg_path.read_text(encoding="utf-8")
+    width, height = _svg_size(svg)
+    html = (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        f"<style>@page {{ size: {width} {height}; margin: 0; }}"
+        "html,body{margin:0;padding:0;background:#fff;}"
+        f"svg{{display:block;width:{width};height:{height};}}"
+        "</style></head><body>"
+        f"{svg}</body></html>"
     )
-    add_box_text(
-        ax,
-        tile_box,
-        title="Localized Supports",
-        body="Extract overlapping spatial tiles\nand $L_t$ slow-time supports\nfor each neighborhood",
-    )
-    add_box_text(
-        ax,
-        band_box,
-        title="Band Model",
-        body="Per-tile slow-time summaries\nuse the same prespecified flow,\nguard, and alias bands",
-    )
-    add_box_text(
-        ax,
-        fixed_box,
-        title="Fixed Statistic",
-        body="Direct unwhitened\nband-limited ratio\n(no covariance estimate)",
-    )
-    add_box_text(
-        ax,
-        adaptive_box,
-        title="Adaptive Statistic",
-        body="Score every tile once with the fixed rule,\nthen selectively promote only\nclutter-heavy tiles",
-    )
-    add_box_text(
-        ax,
-        whitened_box,
-        title="Fully Whitened",
-        body="Estimate local covariance,\nload + whiten,\nthen score every tile",
-    )
-    add_box_text(
-        ax,
-        output_box,
-        title="Reconstruction",
-        body="Overlap-add tile outputs into the final\nscore map and detector-weighted readout map",
-    )
+    html_path.write_text(html, encoding="utf-8")
 
-    add_tile_icon(ax, tile_box)
-    add_band_bar(ax, band_box)
-    add_adaptive_inset(ax, adaptive_box)
-
-    ax.text(
-        0.50,
-        0.62,
-        "Same residual and tile geometry; only the final scoring stage changes.",
-        ha="center",
-        va="center",
-        fontsize=10.0,
-        color="#3b4752",
-        fontweight="bold",
+    browser = _find_browser()
+    _run(
+        [
+            browser,
+            "--headless",
+            "--disable-gpu",
+            "--no-sandbox",
+            f"--print-to-pdf={raw_pdf_path}",
+            "--print-to-pdf-no-header",
+            html_path.as_uri(),
+        ]
     )
-
-    add_arrow(ax, (input_box.right, input_box.cy), (tile_box.left, tile_box.cy))
-    add_arrow(ax, (tile_box.right, tile_box.cy), (band_box.left, band_box.cy))
-    add_arrow(ax, (band_box.cx, band_box.bottom), (adaptive_box.cx, adaptive_box.top))
-    add_arrow(ax, (band_box.left + 0.02, band_box.bottom), (fixed_box.cx, fixed_box.top), rad=0.12)
-    add_arrow(ax, (band_box.right - 0.02, band_box.bottom), (whitened_box.cx, whitened_box.top), rad=-0.12)
-    add_arrow(ax, (fixed_box.cx, fixed_box.bottom), (output_box.left + 0.09, output_box.top), rad=0.06)
-    add_arrow(ax, (adaptive_box.cx, adaptive_box.bottom), (output_box.cx, output_box.top))
-    add_arrow(ax, (whitened_box.cx, whitened_box.bottom), (output_box.right - 0.09, output_box.top), rad=-0.06)
-
-    fig.tight_layout(pad=0.35)
-    fig.savefig(out, bbox_inches="tight")
+    _run(["pdfcrop", str(raw_pdf_path), str(out)])
 
 
 def main() -> int:

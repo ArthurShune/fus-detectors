@@ -4,10 +4,10 @@
 
 This appendix is repository-facing archival material rather than part of the main scientific reading path. It records a minimal reproduction recipe: data locations, artifact outputs, and a pinned repository state.
 The machine-readable manifest \path{repro_manifest.json} stores the exact command blocks; this PDF appendix lists the corresponding artifacts and entry points.
-Run \path{PYTHONPATH=. conda run -n fus-detectors python scripts/generate_repro_manifest.py} to refresh this manifest.
+Refresh this manifest with \texttt{PYTHONPATH=. conda run -n fus-detectors python scripts/generate\_repro\_manifest.py}.
 
 \paragraph{Repository state.}
-Public repository: \path{git@github.com:ArthurShune/fus-detectors.git}.
+Public repository: \href{https://github.com/ArthurShune/fus-detectors}{\texttt{https://github.com/ArthurShune/fus-detectors}}.
 Release tag: (not recorded; set \texttt{FUS\_DETECTORS\_RELEASE\_TAG} or create a git tag).
 Commit: \texttt{601966c} (full: \texttt{601966c3b2}\allowbreak\texttt{5b33a0ac20}\allowbreak\texttt{18e5c41fac}\allowbreak\texttt{df0dd984b1}); branch: \texttt{main}; dirty: \texttt{false}.
 Dirty details: non-ignored paths=0, ignored build products=0.
@@ -16,9 +16,9 @@ For archival reproducibility, generate this manifest from a clean, tagged releas
 
 \paragraph{Environment.}
 Conda spec: \path{environment.yml} (sha256: \texttt{b50293345709179b}\allowbreak\texttt{8df97e68b2886dda}\allowbreak\texttt{6a91d39b68cdc7c6}\allowbreak\texttt{b6caa670490cb194}).
-Create env: \path{conda env create -f environment.yml}.
+Create env: \texttt{conda env create -f environment.yml}.
 Docker: \path{Dockerfile} (sha256: \texttt{0746a21bcc0ecc75}\allowbreak\texttt{a67ac5f84c155a51}\allowbreak\texttt{85522b831eac4cdf}\allowbreak\texttt{3da05b777bf581ac}).
-Build container: \path{docker build -t fus-detectors -f Dockerfile .}.
+Build container: \texttt{docker build -t fus-detectors -f Dockerfile .}.
 Runtime (conda env \texttt{fus-detectors}):
 Python: \path{3.10.19 | packaged by conda-forge | (main, Oct 22 2025, 22:29:10) [GCC 14.3.0]}.
 Platform: \path{Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39}.
@@ -684,4 +684,3 @@ Each entry below lists the paper-facing artifact outputs and their repository en
     \endgroup
     Exact command block: \path{repro_manifest.json}.
 \end{enumerate}
-

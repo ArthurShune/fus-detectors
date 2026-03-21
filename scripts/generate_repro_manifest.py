@@ -257,9 +257,22 @@ def _repo_meta() -> dict[str, Any]:
         tag = str(tag or "").strip()
         return tag or None
 
+    def _normalize_public_url(url: str | None) -> str | None:
+        url = str(url or "").strip()
+        if not url:
+            return None
+        if url.startswith("git@github.com:"):
+            tail = url[len("git@github.com:") :]
+            if tail.endswith(".git"):
+                tail = tail[:-4]
+            return f"https://github.com/{tail}"
+        if url.startswith("https://github.com/") and url.endswith(".git"):
+            return url[:-4]
+        return url
+
     url = (os.environ.get("STAP_FUS_PUBLIC_REPO_URL") or "").strip() or None
     tag = (os.environ.get("STAP_FUS_RELEASE_TAG") or "").strip() or None
-    url = url or _infer_git_remote_url()
+    url = _normalize_public_url(url or _infer_git_remote_url())
     tag = tag or _infer_release_tag()
     return {"public_url": url, "release_tag": tag}
 
@@ -273,6 +286,10 @@ def _tex_escape(s: str) -> str:
         .replace("&", "\\&")
         .replace("#", "\\#")
     )
+
+
+def _render_code_inline(s: str) -> str:
+    return f"\\texttt{{{_tex_escape(str(s))}}}"
 
 
 def _render_verbatim_block(lines: Iterable[str]) -> str:
@@ -373,9 +390,8 @@ def _render_appendix_tex(manifest: dict[str, Any], *, out_path: Path) -> None:
         or "fus-detectors"
     )
     lines.append(
-        "Run "
-        f"\\path{{PYTHONPATH=. conda run -n {preferred_env} python scripts/generate_repro_manifest.py}} "
-        "to refresh this manifest."
+        "Refresh this manifest with "
+        f"{_render_code_inline(f'PYTHONPATH=. conda run -n {preferred_env} python scripts/generate_repro_manifest.py')}."
     )
     lines.append("")
 
@@ -386,7 +402,7 @@ def _render_appendix_tex(manifest: dict[str, Any], *, out_path: Path) -> None:
         public_url = str(repo.get("public_url") or "").strip()
         release_tag = str(repo.get("release_tag") or "").strip()
         if public_url:
-            lines.append(f"Public repository: \\path{{{public_url}}}.")
+            lines.append(f"Public repository: \\href{{{public_url}}}{{{_render_code_inline(public_url)}}}.")
         else:
             lines.append(
                 "Public repository: (not recorded; set \\texttt{FUS\\_DETECTORS\\_PUBLIC\\_REPO\\_URL} or add a git remote such as \\texttt{origin})."
@@ -439,7 +455,7 @@ def _render_appendix_tex(manifest: dict[str, Any], *, out_path: Path) -> None:
             )
         else:
             lines.append(f"Conda spec: \\path{{{str(env_yml.get('path'))}}}.")
-        lines.append("Create env: \\path{conda env create -f environment.yml}.")
+        lines.append(f"Create env: {_render_code_inline('conda env create -f environment.yml')}.")
     if isinstance(docker_spec, dict) and docker_spec.get("path"):
         sha = docker_spec.get("sha256")
         if sha:
@@ -448,7 +464,7 @@ def _render_appendix_tex(manifest: dict[str, Any], *, out_path: Path) -> None:
             )
         else:
             lines.append(f"Docker: \\path{{{str(docker_spec.get('path'))}}}.")
-        lines.append("Build container: \\path{docker build -t fus-detectors -f Dockerfile .}.")
+        lines.append(f"Build container: {_render_code_inline('docker build -t fus-detectors -f Dockerfile .')}.")
 
     if isinstance(env_conda, dict) and "error" in env_conda:
         lines.append(f"Conda query failed for env \\texttt{{{_tex_escape(preferred_env)}}}: {_tex_escape(str(env_conda.get('error')))}.")

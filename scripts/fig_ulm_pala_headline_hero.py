@@ -434,7 +434,7 @@ def main() -> int:
     fig.subplots_adjust(left=0.012, right=0.995, top=0.90, bottom=0.13)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(args.out)
+    fig.savefig(args.out, dpi=300)
     if args.out.suffix.lower() == ".pdf":
         fig.savefig(args.out.with_suffix(".png"), dpi=300)
     plt.close(fig)

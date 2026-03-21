@@ -105,7 +105,7 @@ This build restores the full narrative behind the slimmer submission manuscript:
 \end{center}
 \fi
 \begin{abstract}
-Functional ultrasound is increasingly used in intraoperative, neonatal, and mobile brain imaging, but residual tissue motion, phase instability, and aliased flow can still generate artifactual high scores after conventional clutter suppression. We study localized matched-subspace detectors applied downstream of clutter filtering in beamformed slow-time fUS data, from a fixed band-limited statistic to locally whitened variants. On a held-out SIMUS structural benchmark, changing only the final detector on the same clutter-filtered residual sharply reduces nuisance leakage: in the intra-operative setting, nuisance false-positive rate falls from 0.998 for Kasai to 0.004 for the fixed matched-subspace statistic at matched 50\% target-flow recall. In a separate held-out end-to-end benchmark, the selected fixed chains yield zero observed nuisance detections on all four held-out seed-setting pairs. On an open real-IQ rat-brain dataset, the fully whitened variant improves a conservative localization-derived vessel-core versus shell endpoint in all 10 audited blocks (AUC 0.530 versus 0.504 for power Doppler; exact paired sign-flip $p=0.002$). These results show that the downstream detector is a consequential design choice in post-beamformed fUS, and that localized matched-subspace scoring can reduce nuisance leakage on unchanged clutter-filtered residuals.
+Functional ultrasound is increasingly used in intra-operative, neonatal, and mobile brain imaging, but residual tissue motion, phase instability, and aliased flow can still generate artifactual high scores after conventional clutter suppression. We study localized matched-subspace detectors applied downstream of clutter filtering in beamformed slow-time fUS data, from a fixed band-limited statistic to locally whitened variants. On a held-out SIMUS structural benchmark, changing only the final detector on the same clutter-filtered residual sharply reduces nuisance leakage: in the intra-operative setting, nuisance false-positive rate falls from 0.998 for Kasai to 0.004 for the fixed matched-subspace statistic at matched 50\% target-flow recall. In a separate held-out end-to-end benchmark, the selected fixed chains yield zero observed nuisance detections on all four held-out seed-setting pairs. On an open real-IQ rat-brain dataset, the fully whitened variant improves a conservative localization-derived vessel-core versus shell endpoint in all 10 audited blocks (AUC 0.530 versus 0.504 for power Doppler; exact paired sign-flip $p = 0.002$). These results show that the downstream detector is a consequential design choice in post-beamformed fUS, and that localized matched-subspace scoring can reduce nuisance leakage on unchanged clutter-filtered residuals.
 \end{abstract}
 
 \fi
@@ -121,14 +121,14 @@ This problem matters now because fUS is no longer only a preclinical proof-of-co
 
 On the held-out SIMUS-Struct benchmark, changing only the downstream detection statistic sharply reduces nuisance leakage on the same clutter-filtered residual. In the intra-operative setting, nuisance FPR falls from 0.998 for Kasai to 0.004 for the fixed matched-subspace statistic at matched 50\% target-flow recall. In the separate best-chain benchmark, the selected fixed detector chains yield zero observed nuisance detections on all four held-out seed-setting pairs.
 
-After clutter filtering, we replace the final PD/Kasai-style readout with a local matched-subspace score that asks whether residual slow-time energy is concentrated in the expected flow band. We study three variants: a fixed statistic, an adaptive version that invokes whitening in clutter-dominant neighborhoods, and a fully whitened version. Across the settings studied here, the fixed statistic is the default structural choice, whereas whitening helps in more clutter-dominant settings.
+After clutter filtering, we replace the final PD/Kasai-style readout with a local matched-subspace score that asks whether residual slow-time energy is concentrated in the expected flow band. We study three variants: a fixed statistic, an adaptive version that invokes whitening in clutter-dominant neighborhoods, and a fully whitened version. Across the settings studied here, the fixed statistic is the default structural choice, whereas whitening helps in more clutter-dominant settings. That default path is also the lightest one: it adds no covariance estimation, while whitening is reserved for narrower clutter-heavy settings.
 
 \ifPAPERONLY
-Figure~\ref{fig:ulm_intro_preview} gives a qualitative real-IQ rat-brain preview using the fully whitened variant, which is strongest on this ULM structural endpoint.
+Figure~\ref{fig:ulm_intro_preview} gives a qualitative real-IQ rat-brain preview using the fully whitened variant, which is strongest on this ULM structural endpoint rather than as the default structural path.
 \else
-A qualitative real-IQ rat-brain preview using the fully whitened variant appears in the preprint front matter; that variant is strongest on this ULM structural endpoint.
+A qualitative real-IQ rat-brain preview using the fully whitened variant appears in the preprint front matter; that variant is strongest on this ULM structural endpoint rather than as the default structural path.
 \fi
-The default detector choice for general structural use is determined separately by the held-out SIMUS benchmark below.
+The default detector choice for general structural use is determined separately by the held-out SIMUS benchmark below, which selects the fixed no-covariance statistic.
 
 \ifPAPERONLY
 \enlargethispage{4\baselineskip}
@@ -137,7 +137,7 @@ The default detector choice for general structural use is determined separately 
 \centering
 \captionsetup{skip=4pt}
 \includegraphics[width=0.97\linewidth]{figs/paper/ulm7883227_pala_headline_hero.pdf}
-\caption{\textit{Illustrative real-IQ structural evaluation preview.} Same audited 64-frame residual window shown with a localization-derived vascular reference, baseline power Doppler, and the fully whitened detector. Panels b--c are thresholded at matched 70\% vessel-core recall. Full quantitative same-residual results are reported in Section~\ref{sec:ulm7883227}; the held-out SIMUS benchmark sets the default detector choice.}
+\caption{\textit{Illustrative real-IQ structural evaluation preview.} Same audited 64-frame residual window shown with a localization-derived vascular reference, baseline power Doppler, and the fully whitened detector. Panels b--c are thresholded at matched 70\% vessel-core recall. Full quantitative same-residual results are reported in Section~\ref{sec:ulm7883227}; the held-out SIMUS benchmark separately selects the fixed no-covariance statistic as the default detector choice.}
 \label{fig:ulm_intro_preview}
 \end{figure}
 \vspace{-0.25\baselineskip}
@@ -207,7 +207,7 @@ Relative to a conventional ultrafast Doppler pipeline, the proposed detector fam
 \paragraph{Plain-language interpretation.}
 The fixed statistic is a local band-limited flow detector applied after ordinary clutter filtering. In practical terms, the method asks a local question after ordinary clutter suppression: within a small spatial neighborhood, does the remaining slow-time activity look more like microvascular flow or more like locally structured nuisance? The adaptive branch adds tile-local whitening only where guard-band energy indicates localized clutter. Figure~\ref{fig:stap_pipeline} summarizes the pipeline.
 
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \IfFileExists{figs/paper/stap_pipeline_bayes_block.pdf}{%
   \includegraphics[width=\linewidth]{figs/paper/stap_pipeline_bayes_block.pdf}%
@@ -220,7 +220,7 @@ The fixed statistic is a local band-limited flow detector applied after ordinary
     \vspace{0.5em}
   \end{minipage}}%
 }
-\caption{Method overview. All three detector variants operate on the same clutter-filtered residual and the same overlapping tile geometry. The fixed detector applies the unwhitened band-limited score everywhere. The adaptive detector first scores every tile with that fixed rule, computes a tile-mean guard-fraction telemetry summary, and reruns only promoted clutter-heavy tiles with whitening. The fully whitened detector estimates a local covariance and applies whitening on every tile before overlap-add reconstruction of the final maps.}
+\caption{Method overview. All three detector variants operate on the same clutter-filtered residual, overlapping tile geometry, and slow-time bands. The fixed detector is the default structural path and applies an unwhitened band-limited score to every tile without covariance estimation. The adaptive detector first scores all tiles with the fixed rule, estimates a guard-band clutter diagnostic, and whitens only flagged clutter-heavy tiles. The fully whitened detector estimates local covariance and whitens every tile before the overlapping tile scores are combined into the final maps.}
 \label{fig:stap_pipeline}
 \end{figure}
 
@@ -505,6 +505,8 @@ SIMUS-Struct uses the open-source SIMUS/PyMUST moving-scatterer forward model an
 \paragraph{Same-residual scoring-rule ablation.}
 We first fix one held-out MC--SVD residual stream and swap only the downstream detection statistic to isolate the detector effect directly. This removes clutter-filter choice from the comparison. On that fixed residual, PD and Kasai still rank nuisance highly, the fixed matched-subspace statistic is the strongest same-residual detector, and the fully whitened statistic is worse on both held-out settings. The adaptive statistic is numerically identical to the fixed statistic here because its frozen guard-promotion rule does not activate on these cleaner MC--SVD residuals. The adaptive extension therefore preserves the fixed default when the clutter evidence is weak instead of forcing whitening where it does not help. Figure~\ref{fig:simus_detector_family_headline} gives the operating-point summary, and Table~\ref{tab:simus_detector_family_ablation} reports the full same-residual comparison.
 
+\paragraph{Best-chain benchmark.}
+\noindent Table~\ref{tab:accepted_v2_structural_main} is the best-chain benchmark: each row reports the strongest held-out end-to-end pipeline for that setting, so both clutter filter and final detector may differ across rows. On the mobile setting, HOSVD $\rightarrow$ Kasai is the strongest conventional baseline. Adaptive Global SVD $\rightarrow$ fixed matched-subspace improves AUC$_{\mathrm{main/nuis}}$ from 0.672 [0.624, 0.720] to 0.953 [0.923, 0.984] and yields zero observed nuisance detections on both held-out seeds. On the intra-operative parenchymal setting, HOSVD $\rightarrow$ Kasai is again the strongest conventional baseline, while RPCA $\rightarrow$ fixed matched-subspace improves AUC$_{\mathrm{main/nuis}}$ from 0.451 [0.431, 0.471] to 0.99996 [0.99994, 0.99998] and again yields zero observed nuisance detections on both held-out seeds. Figure~\ref{fig:simus_reference_benchmark_geometry} shows the held-out mask geometry used for these comparisons, and the 0.000 nuisance rows in Table~\ref{tab:accepted_v2_structural_main} are literal zero observed nuisance detections rather than rounded near-zero rates. The detector-only same-residual comparison is reported separately in Table~\ref{tab:simus_detector_family_ablation} and Figure~\ref{fig:simus_detector_family_headline}. This benchmark sets the default detector configuration.
 \IfFileExists{reports/paper/accepted_v2_structural_main_table.tex}{%
   \input{reports/paper/accepted_v2_structural_main_table.tex}%
 }{%
@@ -516,9 +518,6 @@ We first fix one held-out MC--SVD residual stream and swap only the downstream d
   \end{minipage}}
   \end{center}
 }
-
-\paragraph{Best-chain benchmark.}
-\noindent Table~\ref{tab:accepted_v2_structural_main} is the best-chain benchmark: each row reports the strongest held-out end-to-end pipeline for that setting, so both clutter filter and final detector may differ across rows. On the mobile setting, HOSVD $\rightarrow$ Kasai is the strongest conventional baseline. Adaptive Global SVD $\rightarrow$ fixed matched-subspace improves AUC$_{\mathrm{main/nuis}}$ from 0.672 [0.624, 0.720] to 0.953 [0.923, 0.984] and yields zero observed nuisance detections on both held-out seeds. On the intra-operative parenchymal setting, HOSVD $\rightarrow$ Kasai is again the strongest conventional baseline, while RPCA $\rightarrow$ fixed matched-subspace improves AUC$_{\mathrm{main/nuis}}$ from 0.451 [0.431, 0.471] to 0.99996 [0.99994, 0.99998] and again yields zero observed nuisance detections on both held-out seeds. Figure~\ref{fig:simus_reference_benchmark_geometry} shows the held-out mask geometry used for these comparisons, and the 0.000 nuisance rows in Table~\ref{tab:accepted_v2_structural_main} are literal zero observed nuisance detections rather than rounded near-zero rates. The detector-only same-residual comparison is reported separately in Table~\ref{tab:simus_detector_family_ablation} and Figure~\ref{fig:simus_detector_family_headline}. This benchmark sets the default detector configuration.
 \IfFileExists{reports/paper/simus_detector_family_ablation_table.tex}{%
   \input{reports/paper/simus_detector_family_ablation_table.tex}%
 }{%
@@ -532,23 +531,6 @@ We first fix one held-out MC--SVD residual stream and swap only the downstream d
 }
 
 \emph{FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$} directly measures artifact leakage at a clinically relevant sensitivity operating point.
-
-\begin{figure}[t]
-\centering
-\IfFileExists{figs/paper/simus_detector_family_headline.pdf}{%
-  \includegraphics[width=\linewidth]{figs/paper/simus_detector_family_headline.pdf}%
-}{%
-  \fbox{\begin{minipage}{0.95\linewidth}
-    \centering
-    \vspace{0.5em}
-    Missing figure \path{figs/paper/simus_detector_family_headline.pdf}.\\
-    Reproduce it with \path{PYTHONPATH=. python scripts/fig_simus_detector_family_headline.py}.
-    \vspace{0.5em}
-  \end{minipage}}%
-}
-\caption{Headline same-residual scoring-rule comparison on the held-out SIMUS reference benchmark using the common MC--SVD residual from Table~\ref{tab:simus_detector_family_ablation}. Bars show nuisance false-positive rate at matched main-response recall 0.5, the clearest operating-point summary of the benchmark. Lower bars are better. On the intra-operative setting, the fixed matched-subspace detector reduces nuisance FPR from 0.998 for Kasai to 0.004 on the same residual stream; under this frozen guard rule, the adaptive variant matches that result. AUC$_{\mathrm{main/nuis}}$ values are reported in Table~\ref{tab:simus_detector_family_ablation}.}
-\label{fig:simus_detector_family_headline}
-\end{figure}
 
 \ifPAPERONLY
 A fixed-threshold transfer audit also survives on the same benchmark family: on SIMUS-Struct-Mobile, the fixed statistic preserves nonzero held-out main recall while reducing realized nuisance FPR relative to PD, and on SIMUS-Struct-Intraop it is the only statistic that suppresses nuisance leakage to zero under the transferred threshold.
@@ -568,6 +550,23 @@ That per-window operating-point protocol is still an evaluation protocol, not a 
 }
 \fi
 
+\begin{figure}[H]
+\centering
+\IfFileExists{figs/paper/simus_detector_family_headline.pdf}{%
+  \includegraphics[width=\linewidth]{figs/paper/simus_detector_family_headline.pdf}%
+}{%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    \centering
+    \vspace{0.5em}
+    Missing figure \path{figs/paper/simus_detector_family_headline.pdf}.\\
+    Reproduce it with \path{PYTHONPATH=. python scripts/fig_simus_detector_family_headline.py}.
+    \vspace{0.5em}
+  \end{minipage}}%
+}
+\caption{Headline same-residual scoring-rule comparison on the held-out SIMUS reference benchmark using the common MC--SVD residual from Table~\ref{tab:simus_detector_family_ablation}. Bars show nuisance false-positive rate at matched main-response recall 0.5, the clearest operating-point summary of the benchmark. Lower bars are better. On the intra-operative setting, the fixed matched-subspace detector reduces nuisance FPR from 0.998 for Kasai to 0.004 on the same residual stream; under this frozen guard rule, the adaptive variant matches that result. AUC$_{\mathrm{main/nuis}}$ values are reported in Table~\ref{tab:simus_detector_family_ablation}.}
+\label{fig:simus_detector_family_headline}
+\end{figure}
+
 \paragraph{Clutter-heavy stress setting.}
 Whitening starts to matter once the same benchmark is pushed into clutter-heavier settings. We test two held-out stresses: stronger cardiac-like low-frequency pulsation and shorter slow-time support (64, 48, and 32 frames). The pulsation rows use a fixed 1.30~Hz nuisance term with increasing amplitude, and the short-ensemble rows mimic clinically constrained acquisitions in which shorter windows are used to limit motion corruption or workflow burden \cite{DemeneClutterSVD2015,BarangerAdaptiveSVD2018,Imbault2017,Soloukey2020FUSAwake,MobileFUS2025}. The held-out evaluation is then rerun at full reporting tier for the clutter-filter families that survived the reduced-grid search.
 
@@ -584,24 +583,7 @@ Whitening starts to matter once the same benchmark is pushed into clutter-heavie
 }
 
 \noindent Table~\ref{tab:simus_stress_frontier_rpca_heads} shows the punchline directly: the fully whitened statistic is strongest on the cardiac-pulsation rows and on the 64-frame and 48-frame short-ensemble rows, while the fixed statistic remains strongest only on the hardest 32-frame row. The adaptive statistic is numerically identical to the fixed statistic on these rows, so the gain is not coming from freely switching among all three modes. Because this stress setting uses one held-out evaluation seed per axis, the uncertainty notation here is a within-seed bootstrap interval over the held-out masked scores rather than a between-seed interval.
-
-\paragraph{Functional same-cube detection-statistic comparison.}
-\ifPAPERONLY
-A held-out functional audit on the same residual stream is directionally positive for the fully whitened variant across most residual families, but the effect is smaller than in the structural benchmark and is treated as secondary evidence.
-\else
-Table~\ref{tab:accepted_v2_functional_main} reports one held-out functional same-cube audit on the same residual stream under an activation-versus-nuisance readout. The fully whitened variant is directionally positive across most residual families, but the effect is smaller than in the structural benchmark and is treated as secondary evidence.
-\IfFileExists{reports/paper/simus_functional_numeric_summary_table.tex}{%
-  \input{reports/paper/simus_functional_numeric_summary_table.tex}%
-}{%
-  \begin{center}
-  \refstepcounter{table}\label{tab:accepted_v2_functional_main}%
-  \fbox{\begin{minipage}{0.95\linewidth}
-    Missing table \path{reports/paper/simus_functional_numeric_summary_table.tex}.\\
-    Reproduce it with \path{PYTHONPATH=. python3 scripts/simus_functional_numeric_table.py}.
-  \end{minipage}}
-  \end{center}
-}
-\fi
+\noindent A secondary same-residual functional audit is reported in \SuppOrApp{app:supp-results}; under the same background-controlled activation-versus-nuisance readout, the fully whitened variant is directionally positive on five of six frozen residual families in both prespecified SIMUS settings. That matters because it suggests the detector-head effect is not purely structural, even though the functional uplift is smaller than the structural benchmark and remains secondary evidence.
 
 \subsection{Brain simulation stress tests}
 \ifPAPERONLY
@@ -839,9 +821,9 @@ The reference comes from the published PALA rat-brain localization rendering, re
 On this endpoint, Table~\ref{tab:ulm7883227_structural_roc} reports PD, Kasai, the fixed statistic, the adaptive statistic, and the fully whitened variant on the same residual windows and the same localization-derived vessel-core versus shell masks. The fixed and adaptive statistics yield only modest pooled-ROC gains over PD and Kasai, and adaptive is nearly indistinguishable from fixed under this profile. The fully whitened variant is the only statistic that improves pooled AUC, strict-tail sensitivity, and shell FPR at matched 70\% vessel-core recall: AUC 0.530 [0.524, 0.537], TPR@$10^{-3}$ 0.004 [0.003, 0.006], and shell FPR 0.676 [0.665, 0.687], compared with AUC 0.514/0.514, TPR@$10^{-3}$ 2.6e-4/2.6e-4, and shell FPR 0.703/0.702 for the fixed/adaptive statistics and AUC 0.504/0.503, TPR@$10^{-3}$ 7.9e-5/5.9e-5, and shell FPR 0.698/0.701 for PD/Kasai.
 
 \ifPAPERONLY
-The pooled advantage is not driven by one favorable block. Relative to the fixed statistic, the fully whitened variant exceeds AUC on 47/70 audited windows and all 10/10 blocks, lowers shell FPR at matched 70\% core recall on 47/70 windows and 9/10 blocks, and yields nonzero TPR@$10^{-3}$ in 45/70 windows versus 10/70 for the fixed and adaptive statistics. Against baseline power Doppler, the fully whitened variant also wins AUC on all 10 audited blocks on this same-acquisition ULM structural evaluation, and an exact paired sign-flip test on the block-mean AUC difference gives $p=0.00195$. Figure~\ref{fig:ulm_pala_headline_hero} gives the visual counterpart to this result. On an RTX~4080 SUPER, the same 64-frame no-registration configuration runs at 41.3~ms steady-state total for a 64~ms acquisition budget under the reported replay conditions.
+The pooled advantage is not driven by one favorable block. Relative to the fixed statistic, the fully whitened variant exceeds AUC on 47/70 audited windows and all 10/10 blocks, lowers shell FPR at matched 70\% core recall on 47/70 windows and 9/10 blocks, and yields nonzero TPR@$10^{-3}$ in 45/70 windows versus 10/70 for the fixed and adaptive statistics. Against baseline power Doppler, the fully whitened variant also wins AUC on all 10 audited blocks on this same-acquisition ULM structural evaluation, and an exact paired sign-flip test on the block-mean AUC difference gives $p = 0.002$. Figure~\ref{fig:ulm_pala_headline_hero} gives the visual counterpart to this result. On an RTX~4080 SUPER, the same 64-frame no-registration configuration runs at 41.3~ms steady-state total for a 64~ms acquisition budget under the reported replay conditions.
 \else
-The pooled advantage is not driven by one favorable block. Relative to the fixed statistic, the fully whitened variant exceeds AUC on 47/70 audited windows and all 10/10 blocks, lowers shell FPR at matched 70\% core recall on 47/70 windows and 9/10 blocks, and yields nonzero TPR@$10^{-3}$ in 45/70 windows versus 10/70 for the fixed and adaptive statistics (Table~\ref{tab:ulm_pala_window_consistency}). The same pattern holds against the adaptive statistic: 46/70 AUC windows, 47/70 shell-FPR windows, and 10/10 blocks. Against baseline power Doppler, the fully whitened variant also wins AUC on all 10 audited blocks on this same-acquisition ULM structural evaluation, and an exact paired sign-flip test on the block-mean AUC difference gives $p=0.00195$. Figure~\ref{fig:ulm_pala_headline_hero} gives the visual counterpart to this result by showing a representative same-window comparison between baseline power Doppler and the fully whitened variant. On an RTX~4080 SUPER, the same 64-frame no-registration configuration runs at 41.3~ms steady-state total for a 64~ms acquisition budget under the reported replay conditions. The labels come from a published localization-derived vascular rendering on the same acquisition rather than from an independent modality or task-based ground truth, so this remains a structural rather than functional result.
+The pooled advantage is not driven by one favorable block. Relative to the fixed statistic, the fully whitened variant exceeds AUC on 47/70 audited windows and all 10/10 blocks, lowers shell FPR at matched 70\% core recall on 47/70 windows and 9/10 blocks, and yields nonzero TPR@$10^{-3}$ in 45/70 windows versus 10/70 for the fixed and adaptive statistics (Table~\ref{tab:ulm_pala_window_consistency}). The same pattern holds against the adaptive statistic: 46/70 AUC windows, 47/70 shell-FPR windows, and 10/10 blocks. Against baseline power Doppler, the fully whitened variant also wins AUC on all 10 audited blocks on this same-acquisition ULM structural evaluation, and an exact paired sign-flip test on the block-mean AUC difference gives $p = 0.002$. Figure~\ref{fig:ulm_pala_headline_hero} gives the visual counterpart to this result by showing a representative same-window comparison between baseline power Doppler and the fully whitened variant. On an RTX~4080 SUPER, the same 64-frame no-registration configuration runs at 41.3~ms steady-state total for a 64~ms acquisition budget under the reported replay conditions. The labels come from a published localization-derived vascular rendering on the same acquisition rather than from an independent modality or task-based ground truth, so this remains a structural rather than functional result.
 \fi
 
 Supplementary overlap and falsification checks point in the same direction: a stricter odd-block-reference / even-block-evaluation split preserves the family ordering with attenuated margins, while support-matched randomization and large cyclic translations collapse the structural endpoint toward chance rather than reproducing the fully whitened ordering.
@@ -946,7 +928,7 @@ The open real-IQ sections provide conservative structural corroboration on real 
 The clearest next test is prospective validation on real task-driven fUS data. A collaborator would provide raw complex IQ or beamformed slow-time data, PRF and acquisition metadata, stimulus or task timing, and, when available, an independent structural anchor such as a localization-derived vascular map or structural co-registration. We would run the detector family as a drop-in replacement for the final PD/Kasai-style readout on the collaborator's existing clutter-filtered residual pipeline, produce same-residual comparisons against PD/Kasai-style scores, and evaluate task-activation or structural readouts with the collaborator's current downstream analysis workflow rather than replacing it. The intended output is a joint validation study, positive or negative, together with a reusable evaluation harness the collaborator can continue using on future datasets. Collaborators would also receive the full detector implementation configured for their acquisition parameters, together with the evaluation harness, for use on future datasets. The contribution from this side is the tested detector implementation, the same-residual evaluation protocol, and the computational work needed to run the comparisons and package the results. The author welcomes collaboration inquiries from labs with raw fUS IQ data and task paradigms; correspondence to \href{mailto:arthur@skymesasystems.com}{arthur@skymesasystems.com}.
 
 \section*{Data and code availability}
-All datasets used in this work are publicly available or derived deterministically from those sources. The reference implementation, reproduction scripts, and canonical commit information are available at \href{https://github.com/ArthurShune/fus-detectors}{\texttt{github.com/ArthurShune/fus-detectors}}; the repository is released under the MIT License and is the reference implementation used for the reported analyses (\SuppOrApp{app:repro}).
+All datasets used in this work are publicly available or derived deterministically from those sources. The reference implementation, reproduction scripts, and canonical commit information are available at \href{https://github.com/ArthurShune/fus-detectors}{\texttt{https://github.com/ArthurShune/fus-detectors}}; the repository is released under the MIT License and is the reference implementation used for the reported analyses (\SuppOrApp{app:repro}).
 \else
 \section{Discussion}
 \label{sec:discussion}
@@ -983,7 +965,7 @@ More broadly, freezing the clutter-suppressed cube and comparing only the downst
 All datasets used in this work are either publicly available (as cited) or derived deterministically from those sources. All code used to generate the reported tables and figures is versioned; the exact commit hash and release information are recorded in the reproducibility manifest (\SuppOrApp{app:repro}). A minimal CUDA-enabled software environment and container recipe are provided in the repository. End-to-end regeneration commands for the reported figures and tables are collected in the repository and summarized in the reproducibility appendix.
 
 \paragraph{Code repository.}
-The reference implementation and reproduction scripts are available at \href{https://github.com/ArthurShune/fus-detectors}{\texttt{github.com/ArthurShune/fus-detectors}}. The repository is released under the MIT License, and the public codebase is the reference implementation used for the reported analyses. The canonical commit hash and release information are recorded in the reproducibility manifest (\SuppOrApp{app:repro}).
+The reference implementation and reproduction scripts are available at \href{https://github.com/ArthurShune/fus-detectors}{\texttt{https://github.com/ArthurShune/fus-detectors}}. The repository is released under the MIT License, and the public codebase is the reference implementation used for the reported analyses. The canonical commit hash and release information are recorded in the reproducibility manifest (\SuppOrApp{app:repro}).
 \fi
 
 \fi % end main-text block (skipped in supplement-only build)
@@ -1368,9 +1350,9 @@ The appendices collect formal detector derivations, robustness audits, and repro
 Term in the paper & Plain-language meaning in ultrasound terms & Where it is developed \\
 \hline
 Fully whitened detector & Tile-local slow-time covariance whitening applied before matched-subspace scoring. & Appendix~\ref{app:ka-contract-theory} \\
-Adaptive guard rule & A conservative switch that keeps the simple detector by default and turns on whitening only where guard-band clutter evidence is strong. & Main text Section~\ref{sec:method}; Supplementary Material \\
+Adaptive guard rule & A conservative switch that keeps the simple detector by default and turns on whitening only where guard-band clutter evidence is strong. & \ifSUPPLEMENTONLY Main paper methods section\else Main text Section~\ref{sec:method}\fi; Supplementary Material \\
 Shrink-only regularizer & A conservative score penalty map driven by band-energy cues and vessel-proxy protection masks; it can reduce scores but never increase them. & Appendix~\ref{app:ka-contract-theory}; Supplementary Material \\
-Empirically tail-calibrated thresholds & Background-tail threshold setting based on empirical negative-score distributions rather than analytic scanner-time formulas. & Main text Section~\ref{sec:eval}; Supplementary Material \\
+Empirically tail-calibrated thresholds & Background-tail threshold setting based on empirical negative-score distributions rather than analytic scanner-time formulas. & \ifSUPPLEMENTONLY Main paper evaluation section\else Main text Section~\ref{sec:eval}\fi; Supplementary Material \\
 Safeguards & Automatic checks that disable the optional penalty layer or force conservative behavior when metadata, band geometry, or proxy information are unreliable. & Appendix~\ref{app:failure-modes} \\
 \hline
 \end{tabular}

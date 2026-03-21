@@ -116,19 +116,29 @@ def main() -> int:
         ax.set_ylabel(r"FPR$_{\mathrm{nuis}}$ @ TPR$_{\mathrm{main}}=0.5$")
         ax.grid(axis="y", color="#dddddd", linewidth=0.6, zorder=0)
         ax.set_axisbelow(True)
-        for xi, mean in zip(x, means, strict=True):
-            ax.text(xi, mean + 0.03, f"{mean:.3f}", ha="center", va="bottom", fontsize=7)
+        for xi, mean, short in zip(x, means, labels, strict=True):
+            y = mean + 0.03
+            va = "bottom"
+            if setting_key == "Mobile" and short in {"Fixed", "Adaptive"}:
+                y = mean + 0.05
+            if setting_key == "Mobile" and short == "Whitened":
+                y = mean + 0.08
+            if setting_key == "Intra-operative parenchymal" and short in {"PD", "Kasai"}:
+                y = mean - 0.025
+                va = "top"
+            ax.text(xi, y, f"{mean:.3f}", ha="center", va=va, fontsize=7)
 
     axes[1].set_ylabel("")
     fig.legend(
         handles=legend_handles,
         loc="upper center",
         ncol=3,
-        fontsize=7,
+        fontsize=8,
         frameon=False,
         bbox_to_anchor=(0.5, 1.11),
-        columnspacing=0.9,
+        columnspacing=0.8,
         handlelength=1.3,
+        handletextpad=0.5,
     )
     fig.savefig(args.out, bbox_inches="tight")
     plt.close(fig)

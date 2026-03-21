@@ -949,10 +949,34 @@ One remaining fairness concern is that the held-out structural checkpoint may st
 The resulting pattern is stronger than the earlier generic stress audit. On every held-out row in supplementary Table~\ref{tab:simus_stress_frontier_headline}, the strongest detector-family stack outperforms the strongest conventional baseline evaluated on that same stressed row. The row-wise winner is not uniform: the fully whitened variant takes all three cardiac-pulsation rows and the reference and intermediate short-ensemble rows, while the fixed matched-subspace head remains strongest only on the hardest 32-frame short-ensemble row. The main scientific use of this table is not to replace the direct per-head stress table in the main paper, but to show that once the nuisance is made more clinically realistic, the detector family still keeps a substantial nuisance-control advantage over the strongest conventional stacks evaluated under the same stress conditions.
 
 \paragraph{Detector-family ablation on a fixed use-case-motivated synthetic residual.}
-The held-out same-residual SIMUS detector-family ablation now appears in the main text as Table~\ref{tab:simus_detector_family_ablation}. We do not repeat it here. Its role is to hold the MC--SVD residual fixed and change only the downstream head, which sharpens the detector-head claim independently of the end-to-end stack comparisons in Table~\ref{tab:simus_v2_structural_latency}.
+The held-out same-residual SIMUS detector-family ablation now appears in the main text as \ifSUPPLEMENTONLY the main paper's same-residual SIMUS detector-family table\else Table~\ref{tab:simus_detector_family_ablation}\fi. We do not repeat it here. Its role is to hold the MC--SVD residual fixed and change only the downstream head, which sharpens the detector-head claim independently of the end-to-end stack comparisons in Table~\ref{tab:simus_v2_structural_latency}.
 
 \paragraph{Held-out functional same-cube detector-head audit.}
-The held-out functional same-cube audit now appears in the main text as Table~\ref{tab:accepted_v2_functional_main}. We do not repeat it here. Its role is narrower than the structural SIMUS benchmark: it fixes the residual stream and asks whether the detector head remains directionally positive under a common activation-versus-nuisance readout.
+This audit is intentionally narrower than the structural SIMUS benchmark. It does not select a new default detector statistic and it does not replace the labeled structural benchmark that anchors the paper. Instead, it fixes a common background-controlled activation-versus-nuisance readout and asks a more limited question: if the upstream residual family is held fixed, does replacing the native conventional score with a matched-subspace detector head improve the held-out functional ranking metric on that same residual stream?
+
+The repository artifacts for this audit are explicit:
+\begin{itemize}[nosep,leftmargin=1.8em]
+  \item table generator: \path{scripts/simus_functional_numeric_table.py}
+  \item held-out pipeline summary: \path{reports/simus_v2/simus_eval_functional_seed221_222_to_223_224_ec6_bgcdf_outside_headline.csv}
+  \item held-out detector-head swap summary: \path{reports/simus_v2/simus_functional_stap_head_search_seed221_222_to_223_224_ec6_bgcdf_outside_headline.csv}
+\end{itemize}
+\noindent Those files freeze the same two prespecified SIMUS settings used in the main paper (\texttt{ClinIntraOpParenchyma-Pf-v3} and \texttt{ClinMobile-Pf-v2}) and compare six residual families under one common functional readout: adaptive-local SVD, HOSVD, local SVD, MC--SVD, RPCA, and singular-vector-similarity SVD.
+
+\IfFileExists{reports/paper/simus_functional_numeric_summary_table.tex}{%
+  \input{reports/paper/simus_functional_numeric_summary_table.tex}%
+}{%
+  \begin{center}
+  \refstepcounter{table}\label{tab:accepted_v2_functional_main}%
+  \fbox{\begin{minipage}{0.95\linewidth}
+    Missing table \path{reports/paper/simus_functional_numeric_summary_table.tex}.\\
+    Reproduce it with \path{PYTHONPATH=. python3 scripts/simus_functional_numeric_table.py}.
+  \end{minipage}}
+  \end{center}
+}
+
+Table~\ref{tab:accepted_v2_functional_main} shows a directionally positive but not uniform pattern. On intra-operative parenchymal, matched-subspace replacement is positive on five of the six frozen residual families, with median $\Delta$ selection score $+0.065$ [$+0.032,+0.091$] and median $\Delta$AUC$_{\mathrm{act/nuis}}$ $+0.026$ [$+0.014,+0.052$]. On mobile, it is again positive on five of the six families, with median $\Delta$ selection score $+0.111$ [$+0.032,+0.142$] and median $\Delta$AUC$_{\mathrm{act/nuis}}$ $+0.059$ [$+0.011,+0.066$]. The negatives are not the same family in both settings: adaptive-local SVD is the lone negative family on intra-operative parenchymal, whereas local SVD is slightly negative on mobile.
+
+This is also why the table is useful but secondary. Under the common functional readout, the strongest full held-out chain is RPCA $\rightarrow$ PD after matched-subspace on intra-operative parenchymal and HOSVD $\rightarrow$ PD on mobile. The table therefore does \emph{not} support a universal functional ranking of every full pipeline. What it does support is the narrower detector-head claim: when the residual family is frozen and only the downstream score is changed, the fully whitened matched-subspace replacement is directionally favorable across most of the prespecified families, but not as uniformly decisive as the structural same-residual benchmark.
 
 \subsection*{Functional and Translation-Support Audits}
 This block collects compact real-data score audits and PD-only whole-brain retrospective summaries that support the translational interpretation without serving as primary labeled efficacy benchmarks.

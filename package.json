@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@viz-js/viz": "3.25.0"
+  }
+}

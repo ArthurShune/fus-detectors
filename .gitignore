@@ -11,6 +11,7 @@
 .env
 .venv
 .ipynb_checkpoints/
+node_modules/
 build/
 dist/
 *.egg-info/

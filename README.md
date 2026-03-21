@@ -50,10 +50,10 @@ This is a replay-feasibility statement, not an end-to-end scanner-integration cl
 ## Method at a Glance
 
 <p align="center">
-  <img src="docs/assets/readme_pipeline.png" alt="Pipeline overview showing clutter-filtered residual input and downstream detection statistics." width="760">
+  <img src="docs/assets/readme_pipeline.png" alt="Method overview showing the same clutter-filtered residual feeding fixed, adaptive, and fully whitened detector variants, with the fixed statistic as the default path." width="760">
 </p>
 
-The method does not replace the upstream clutter filter. It changes only the final detection statistic applied to the same clutter-filtered residual.
+The method does not replace the upstream clutter filter. It changes only the final detection statistic applied to the same clutter-filtered residual. The default path is the fixed statistic, which adds no covariance estimation; whitening is optional and reserved for clutter-heavy settings.
 
 > Status: active research code accompanying a preprint. APIs and helper scripts may still change. If you want to test this on raw fUS IQ, task data, or a clinical/mobile workflow, contact `arthur@skymesasystems.com`.
 

@@ -915,7 +915,7 @@ def _make_mask_figure(
     for ax in axes:
         ax.set_xticks([])
         ax.set_yticks([])
-    fig.savefig(out_path, bbox_inches="tight", pad_inches=0.04)
+    fig.savefig(out_path, dpi=300, bbox_inches="tight", pad_inches=0.04)
     if out_path.suffix.lower() == ".pdf":
         fig.savefig(out_path.with_suffix(".png"), dpi=250, bbox_inches="tight", pad_inches=0.04)
     plt.close(fig)
