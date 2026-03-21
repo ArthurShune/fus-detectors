@@ -73,45 +73,6 @@ The method does not replace the upstream clutter filter. It changes only the fin
 | Prepare datasets | [docs/data_download.md](docs/data_download.md) |
 | Cite the work | [CITATION.cff](CITATION.cff) |
 
-## Paper
-
-Arthur Shune, *Localized Matched-Subspace Detection for Functional Ultrasound and Ultrafast Doppler Imaging*, preprint, 2026.
-
-[[PDF]](paper/preprint.pdf) · [[Extended Methods]](paper/methods_companion.pdf) · [[Supplement]](paper/supplement.pdf)
-
-`arXiv link will be added once the preprint is posted.`
-
-### Citation
-
-```bibtex
-@misc{shune2026localized,
-  author = {Arthur Shune},
-  title = {Localized Matched-Subspace Detection for Functional Ultrasound and Ultrafast Doppler Imaging},
-  year = {2026},
-  note = {Preprint},
-  url = {https://github.com/ArthurShune/fus-detectors}
-}
-```
-
-Machine-readable citation metadata is also provided in [`CITATION.cff`](CITATION.cff).
-
-## GitHub Discoverability
-
-For GitHub search and repository topics, the most accurate public labels for this repo are:
-- `functional-ultrasound`
-- `fus`
-- `ultrafast-doppler`
-- `doppler-imaging`
-- `ultrasound`
-- `signal-processing`
-- `medical-imaging`
-- `microvascular-imaging`
-- `power-doppler`
-- `python`
-
-Recommended GitHub description:
-- `Post-clutter-suppression detection statistics for functional ultrasound and ultrafast Doppler that reduce artifact leakage without changing the upstream clutter filter.`
-
 ## Quick Start
 
 ```bash
@@ -146,6 +107,8 @@ score_map = result.score_map
 summary = result.summary.to_dict()
 ```
 
+The API returns a detector readout map, a score map, and a summary object for the same residual cube.
+
 See [docs/integration.md](docs/integration.md) for the supported variants, the
 public config surface, adaptive routing behavior, and the expected input/output
 contract. A runnable end-to-end example is available at
@@ -166,6 +129,28 @@ Use the public variants this way:
 - `whitened_power`: keep as a bounded ablation, not a default deployment choice.
 
 The short integration rule is: start with `fixed`, check a few representative windows, and only move to `whitened` when clutter stays high often enough that whitening is worth the extra compute. The fuller rationale is in [docs/integration.md](docs/integration.md) and in the deployment flowchart in [paper/preprint.pdf](paper/preprint.pdf).
+
+## Paper
+
+Arthur Shune, *Localized Matched-Subspace Detection for Functional Ultrasound and Ultrafast Doppler Imaging*, preprint, 2026.
+
+[[PDF]](paper/preprint.pdf) · [[Extended Methods]](paper/methods_companion.pdf) · [[Supplement]](paper/supplement.pdf)
+
+`arXiv link will be added once the preprint is posted.`
+
+### Citation
+
+```bibtex
+@misc{shune2026localized,
+  author = {Arthur Shune},
+  title = {Localized Matched-Subspace Detection for Functional Ultrasound and Ultrafast Doppler Imaging},
+  year = {2026},
+  note = {Preprint},
+  url = {https://github.com/ArthurShune/fus-detectors}
+}
+```
+
+Machine-readable citation metadata is also provided in [`CITATION.cff`](CITATION.cff).
 
 ## Common Failure Modes
 
