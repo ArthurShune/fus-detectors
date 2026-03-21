@@ -7,6 +7,13 @@ except Exception:  # pragma: no cover - torch optional
     torch = None  # type: ignore
 
 
+def _import_stap_fastpath():
+    pytest.importorskip("kwave", reason="kwave not available")
+    from sim.kwave.common import _stap_pd_tile_lcmv_batch
+
+    return _stap_pd_tile_lcmv_batch
+
+
 @pytest.mark.skipif(torch is None, reason="torch not available")
 def test_stap_pd_tile_batch_fastpath_accepts_tensor_without_numpy_roundtrip():
     """
@@ -20,7 +27,7 @@ def test_stap_pd_tile_batch_fastpath_accepts_tensor_without_numpy_roundtrip():
     with a NumPy batch vs a torch batch (same values), which would not hold if
     dtype/device handling diverged.
     """
-    from sim.kwave.common import _stap_pd_tile_lcmv_batch
+    _stap_pd_tile_lcmv_batch = _import_stap_fastpath()
 
     rng = np.random.default_rng(0)
     B, T, h, w = 3, 12, 4, 4
@@ -61,7 +68,7 @@ def test_stap_pd_tile_batch_fastpath_accepts_tensor_without_numpy_roundtrip():
 
 @pytest.mark.skipif(torch is None, reason="torch not available")
 def test_fastpath_whiten_gamma_zero_matches_unwhitened_ratio():
-    from sim.kwave.common import _stap_pd_tile_lcmv_batch
+    _stap_pd_tile_lcmv_batch = _import_stap_fastpath()
 
     rng = np.random.default_rng(1)
     B, T, h, w = 2, 14, 4, 4
@@ -110,7 +117,7 @@ def test_fastpath_whiten_gamma_zero_matches_unwhitened_ratio():
 
 @pytest.mark.skipif(torch is None, reason="torch not available")
 def test_fastpath_fractional_whitening_smoke():
-    from sim.kwave.common import _stap_pd_tile_lcmv_batch
+    _stap_pd_tile_lcmv_batch = _import_stap_fastpath()
 
     rng = np.random.default_rng(2)
     B, T, h, w = 2, 14, 4, 4
