@@ -29,10 +29,10 @@ digraph G {
     shape=box,
     style="rounded,filled",
     fillcolor="#e8f0fa",
-    margin="0.28,0.22",
-    fontsize=16,
-    fontname="Helvetica-Bold",
-    label="Start with the fixed matched-subspace statistic"
+    margin="0.34,0.28",
+    fontsize=15,
+    fontname="Helvetica",
+    label="Start with the default fixed detector"
   ];
 
   measure [
@@ -41,7 +41,7 @@ digraph G {
     fillcolor="#fdf3db",
     margin="0.28,0.22",
     fontsize=13,
-    label="Measure label-free runtime telemetry on representative windows:\nhigh-end guard contamination Q0.90(rg), promotion fraction ppromote,\nand replay budget"
+    label="Check a few representative windows:\nhow much clutter remains, how often tiles would switch to whitening,\nand whether your latency budget allows whitening"
   ];
 
   low_guard [
@@ -50,7 +50,7 @@ digraph G {
     fillcolor="#f6f6f6",
     margin="0.20,0.12",
     fontsize=13,
-    label="Guard telemetry low across windows?\nQ0.90(rg) < τg and ppromote ≈ 0"
+    label="Is clutter low in most windows?\nVery little need to switch tiles to whitening"
   ];
 
   high_guard [
@@ -59,7 +59,7 @@ digraph G {
     fillcolor="#f6f6f6",
     margin="0.20,0.12",
     fontsize=12,
-    label="Guard telemetry persistently elevated\nand latency budget sufficient\nfor whitening?"
+    label="Is clutter still high often enough\nto justify whitening,\nand does latency allow it?"
   ];
 
   deploy_fixed [
@@ -68,7 +68,7 @@ digraph G {
     fillcolor="#e8f6ef",
     margin="0.24,0.18",
     fontsize=13,
-    label="Deploy the fixed statistic\nDefault supported by the held-out\nSIMUS benchmark"
+    label="Use the fixed detector\nDefault supported by the held-out\nSIMUS benchmark"
   ];
 
   keep_fixed [
@@ -77,7 +77,7 @@ digraph G {
     fillcolor="#f9ebea",
     margin="0.24,0.18",
     fontsize=13,
-    label="Keep the fixed statistic\nNo validated prospective switch\nfor mixed telemetry"
+    label="Still use the fixed detector\nMixed windows are not enough\nto justify a switch"
   ];
 
   use_whitened [
@@ -86,7 +86,7 @@ digraph G {
     fillcolor="#e8f0fa",
     margin="0.24,0.18",
     fontsize=13,
-    label="Use the fully whitened variant\nwhen guard telemetry stays high,\npromotion is nonzero, and latency permits"
+    label="Use the fully whitened detector\nwhen clutter stays high often enough\nand latency allows it"
   ];
 
   { rank=same; deploy_fixed keep_fixed use_whitened }

@@ -156,7 +156,7 @@ see [examples/svd_pipeline_readout_swap.py](examples/svd_pipeline_readout_swap.p
 ## Which Variant to Use
 
 <p align="center">
-  <img src="docs/assets/readme_variant_selection.png" alt="Detector selection flowchart: start with fixed, escalate to fully whitened only in persistently clutter-dominant windows with latency margin." width="760">
+  <img src="docs/assets/readme_variant_selection.png" alt="Detector selection flowchart: start with the default fixed detector and move to the fully whitened detector only when clutter stays high on representative windows and latency allows it." width="760">
 </p>
 
 Use the public variants this way:
@@ -165,7 +165,7 @@ Use the public variants this way:
 - `whitened`: use when your acquisition repeatedly shows clutter-dominant windows and you can tolerate the extra compute.
 - `whitened_power`: keep as a bounded ablation, not a default deployment choice.
 
-The short integration rule is: start with `fixed`, inspect the adaptive telemetry, and only move to `whitened` when the clutter evidence stays elevated on representative windows. The fuller rationale is in [docs/integration.md](docs/integration.md) and in the deployment flowchart in [paper/preprint.pdf](paper/preprint.pdf).
+The short integration rule is: start with `fixed`, check a few representative windows, and only move to `whitened` when clutter stays high often enough that whitening is worth the extra compute. The fuller rationale is in [docs/integration.md](docs/integration.md) and in the deployment flowchart in [paper/preprint.pdf](paper/preprint.pdf).
 
 ## Common Failure Modes
 
