@@ -4,6 +4,7 @@ title: "fus-detectors: Localized matched-subspace detectors for functional ultra
 type: software
 license: MIT
 version: 0.1.0-dev
+doi: 10.5281/zenodo.19210732
 authors:
   - family-names: Shune
     given-names: Arthur

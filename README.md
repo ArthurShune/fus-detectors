@@ -136,6 +136,8 @@ Arthur Shune, *Localized Matched-Subspace Detection for Functional Ultrasound an
 
 [[PDF]](paper/preprint.pdf) · [[Extended Methods]](paper/methods_companion.pdf) · [[Supplement]](paper/supplement.pdf)
 
+Preprint archive DOI: [`10.5281/zenodo.19210732`](https://doi.org/10.5281/zenodo.19210732)
+
 `arXiv link will be added once the preprint is posted.`
 
 ### Citation
@@ -146,7 +148,8 @@ Arthur Shune, *Localized Matched-Subspace Detection for Functional Ultrasound an
   title = {Localized Matched-Subspace Detection for Functional Ultrasound and Ultrafast Doppler Imaging},
   year = {2026},
   note = {Preprint},
-  url = {https://github.com/ArthurShune/fus-detectors}
+  doi = {10.5281/zenodo.19210732},
+  url = {https://doi.org/10.5281/zenodo.19210732}
 }
 ```
 
